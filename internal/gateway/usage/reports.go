@@ -14,7 +14,8 @@ package usage
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/pagination"
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -23,10 +24,13 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/catalog"
+	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/dataplane"
 	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/pagination"
+	"github.com/sunqirui1987/xhub/internal/provider"
 )
 
 var logTraceOnceReports sync.Once
@@ -1010,11 +1014,12 @@ func Calculate(s Host, w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, 200, map[string]any{"cost": total})
 }
 
-// HealthTestConnection checks whether an upstream or dependency is reachable. A failure writes the reason in JSON and is not always a 500.
-// 参数 s（Host）：HealthTestConnection使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
-// 返回：无。状态码和正文写进调用方的响应。
-// 调用：gateway/usage/mount.go
-// 测试：无直接单测
+// HealthTestConnection 使用服务端模型表和已保存凭据，对指定对话部署发起一次最小真实请求。
+// 参数 s 提供管理员鉴权、部署、凭据和受超时约束的 HTTP 客户端；w、r 承载请求与 JSON 响应。
+// 调用方是模型详情页；客户端只能指定 model_info.id 和模式，不能覆盖实际上游地址或密钥。
+// 输入错误或部署不存在返回 400/404；探测失败以 HTTP 200、healthy=false 和固定脱敏诊断返回。
+// 只支持与部署 transport 匹配的对话模式；媒体等原生模式明确拒绝且不访问上游。探测不经过路由、额度、冷却和记账。
+// 测试：health_connection_test.go；真实浏览器流程由模型详情连接测试 E2E 覆盖。
 func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
@@ -1030,12 +1035,89 @@ func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 			model = str(params["model"])
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
-		"status":  "success",
-		"healthy": true,
-		"error":   nil,
-		"model":   model,
-		"mode":    mode,
+	info, _ := body["model_info"].(map[string]any)
+	id := strings.TrimSpace(str(info["id"]))
+	if id == "" {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid_request", "model_info.id is required")
+		return
+	}
+	var selected config.ModelEntry
+	found := false
+	for _, dep := range s.ModelList() {
+		if strings.TrimSpace(str(dep.ModelInfo["id"])) == id {
+			selected, found = dep, true
+			break
+		}
+	}
+	if !found {
+		httpx.WriteError(w, http.StatusNotFound, "not_found", "model deployment not found")
+		return
+	}
+	if model == "" {
+		model = selected.ModelName
+	}
+	if !supportsDialogueConnectionMode(selected, mode) {
+		writeConnectionFailure(w, model, mode, "unsupported_mode", "Connection testing is not supported for this mode.")
+		return
+	}
+	attached, err := s.AttachCredential(selected)
+	if err != nil {
+		// 凭据后端错误可能携带秘密或地址，禁止把 err.Error() 写进响应。
+		writeConnectionFailure(w, model, mode, "credential_unavailable", "Stored credentials could not be loaded.")
+		return
+	}
+	err = dataplane.ProbeDialogue(r.Context(), s.HTTPClient(), attached)
+	if err != nil {
+		code, message := connectionProbeDiagnostic(err)
+		writeConnectionFailure(w, model, mode, code, message)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"status": "success", "healthy": true, "error": nil, "model": model, "mode": mode,
+	})
+}
+
+// supportsDialogueConnectionMode 校验页面模式与服务端部署的对话 transport 是否一致。
+// 参数 dep 来自服务端模型表，mode 来自页面；媒体协议、未知模式和跨 transport 模式返回 false。
+func supportsDialogueConnectionMode(dep config.ModelEntry, mode string) bool {
+	transport, ok := provider.Execution(dep)
+	if !ok || !provider.DialogueProtocol(transport.Protocol) {
+		return false
+	}
+	mode = strings.TrimSpace(mode)
+	declaredTransport := strings.TrimSpace(str(dep.ModelInfo["transport"]))
+	return mode == "chat" || mode == declaredTransport || mode == transport.ID || mode == transport.EndpointID || mode == transport.Protocol
+}
+
+// connectionProbeDiagnostic 把内部探测错误映射为固定外部诊断。
+// 返回稳定错误码与安全英文文案，只允许附带 HTTP 状态码，不传播 URL、密钥、供应商正文或底层错误。
+func connectionProbeDiagnostic(err error) (string, string) {
+	var probeErr *dataplane.DialogueProbeError
+	if !errors.As(err, &probeErr) {
+		return "request_failed", "The upstream connection test failed."
+	}
+	switch probeErr.Kind {
+	case dataplane.DialogueProbeUnsupported:
+		return "unsupported_mode", "Connection testing is not supported for this mode."
+	case dataplane.DialogueProbeConfiguration:
+		return "invalid_configuration", "The stored deployment configuration is incomplete or invalid."
+	case dataplane.DialogueProbeHTTP:
+		return "upstream_http_error", fmt.Sprintf("The upstream service returned HTTP %d.", probeErr.HTTPStatus)
+	case dataplane.DialogueProbeProtocol:
+		return "protocol_mismatch", "The upstream response did not match the configured protocol."
+	case dataplane.DialogueProbeOversize:
+		return "response_too_large", "The upstream response exceeded the connection test limit."
+	default:
+		return "request_failed", "The upstream service could not be reached."
+	}
+}
+
+// writeConnectionFailure 写入模型详情页可直接消费的失败结构；参数必须是已脱敏固定值。
+// 始终写 HTTP 200；message 和 result.error 让现有页面与 API 调用方都能观察诊断。
+func writeConnectionFailure(w http.ResponseWriter, model, mode, code, message string) {
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"status": "error", "healthy": false, "error": code, "message": message,
+		"result": map[string]any{"error": message}, "model": model, "mode": mode,
 	})
 }
 

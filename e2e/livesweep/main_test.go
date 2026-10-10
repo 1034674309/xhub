@@ -25,3 +25,23 @@ func TestExpectedOperationalFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestTypedUnsupported 验证 sweep 只对两个未记录归因维度接受专用 501，且不会把同类型错误扩散到其他路由；纯解析无测试数据。
+func TestTypedUnsupported(t *testing.T) {
+	dimension := `{"error":{"type":"unsupported_usage_dimension","message":"not recorded"}}`
+	generic := `{"error":{"type":"not_implemented","message":"unsupported"}}`
+	for _, path := range []string{"/customer/daily/activity", "/tag/daily/activity"} {
+		if !typedUnsupported("GET", path, dimension) {
+			t.Fatalf("expected dimension contract for %s", path)
+		}
+	}
+	if typedUnsupported("GET", "/team/daily/activity", dimension) {
+		t.Fatal("dimension error unexpectedly accepted for another route")
+	}
+	if !typedUnsupported("POST", "/some/catalog/route", generic) {
+		t.Fatal("generic not_implemented contract rejected")
+	}
+	if typedUnsupported("GET", "/customer/daily/activity", generic) {
+		t.Fatal("customer dimension accepted the wrong error type")
+	}
+}

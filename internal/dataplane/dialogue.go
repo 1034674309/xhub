@@ -1,9 +1,12 @@
 package dataplane
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,6 +18,94 @@ import (
 
 // errDialogueCredentials 区分连接配置缺失与协议编码错误，供数据面返回上游鉴权错误。
 var errDialogueCredentials = errors.New("upstream address and credentials required")
+
+// DialogueProbeErrorKind 是连接探测的内部失败分类，供 HTTP 层映射固定诊断文案。
+// 分类不携带目标 URL、密钥、供应商正文或底层网络错误。
+type DialogueProbeErrorKind string
+
+const (
+	DialogueProbeUnsupported   DialogueProbeErrorKind = "unsupported"
+	DialogueProbeConfiguration DialogueProbeErrorKind = "configuration"
+	DialogueProbeUnavailable   DialogueProbeErrorKind = "unavailable"
+	DialogueProbeProtocol      DialogueProbeErrorKind = "protocol"
+	DialogueProbeHTTP          DialogueProbeErrorKind = "http"
+	DialogueProbeOversize      DialogueProbeErrorKind = "oversize"
+)
+
+// DialogueProbeError 描述连接探测失败的安全类别；HTTPStatus 只在非 2xx 时设置。
+// Error 返回固定文本或状态码，不包含请求地址、鉴权头、响应正文和底层错误。
+type DialogueProbeError struct {
+	Kind       DialogueProbeErrorKind
+	HTTPStatus int
+}
+
+// Error 返回进程内可记录的脱敏文本；调用方应按 Kind 映射外部接口文案。
+func (e *DialogueProbeError) Error() string {
+	if e != nil && e.Kind == DialogueProbeHTTP && e.HTTPStatus > 0 {
+		return fmt.Sprintf("upstream returned HTTP %d", e.HTTPStatus)
+	}
+	if e == nil {
+		return "dialogue probe failed"
+	}
+	switch e.Kind {
+	case DialogueProbeUnsupported:
+		return "dialogue connection test is not supported for this deployment"
+	case DialogueProbeConfiguration:
+		return "deployment credentials or execution profile are invalid"
+	case DialogueProbeProtocol:
+		return "upstream response did not match the configured protocol"
+	case DialogueProbeOversize:
+		return "upstream response exceeded the probe limit"
+	default:
+		return "upstream request failed"
+	}
+}
+
+// ProbeDialogue 对一条已补齐凭据的对话部署发起最小真实请求，并校验上游状态与协议正文。
+// 参数 ctx 控制取消，client 提供网关统一超时，dep 必须来自服务端模型表；返回 nil 表示连接及协议均可用。
+// 调用场景是管理面的连接测试；它不经过鉴权额度、路由、冷却和记账链，也不会接受客户端指定的地址或密钥。
+// 探测会在供应商侧产生一次极小对话请求；响应最多读取 1 MiB，非 2xx、网络错误和协议损坏均返回脱敏错误。
+func ProbeDialogue(ctx context.Context, client *http.Client, dep config.ModelEntry) error {
+	transport, ok := provider.Execution(dep)
+	if !ok || !provider.DialogueProtocol(transport.Protocol) {
+		return &DialogueProbeError{Kind: DialogueProbeUnsupported}
+	}
+	upstream, err := buildDialogue(dep, llm.Dialogue{
+		Turns:   []llm.Turn{{Role: "user", Text: "Reply with OK."}},
+		Options: map[string]any{"max_tokens": 1},
+	})
+	if err != nil {
+		return &DialogueProbeError{Kind: DialogueProbeConfiguration}
+	}
+	if client == nil {
+		return &DialogueProbeError{Kind: DialogueProbeUnavailable}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream.URL, bytes.NewReader(upstream.Body))
+	if err != nil {
+		return &DialogueProbeError{Kind: DialogueProbeConfiguration}
+	}
+	req.Header = upstream.Header.Clone()
+	res, err := client.Do(req)
+	if err != nil {
+		return &DialogueProbeError{Kind: DialogueProbeUnavailable}
+	}
+	defer res.Body.Close()
+	const responseLimit = 1 << 20
+	raw, err := io.ReadAll(io.LimitReader(res.Body, responseLimit+1))
+	if err != nil {
+		return &DialogueProbeError{Kind: DialogueProbeUnavailable}
+	}
+	if len(raw) > responseLimit {
+		return &DialogueProbeError{Kind: DialogueProbeOversize}
+	}
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return &DialogueProbeError{Kind: DialogueProbeHTTP, HTTPStatus: res.StatusCode}
+	}
+	if _, err := llm.ParseDialogueResult(transport.Protocol, raw); err != nil {
+		return &DialogueProbeError{Kind: DialogueProbeProtocol}
+	}
+	return nil
+}
 
 // responsesRequestBody 恢复统一 Responses 的历史并消费网关续接字段。
 // 参数 body 为新请求、history 为已校验归属的历史；返回独立正文或参数错误。

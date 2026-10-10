@@ -490,11 +490,16 @@ func Serve(h Adapted, w http.ResponseWriter, r *http.Request, op string) {
 					result, conversionErr := llm.ParseDialogueResult(execution.Protocol, respBody)
 					if conversionErr != nil {
 						lastErr = conversionErr
+						// HTTP 200 只说明传输成功；无法解析的供应商正文仍是部署失败，
+						// 必须进入与网络错误、5xx 和流式转换错误相同的冷却链。
+						h.NoteFailure(did, routeCfg)
 						continue
 					}
 					respBody, conversionErr = llm.EncodeDialogueResult(result, callerProtocol(op), alias)
 					if conversionErr != nil {
 						lastErr = conversionErr
+						// 编码失败同样不能提交路由归属；记录部署失败后再尝试候选项。
+						h.NoteFailure(did, routeCfg)
 						continue
 					}
 					if op == "responses" {

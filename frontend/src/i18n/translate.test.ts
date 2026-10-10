@@ -124,7 +124,30 @@ describe("interpolate", () => {
 });
 
 describe("catalogs", () => {
-  // 验证中英文目录键集合完全一致且文案非空，失败时直接列出单边缺失键。
+  /**
+   * 判断文档文章的可选分节是否由渲染器隐藏。
+   * 参数为目录键和双语叶子映射；仅当第二或第三节标题、正文双语均为空，且文章已有单段 Markdown 正文时返回 true。
+   * 目录完整性测试调用；无外部状态、异常或副作用。
+   */
+  function isHiddenOptionalArticleSection(
+    key: string,
+    zhEntries: Map<string, string>,
+    enEntries: Map<string, string>,
+  ): boolean {
+    const match = key.match(/^(docs\.articles\.[^.]+)\.(?:heading|body)([23])$/);
+    if (!match) return false;
+    const article = match[1];
+    const section = match[2];
+    const pair = [article + ".heading" + section, article + ".body" + section];
+    const hasSingleMarkdownBody = [zhEntries, enEntries].every(
+      (entries) => ((entries.get(article + ".body1") || entries.get(article + ".detail") || "").trim().length > 0),
+    );
+    return hasSingleMarkdownBody && pair.every((field) =>
+      [zhEntries, enEntries].every((entries) => (entries.get(field) || "") === ""),
+    );
+  }
+
+  // 验证中英文目录键集合一致；renderer 隐藏的可选文章段允许成对为空，其余生产文案必须非空。
   it("keeps the same non-empty sentence keys in zh-CN and en", () => {
     const zhEntries = catalogEntries(catalogs["zh-CN"]);
     const enEntries = catalogEntries(catalogs.en);
@@ -138,6 +161,7 @@ describe("catalogs", () => {
     for (const key of zhKeys) {
       const zh = zhEntries.get(key) ?? "";
       const en = enEntries.get(key) ?? "";
+      if (isHiddenOptionalArticleSection(key, zhEntries, enEntries)) continue;
       expect(zh.length, key).toBeGreaterThan(0);
       expect(en.length, key).toBeGreaterThan(0);
     }
@@ -263,6 +287,37 @@ describe("leftover user-visible English", () => {
     ]) {
       expect(hits, expected).toContain(expected);
     }
+  });
+
+  /** 前置同一句英文分别放在请求示例函数与界面占位符中；验证扫描器只豁免必须保持英文的请求正文，不放过可见文案。 */
+  it("keeps English request examples while still flagging visible prose", () => {
+    const examples = `
+      function invocationCurl() {
+        return { messages: [{ role: "user", content: "Explain the image in detail" }] };
+      }
+    `;
+    const visible = `export function Widget() { return <input placeholder="Explain the image in detail" />; }`;
+    expect(findHitsInSource("modelInvocation.ts", examples)).toEqual([]);
+    expect(findHitsInSource("Widget.tsx", visible).map((hit) => hit.template)).toContain("Explain the image in detail");
+  });
+
+  /** 前置文档文件同时包含协议响应样例和真实 JSX 文案；验证只豁免命名响应数据，页面按钮仍被扫描。 */
+  it("keeps documentation protocol examples without skipping documentation UI", () => {
+    const source = [
+      'const responseErrors = { "400": { message: "Invalid request", type: "invalid_request" } };',
+      "export function DocsCenter() { return <button>Open documentation runner</button>; }",
+    ].join("\n");
+    expect(findHitsInSource("/repo/components/docs/DocsCenter.tsx", source).map((hit) => hit.template)).toEqual([
+      "Open documentation runner",
+    ]);
+  });
+
+  /** 前置协议 token 分别用于比较和直接渲染；验证比较值不误报，而展示给用户的同一 token 仍被扫描。 */
+  it("ignores mapped protocol comparisons but flags mapped tokens rendered directly", () => {
+    const compared = `export function Widget({ side }) { return (["input", "output"]).map((item) => item === side ? <b /> : null); }`;
+    const rendered = `export function Widget() { return (["input", "output"]).map((item) => <span>{item}</span>); }`;
+    expect(findHitsInSource("Compared.tsx", compared)).toEqual([]);
+    expect(findHitsInSource("Rendered.tsx", rendered).map((hit) => hit.template)).toEqual(["input", "output"]);
   });
 
   it("finds no English prose in production JSX, labels, toasts, or validation messages", () => {

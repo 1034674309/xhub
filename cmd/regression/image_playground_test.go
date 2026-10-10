@@ -61,6 +61,8 @@ func TestImagePlaygroundParameters(t *testing.T) {
 			if len(success.json()["data"].([]any)) != 1 {
 				t.Fatal("图片响应契约丢失")
 			}
+			// 配置 Redis 时成功账单先进入队列；读取 PostgreSQL 日志前显式推进本测试产生的记录。
+			h.flushSpend()
 			log := h.ok("GET", "/spend/logs/ui/"+success.header("x-litellm-call-id"), admin, nil).json()
 			if log["model"] != "image-playground" || !nearlyEqual(numberOrZero(log["spend"]), 0.000012) {
 				t.Fatalf("图片日志或计量错误: %+v", log)

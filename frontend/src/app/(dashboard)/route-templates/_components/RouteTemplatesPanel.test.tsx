@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import RouteTemplatesPanel from "./RouteTemplatesPanel";
 import { createRouteTemplateCall, getRouteTemplatesCall, updateRouteTemplateCall } from "@/components/networking";
+import { setActiveLocale, translate } from "@/i18n";
 
 const document = (timeout = 60) => ({
   model_routes: [],
@@ -44,6 +45,8 @@ async function openCreate(user: ReturnType<typeof userEvent.setup>) {
 
 describe("route template workflow", () => {
   beforeEach(() => {
+    // 全量测试可能由前序用例切换全局语言；本组固定英文并按同一词典定位可访问名称。
+    setActiveLocale("en");
     vi.clearAllMocks();
     vi.mocked(getRouteTemplatesCall).mockResolvedValue([
       { id: "first", name: "Fast", body: document(20), writable: true, used_by: 1 },
@@ -167,15 +170,15 @@ describe("route template workflow", () => {
   it("opens complete JSON documentation without changing drafts", async () => {
     const user = setup();
     await screen.findByText("Fast");
-    await user.click(screen.getByRole("button", { name: "完整 JSON 配置指南" }));
+    await user.click(screen.getByRole("button", { name: translate("en", "pages.routeTemplates.jsonGuide.openButton") }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("cell", { name: "routing_groups" })).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("tab", { name: "可导入示例" }));
-    expect(within(dialog).getByRole("region", { name: "完整模板示例" })).toHaveTextContent(
+    await user.click(within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabExamples") }));
+    expect(within(dialog).getByRole("region", { name: translate("en", "pages.routeTemplates.jsonGuide.exampleTitle") })).toHaveTextContent(
       '"routing_strategy": "cost-based-routing"',
     );
-    await user.click(within(dialog).getByRole("tab", { name: "LiteLLM 对照" }));
-    expect(within(dialog).getByText(/负载均衡/, {selector: "td"})).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabStrategies") }));
+    expect(within(dialog).getByText("cost-based-routing", { selector: "code" })).toBeInTheDocument();
     expect(createRouteTemplateCall).not.toHaveBeenCalled();
   });
 

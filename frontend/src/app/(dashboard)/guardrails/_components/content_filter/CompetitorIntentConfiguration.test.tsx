@@ -169,6 +169,19 @@ describe("CompetitorIntentConfiguration reported config", () => {
     expect(lastConfig()).toStrictEqual({ ...DEFAULT_CONFIG, threshold_low: 1 });
   });
 
+  /** 前置启用完整阈值说明；验证三条策略说明处于合法列表结构且没有 p 包裹 ul，组件卸载即清理。 */
+  it("renders threshold guidance without invalid paragraph list nesting", () => {
+    const { container } = render(<Harness />);
+
+    const list = container.querySelector("ul");
+    expect(list).not.toBeNull();
+    if (!list) throw new Error("阈值策略说明列表未渲染");
+    expect(list).toHaveTextContent("Treat as full competitor comparison");
+    expect(list).toHaveTextContent("Treat as possible comparison");
+    expect(list).toHaveTextContent("Log only; allow request");
+    expect(container.querySelector("p ul")).toBeNull();
+  });
+
   it("explains the filter without rendering any control while switched off", () => {
     render(<Harness initialEnabled={false} />);
 

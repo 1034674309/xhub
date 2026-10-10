@@ -17,10 +17,21 @@ import DeleteResourceModal from "./common_components/DeleteResourceModal";
 import ModelEditor from "./add_model/ModelEditor";
 import PricingTable from "./add_model/PricingTable";
 import { effectivePricing, type EditorModel, type CatalogRow } from "./add_model/modelEditorPricing";
+import { useT } from "@/i18n";
 
 function callType(info: Record<string, unknown>): string {
   if (typeof info.transport === "string") return info.transport;
   return Array.isArray(info.endpoint_types) ? String(info.endpoint_types[0] ?? "") : "";
+}
+
+/** 从连接探测响应中提取后台返回的脱敏诊断；参数为未知响应，返回可展示的技术详情或空字符串。 */
+function connectionDiagnostic(response: unknown): string {
+  if (!response || typeof response !== "object") return "";
+  const payload = response as { message?: unknown; error?: unknown; result?: { error?: unknown } };
+  for (const value of [payload.result?.error, payload.message, payload.error]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 type Props = {
@@ -52,6 +63,7 @@ export default function ModelInfoView({
   isViewOnly,
   onModelUpdate,
 }: Props) {
+  const t = useT();
   const queryClient = useQueryClient();
   const models = useModelsInfo(1, 1, undefined, modelId);
   const { data: costMap } = useModelCostMap();
@@ -85,6 +97,7 @@ export default function ModelInfoView({
       setDeleting(false);
     }
   };
+  /** 对当前部署发起后台真实探测；无参数和返回值，成功或失败均更新本地可见状态，不修改部署。 */
   const test = async () => {
     if (!accessToken || !model) return;
     setTesting(true);
@@ -100,10 +113,21 @@ export default function ModelInfoView({
         { id: modelId, endpoint_types: model.model_info.endpoint_types, transport: model.model_info.transport },
         callType(model.model_info),
       );
-      if (response.status !== "success") throw new Error(response.result?.error || response.message || "连接测试失败");
-      setTestResult({ ok: true, text: "连接正常，模型已响应。" });
+      if (response.status !== "success") {
+        const detail = connectionDiagnostic(response);
+        setTestResult({
+          ok: false,
+          text: detail ? t("Connection test failed: {value0}", { value0: detail }) : t("Connection test failed"),
+        });
+        return;
+      }
+      setTestResult({ ok: true, text: t("Connection is healthy and the model responded.") });
     } catch (error) {
-      setTestResult({ ok: false, text: error instanceof Error ? error.message : "连接测试失败" });
+      const detail = error instanceof Error ? error.message.trim() : "";
+      setTestResult({
+        ok: false,
+        text: detail ? t("Connection test failed: {value0}", { value0: detail }) : t("Connection test failed"),
+      });
     } finally {
       setTesting(false);
     }
@@ -162,7 +186,7 @@ export default function ModelInfoView({
           {!isViewOnly && (
             <Button variant="outline" onClick={test} disabled={testing || editing || info.disabled === true}>
               <RefreshCw className={testing ? "size-4 animate-spin" : "size-4"} />
-              {testing ? "测试中…" : "测试连接"}
+              {testing ? t("Testing...") : t("Test Connection")}
             </Button>
           )}
           {canEdit && !editing && (

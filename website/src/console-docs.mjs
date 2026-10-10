@@ -30,11 +30,6 @@ export async function consoleDocuments(root) {
       if (page.code) markdown += "\n\n## " + translations.example + "\n\n~~~\n" + page.code.replaceAll("https://YOUR_GATEWAY_HOST", "http://localhost:4000") + "\n~~~";
       if (page.group === "api") {
         markdown = await readFile(root + "/docs/api/" + (lang === "zh" ? "zh-CN" : "en") + "/" + page.id + ".md", "utf8");
-        // 控制台使用无扩展名路由，静态文档映射使用 Markdown 路径；只转换已确认的同级接口链接。
-        for (const target of data.docPages.filter((item) => item.group === "api")) {
-          const slug = target.path.split("/").at(-1);
-          markdown = markdown.replaceAll("(" + slug + ")", "(" + slug + ".md)");
-        }
       }
       documents.push({ source, lang, markdown, group: page.group, section: data.docSection(page.id), sectionTitle: translations.sections[data.docSection(page.id)], protocol: data.docProtocol(page.id), protocolTitle: translations.protocols[data.docProtocol(page.id)], repositorySource: page.group === "api" ? "docs/api/" + (lang === "zh" ? "zh-CN" : "en") + "/" + page.id + ".md" : "frontend/src/i18n/messages/docs" + (page.id.startsWith("help-") ? "-help" : article.detail ? "-expanded" : "") + (lang === "zh" ? ".zh-CN.ts" : ".en.ts") });
     }

@@ -200,6 +200,15 @@ test("team session inheritance and explicitly bound key preview match inference 
     const log = await waitForSessionLog(page.request, headers, inferenceSession);
     expect(log.team_id).toBe(teamID);
     expect(Number(log.spend)).toBeCloseTo(0.000012, 10);
+
+    // RPM 耗尽后仍能只读预览，但预览不能清除计数或为下一次真实请求增加可用容量。
+    // 设为零使分钟边界也保持稳定；已有消费与归属账单不得被修改。
+    const exhausted = await page.request.post(GATEWAY + "/key/update", { headers, data: { key, rpm_limit: 0 } });
+    expect(exhausted.status(), await exhausted.text()).toBe(200);
+    for (let index = 0; index < 3; index++) await preview(key);
+    const refused = await page.request.post(GATEWAY + "/bypass/openai/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: { model, messages: [{ role: "user", content: "preview cannot restore exhausted rpm" }] } });
+    expect(refused.status(), await refused.text()).toBe(429);
+    expect((await refused.json()).error.message).toContain("rpm_limit");
   } finally {
     if (teamID) await page.request.post(GATEWAY + "/route_template/binding", { headers, data: { scope: "team", scope_id: teamID, route_template_id: "" } });
     if (key) {

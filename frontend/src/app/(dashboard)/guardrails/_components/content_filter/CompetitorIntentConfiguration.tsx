@@ -153,7 +153,9 @@ const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps
         {header}
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            {t("Block or reframe competitor comparison questions. When enabled, airline type auto-loads competitors from IATA; generic type requires manual competitor list.")}
+            {t(
+              "Block or reframe competitor comparison questions. When enabled, airline type auto-loads competitors from IATA; generic type requires manual competitor list.",
+            )}
           </p>
         </CardContent>
       </Card>
@@ -180,7 +182,9 @@ const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps
       {header}
       <CardContent>
         <p className="mb-4 text-sm text-muted-foreground">
-          {t("Block or reframe competitor comparison questions. Airline type uses major airlines (excluding your brand); generic requires manual competitor list.")}
+          {t(
+            "Block or reframe competitor comparison questions. Airline type uses major airlines (excluding your brand); generic requires manual competitor list.",
+          )}
         </p>
         <FieldGroup>
           <Field>
@@ -239,7 +243,9 @@ const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps
                 tokenSeparators={[","]}
                 placeholder={t("Type and press Enter to add")}
               />
-              <FieldDescription>{t("Countries, cities, airports for disambiguation (e.g. qatar, doha)")}</FieldDescription>
+              <FieldDescription>
+                {t("Countries, cities, airports for disambiguation (e.g. qatar, doha)")}
+              </FieldDescription>
             </Field>
           )}
 
@@ -319,21 +325,25 @@ const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps
                 </Field>
               ))}
             </div>
-            <FieldDescription>
+            {/* 说明正文含列表，不能放进 FieldDescription 渲染的 p 元素，否则浏览器会重排 DOM 并触发 hydration 错误。 */}
+            <div className="text-left text-sm leading-normal font-normal text-muted-foreground">
               {t("Classify competitor intent by confidence (0–1). Higher confidence -> stronger intent.")}
               <ul className="mt-1 mb-0 list-disc pl-5">
                 <li>
-                  <strong>{t("High (≥)")}</strong>{t(": Treat as full competitor comparison -> uses \"Competitor comparison\" policy")}
+                  <strong>{t("High (≥)")}</strong>
+                  {t(': Treat as full competitor comparison -> uses "Competitor comparison" policy')}
                 </li>
                 <li>
-                  <strong>{t("Medium (≥)")}</strong>{t(": Treat as possible comparison -> uses \"Possible competitor comparison\" policy")}
+                  <strong>{t("Medium (≥)")}</strong>
+                  {t(': Treat as possible comparison -> uses "Possible competitor comparison" policy')}
                 </li>
                 <li>
-                  <strong>{t("Low (≥)")}</strong>{t(": Log only; allow request. Below Low -> allow with no action")}
+                  <strong>{t("Low (≥)")}</strong>
+                  {t(": Log only; allow request. Below Low -> allow with no action")}
                 </li>
               </ul>
               {t("Raise thresholds to be more permissive; lower them to be stricter.")}
-            </FieldDescription>
+            </div>
           </Field>
         </FieldGroup>
       </CardContent>

@@ -320,71 +320,69 @@ const UI_SINGLE_WORDS = new Set([
   "assistant",
 ]);
 
-const TECHNICAL_LATIN_TOKENS = new Set(
-  [
-    "api",
-    "json",
-    "http",
-    "https",
-    "sse",
-    "jwt",
-    "aws",
-    "openai",
-    "github",
-    "litellm",
-    "xhub",
-    "xgo",
-    "go",
-    "re2",
-    "fal",
-    "post",
-    "get",
-    "put",
-    "patch",
-    "delete",
-    "head",
-    "options",
-    "key",
-    "model",
-    "metadata",
-    "texts",
-    "replacement",
-    "success",
-    "error",
-    "body",
-    "headers",
-    "timeout",
-    "tokens",
-    "token",
-    "flagged",
-    "lakera",
-    "hate",
-    "selfharm",
-    "sexual",
-    "violence",
-    "applyguardrail",
-    "guardrail_intervened",
-    "analyzer",
-    "anonymizer",
-    "detect-secrets",
-    "modelink",
-    "fal",
-    "id",
-    "null",
-    "nan",
-    "infinity",
-    "number",
-    "any",
-    "mib",
-    "rpm",
-    "tpm",
-    "qiniu",
-    "volcengine",
-    "simple-shuffle",
-    "traffic-split",
-    "bypass",
-  ],
-);
+const TECHNICAL_LATIN_TOKENS = new Set([
+  "api",
+  "json",
+  "http",
+  "https",
+  "sse",
+  "jwt",
+  "aws",
+  "openai",
+  "github",
+  "litellm",
+  "xhub",
+  "xgo",
+  "go",
+  "re2",
+  "fal",
+  "post",
+  "get",
+  "put",
+  "patch",
+  "delete",
+  "head",
+  "options",
+  "key",
+  "model",
+  "metadata",
+  "texts",
+  "replacement",
+  "success",
+  "error",
+  "body",
+  "headers",
+  "timeout",
+  "tokens",
+  "token",
+  "flagged",
+  "lakera",
+  "hate",
+  "selfharm",
+  "sexual",
+  "violence",
+  "applyguardrail",
+  "guardrail_intervened",
+  "analyzer",
+  "anonymizer",
+  "detect-secrets",
+  "modelink",
+  "fal",
+  "id",
+  "null",
+  "nan",
+  "infinity",
+  "number",
+  "any",
+  "mib",
+  "rpm",
+  "tpm",
+  "qiniu",
+  "volcengine",
+  "simple-shuffle",
+  "traffic-split",
+  "bypass",
+]);
 
 /**
  * 判断中英文混排文本中的拉丁字符是否全部属于可证明的技术标识符。
@@ -494,7 +492,12 @@ function inConsole(node: ts.Node): boolean {
       if (
         ts.isIdentifier(obj) &&
         obj.text === "console" &&
-        (method === "log" || method === "debug" || method === "info" || method === "warn" || method === "error" || method === "trace")
+        (method === "log" ||
+          method === "debug" ||
+          method === "info" ||
+          method === "warn" ||
+          method === "error" ||
+          method === "trace")
       ) {
         return true;
       }
@@ -579,7 +582,12 @@ function isExternalGuardrailCatalogValue(node: ts.Node, file: string): boolean {
  */
 function isTranslatedCatalogValue(node: ts.Node, file: string): boolean {
   const property = node.parent;
-  if (!property || !ts.isPropertyAssignment(property) || property.initializer !== node || propNameOf(property.name) !== "label") {
+  if (
+    !property ||
+    !ts.isPropertyAssignment(property) ||
+    property.initializer !== node ||
+    propNameOf(property.name) !== "label"
+  ) {
     return false;
   }
   const base = path.basename(file);
@@ -587,9 +595,10 @@ function isTranslatedCatalogValue(node: ts.Node, file: string): boolean {
   while (current) {
     if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
       return (
-        base === "RequestLogsFilters.tsx" &&
-        (current.name.text === "STATUS_FILTER_KEYS" || current.name.text === "CACHE_FILTER_KEYS")
-      ) || (base === "constants.ts" && current.name.text === "ERROR_CODE_OPTIONS");
+        (base === "RequestLogsFilters.tsx" &&
+          (current.name.text === "STATUS_FILTER_KEYS" || current.name.text === "CACHE_FILTER_KEYS")) ||
+        (base === "constants.ts" && current.name.text === "ERROR_CODE_OPTIONS")
+      );
     }
     if (ts.isFunctionDeclaration(current) && current.name) {
       return base === "taskStatus.ts" && current.name.text === "requestLogStatus";
@@ -605,23 +614,32 @@ function isTranslatedCatalogValue(node: ts.Node, file: string): boolean {
  * 调用场景：定价模态和动态翻译页签用小写值拼接翻译键；扫描器只跳过 translated。
  * 边界：普通比较、属性、toast 或其他函数调用都不足以证明已翻译；["pricing"].map(x => <span>{x}</span>) 必须继续命中。
  */
-function mappedTokenUsage(node: ts.Node): "translated" | "rendered" | null {
+function mappedTokenUsage(node: ts.Node): "translated" | "rendered" | "technical" | null {
   const array = node.parent;
   if (!array || !ts.isArrayLiteralExpression(array)) return null;
   let owner: ts.Expression = array;
   if (ts.isAsExpression(array.parent) && array.parent.expression === array) owner = array.parent;
   if (ts.isParenthesizedExpression(owner.parent) && owner.parent.expression === owner) owner = owner.parent;
   const access = owner.parent;
-  if (!access || !ts.isPropertyAccessExpression(access) || access.expression !== owner || access.name.text !== "map") return null;
+  if (!access || !ts.isPropertyAccessExpression(access) || access.expression !== owner || access.name.text !== "map")
+    return null;
   const call = access.parent;
   if (!call || !ts.isCallExpression(call) || call.expression !== access) return null;
   const callback = call.arguments[0];
-  if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || callback.parameters.length === 0) return null;
+  if (
+    !callback ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+    callback.parameters.length === 0
+  )
+    return null;
   const names = new Set<string>();
   /** 收集 map 首参的标识符；参数可为标识符或解构绑定，无返回值，仅服务当前回调分析。 */
   const collectNames = (name: ts.BindingName) => {
     if (ts.isIdentifier(name)) names.add(name.text);
-    else name.elements.forEach((element) => { if (ts.isBindingElement(element)) collectNames(element.name); });
+    else
+      name.elements.forEach((element) => {
+        if (ts.isBindingElement(element)) collectNames(element.name);
+      });
   };
   collectNames(callback.parameters[0].name);
   let directlyRendered = false;
@@ -656,7 +674,56 @@ function mappedTokenUsage(node: ts.Node): "translated" | "rendered" | null {
   };
   inspect(callback.body);
   if (directlyRendered) return "rendered";
-  return translated ? "translated" : null;
+  // map 内仅用于比较、键或 value 属性的固定 token 是协议值；没有直接展示时不要求翻译。
+  return translated ? "translated" : "technical";
+}
+
+/**
+ * 判断字符串是否属于模型调用示例正文。
+ * 参数 node 为候选字符串，file 为源码路径；返回仅覆盖 modelInvocation 的 falInput 和 invocationCurl 示例对象。
+ * 这些 prompt/content/input 按产品规范必须保持英文，且最终只出现在 curl 请求正文中；普通 JSX 或 placeholder 不会命中。
+ */
+function isRequestExampleValue(node: ts.Node, file: string): boolean {
+  if (path.basename(file) !== "modelInvocation.ts") return false;
+  let current: ts.Node | undefined = node;
+  while (current) {
+    if (ts.isFunctionDeclaration(current) && current.name) {
+      return current.name.text === "falInput" || current.name.text === "invocationCurl";
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+/** 判断文档中心中必须保持英文的协议示例或内部控制值；参数为 AST 字符串和路径，返回是否可精确豁免。
+ * 仅识别响应 JSON 样例、Markdown/curl 替换片段及不渲染的校验哨兵；同文件 JSX、标签、错误状态仍进入扫描。 */
+function isDocumentationProtocolValue(node: ts.Node, file: string): boolean {
+  const relative = file.split(path.sep).join("/");
+  if (!relative.includes("/components/docs/")) return false;
+  let current: ts.Node | undefined = node;
+  while (current) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
+      if (path.basename(file) === "DocsCenter.tsx" && current.name.text === "responseErrors") return true;
+    }
+    current = current.parent;
+  }
+  if (path.basename(file) === "ApiRunner.tsx" && ts.isNewExpression(node.parent)) return true;
+  if (path.basename(file) === "apiMarkdown.ts" && isErrorMessage(node)) return true;
+  const parent = node.parent;
+  if (path.basename(file) === "DocsCenter.tsx" && parent && ts.isCallExpression(parent)) {
+    const method = ts.isPropertyAccessExpression(parent.expression) ? parent.expression.name.text : "";
+    if (method === "replaceAll") return true;
+  }
+  if (
+    path.basename(file) === "DocsCenter.tsx" &&
+    parent &&
+    ts.isBinaryExpression(parent) &&
+    parent.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+    (node as ts.StringLiteral).text?.startsWith(".")
+  )
+    return true;
+  if (path.basename(file) === "DocsCenter.tsx" && isStableTokenOperand(node)) return true;
+  return false;
 }
 
 function calleeName(expr: ts.Expression): { obj: string; method: string } {
@@ -721,7 +788,10 @@ function placeholderName(expr: ts.Expression, index: number, used: Set<string>):
   return name;
 }
 
-function fromTemplate(node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral | ts.StringLiteral, sf: ts.SourceFile): {
+function fromTemplate(
+  node: ts.TemplateExpression | ts.NoSubstitutionTemplateLiteral | ts.StringLiteral,
+  sf: ts.SourceFile,
+): {
   template: string;
   vars: { name: string; expr: string }[];
   probe: string;
@@ -787,7 +857,13 @@ function technicalAttrContext(node: ts.Node): boolean {
 }
 
 export function findHitsInSource(file: string, text: string): ProseHit[] {
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const sf = ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const hits: ProseHit[] = [];
   const covered = new Set<ts.Node>();
 
@@ -853,7 +929,8 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
     }
     const collapsed = collapse(decodeEntities(template));
     const collapsedProbe = collapse(decodeEntities(probe));
-    if (!isEnglishProse(collapsedProbe, { singleWordUi: true }) && !isEnglishProse(collapsed, { singleWordUi: true })) return;
+    if (!isEnglishProse(collapsedProbe, { singleWordUi: true }) && !isEnglishProse(collapsed, { singleWordUi: true }))
+      return;
 
     const first = significant[0];
     const last = significant[significant.length - 1];
@@ -879,11 +956,30 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
       const lead = raw.length - raw.trimStart().length;
       const trail = raw.length - raw.trimEnd().length;
       const inner = raw.slice(lead, raw.length - trail);
-      push(node, node.getStart(sf) + lead, node.getEnd() - trail, "jsx-text", collapse(decodeEntities(inner)), [], false, true);
+      push(
+        node,
+        node.getStart(sf) + lead,
+        node.getEnd() - trail,
+        "jsx-text",
+        collapse(decodeEntities(inner)),
+        [],
+        false,
+        true,
+      );
     }
 
     const mappedUsage = mappedTokenUsage(node);
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) && !skipNode(node) && !technicalAttrContext(node) && !isExternalGuardrailCatalogValue(node, file) && !isTranslatedCatalogValue(node, file) && mappedUsage !== "translated") {
+    if (
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) &&
+      !skipNode(node) &&
+      !technicalAttrContext(node) &&
+      !isExternalGuardrailCatalogValue(node, file) &&
+      !isTranslatedCatalogValue(node, file) &&
+      !isRequestExampleValue(node, file) &&
+      !isDocumentationProtocolValue(node, file) &&
+      mappedUsage !== "translated" &&
+      mappedUsage !== "technical"
+    ) {
       const built = ts.isTemplateExpression(node) ? fromTemplate(node, sf) : fromTemplate(node as ts.StringLiteral, sf);
       const parent = node.parent;
       const asAttr = !!parent && ts.isJsxAttribute(parent) && parent.initializer === node;
@@ -892,14 +988,19 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
       const asTitle = isVisibleTitleList(node) || mappedUsage === "rendered";
       const inHandler = isInsideEventHandler(node);
       const inJsx = !inHandler && (asAttr || isInsideJsx(node));
-      const asProp = !!parent && ts.isPropertyAssignment(parent) && parent.initializer === node && USER_FACING_PROPS.has(propNameOf(parent.name));
+      const asProp =
+        !!parent &&
+        ts.isPropertyAssignment(parent) &&
+        parent.initializer === node &&
+        USER_FACING_PROPS.has(propNameOf(parent.name));
       const asToast = isToastArg(node);
       const asZod = isZodMessage(node);
       const asError = isErrorMessage(node) || inSetErrorArgument(node) || isUiErrorBinding(node);
       const renderedChild = isRenderedJsxChild(node);
       const facingAttr = userFacingAttributeAncestor(node);
       const asVisibleProp = asProp && propNameOf((parent as ts.PropertyAssignment).name) !== "text";
-      const singleWordUi = asAttr || asDefault || asTitle || renderedChild || facingAttr || asToast || asError || asVisibleProp;
+      const singleWordUi =
+        asAttr || asDefault || asTitle || renderedChild || facingAttr || asToast || asError || asVisibleProp;
       const probe = /[\u3400-\u9fff]/u.test(built.template) ? built.template : built.probe;
       const prose = isEnglishProse(probe, { singleWordUi, anySingleWord: asTitle });
       if (prose) {
@@ -913,17 +1014,17 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
                   ? "default"
                   : asTitle
                     ? "title-list"
-                  : asAttr
-                    ? `attr:${attrNameOf(parent as ts.JsxAttribute)}`
-                    : asToast
-                      ? "toast"
-                      : asZod
-                        ? "zod"
-                        : asError
-                          ? "error"
-                          : asProp
-                            ? `prop:${propNameOf((parent as ts.PropertyAssignment).name)}`
-                            : "jsx-string";
+                    : asAttr
+                      ? `attr:${attrNameOf(parent as ts.JsxAttribute)}`
+                      : asToast
+                        ? "toast"
+                        : asZod
+                          ? "zod"
+                          : asError
+                            ? "error"
+                            : asProp
+                              ? `prop:${propNameOf((parent as ts.PropertyAssignment).name)}`
+                              : "jsx-string";
               push(node, node.getStart(sf), node.getEnd(), kind, built.template, built.vars, asAttr, singleWordUi);
             }
           }
@@ -936,7 +1037,9 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
 
   visit(sf);
 
-  const filtered = hits.filter((h) => !hits.some((o) => o !== h && o.start <= h.start && o.end >= h.end && o.end - o.start > h.end - h.start));
+  const filtered = hits.filter(
+    (h) => !hits.some((o) => o !== h && o.start <= h.start && o.end >= h.end && o.end - o.start > h.end - h.start),
+  );
   filtered.sort((a, b) => a.start - b.start);
   return filtered;
 }
@@ -944,7 +1047,13 @@ export function findHitsInSource(file: string, text: string): ProseHit[] {
 function userFacingAttr(attr: ts.JsxAttribute): boolean {
   const name = attrNameOf(attr);
   if (name.startsWith("aria-")) {
-    return name === "aria-label" || name === "aria-description" || name === "aria-placeholder" || name === "aria-roledescription" || name === "aria-valuetext";
+    return (
+      name === "aria-label" ||
+      name === "aria-description" ||
+      name === "aria-placeholder" ||
+      name === "aria-roledescription" ||
+      name === "aria-valuetext"
+    );
   }
   return USER_FACING_ATTRS.has(name);
 }
@@ -952,7 +1061,14 @@ function userFacingAttr(attr: ts.JsxAttribute): boolean {
 function isInsideJsx(node: ts.Node): boolean {
   let p: ts.Node | undefined = node.parent;
   while (p) {
-    if (ts.isJsxElement(p) || ts.isJsxFragment(p) || ts.isJsxExpression(p) || ts.isJsxAttribute(p) || ts.isJsxSelfClosingElement(p)) return true;
+    if (
+      ts.isJsxElement(p) ||
+      ts.isJsxFragment(p) ||
+      ts.isJsxExpression(p) ||
+      ts.isJsxAttribute(p) ||
+      ts.isJsxSelfClosingElement(p)
+    )
+      return true;
     p = p.parent;
   }
   return false;
@@ -974,7 +1090,8 @@ function isInsideCallArgument(node: ts.Node): boolean {
     const parent: ts.Node | undefined = current.parent;
     if (!parent) return false;
     if (ts.isCallExpression(parent) && parent.arguments.some((arg) => arg === current)) return true;
-    if (ts.isJsxExpression(parent) || ts.isJsxElement(parent) || ts.isJsxFragment(parent) || isFunctionBoundary(parent)) return false;
+    if (ts.isJsxExpression(parent) || ts.isJsxElement(parent) || ts.isJsxFragment(parent) || isFunctionBoundary(parent))
+      return false;
     current = parent;
   }
   return false;
@@ -1043,7 +1160,12 @@ function isToastArg(node: ts.Node): boolean {
     current = parent;
   }
   const parent = node.parent;
-  if (parent && ts.isPropertyAssignment(parent) && parent.initializer === node && ts.isObjectLiteralExpression(parent.parent)) {
+  if (
+    parent &&
+    ts.isPropertyAssignment(parent) &&
+    parent.initializer === node &&
+    ts.isObjectLiteralExpression(parent.parent)
+  ) {
     const pname = propNameOf(parent.name);
     if (pname !== "description" && pname !== "title") return false;
     const obj = parent.parent;
@@ -1055,7 +1177,20 @@ function isToastArg(node: ts.Node): boolean {
   return false;
 }
 
-const ZOD_METHODS = new Set(["min", "max", "length", "regex", "email", "url", "uuid", "includes", "startsWith", "endsWith", "nonempty", "refine"]);
+const ZOD_METHODS = new Set([
+  "min",
+  "max",
+  "length",
+  "regex",
+  "email",
+  "url",
+  "uuid",
+  "includes",
+  "startsWith",
+  "endsWith",
+  "nonempty",
+  "refine",
+]);
 
 function isZodMessage(node: ts.Node): boolean {
   const parent = node.parent;
@@ -1071,7 +1206,12 @@ function isZodMessage(node: ts.Node): boolean {
   if (ts.isPropertyAssignment(parent) && parent.initializer === node && propNameOf(parent.name) === "message") {
     let p: ts.Node | undefined = parent.parent;
     while (p) {
-      if (ts.isCallExpression(p) && ts.isPropertyAccessExpression(p.expression) && ZOD_METHODS.has(p.expression.name.text)) return true;
+      if (
+        ts.isCallExpression(p) &&
+        ts.isPropertyAccessExpression(p.expression) &&
+        ZOD_METHODS.has(p.expression.name.text)
+      )
+        return true;
       p = p.parent;
     }
   }
@@ -1094,7 +1234,8 @@ function isVisibleTitleList(node: ts.Node): boolean {
   let init: ts.Node = arr;
   if (ts.isAsExpression(arr.parent) || ts.isSatisfiesExpression(arr.parent)) init = arr.parent;
   const decl = init.parent;
-  if (!decl || !ts.isVariableDeclaration(decl) || decl.initializer !== init || !ts.isIdentifier(decl.name)) return false;
+  if (!decl || !ts.isVariableDeclaration(decl) || decl.initializer !== init || !ts.isIdentifier(decl.name))
+    return false;
   return /title|label|heading|step/i.test(decl.name.text);
 }
 
@@ -1143,7 +1284,11 @@ function isUiErrorBinding(node: ts.Node): boolean {
   while (current) {
     const parent: ts.Node | undefined = current.parent;
     if (!parent) break;
-    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) && /^(message|errorMessage|errMsg|errorText)$/.test(parent.name.text)) {
+    if (
+      ts.isVariableDeclaration(parent) &&
+      ts.isIdentifier(parent.name) &&
+      /^(message|errorMessage|errMsg|errorText)$/.test(parent.name.text)
+    ) {
       const init = parent.initializer;
       if (init && node.getStart() >= init.getStart() && node.getEnd() <= init.getEnd()) {
         name = parent.name.text;
@@ -1181,12 +1326,20 @@ function isUiErrorBinding(node: ts.Node): boolean {
     if (used) return;
     const arg0 = ts.isCallExpression(n) || ts.isNewExpression(n) ? n.arguments?.[0] : undefined;
     if (arg0 && ts.isIdentifier(arg0) && arg0.text === name) {
-      if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && (n.expression.text === "Error" || n.expression.text.endsWith("Error"))) {
+      if (
+        ts.isNewExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        (n.expression.text === "Error" || n.expression.text.endsWith("Error"))
+      ) {
         used = true;
       }
       if (ts.isCallExpression(n)) {
         const expr = n.expression;
-        const callee = ts.isIdentifier(expr) ? expr.text : ts.isPropertyAccessExpression(expr) ? expr.expression.getText() : "";
+        const callee = ts.isIdentifier(expr)
+          ? expr.text
+          : ts.isPropertyAccessExpression(expr)
+            ? expr.expression.getText()
+            : "";
         const method = ts.isPropertyAccessExpression(expr) ? expr.name.text : "";
         if (callee === "toast" || method === "setError" || callee === "setError") used = true;
       }

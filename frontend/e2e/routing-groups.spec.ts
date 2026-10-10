@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto, watchGateway, t } from "./helpers";
 
-/** 验证完整模板的三个表单、双向JSON、持久化、个人密钥绑定、真实组回退与计费、编辑和删除。
- * 前置隔离数据库及本地上游；finally先删除自建密钥，再模板与模型，运行器最终销毁schema。
+/** 验证完整模板的三个表单、双向JSON、指南复制反馈、持久化、个人密钥绑定、真实组回退与计费、编辑和删除。
+ * 前置隔离数据库、本地上游及可控剪贴板；验证成功和拒绝反馈，finally先删除自建密钥，再模板与模型，运行器最终销毁schema。
  */
 test("complete routing template drives real group routing and fallbacks", async ({ page }) => {
   test.setTimeout(120_000);
@@ -147,6 +147,32 @@ test("complete routing template drives real group routing and fallbacks", async 
     await page.getByRole("button", { name: "完整 JSON 配置指南" }).click();
     const guide = page.getByRole("dialog", { name: "完整 JSON 配置指南" });
     await expect(guide.getByRole("cell", { name: "routing_groups", exact: true })).toBeVisible();
+    await guide.getByRole("tab", { name: "可导入示例", exact: true }).click();
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await guide.getByRole("button", { name: "复制示例", exact: true }).click();
+    await expect(guide.getByRole("status")).toHaveText("已复制");
+    expect(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())).routing_groups).toHaveLength(1);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.reject(new Error("denied for E2E")) },
+      });
+    });
+    await guide.getByRole("button", { name: "复制示例", exact: true }).click();
+    await expect(guide.getByRole("status")).toHaveText("复制失败，请手动选择代码复制。");
+    await page.keyboard.press("Escape");
+    await expect(guide).toHaveCount(0);
+    await page.getByRole("button", { name: "English", exact: true }).click();
+    await page.getByRole("button", { name: "Complete JSON configuration guide", exact: true }).click();
+    const englishGuide = page.getByRole("dialog", { name: "Complete JSON configuration guide" });
+    await englishGuide.getByRole("tab", { name: "Importable example", exact: true }).click();
+    await expect(englishGuide.getByRole("button", { name: "Copy example", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(englishGuide).toHaveCount(0);
+    await page.getByRole("button", { name: "中文", exact: true }).click();
+    await page.getByRole("button", { name: "完整 JSON 配置指南", exact: true }).click();
+    await guide.getByRole("tab", { name: "可导入示例", exact: true }).click();
+    await expect(guide.getByRole("button", { name: "复制示例", exact: true })).toBeVisible();
     await page.screenshot({ path: "../.e2e/routing-templates/guide-desktop.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     expect((await guide.boundingBox())!.width).toBeLessThanOrEqual(390);

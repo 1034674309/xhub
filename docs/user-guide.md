@@ -38,6 +38,8 @@ Several deployments can share a public model name. This gives routing a choice o
 
 *Figure 2: Configure credentials in Providers, then return to All Models and use Add Model. Inspect the model, associated credential and price in the table. Click to open the full screenshot. This is an existing demonstration environment; its models and prices are examples. Labels can differ by console language and version.*
 
+After saving a dialogue deployment, a platform administrator can run **Test connection**. The server uses the saved provider credentials and deployment ID to send a minimal real English dialogue request. This test does not support media deployments. It bypasses gateway key quotas, routing, cooldown, and gateway usage accounting, but the provider may still execute and charge for the request. A successful result confirms only this probe; it does not prove that streaming, tools, images, asynchronous operations, or the application's complete production request will work.
+
 
 ## 3. Assign the right administrators
 
@@ -80,6 +82,8 @@ Budgets check recorded spend plus available hot spend. They do not reserve the c
 
 Give each application a recognizable key name. The create dialog keeps its optional policy settings to a budget, budget reset period, and route template; key lifecycle settings remain available for expiry and rotation. Team, key type, and model access are basic access choices. RPM/TPM limits remain available when editing an existing key where the account is authorized to use them. Keep the secret in an environment variable or secret store.
 
+When creating or updating a key through the API, `duration` accepts a positive integer followed by `s`, `m`, `h`, or `d`, such as `30m`, `12h`, or `7d`. An empty string creates a key without an expiry. Zero, negative, malformed, and overflowing durations are rejected.
+
 Use XHub virtual keys in applications. Provider secrets connect XHub to upstreams; master credentials are for bootstrap/emergency administration; session tokens serve console sessions. Virtual keys do not grant console administration.
 
 ## 6. Make an application request
@@ -116,9 +120,9 @@ Replace the gateway URL for your deployment. A URL on port `3000` points to the 
 
 ## 7. Configure routing
 
-Manage templates at `/route-templates` with an account authorized for the target scope. Selection precedence is **key → team → organization → platform**. Clearing a selection restores inheritance. The selected template replaces the parent template as a whole; fields do not merge across scopes. Projects and accounts do not have a separate template assignment.
+Manage templates at `/route-templates` with an account authorized for the target scope. The bindable selection precedence is **key → team → organization**; if none is selected, built-in platform settings use model-managed deployment defaults. Clearing a selection restores inheritance. The selected template replaces the parent template as a whole; fields do not merge across scopes. Projects and accounts do not have a separate template assignment.
 
-[![Routing template resolution: key, team, organization, platform; stop at the first assignment](assets/guide-routing.svg)](assets/guide-routing.svg)
+[![Routing template resolution: key, team, organization, then built-in platform defaults; stop at the first assignment](assets/guide-routing.svg)](assets/guide-routing.svg)
 
 *Figure 5: Check assignments from left to right. Clearing a key's selection restores the team or higher-level selection.*
 
@@ -130,7 +134,7 @@ Manage templates at `/route-templates` with an account authorized for the target
 | Template `retry_policy.max_attempts` | Total attempts per deployment, including the first. All four reliability fields are required; counting differs from legacy `num_retries`. |
 | Timeout | Per upstream attempt; default 60 seconds, rather than a deadline for the entire request |
 
-Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/routing.md) for fields and inheritance semantics. Once a stream has emitted response bytes, XHub does not switch providers for that response.
+Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/routing.md) for fields and inheritance semantics. Fallback happens only before response bytes are emitted and can be disabled per request with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
 
 ## 8. Read usage, costs, and logs
 

@@ -76,7 +76,7 @@ XHub 面向企业建设统一的 **AI 接入与治理平台**，将多模型与�
 
 在模型部署与路由模板中配置加权分流，以及按负载、费用、延迟或用量选择部署的策略。通过路由组组织模型资源，为通用错误、上下文超限和供应商内容策略错误配置回退链，结合重试、超时与失败冷却处理上游变化。
 
-组织、团队和密钥可以选择或继承路由模板。支持会话粘性与非流式完整响应缓存；流式内容开始输出后，不会重新切换供应商并重放响应。
+组织、团队和密钥可以选择或继承路由模板。支持会话粘性与非流式完整响应缓存。跨模型回退只发生在响应字节输出前，可用 `disable_fallbacks:true` 关闭；固定续传、原生异步任务创建和 Responses background 请求不会换模型重放。
 
 ### 安全护栏：从内置规则到业务定制
 
@@ -158,7 +158,7 @@ docker version
 docker compose version
 ```
 
-当前部署方式是在主机上构建，再打包为 Docker 镜像，因此还需要 **Git、Go 1.25、Node.js ≥24.14.1、npm ≥11.10.0**，以及可读取的 `/etc/ssl/cert.pem`。构建脚本需要 Bash 环境；Windows 用户请在 WSL2 Linux 环境中安装上述工具并启用 Docker Desktop 的 WSL 集成。脚本支持 amd64/arm64，从 npmmirror 下载 Linux Node.js；完整要求见[安装指南](docs/getting-started.zh-CN.md)。
+当前部署方式是在主机上构建，再打包为 Docker 镜像，因此还需要 **Git、Go 1.25、Node.js ≥24.14.1、npm ≥11.10.0**，以及可读取的系统 CA bundle。构建脚本会检测 Debian/Ubuntu、RHEL、macOS 和 Alpine 的常见路径；其它位置可通过 `XHUB_CA_CERT_FILE` 指定。构建脚本需要 Bash 环境；Windows 用户请在 WSL2 Linux 环境中安装上述工具并启用 Docker Desktop 的 WSL 集成。脚本支持 amd64/arm64，从 npmmirror 下载 Linux Node.js；完整要求见[安装指南](docs/getting-started.zh-CN.md)。
 
 ### 2. 构建并启动
 

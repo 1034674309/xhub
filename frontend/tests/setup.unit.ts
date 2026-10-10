@@ -1,5 +1,4 @@
 import { beforeEach, vi } from "vitest";
-import "./remapLiteLLMProxyReads";
 import { setActiveLocale } from "@/i18n/runtime";
 
 beforeEach(() => {

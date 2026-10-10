@@ -76,6 +76,13 @@ type Host interface {
 	// 调用：gateway/usage/benchmark.go
 	// 测试：无直接单测
 	ModelList() []config.ModelEntry
+	// AttachCredential 按部署保存的凭据名称补齐上游地址和密钥；连接测试只传入服务端模型表中的部署。
+	// 参数 dep（config.ModelEntry）：已按 model_info.id 匹配的部署；返回补齐后的副本或凭据读取错误。
+	// 调用：HealthTestConnection；失败不会修改模型、额度或用量。
+	AttachCredential(dep config.ModelEntry) (config.ModelEntry, error)
+	// HTTPClient 返回数据面共用的受超时约束客户端，连接测试据此访问真实上游。
+	// 参数：无；返回 *http.Client。调用：HealthTestConnection；不改变客户端配置。
+	HTTPClient() *http.Client
 }
 
 // traceModule records that usage routes are being mounted.

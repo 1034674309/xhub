@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import prettier from "eslint-config-prettier/flat";
+import react from "eslint-plugin-react";
 import unusedImports from "eslint-plugin-unused-imports";
 import testingLibrary from "eslint-plugin-testing-library";
 import jestDom from "eslint-plugin-jest-dom";
@@ -9,14 +10,24 @@ import local from "./scripts/eslint-rules/index.mjs";
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "src/lib/http/schema.d.ts"],
+    ignores: [
+      ".next*/**",
+      ".e2e-report/**",
+      "playwright-report/**",
+      "test-results/**",
+      "out/**",
+      "build/**",
+      "coverage/**",
+      "next-env.d.ts",
+      "src/lib/http/schema.d.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...nextCoreWebVitals,
   prettier,
   {
-    plugins: { "unused-imports": unusedImports, local },
+    plugins: { react, "unused-imports": unusedImports, local },
     rules: {
       "unused-imports/no-unused-imports": "error",
       "local/no-large-inline-object-arg": "warn",

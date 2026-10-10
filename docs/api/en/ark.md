@@ -72,7 +72,7 @@ Parameter support depends on the deployed model and conversion or Bypass path; u
 
 ## Task lifecycle and protocol choice
 
-Save the creation id as TASK_ID. Query until a terminal state. Content-generation transport uses content arrays. See [Seedance Fal](fal-seedance) for deployments bound to Fal; the protocols are not interchangeable.
+Save the creation id as TASK_ID. Query until a terminal state. Content-generation transport uses content arrays. See [Seedance Fal](fal-seedance.md) for deployments bound to Fal; the protocols are not interchangeable.
 
 ~~~http
 GET /api/v3/contents/generations/tasks/{TASK_ID}

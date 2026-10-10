@@ -39,3 +39,18 @@ it("indexes real headings outside code fences", () => {
     { title: "请求参数", id: "doc-请求参数" },
   ]);
 });
+
+/** 目的：验证源文档文件名映射到控制台路由，同时保留页内与外部链接；前置静态 Markdown 和目录映射；不发请求，无需清理。 */
+it("maps repository Markdown links to console routes", () => {
+  render(
+    <I18nProvider initialLocale="en">
+      <DocumentationMarkdown
+        markdown="[Chat](chat.md) [Section](#request) [External](https://example.com)"
+        linkHrefs={{ "chat.md": "/docs/api/chat-completions" }}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "/docs/api/chat-completions");
+  expect(screen.getByRole("link", { name: "Section" })).toHaveAttribute("href", "#request");
+  expect(screen.getByRole("link", { name: "External" })).toHaveAttribute("href", "https://example.com");
+});

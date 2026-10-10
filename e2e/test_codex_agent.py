@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 from real_dataset import Dataset, load_manifest
 from fake_upstream import codex_answer
+from codex_simulator import resolve_billing_identity
 
 
 class CodexAgentTests(unittest.TestCase):
@@ -72,6 +73,42 @@ class CodexAgentTests(unittest.TestCase):
         self.assertEqual(len(self.requests), 3)
         self.bills.pop("call-2")
         self.assertIsNone(self.dataset.codex_conversation(self.key, True))
+
+    def test_personal_key_billing_identity_uses_current_membership(self):
+        """目的：个人密钥未绑定团队时仍按用户当前唯一团队计费；前置生成响应 team_id 为空及权威用户成员关系，验证派生快照且不篡改原密钥，无外部数据需要清理。"""
+        key = {**self.key, "owner_type": "personal", "team_id": "", "organization_id": ""}
+        dataset = mock.Mock()
+        dataset.api.return_value = ({"user_info": {"teams": [{
+            "team_id": "current-team", "organization_id": "current-org",
+        }]}}, {})
+        resolved = resolve_billing_identity(dataset, key)
+        self.assertEqual(resolved["billing_team_id"], "current-team")
+        self.assertEqual(resolved["billing_organization_id"], "current-org")
+        self.assertEqual(key["team_id"], "")
+        dataset.api.assert_called_once_with("/user/info?user_id=user")
+
+    def test_personal_key_billing_identity_allows_teamless_user(self):
+        """目的：无团队用户的个人密钥保持空团队和空组织计费；前置合法空成员关系列表，验证边界结果且不发额外请求，无持久化数据需要清理。"""
+        key = {**self.key, "owner_type": "personal", "team_id": "", "organization_id": ""}
+        dataset = mock.Mock()
+        dataset.api.return_value = ({"user_info": {"teams": []}}, {})
+        resolved = resolve_billing_identity(dataset, key)
+        self.assertEqual((resolved["billing_team_id"], resolved["billing_organization_id"]), ("", ""))
+
+    def test_personal_key_billing_identity_rejects_ambiguous_or_incomplete_membership(self):
+        """目的：夹具不能猜测多个团队或接受缺字段成员关系；前置三种错误接口响应，验证明确失败，全部为内存样本无需清理。"""
+        key = {**self.key, "owner_type": "personal", "team_id": "", "organization_id": ""}
+        failures = [
+            {"user_info": {}},
+            {"user_info": {"teams": [{"team_id": "a", "organization_id": "o"},
+                                              {"team_id": "b", "organization_id": "o"}]}},
+            {"user_info": {"teams": [{"team_id": "a"}]}},
+        ]
+        for response in failures:
+            dataset = mock.Mock()
+            dataset.api.return_value = (response, {})
+            with self.subTest(response=response), self.assertRaises(AssertionError):
+                resolve_billing_identity(dataset, key)
 
     def test_corrupt_evidence_and_partial_conversation_rejected(self):
         """目的：不能用单轮、错链、错误身份或虚假usage冒充完整会话；前置合法三轮，各失败分支应返回无检查点，目录自动清理。"""

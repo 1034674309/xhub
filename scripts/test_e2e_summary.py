@@ -11,7 +11,12 @@ SCENARIO = {"name": "identical", "deployments": [{"id": "a"}, {"id": "b"}]}
 
 
 class ReportTests(unittest.TestCase):
-    def report(self, *, browser=True, errors=None, weighted=None, configured=False, backend=True, preflight=None, backend_failure=False, browser_failure=False, browser_log=None, backend_log=None):
+    def report(self, *, browser=True, errors=None, weighted=None, configured=False, backend=True, preflight=None, backend_failure=False, browser_failure=False, browser_log=None, backend_log=None, raw_browser=None, raw_weighted=None, raw_metadata=None):
+        """构造隔离报告输入并执行汇总器。
+
+        参数控制浏览器、后端、权重和原始损坏内容；返回退出码、summary 与 HTML。
+        每个调用使用临时目录，结束后自动清理，不访问真实网关或供应商。
+        """
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             (out / "browser").mkdir()
@@ -21,7 +26,9 @@ class ReportTests(unittest.TestCase):
                 (out / "preflight.log").write_text(preflight)
             if browser_log:
                 (out / "browser.log").write_text(browser_log)
-            if browser:
+            if raw_browser is not None:
+                (out / "browser/results.json").write_text(raw_browser)
+            elif browser:
                 (out / "browser/results.json").write_text(json.dumps({
                     "stats": {"expected": 0 if browser_failure else 1, "unexpected": int(browser_failure), "skipped": 0},
                     "errors": [{"message": error} for error in errors or []],
@@ -39,12 +46,15 @@ class ReportTests(unittest.TestCase):
                 if backend_failure:
                     with (out / "backend.log").open("a") as log:
                         log.write("=== RUN   TestLive\n    live_test.go:40: upstream DNS timeout\n--- FAIL: TestLive (30.00s)\n")
-            if weighted is not None:
+            if raw_weighted is not None:
+                (out / "evidence/weighted-identical.json").write_text(raw_weighted)
+            elif weighted is not None:
                 (out / "evidence/weighted-identical.json").write_text(json.dumps(weighted))
             (out / ".e2e-report/routes.txt").write_text("route unsupported POST /unsupported 501\n")
+            metadata = raw_metadata if raw_metadata is not None else json.dumps({"providers": [], "weighted_scenarios": [SCENARIO] if configured else []})
             env = dict(os.environ, E2E_ACCEPTANCE_DIR=str(out), E2E_RUN_DIR=str(out / "browser"),
                        E2E_BROWSER_STATUS="0", E2E_BACKEND_STATUS="0", E2E_FULL_COVERAGE="1",
-                       E2E_PROVIDER_METADATA=json.dumps({"providers": [], "weighted_scenarios": [SCENARIO] if configured else []}))
+                       E2E_PROVIDER_METADATA=metadata)
             result = subprocess.run(["python3", str(SCRIPT)], env=env, capture_output=True, text=True)
             self.last_stdout = result.stdout
             summary = json.loads((out / "summary.json").read_text())
@@ -200,6 +210,31 @@ class ReportTests(unittest.TestCase):
         self.assertFalse(summary["backend_ok"])
         self.assertEqual(len(summary["incomplete_stages"]), 1)
         self.assertIn("后端已开始执行", html)
+
+    def test_malformed_browser_json_still_writes_actionable_failed_report(self):
+        """浏览器 JSON 截断时仍生成失败报告；错误进入终端、JSON 与 HTML，临时目录自动清理。"""
+        code, summary, html = self.report(raw_browser='{"stats":')
+        self.assertEqual(code, 1)
+        self.assertEqual(summary["status"], "failed")
+        self.assertIn("浏览器 results.json 无法解析", summary["input_errors"][0])
+        self.assertIn("[report input]", self.last_stdout)
+        self.assertIn("报告输入错误", html)
+
+    def test_malformed_weighted_json_cannot_crash_or_pass(self):
+        """权重证据不是合法 JSON 时拒绝通过且保留文件名诊断；临时证据由测试自动清理。"""
+        code, summary, html = self.report(configured=True, raw_weighted="[")
+        self.assertEqual(code, 1)
+        self.assertEqual(summary["missing_weighted_evidence"], ["identical"])
+        self.assertIn("weighted-identical.json", summary["input_errors"][0])
+        self.assertIn("weighted-identical.json", html)
+
+    def test_valid_json_with_wrong_top_level_shapes_is_reported(self):
+        """合法 JSON 但顶层类型错误时不触发异常或误报通过；诊断进入报告，临时目录自动清理。"""
+        code, summary, html = self.report(raw_browser="[]", raw_metadata="[]")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(summary["input_errors"]), 2)
+        self.assertIn("results.json 顶层必须是 JSON 对象", html)
+        self.assertIn("E2E_PROVIDER_METADATA 顶层必须是 JSON 对象", html)
 
 
 if __name__ == "__main__":

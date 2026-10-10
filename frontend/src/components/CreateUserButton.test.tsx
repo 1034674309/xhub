@@ -79,6 +79,7 @@ describe("CreateUserButton", () => {
     mockUserCreateCall.mockResolvedValue({ user_id: "user-new" });
   });
 
+  /** 验证创建账号只提供普通用户和平台管理员；等待浮层挂载后检查完整选项。 */
   it("opens a create form that offers only the two account roles", async () => {
     const user = userEvent.setup();
     renderButton();
@@ -86,7 +87,7 @@ describe("CreateUserButton", () => {
 
     expect(screen.getByRole("dialog", { name: /create user/i })).toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: /account role/i }));
-    expect(screen.getByRole("option", { name: /Regular user/ })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /Regular user/ })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Platform administrator/ })).toBeInTheDocument();
   });
 

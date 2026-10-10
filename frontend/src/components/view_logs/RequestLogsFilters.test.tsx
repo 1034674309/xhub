@@ -51,7 +51,6 @@ const emptyInfiniteQuery = {
 
 const LOGS_WINDOW = { start_date: "2026-07-23 00:00:00", end_date: "2026-07-24 00:00:00" };
 
-
 /** 渲染日志筛选器并返回查询写入回调；参数是初始筛选值，不写后台，组件由测试框架卸载。 */
 function renderFilters(filters: Record<string, string> = {}) {
   const set = vi.fn();
@@ -95,12 +94,14 @@ describe("RequestLogsFilters", () => {
 
   /** 前置错误日志视图；验证状态选择隐藏且缓存筛选仍可使用，自动卸载和查询缓存清理。 */
   it("hides conflicting status choices in error logs", () => {
-    renderWithProviders(<RequestLogsFilters get={() => undefined} set={vi.fn()} teams={[]} logsWindow={LOGS_WINDOW} errorsOnly />);
+    renderWithProviders(
+      <RequestLogsFilters get={() => undefined} set={vi.fn()} teams={[]} logsWindow={LOGS_WINDOW} errorsOnly />,
+    );
     expect(screen.queryByText("Status", { exact: true })).not.toBeInTheDocument();
     expect(screen.getByText("Cache", { exact: true })).toBeInTheDocument();
   });
 
-  /** 前置普通日志筛选表单；展开状态选项后应只有成功和全部非失败状态，卸载与查询缓存由测试框架清理。 */
+  /** 前置普通日志筛选表单；展开状态选项后应只有成功和全部状态，不能混入错误页专用筛选，卸载与查询缓存由测试框架清理。 */
   it("does not offer failure status in ordinary logs", async () => {
     const user = userEvent.setup();
     renderFilters();
@@ -224,7 +225,9 @@ describe("RequestLogsFilters", () => {
 
   /** 前置正常模型列表含重复与空 ID；验证只显示有效唯一项，模拟接口和组件由每次测试清理。 */
   it("deduplicates available models and ignores empty ids", async () => {
-    vi.mocked(userAvailableModelsCall).mockResolvedValue({ data: [{ id: "visible-model" }, { id: "visible-model" }, { id: "" }, {}] });
+    vi.mocked(userAvailableModelsCall).mockResolvedValue({
+      data: [{ id: "visible-model" }, { id: "visible-model" }, { id: "" }, {}],
+    });
     renderFilters();
     await waitFor(() => expect(userAvailableModelsCall).toHaveBeenCalled());
     await userEvent.setup().click(screen.getByPlaceholderText("Search a model"));

@@ -72,12 +72,14 @@
 | --- | --- | --- |
 | 输入单元 | internal/httpx/{budget,rates}_test.go | 缺省/null/零、负数、分数、溢出、非法类型 |
 | IAM 单元及数据库 | internal/iam/{quota,rates}_test.go | 分配递归、真实并发分配回滚、唯一团队、退出释放、计划异常 |
-| 纯准入单元 | internal/live/rate_plan_test.go | 两维度各 30 种顺序，容量内放行与匹配上界 |
+| 纯准入单元 | internal/live/rate_plan_test.go | 两维度各 30 种顺序，容量内放行与匹配上界；当分钟调整限额保留已有用量，零禁用和 TPM 下一请求边界 |
 | 计数及并发 | internal/live/rates_test.go、internal/gateway/rates_test.go | 真实临时 Redis、本地计数、拒绝不扣量、分钟恢复、故障、100 并发仅放行 7 |
 | 后台 regression | cmd/regression/{quota_hierarchy,rate_hierarchy,budget_chain,teamless_keys}_test.go | 真实 HTTP/数据库/本地供应商，汇总、共享、权限、退出历史；混合字段失败金额/角色全回滚 |
+| 组合场景 regression | cmd/regression/{acceptance_limits,chain,permission,route_preview}_test.go | 五级收紧与恢复；密钥消费重置的拒绝回滚及扩容恢复；组织管理员与普通成员权限；预览不计数、不解除限流 |
 | 验收脚本回归 | e2e/test_real_dataset.py、cmd/regression/real_dataset_limits_test.go | 实际执行 Python 限额验收；已消费且有固定分配的基线保持不变，五预算及八分钟限制拦截/恢复对账，正常与异常路径逆序清理 |
 | 页面测试 | 配套 payload/schema、表单、QuotaGuide、HTTP 客户端测试 | 可空字段、三项限额、双语说明及错误、保存转换 |
 | 浏览器 E2E | frontend/e2e/{rate-hierarchy,quota-hierarchy,personal-keys}.spec.ts | 页面操作→真实持久化→真实数据面放行/429；输入保留、修正、双语、唯一团队、退出、清空及删除 |
+| 路由预览 E2E | frontend/e2e/product-fixes.spec.ts | 页面模板编辑、会话和密钥继承；重复预览后真实请求放行，RPM 禁用后预览仍可读取但真实请求返回 429 |
 
 数据库测试使用隔离 schema，临时 Redis、本地供应商和数据库由测试清理。E2E 使用稳定角色、标签；自建对象在 finally 删除，脚本结束清理 schema，不覆盖用户现有数据。
 
@@ -91,6 +93,15 @@ bash scripts/e2e.sh e2e/rate-hierarchy.spec.ts e2e/quota-hierarchy.spec.ts e2e/p
 ```
 
 前端用 `npm run test:unit`、`test:component`、`test:integration` 的指定文件参数。需要本地 PostgreSQL、Redis 测试环境与 Playwright；E2E 脚本包含生产构建和 TypeScript 校验。不能把 DB 不可达导致的 skip 当验证通过。
+
+### 组合场景的前置条件
+
+- 扩大预算按组织→团队→个人→密钥执行，缩小预算按密钥→个人→团队→组织执行。项目是独立的并行预算约束，不能替代个人的分配校验。只改变写入顺序，不绕过父子校验。
+- 重置密钥消费会恢复该密钥的未用预留金额，不会清除个人、团队或组织的历史消费。例如个人上限 1000、已消费 100，密钥上限 1000、已消费 100 时，密钥重置为零会要求个人容纳 `100 + 1000`，应返回 400 并回滚；父级有足够空间后才可重置。
+- `newTenant` 通过 `/user/new` 提交 `organization_id`，夹具账号因此具有组织管理权。普通成员拒绝测试必须先撤销组织管理成员身份，再检查 403 和持久化值不变；组织管理员操作自己组织的团队应允许。
+- 未设置 RPM/TPM 的节点也累计当前分钟用量。当分钟降低限额不会清计数；预览不占用计数，也不恢复真实请求的容量。验证“多次预览后首次推理放行”应使用新密钥；独立限流场景还应隔离预算链，防止兄弟固定预留使请求先触发预算限制。
+
+排查组合回归失败时，先核对以上前置条件与具体错误响应，再判断业务实现是否违背不变量，不能仅为满足旧状态码断言而放宽额度或权限。
 
 ## 运行边界
 

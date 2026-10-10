@@ -14,10 +14,9 @@ type catalogRoute struct {
 	Path   string `json:"path"`
 }
 
-// TestCatalogReads calls every catalog GET through the shipped gateway handler.
-// A removed column must stay 404. A retired path must stay 410. A mounted read
-// must return JSON, either 200 without an error object or the handler's 400
-// contract. Unsupported nested provider resources must return 501.
+// TestCatalogReads 通过真实网关处理器调用目录中的全部 GET 路由。
+// 前置条件是隔离数据库和管理员会话；验证已删除、已退役、未实现维度及普通读取的精确 JSON 契约。
+// 参数 t 为测试上下文，返回无；网关与数据库由 bootGateway 和测试清理函数回收。
 func TestCatalogReads(t *testing.T) {
 	srv, base, db := bootGateway(t)
 	defer srv.Close()
@@ -27,6 +26,17 @@ func TestCatalogReads(t *testing.T) {
 		t.Run(rt.Method+" "+rt.Path, func(t *testing.T) {
 			path := fillCatalogPath(rt.Path)
 			status, body := authed(t, base, key, http.MethodGet, path, nil)
+			if path == "/customer/daily/activity" || path == "/tag/daily/activity" {
+				var probe map[string]any
+				if status != http.StatusNotImplemented || json.Unmarshal(body, &probe) != nil {
+					t.Fatalf("unsupported usage dimension status %d %s", status, trim(body))
+				}
+				errObj, _ := probe["error"].(map[string]any)
+				if errObj["type"] != "unsupported_usage_dimension" {
+					t.Fatalf("unsupported usage dimension contract %s", trim(body))
+				}
+				return
+			}
 			if IsRemovedColumn(rt.Path) || IsRemovedColumn(path) {
 				if status != http.StatusNotFound {
 					t.Fatalf("removed status %d %s", status, trim(body))

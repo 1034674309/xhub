@@ -100,7 +100,7 @@ func main() {
 			record()
 			continue
 		}
-		if code == http.StatusNotImplemented && typedUnsupported(resp) && hdr.Get("x-litellm-call-id") != "" && hdr.Get("x-litellm-version") != "" {
+		if code == http.StatusNotImplemented && typedUnsupported(method, path, resp) && hdr.Get("x-litellm-call-id") != "" && hdr.Get("x-litellm-version") != "" {
 			lines = append(lines, fmt.Sprintf("route unsupported %s %s %d", method, rt.Path, code))
 			continue
 		}
@@ -246,13 +246,21 @@ func call(client *http.Client, base, method, path, token string, body any) (int,
 	return res.StatusCode, res.Header, string(b)
 }
 
-func typedUnsupported(raw string) bool {
+// typedUnsupported 只接受目录明确声明的未实现契约；参数为方法、路径和响应正文，返回是否可作为预期 501。
+// 调用：live catalog sweep；customer/tag 维度只接受专用错误类型，其他路径仍只接受通用 not_implemented。
+func typedUnsupported(method, path, raw string) bool {
 	var body map[string]any
 	if json.Unmarshal([]byte(raw), &body) != nil {
 		return false
 	}
 	err, _ := body["error"].(map[string]any)
-	return err["type"] == "not_implemented" && err["message"] != ""
+	if err["message"] == "" {
+		return false
+	}
+	if method == http.MethodGet && (path == "/customer/daily/activity" || path == "/tag/daily/activity") {
+		return err["type"] == "unsupported_usage_dimension"
+	}
+	return err["type"] == "not_implemented"
 }
 
 func typed404(raw string) bool {

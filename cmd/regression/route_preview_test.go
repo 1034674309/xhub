@@ -57,10 +57,16 @@ func TestRoutePreviewMatchesInference(t *testing.T) {
 			t.Fatalf("会话推理偏离预览或未计费: %v %s", calls, r.describe())
 		}
 	}
+	// 无上限的密钥也累计窗口用量。另发新密钥再设 RPM=1，隔离前面真实推理的计数，
+	// 不清 Redis 桶也不依赖跨分钟等待；这样连续预览后的首次推理才验证预览没有消耗额度。
+	c.key, c.keyID = h.issueKey(t, c.session, c.teamID, c.projectID, "preview-fresh-window")
+	c.keySecret = c.key
 	bindTemplate(t, h, admin, "key", c.keyID, key)
 	h.ok(http.MethodPost, "/key/update", admin, map[string]any{"key": c.key, "rpm_limit": 1, "tpm_limit": 100})
 	preview(c.key, key, "key", "preview-a")
 	h.assertBilled(t, c, admin, model, "key-priority", []string{"preview-a"})
+	preview(c.key, key, "key", "preview-a")
+	assertAcceptanceRejected(t, h, admin, c, model, "key-window-exhausted", http.StatusTooManyRequests, "rpm_limit")
 	preview(c.session, team, "team", "preview-b")
 	personal := h.keyWith(t, c.session, map[string]any{"key_alias": "preview-personal"})
 	preview(personal, "", "builtin", "")

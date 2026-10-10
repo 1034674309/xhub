@@ -1,5 +1,6 @@
 "use client";
 import { Children, isValidElement, useState, type ReactNode } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -97,11 +98,15 @@ export function DocumentationCode({ code, language }: { code: string; language: 
   );
 }
 /** Markdown 阅读区域；参数为当前语言正文，返回代码面板与标题锚点，行内代码保留，不渲染原始 HTML。 */
-export function DocumentationMarkdown({ markdown }: { markdown: string }) {
+export function DocumentationMarkdown({ markdown, linkHrefs = {} }: { markdown: string; linkHrefs?: Readonly<Record<string, string>> }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        a: ({ href = "", children }) => {
+          const resolved = linkHrefs[href] ?? href;
+          return resolved.startsWith("/docs/") ? <Link href={resolved}>{children}</Link> : <a href={resolved}>{children}</a>;
+        },
         h2: ({ children }) => (
           <h2 id={documentationHeadingId(nodeText(children))} className="scroll-mt-40">
             {children}

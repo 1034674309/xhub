@@ -674,33 +674,39 @@ func KeyNameFromPlain(plain string) string {
 	return strings.TrimSpace(plain)
 }
 
-// ParseExpiry turns a relative duration such as 30s, 30m, 30h or 30d into the absolute instant it names, counted from now. An empty value is "no expiry" and returns nil. Anything else is an error, so atypo never becomes a key that never expires.
-// 参数 d（string）：解析Expiry使用的d。空串表示调用方没有提供这项。
-// 返回 *time.Time（*time.Time）：解析出的时间；error（error）：失败原因，nil 表示成功。
-// 调用：gateway/keys/generate.go
-// 测试：无直接单测
+// ParseExpiry 将正整数秒、分、小时或天转换为从当前时刻起算的绝对过期时间。
+// 参数 d 为期限字符串；空串表示永不过期。返回 UTC 时间或输入错误；非正数及会使 time.Duration 溢出的值会被拒绝。
+// 创建与更新密钥接口调用本函数；函数只读取当前时间，不修改持久化数据。
 func ParseExpiry(d string) (*time.Time, error) {
 	d = strings.TrimSpace(d)
 	if d == "" {
 		return nil, nil
 	}
-	n, err := strconv.Atoi(d[:len(d)-1])
-	if err != nil {
+	if len(d) < 2 {
 		return nil, fmt.Errorf("invalid duration %q", d)
 	}
-	var at time.Time
+	n, err := strconv.ParseInt(d[:len(d)-1], 10, 64)
+	if err != nil || n <= 0 {
+		return nil, fmt.Errorf("invalid duration %q", d)
+	}
+	var unit time.Duration
 	switch d[len(d)-1] {
 	case 's':
-		at = time.Now().Add(time.Duration(n) * time.Second)
+		unit = time.Second
 	case 'm':
-		at = time.Now().Add(time.Duration(n) * time.Minute)
+		unit = time.Minute
 	case 'h':
-		at = time.Now().Add(time.Duration(n) * time.Hour)
+		unit = time.Hour
 	case 'd':
-		at = time.Now().AddDate(0, 0, n)
+		unit = 24 * time.Hour
 	default:
 		return nil, fmt.Errorf("invalid duration %q", d)
 	}
+	// 先除后乘，避免整数乘法回绕后把很长的未来期限变成已过期时间。
+	if n > int64((time.Duration(1<<63-1))/unit) {
+		return nil, fmt.Errorf("duration %q is too large", d)
+	}
+	at := time.Now().Add(time.Duration(n) * unit)
 	at = at.UTC()
 	return &at, nil
 }

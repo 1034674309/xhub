@@ -82,25 +82,32 @@ func TestMemberCannotReadAnotherTenant(t *testing.T) {
 
 // TestMemberCannotAdminister 证明普通成员改不了团队、也发不了别人的密钥。
 // 参数 t（*testing.T）：当前测试。
-// 返回：无。
+// 返回：无；通过真实接口撤销夹具默认组织管理员身份，再验证成员返回 403 且团队预算未改变，harness 清理数据。
 func TestMemberCannotAdminister(t *testing.T) {
 	h := newHarness(t, chatDeployment("regression-perm"))
 	admin := h.adminSession()
 	a := h.provision(t, admin, "perm-a")
+	// newTenant 的 organization_id 会授予组织管理权，必须先证明该权限有效，再撤销以构造普通成员。
+	h.ok(http.MethodPost, "/team/update", a.session, map[string]any{"team_id": a.teamID, "max_budget": 1000})
+	h.ok(http.MethodPost, "/organization/member_delete", admin, map[string]any{"organization_id": a.orgID, "user_id": a.userID})
 
 	// 改自己团队的额度：这是管理员的事，成员不行。
 	r := h.do(http.MethodPost, "/team/update", a.session, map[string]any{
-		"team_id": a.teamID, "max_budget": 1000,
+		"team_id": a.teamID, "max_budget": 2000,
 	})
-	if r.status < 300 {
+	if r.status != http.StatusForbidden {
 		t.Fatalf("a member changed their own team's budget: %s", r.describe())
+	}
+	info := h.ok(http.MethodGet, "/team/info?team_id="+a.teamID, admin, nil).json()["team_info"].(map[string]any)
+	if budget, ok := floatField(info, "max_budget"); !ok || budget != 1000 {
+		t.Fatalf("成员被拒绝后团队预算必须保持 1000: %v", info)
 	}
 
 	// 给团队加人：同样不该允许。
 	r = h.do(http.MethodPost, "/team/member_add", a.session, map[string]any{
 		"team_id": a.teamID, "user_email": "intruder@example.com", "role": "admin",
 	})
-	if r.status < 300 {
+	if r.status != http.StatusForbidden {
 		t.Fatalf("a member added a member to their own team: %s", r.describe())
 	}
 }

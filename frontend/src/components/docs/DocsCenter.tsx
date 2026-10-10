@@ -265,6 +265,7 @@ export function DocsCenter({ page, apiMarkdown }: { page: DocPage; apiMarkdown?:
           {markdown && (
             <div className="docs-prose mt-8" id={spec?.anchor}>
               <DocumentationMarkdown
+                linkHrefs={Object.fromEntries(docPages.filter((item) => item.group === "api").map((item) => [item.id + ".md", docHref(item)]))}
                 markdown={markdown
                   .replace(/^# .+\n/, "")
                   .replaceAll("https://YOUR_GATEWAY_HOST", gatewayBase)

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ModelInfoView from "./model_info_view";
 import { testConnectionRequest } from "./networking";
+import { setActiveLocale } from "@/i18n";
 
 const useModelsInfo = vi.fn();
 const modelEditor = vi.fn();
@@ -46,7 +47,14 @@ const requested = {
     litellm_credential_name: "supplier-a",
     input_cost_per_token: 0.000007,
   },
-  model_info: { id: "model-123", db_model: true, endpoint_types: ["chat"], transport: "bypass_openai_chat", pricing_source: "catalog", base_model: "catalog/gpt" },
+  model_info: {
+    id: "model-123",
+    db_model: true,
+    endpoint_types: ["chat"],
+    transport: "bypass_openai_chat",
+    pricing_source: "catalog",
+    base_model: "catalog/gpt",
+  },
 };
 const other = { ...requested, model_name: "wrong-model", model_info: { ...requested.model_info, id: "other-id" } };
 const props = {
@@ -64,6 +72,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe("ModelInfoView reconstructed behavior", () => {
   beforeEach(() => {
+    setActiveLocale("zh-CN");
     vi.clearAllMocks();
     useModelsInfo.mockReturnValue({
       data: { data: [other, requested] },
@@ -119,5 +128,31 @@ describe("ModelInfoView reconstructed behavior", () => {
       ),
     );
     expect(await screen.findByText("连接正常，模型已响应。")).toBeInTheDocument();
+  });
+
+  /** 前置后台返回脱敏的 HTTP 诊断；验证页面显示本地化失败状态并保留技术详情，组件卸载后无持久数据。 */
+  it("shows a localized failure with the backend diagnostic", async () => {
+    vi.mocked(testConnectionRequest).mockResolvedValue({
+      status: "error",
+      healthy: false,
+      error: "upstream_http_error",
+      message: "The upstream service returned HTTP 500.",
+    } as never);
+    const user = userEvent.setup();
+    render(<ModelInfoView {...props} />, { wrapper });
+    await user.click(screen.getByRole("button", { name: "测试连接" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "连接测试失败: The upstream service returned HTTP 500.",
+    );
+  });
+
+  /** 前置后台仅返回错误码且界面切换英文；验证状态提示仍本地化且不会向用户暴露内部错误码。 */
+  it("uses the localized fallback when no diagnostic is available", async () => {
+    setActiveLocale("en");
+    vi.mocked(testConnectionRequest).mockResolvedValue({ status: "error", healthy: false } as never);
+    const user = userEvent.setup();
+    render(<ModelInfoView {...props} />, { wrapper });
+    await user.click(screen.getByRole("button", { name: "Test Connection" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Connection test failed");
   });
 });

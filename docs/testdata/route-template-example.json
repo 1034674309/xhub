@@ -1,0 +1,32 @@
+{
+  "model_routes": [
+    {
+      "model": "chat-main",
+      "strategy": "least-busy"
+    }
+  ],
+  "retry_policy": {
+    "max_attempts": 2,
+    "timeout_seconds": 60,
+    "failure_threshold": 3,
+    "cooldown_seconds": 60
+  },
+  "routing_groups": [
+    {
+      "group_name": "chat-group",
+      "models": ["chat-main", "chat-fast"],
+      "routing_strategy": "cost-based-routing"
+    }
+  ],
+  "fallbacks": [
+    {
+      "chat-group": ["chat-backup"]
+    }
+  ],
+  "context_window_fallbacks": [
+    {
+      "chat-main": ["chat-long"]
+    }
+  ],
+  "content_policy_fallbacks": []
+}

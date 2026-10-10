@@ -32,7 +32,7 @@ bash deploy/build.sh
 docker compose up -d
 ```
 
-The build script needs Go, Node.js, npm, Docker, and a readable `/etc/ssl/cert.pem`. It downloads the Linux Node.js binary from npmmirror and targets your host CPU architecture (amd64 or arm64). Runtime images contain the prebuilt output; they do not compile the application. The console uses `postgres:16` as its runtime base for glibc. Ensure that `postgres:16` and `redis:7-alpine` are available to Docker.
+The build script needs Go, Node.js, npm, Docker, and a readable system CA bundle. It detects `/etc/ssl/certs/ca-certificates.crt` (Debian/Ubuntu), `/etc/pki/tls/certs/ca-bundle.crt` (RHEL family), and `/etc/ssl/cert.pem` (macOS/Alpine); set `XHUB_CA_CERT_FILE` for another location. It downloads the Linux Node.js binary from npmmirror and targets your host CPU architecture (amd64 or arm64). Runtime images contain the prebuilt output; they do not compile the application. The console uses `postgres:16` as its runtime base for glibc. Ensure that `postgres:16` and `redis:7-alpine` are available to Docker.
 
 | Service | Address |
 | --- | --- |

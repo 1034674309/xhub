@@ -11,7 +11,7 @@ test("team usage displays recorded calls without requesting the removed Agent en
   const organizations = await page.request.get(GATEWAY + "/organization/list", { headers });
   expect(organizations.status()).toBe(200);
   const org = (await organizations.json()).find((row: { organization_alias: string }) => row.organization_alias === "e2e-fixture-org");
-  let teamID = "", key = "";
+  let teamID = "", userID = "", key = "";
   const agentRequests: string[] = [], errors: string[] = [];
   page.on("request", request => {
     if (new URL(request.url()).pathname === "/agent/daily/activity") agentRequests.push(request.url());
@@ -23,11 +23,19 @@ test("team usage displays recorded calls without requesting the removed Agent en
     if (message.type() === "error" && message.text().includes("Failed to fetch daily activity")) errors.push(message.text());
   });
   try {
-    const created = await page.request.post(GATEWAY + "/team/new", { headers, data: { organization_id: org.organization_id, team_alias: "team-usage-" + Date.now() } });
+    const suffix = Date.now();
+    const created = await page.request.post(GATEWAY + "/team/new", { headers, data: { organization_id: org.organization_id, team_alias: "team-usage-" + suffix } });
     expect(created.status(), await created.text()).toBe(200);
     const team = await created.json();
     teamID = team.team_id;
-    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: "team-usage-probe", team_id: teamID } });
+    // 个人团队密钥的所有者必须是该团队成员；专用成员同时让用量的用户维度来自真实关系。
+    const member = await page.request.post(GATEWAY + "/user/new", { headers, data: {
+      user_email: `team-usage-${suffix}@xhub.local`, password: "team-usage-password", user_role: "user",
+      team_id: teamID, team_role: "member",
+    } });
+    expect(member.status(), await member.text()).toBe(200);
+    userID = (await member.json()).user_id;
+    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: "team-usage-probe", team_id: teamID, user_id: userID } });
     expect(minted.status(), await minted.text()).toBe(200);
     key = (await minted.json()).key;
     const completion = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "team usage regression" }] } });
@@ -65,6 +73,7 @@ test("team usage displays recorded calls without requesting the removed Agent en
     guard.assertOk();
   } finally {
     if (key) expect((await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [key] } })).status()).toBe(200);
+    if (userID) expect((await page.request.post(GATEWAY + "/user/delete", { headers, data: { user_id: userID } })).status()).toBe(200);
     if (teamID) expect((await page.request.post(GATEWAY + "/team/delete", { headers, data: { team_id: teamID } })).status()).toBe(200);
   }
 });
@@ -79,7 +88,7 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
   const headers = { Authorization: "Bearer " + await sessionBearer(page) };
   const organizations = await (await page.request.get(GATEWAY + "/organization/list", { headers })).json();
   const org = organizations.find((row: any) => row.organization_alias === "e2e-fixture-org");
-  let teamID = "", key = "";
+  let teamID = "", userID = "", key = "";
   const models: string[] = [];
   const modelName = "usage-priced-" + Date.now(), failedModel = modelName + "-failure";
   const requests: string[] = [];
@@ -92,7 +101,13 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
     }
     const created = await page.request.post(GATEWAY + "/team/new", { headers, data: { organization_id: org.organization_id, team_alias: modelName } });
     expect(created.status(), await created.text()).toBe(200); teamID = (await created.json()).team_id;
-    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: modelName, team_id: teamID } });
+    // 使用测试专属成员持有个人团队密钥，满足 team_id 与 user_id 的真实成员关系约束。
+    const member = await page.request.post(GATEWAY + "/user/new", { headers, data: {
+      user_email: `${modelName}@xhub.local`, password: "team-usage-password", user_role: "user",
+      team_id: teamID, team_role: "member",
+    } });
+    expect(member.status(), await member.text()).toBe(200); userID = (await member.json()).user_id;
+    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: modelName, team_id: teamID, user_id: userID } });
     expect(minted.status(), await minted.text()).toBe(200); key = (await minted.json()).key;
     for (const [model, success] of [[modelName, true], [failedModel, false]] as const) {
       const result = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: { model, messages: [{ role: "user", content: "usage reconciliation" }] } });
@@ -121,7 +136,8 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
     }
     expect(Object.values(providers).some(metrics => metrics.spend === 0)).toBe(true);
     for (const [name, metrics] of Object.entries(providers)) {
-      const row = page.getByRole("row").filter({ has: page.getByRole("cell", { name, exact: true }) });
+      // 供应商图标的首字母会并入单元格可访问名称；按行内精确可见文本定位，保留各指标逐列对账。
+      const row = page.getByRole("row").filter({ has: page.getByText(name, { exact: true }) });
       await expect(row.getByRole("cell").nth(2)).toHaveText(metrics.successful_requests.toLocaleString());
       await expect(row.getByRole("cell").nth(3)).toHaveText(metrics.failed_requests.toLocaleString());
       await expect(row.getByRole("cell").nth(4)).toHaveText(metrics.total_tokens.toLocaleString());
@@ -180,6 +196,8 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
     const dateLoaded = page.waitForResponse(r => { const url = new URL(r.url()); return url.pathname === "/user/daily/activity/aggregated" && url.searchParams.get("start_date") === url.searchParams.get("end_date"); });
     await page.getByRole("button", { name: /\d.* - .*\d/ }).first().click();
     await page.getByRole("button", { name: new RegExp("^" + t("Today")) }).click();
+    // 日期预设只写入弹窗临时值；提交后才更新页面范围并发起单日聚合请求。
+    await page.getByRole("button", { name: t("Apply"), exact: true }).click();
     await assertUsageTiles(page, (await (await dateLoaded).json()).metadata);
     await expect(page.getByRole("tab", { name: t("pages.usage.customer"), exact: true })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: t("pages.usage.tag"), exact: true })).toHaveCount(0);
@@ -188,6 +206,7 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
     guard.assertOk();
   } finally {
     if (key) expect((await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [key] } })).status()).toBe(200);
+    if (userID) expect((await page.request.post(GATEWAY + "/user/delete", { headers, data: { user_id: userID } })).status()).toBe(200);
     if (teamID) expect((await page.request.post(GATEWAY + "/team/delete", { headers, data: { team_id: teamID } })).status()).toBe(200);
     for (const id of models) expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id } })).status()).toBe(200);
   }

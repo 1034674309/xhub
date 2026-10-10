@@ -240,6 +240,10 @@ func BulkUpdate(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens := idsFrom(body, "keys", "key")
+	if _, err := patchFrom(&iam.Key{}, body); err != nil {
+		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		return
+	}
 	if err := templateauth.Selection(s, r, p, str(body["route_template_id"])); err != nil {
 		s.WriteAuthz(w, r, err)
 		return
@@ -254,7 +258,11 @@ func BulkUpdate(s Host, w http.ResponseWriter, r *http.Request) {
 		if err := s.Authorize(r, p, authz.ActionKeyWrite, authz.Object{Type: authz.ObjectKey, ID: k.ID}); err != nil {
 			continue
 		}
-		updated, err := s.Identity().UpdateKey(r.Context(), actorOf(p), k.ID, patchFrom(k, body))
+		patch, err := patchFrom(k, body)
+		if err != nil {
+			continue
+		}
+		updated, err := s.Identity().UpdateKey(r.Context(), actorOf(p), k.ID, patch)
 		if err != nil {
 			continue
 		}

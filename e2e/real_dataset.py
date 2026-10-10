@@ -345,10 +345,16 @@ def chat_candidates(catalog, rng, preferred=()):
 
 
 def bill_check(bill, key, rates):
-    """用途：核对真实用量及五级归属；参数为账单、密钥记录和费率，返回费用；供 API/浏览器验收，缺字段或金额不符抛异常。"""
+    """用途：核对真实用量及五级计费归属；参数为账单、含显式及可选派生计费归属的密钥记录和费率，返回费用；供 API/浏览器验收，缺字段或金额不符抛异常。
+
+    未绑定团队的个人密钥仍按调用时用户成员关系计入团队和组织，因此浏览器夹具可用
+    billing_team_id/billing_organization_id 传入权威计费链；其余数据集继续使用密钥显式字段。
+    """
+    expected_team = key.get("billing_team_id", key["team_id"])
+    expected_organization = key.get("billing_organization_id", key["organization_id"])
     for field, expected in (("api_key", key["token_id"]), ("user", key["user_id"]),
-                            ("team_id", key["team_id"]), ("project_id", key["project_id"]),
-                            ("organization_id", key["organization_id"])):
+                            ("team_id", expected_team), ("project_id", key["project_id"]),
+                            ("organization_id", expected_organization)):
         if bill.get(field) != expected:
             raise AssertionError("账单归属错误: " + field)
     if int(bill.get("prompt_tokens", 0)) <= 0 or int(bill.get("completion_tokens", 0)) <= 0:

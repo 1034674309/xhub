@@ -51,11 +51,19 @@ func TestKeyModelSelection(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(in.Models, tc.want) {
 			t.Fatalf("创建模型解析错误: %+v %v", in, err)
 		}
-		if got := patchFrom(&iam.Key{Models: []string{"old"}}, map[string]any{"models": tc.raw}).Models; !reflect.DeepEqual(got, tc.want) {
+		patch, err := patchFrom(&iam.Key{Models: []string{"old"}}, map[string]any{"models": tc.raw})
+		if err != nil {
+			t.Fatalf("更新模型解析失败: %v", err)
+		}
+		if got := patch.Models; !reflect.DeepEqual(got, tc.want) {
 			t.Fatalf("更新模型解析错误: %v", got)
 		}
 	}
-	if got := patchFrom(&iam.Key{Models: []string{"old"}}, map[string]any{}).Models; !reflect.DeepEqual(got, []string{"old"}) {
+	patch, err := patchFrom(&iam.Key{Models: []string{"old"}}, map[string]any{})
+	if err != nil {
+		t.Fatalf("缺字段更新解析失败: %v", err)
+	}
+	if got := patch.Models; !reflect.DeepEqual(got, []string{"old"}) {
 		t.Fatalf("缺字段覆盖原模型: %v", got)
 	}
 }

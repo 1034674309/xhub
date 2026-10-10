@@ -202,6 +202,7 @@ type harness struct {
 // 用来在第一次失败和换部署之间把额度花到顶。
 type upstreamRule struct {
 	status int
+	body   []byte
 	hold   <-chan struct{}
 	before func()
 	// usage 非空时替换这一次回答里的 usage，用来制造缓存命中、秒数、图片数
@@ -368,6 +369,10 @@ func (h *harness) serveUpstream(w http.ResponseWriter, r *http.Request) {
 	if failing {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]any{"error": map[string]any{"message": "regression upstream failure", "type": "api_error"}})
+		return
+	}
+	if rule.body != nil {
+		_, _ = w.Write(rule.body)
 		return
 	}
 
@@ -548,6 +553,19 @@ func (h *harness) scriptStatus(model string, status int) {
 	}
 	rule := h.rules[model]
 	rule.status = status
+	h.rules[model] = rule
+}
+
+// scriptBody 让指定上游模型以 HTTP 200 返回原始正文；参数 model 是上游模型名，body 为待测协议正文。
+// 空 body 恢复默认合法响应；调用场景是验证协议损坏、尾随字节和回退冷却，不访问外部服务。
+func (h *harness) scriptBody(model string, body []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.rules == nil {
+		h.rules = map[string]upstreamRule{}
+	}
+	rule := h.rules[model]
+	rule.body = append([]byte(nil), body...)
 	h.rules[model] = rule
 }
 

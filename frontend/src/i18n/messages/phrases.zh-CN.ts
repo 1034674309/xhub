@@ -458,9 +458,12 @@ export const zhPhrases: Record<string, string> = {
   "API Request": "API 请求",
   "Failed to load team user usage": "团队用户用量读取失败，请刷新后重试",
   "Usage dimension unavailable": "暂不支持此用量维度",
-  "Tag and customer attribution is not recorded by this gateway. Use organization, team, user, key or model usage to inspect recorded calls.": "当前网关未记录标签和客户归属。请通过组织、团队、用户、密钥或模型用量查看实际调用记录。",
-  "Counts recorded calls in the selected period, using the same usage records as cost, key and model breakdowns.": "统计所选期间已记录的调用，与费用、密钥和模型明细使用相同的用量记录。",
-  "Recorded calls grouped by endpoint for the selected period. Running asynchronous tasks are included after completion.": "按接口统计所选期间已记录的调用。异步任务在完成后计入统计。",
+  "Tag and customer attribution is not recorded by this gateway. Use organization, team, user, key or model usage to inspect recorded calls.":
+    "当前网关未记录标签和客户归属。请通过组织、团队、用户、密钥或模型用量查看实际调用记录。",
+  "Counts recorded calls in the selected period, using the same usage records as cost, key and model breakdowns.":
+    "统计所选期间已记录的调用，与费用、密钥和模型明细使用相同的用量记录。",
+  "Recorded calls grouped by endpoint for the selected period. Running asynchronous tasks are included after completion.":
+    "按接口统计所选期间已记录的调用。异步任务在完成后计入统计。",
   "API Requests": "API请求",
   "API Requests {value0}": "API 请求 {value0}",
   "API Usage": "API使用",
@@ -7790,4 +7793,31 @@ export const zhPhrases: Record<string, string> = {
   "调用后（响应） · post_call（暂不支持）": "调用后（响应） · post_call（暂不支持）",
   "MCP 工具调用前 · pre_mcp_call（暂不支持）": "MCP 工具调用前 · pre_mcp_call（暂不支持）",
   "当前支持调用前检查，其他阶段尚未接通。": "当前支持调用前检查，其他阶段尚未接通。",
+  "Credential Information": "凭据信息",
+  "Upstream protocol": "上游接口协议",
+  "The current connection type {protocol} does not support this model's registered upstream protocol, so it cannot be saved. Check the provider connection type.":
+    "当前连接类型 {protocol} 不支持该模型登记的上游协议，暂时无法保存。请检查供应商连接类型。",
+  "The catalog does not provide an available upstream protocol, so this model cannot be saved. Check the upstream model ID and provider connection type.":
+    "目录未提供可用的上游接口协议，暂时无法保存该模型。请检查上游模型 ID 和供应商连接类型。",
+  "Loading endpoint catalog…": "正在加载端点目录…",
+  "Select a call method supported by the upstream provider": "请选择上游实际支持的调用方式",
+  "Bypass forwarding (including Fal)": "Bypass 转发（含 Fal）",
+  "Preselected for the provider. Switch it to match upstream support.": "已按提供商预选，可按上游支持情况切换。",
+  "Failed to load the endpoint catalog. Reopen the editor. Saved endpoint declarations were preserved.":
+    "端点目录加载失败，请重新打开编辑页面。已保存的端点声明已保留。",
+  "Select a call protocol supported by the upstream provider. Ordinary models do not require dedicated capabilities.":
+    "请选择上游实际支持的调用协议。常规模型无需登记专用能力。",
+  "The selected {protocol} protocol does not support the current model or catalog. Enter an upstream model path supported by this protocol, or select a standard protocol such as OpenAI or Vertex / Gemini. This dedicated capability is validated when saving.":
+    "所选 {protocol} 尚未实现当前模型或目录的调用。请填写该协议支持的上游模型路径，或选择 OpenAI、Vertex / Gemini 等常规协议。保存时会校验此专用能力。",
+  "Enter a FAL task path as the upstream model, for example byteplus/seedance-2.0/text-to-video.":
+    "上游模型需填写 FAL 任务路径，如 byteplus/seedance-2.0/text-to-video。",
+  "XHub public endpoints": "XHub 对外接口",
+  "Standard endpoints are enabled automatically and use the same public model name.":
+    "标准接口已自动开放，可使用同一个对外模型名称调用。",
+  "This model uses a provider-specific protocol. The passthrough endpoints below are enabled from registered capabilities.":
+    "此模型使用供应商专用协议，以下直通接口已按注册能力开放。",
+  "Enabled endpoints": "已开放接口",
+  "Optional passthrough endpoints": "可选直通接口",
+  "Connection test failed": "连接测试失败",
+  "Connection is healthy and the model responded.": "连接正常，模型已响应。",
 };

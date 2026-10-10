@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/deploy/build-lib.sh"
 
 TARGET_OS=linux
 case "$(uname -m)" in
@@ -57,10 +58,10 @@ if [ ! -s "$NODE_BINARY" ]; then
   rm -rf "$tmp"
 fi
 
-if [ -r /etc/ssl/cert.pem ]; then
-  cp /etc/ssl/cert.pem bin/ca-certificates.crt
+if CA_CERTIFICATE_SOURCE="$(find_ca_certificate)"; then
+  cp "$CA_CERTIFICATE_SOURCE" bin/ca-certificates.crt
 else
-  echo "missing /etc/ssl/cert.pem" >&2
+  echo "missing readable CA bundle; checked XHUB_CA_CERT_FILE or common Linux/macOS paths" >&2
   exit 1
 fi
 

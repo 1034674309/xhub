@@ -111,7 +111,7 @@ func TestAcceptanceLimitsAndAccountingContract(t *testing.T) {
 		previousT := h.t
 		h.t = t
 		t.Cleanup(func() { h.t = previousT })
-		rpm := acceptanceKey(t, h, c, "acceptance-rpm")
+		rpm := acceptanceKey(t, h, admin, "acceptance-rpm")
 		h.ok(http.MethodPost, "/key/update", admin, map[string]any{"key": rpm.key, "rpm_limit": 1})
 		h.assertBilled(t, rpm, admin, modelA, "rpm-first", []string{modelA})
 		assertAcceptanceRejected(t, h, admin, rpm, modelA, "rpm-refused", http.StatusTooManyRequests, "rpm_limit")
@@ -123,7 +123,7 @@ func TestAcceptanceLimitsAndAccountingContract(t *testing.T) {
 		previousT := h.t
 		h.t = t
 		t.Cleanup(func() { h.t = previousT })
-		tpm := acceptanceKey(t, h, c, "acceptance-tpm")
+		tpm := acceptanceKey(t, h, admin, "acceptance-tpm")
 		h.ok(http.MethodPost, "/key/update", admin, map[string]any{"key": tpm.key, "tpm_limit": 40})
 		h.assertBilled(t, tpm, admin, modelA, "tpm-first", []string{modelA})
 		assertAcceptanceRejected(t, h, admin, tpm, modelA, "tpm-refused", http.StatusTooManyRequests, "tpm_limit")
@@ -155,15 +155,12 @@ func TestAcceptanceLimitsAndAccountingContract(t *testing.T) {
 	})
 }
 
-// acceptanceKey 在同一用户、项目、团队和组织下签发一把新的限流测试密钥。
-// 参数 c 提供完整归属链，alias 是稳定别名；返回的新 chained 只替换密钥明文和 ID，调用方用它隔离 RPM/TPM Redis 桶，其余资源仍由 harness 统一清理。
-func acceptanceKey(t *testing.T, h *harness, c chained, alias string) chained {
+// acceptanceKey 创建限流子场景的独立组织、团队、个人、项目与密钥。
+// 参数 admin 是平台会话，alias 是资源前缀；返回无预算限制且尚无窗口用量的归属链。
+// 调用方验证 RPM/TPM 拒绝与真实账单，隔离前一场景固定密钥的预留额度；所有资源由 harness 清理。
+func acceptanceKey(t *testing.T, h *harness, admin, alias string) chained {
 	t.Helper()
-	secret, id := h.issueKey(t, c.session, c.teamID, c.projectID, alias)
-	c.key = secret
-	c.keySecret = secret
-	c.keyID = id
-	return c
+	return h.openScope(t, admin, alias)
 }
 
 // setAcceptanceBudgets 按父级到子级顺序给五层设置相同的宽松预算。
@@ -173,16 +170,17 @@ func setAcceptanceBudgets(t *testing.T, h *harness, admin string, c chained, bud
 	h.setOrgBudget(t, admin, c.orgID, budget)
 	h.setTeamBudget(t, admin, c.teamID, budget)
 	h.setProjectBudget(t, admin, c.projectID, budget)
-	h.setKeyBudget(t, admin, c.key, budget)
 	h.setUserBudget(t, admin, c.userID, budget)
+	h.setKeyBudget(t, admin, c.key, budget)
 }
 
 // setAcceptanceBudgetsAtSpend 把五层预算分别收紧到其当前已花金额。
-// 参数 spent 来自 flush 后的真实计数；函数按子级到父级写入，保证父级仍有空间容纳子级上限，随后下一次请求应在上游前被拒绝。
+// 参数 spent 来自 flush 后的真实计数；先缩小密钥再缩小个人、团队和组织，项目作为独立上限。
+// 必须先释放下级未消费预留金额，避免个人额度降低时仍保留整把密钥的旧额度；接口失败终止测试。
 func setAcceptanceBudgetsAtSpend(t *testing.T, h *harness, admin string, c chained, spent scopeMoney) {
 	t.Helper()
-	h.setUserBudget(t, admin, c.userID, spent.user)
 	h.setKeyBudget(t, admin, c.key, spent.key)
+	h.setUserBudget(t, admin, c.userID, spent.user)
 	h.setProjectBudget(t, admin, c.projectID, spent.project)
 	h.setTeamBudget(t, admin, c.teamID, spent.team)
 	h.setOrgBudget(t, admin, c.orgID, spent.org)

@@ -122,6 +122,12 @@ test("共享分页覆盖密钥、项目、项目密钥和审计", async ({ page 
   } });
   expect(teamResponse.status(), await teamResponse.text()).toBe(200);
   const teamId = (await teamResponse.json()).team_id;
+  const memberResponse = await page.request.post(GATEWAY + "/user/new", { headers, data: {
+    user_email: `${prefix}@xhub.local`, password: "pagination-password", user_role: "user",
+    team_id: teamId, team_role: "member",
+  } });
+  expect(memberResponse.status(), await memberResponse.text()).toBe(200);
+  const userId = (await memberResponse.json()).user_id;
   const projects: string[] = [];
   const keys: string[] = [];
   try {
@@ -133,7 +139,8 @@ test("共享分页覆盖密钥、项目、项目密钥和审计", async ({ page 
     for (let i = 0; i < 32; i++) {
       const created = await page.request.post(GATEWAY + "/key/generate", { headers, data: {
         key_alias: prefix + (i < 26 ? "-personal-" : "-project-key-") + i,
-        ...(i >= 26 ? { team_id: teamId, project_id: projects[0] } : {}),
+        // 项目个人密钥必须由项目所属团队的真实成员持有。
+        ...(i >= 26 ? { team_id: teamId, project_id: projects[0], user_id: userId } : {}),
       } });
       expect(created.status(), await created.text()).toBe(200);
       keys.push((await created.json()).token_id);
@@ -201,6 +208,8 @@ test("共享分页覆盖密钥、项目、项目密钥和审计", async ({ page 
       const deleted = await page.request.post(GATEWAY + "/project/delete", { headers, data: { project_id: projectId } });
       expect(deleted.status(), await deleted.text()).toBe(200);
     }
+    const deletedUser = await page.request.post(GATEWAY + "/user/delete", { headers, data: { user_id: userId } });
+    expect(deletedUser.status(), await deletedUser.text()).toBe(200);
     const deleted = await page.request.post(GATEWAY + "/team/delete", { headers, data: { team_id: teamId } });
     expect(deleted.status(), await deleted.text()).toBe(200);
   }

@@ -1,63 +1,62 @@
+#!/usr/bin/env node
 /**
- * Regenerates src/lib/http/schema.d.ts from the proxy's OpenAPI spec.
- *
- * Two hops, because the backend is the source of truth: the FastAPI app emits
- * the spec from its route decorators (app.openapi()), then openapi-typescript
- * turns that spec into TypeScript types. There is no live server in the loop —
- * the spec is read straight off the app object, so this runs in CI without a
- * database or proxy boot.
- *
- * The Python interpreter must have litellm installed. Override which one via
- * LITELLM_PYTHON (CI passes "uv run --no-sync python"); defaults to python3.
+ * 检查控制台 API 类型的真实生成来源。
+ * XHub 后端已经迁移到 Go；当前仓库只有 method/path 路由目录，没有包含请求体、
+ * 响应体和状态码的 OpenAPI 文档或 Go 生成命令，因此不能安全生成 schema.d.ts。
  */
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const dashboardDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = resolve(dashboardDir, "..", "..");
-const outPath = join(dashboardDir, "src", "lib", "http", "schema.d.ts");
-const specDir = mkdtempSync(join(tmpdir(), "litellm-openapi-"));
-const specPath = join(specDir, "openapi.json");
+/**
+ * 计算生成器使用的仓库路径。
+ * 参数 scriptUrl 为当前脚本或测试夹具的 file URL；返回前端目录、仓库根目录、
+ * 路由目录与生成文件路径。调用方用这些路径检查真实来源；函数不访问或修改文件。
+ */
+export function resolveGeneratorPaths(scriptUrl) {
+  const dashboardDir = resolve(dirname(fileURLToPath(scriptUrl)), "..");
+  const repoRoot = resolve(dashboardDir, "..");
+  return {
+    dashboardDir,
+    repoRoot,
+    routeCatalogPath: join(repoRoot, "internal", "catalog", "routes.json"),
+    outputPath: join(dashboardDir, "src", "lib", "http", "schema.d.ts"),
+  };
+}
 
-const python = (process.env.LITELLM_PYTHON ?? "python3").split(" ");
-// The dashboard calls internal UI routes that the public /openapi.json hides via
-// include_in_schema=False. Force them in so they get typed here; this mutates a
-// throwaway interpreter, so the spec the proxy actually serves is unchanged.
-// Python 3.13 strips a docstring's common leading indentation at compile time
-// while 3.12 keeps it, so the same model yields differently-indented descriptions
-// depending on the interpreter — enough to make this output non-reproducible
-// across CI and contributors. inspect.cleandoc normalizes every description to one
-// canonical form regardless of interpreter, so the generated file is stable.
-const dumpSpec = [
-  "import inspect, json, sys",
-  "from litellm.proxy.proxy_server import app",
-  "from fastapi.routing import APIRoute",
-  "for route in app.routes:",
-  "    if isinstance(route, APIRoute):",
-  "        route.include_in_schema = True",
-  "app.openapi_schema = None",
-  "def normalize(node):",
-  "    if isinstance(node, dict):",
-  "        return {k: inspect.cleandoc(v) if k == 'description' and isinstance(v, str) else normalize(v) for k, v in node.items()}",
-  "    if isinstance(node, list):",
-  "        return [normalize(v) for v in node]",
-  "    return node",
-  "with open(sys.argv[1], 'w') as f: json.dump(normalize(app.openapi()), f, sort_keys=True)",
-].join("\n");
+/**
+ * 检查仓库当前可观察到的合同来源。
+ * 参数 paths 来自 resolveGeneratorPaths，exists 可由单元测试注入；返回来源能力说明。
+ * routes.json 只证明路由目录存在，不能作为 OpenAPI schema；函数无写入副作用。
+ */
+export function inspectContractSources(paths, exists = existsSync) {
+  return { routeCatalogExists: exists(paths.routeCatalogPath), hasSchemaSource: false };
+}
 
-try {
-  execFileSync(python[0], [...python.slice(1), "-c", dumpSpec, specPath], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
+/**
+ * 执行 API 类型来源检查。
+ * 参数 scriptUrl 定位仓库，exists 供测试隔离文件系统；当前没有真实 Go OpenAPI
+ * 来源时抛出可操作错误。不会启动服务、调用网络或改写生成文件。
+ */
+export function runGeneratorCheck(scriptUrl = import.meta.url, exists = existsSync) {
+  const paths = resolveGeneratorPaths(scriptUrl);
+  const sources = inspectContractSources(paths, exists);
+  const catalog = sources.routeCatalogExists
+    ? `检测到 ${paths.routeCatalogPath}，但它只包含 method/path，不能生成请求和响应类型。`
+    : `未检测到路由目录 ${paths.routeCatalogPath}。`;
+  throw new Error([
+    "无法生成 src/lib/http/schema.d.ts：仓库中没有由 Go 后端产出的 OpenAPI 合同。",
+    catalog,
+    "已停止使用退役的 litellm.proxy.proxy_server；现有 schema.d.ts 保持不变。",
+    "请先在 Go 源码中建立包含请求体、响应体和错误状态的 OpenAPI 生成链，再接入 openapi-typescript。",
+  ].join("\n"));
+}
 
-  execFileSync(join(dashboardDir, "node_modules", ".bin", "openapi-typescript"), [specPath, "-o", outPath], {
-    cwd: dashboardDir,
-    stdio: "inherit",
-  });
-} finally {
-  rmSync(specDir, { recursive: true, force: true });
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  try {
+    runGeneratorCheck();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }

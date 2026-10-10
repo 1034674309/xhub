@@ -6,13 +6,13 @@
 
 | 方法 | 接口 | 路径 |
 | --- | --- | --- |
-| POST | [Bypass Anthropic 消息](native-anthropic) | /bypass/anthropic/v1/messages |
-| POST | [Bypass Vertex 内容生成](native-vertex) | /bypass/vertex/v1/models/YOUR_MODEL_NAME:generateContent |
-| POST | [Bypass Gemini 内容生成](native-gemini) | /bypass/gemini/v1beta/models/YOUR_MODEL_NAME:generateContent |
-| POST | [Bypass OpenAI 图片生成](native-images) | /bypass/openai/v1/images/generations |
-| POST | [Bypass OpenAI 图片编辑](native-image-edits) | /bypass/openai/v1/images/edits |
-| POST | [Bypass OpenAI Responses 响应](native-responses) | /bypass/openai/v1/responses |
-| POST | [Bypass OpenAI 对话补全](native-chat) | /bypass/openai/v1/chat/completions |
+| POST | [Bypass Anthropic 消息](native-anthropic.md) | /bypass/anthropic/v1/messages |
+| POST | [Bypass Vertex 内容生成](native-vertex.md) | /bypass/vertex/v1/models/YOUR_MODEL_NAME:generateContent |
+| POST | [Bypass Gemini 内容生成](native-gemini.md) | /bypass/gemini/v1beta/models/YOUR_MODEL_NAME:generateContent |
+| POST | [Bypass OpenAI 图片生成](native-images.md) | /bypass/openai/v1/images/generations |
+| POST | [Bypass OpenAI 图片编辑](native-image-edits.md) | /bypass/openai/v1/images/edits |
+| POST | [Bypass OpenAI Responses 响应](native-responses.md) | /bypass/openai/v1/responses |
+| POST | [Bypass OpenAI 对话补全](native-chat.md) | /bypass/openai/v1/chat/completions |
 
 ## 接口契约
 使用对应 API 文章的协议字段及 XHub 虚拟密钥，部署必须选择匹配的 Bypass 传输。路由替换公开模型为上游名并应用供应商认证，保留原厂扩展字段。Gemini/Vertex 还登记 streamGenerateContent、countTokens。Bypass 不开放任意上游路径。
@@ -54,6 +54,6 @@ Bypass 是透传机制，不是模型系列。调用前确认部署支持对应�
 
 | Capability | Guide |
 | --- | --- |
-| Chat | [OpenAI](chat-completions), [Anthropic](messages), [Gemini](gemini) |
-| Images | [Generation](images), [Edits](image-edits) |
-| Video | [OpenAI](videos), [Content generation](ark), [Seedance Fal](fal-seedance) |
+| Chat | [OpenAI](chat.md), [Anthropic](messages.md), [Gemini](gemini.md) |
+| Images | [Generation](images.md), [Edits](image-edits.md) |
+| Video | [OpenAI](videos.md), [Content generation](ark.md), [Seedance Fal](fal-seedance.md) |

@@ -57,7 +57,7 @@ export function PriceProviderDialog({
               id="price-provider-slug"
               value={slug}
               readOnly={isEdit}
-              placeholder="acme"
+              placeholder={t("priceData.providerSlugExample")}
               onChange={(event) => setSlug(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">{t("priceData.providerSlugHint")}</p>

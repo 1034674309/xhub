@@ -55,9 +55,20 @@ npm run test:integration -- src/components/templates/key_edit_view.integration.t
 npm run test:types
 ```
 
-项目匹配由 `frontend/vitest.config.ts` 定义：unit 为 `.test.ts`，component 为 `.test.tsx`，integration 为 `.integration.test.tsx`，types 为 `.test-d.ts`。不要无路径执行整个 Vitest 套件；遵循 [frontend/CLAUDE.md](../../frontend/CLAUDE.md) 的范围与断言要求。
+项目匹配由 `frontend/vitest.config.ts` 定义：unit 为 `.test.ts`，component 为 `.test.tsx`，integration 为 `.integration.test.tsx`，types 为 `.test-d.ts`。日常修改默认传入受影响路径，避免把无关失败混入反馈；用户明确授权全项目 review、发布验收或基线审计时，可以无路径执行各层完整 Vitest 套件，并在报告中分别列出命令、通过、失败和跳过数。遵循 [frontend/CLAUDE.md](../../frontend/CLAUDE.md) 的范围与断言要求。
 
-修改后端接口后，若控制台使用该接口，必须核对实际请求和响应，并同步验证消费者。`npm run gen:api` 当前仍从历史 Python LiteLLM/FastAPI 应用生成 `schema.d.ts`，并非从本项目 Go 网关生成；本轮执行因缺少 `litellm.proxy.proxy_server` 失败，不能宣称已同步 Go 接口类型。不要手改生成文件，也不要用其它版本的 LiteLLM 输出覆盖本项目接口契约。Go 接口在当前阶段以后台 HTTP regression、前端消费者测试和真实浏览器链核对，生成器迁移仍是明确待办。
+修改后端接口后，若控制台使用该接口，必须核对实际请求和响应，并同步验证消费者。`npm run gen:api` 现在执行来源检查：它使用正确的仓库根目录，明确拒绝已退役的 Python `litellm.proxy.proxy_server`，并在缺少 Go OpenAPI 来源时失败且不修改 `schema.d.ts`。`internal/catalog/routes.json` 是真实 Go 网关挂载的 method/path 目录，但不含请求体、响应体、字段约束或错误状态，不能据此拼造 OpenAPI。
+
+当前 `schema.d.ts` 仍是历史生成产物，仓库中尚无可复现它的 Go OpenAPI 文档或生成命令。不要手改该文件，也不要用其它版本的 LiteLLM 或仅有路由名的目录覆盖它。迁移完成前，Go 接口以后台 HTTP regression、前端消费者测试和离线浏览器链核对；这些验证不能证明历史生成类型与全部 Go 合同同步。完整修复需要先从 Go 源码建立包含请求、响应和错误模型的 OpenAPI 生成链，再由 `openapi-typescript` 原子更新类型。
+
+工具脚本可在本地离线运行单元测试：
+
+```bash
+node --test frontend/scripts/*.test.mjs
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
+
+报告器遇到截断或损坏的 Playwright/权重 JSON 时会写出失败的 `summary.json`、Markdown 和 HTML，并在 `input_errors` 中保留可定位原因，不会因解析异常而丢失整份报告。
 
 ## 浏览器 E2E
 

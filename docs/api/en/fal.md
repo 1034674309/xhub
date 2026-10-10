@@ -78,8 +78,8 @@ Parameter support depends on the deployed model and conversion or Bypass path; u
 
 ## Model guides
 
-- [Seedance](fal-seedance)
-- [Kling](fal-kling)
-- [Vidu](fal-vidu)
-- [Veo 3.1](fal-veo)
-- [MiniMax H3 Max](fal-minimax)
+- [Seedance](fal-seedance.md)
+- [Kling](fal-kling.md)
+- [Vidu](fal-vidu.md)
+- [Veo 3.1](fal-veo.md)
+- [MiniMax H3 Max](fal-minimax.md)

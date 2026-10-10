@@ -5,8 +5,10 @@ import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
   quotaGuide: {
-    rateAllocationError: "Child RPM/TPM allocations exceed the parent limit. Reduce allocations or increase the parent limit.",
-    rates: "Allocate RPM and TPM like budgets: fixed child allocations must add up to at most the parent limit. Blank shares the unreserved capacity; zero blocks calls. All personal keys and sessions count together, then roll up to the team and organization. Unused fixed capacity is reserved each UTC minute. TPM uses the token estimate at admission.",
+    rateAllocationError:
+      "Child RPM/TPM allocations exceed the parent limit. Reduce allocations or increase the parent limit.",
+    rates:
+      "Allocate RPM and TPM like budgets: fixed child allocations must add up to at most the parent limit. Blank shares the unreserved capacity; zero blocks calls. All personal keys and sessions count together, then roll up to the team and organization. Unused fixed capacity is reserved each UTC minute. TPM uses the token estimate at admission.",
     rateBlank: "Share parent remaining capacity",
     editMember: "Edit member",
     deleteMember: "Delete member",
@@ -453,6 +455,7 @@ export const en = {
     unitRatesHint: "Per image or per second.",
     invalidRate: "Enter a finite number greater than or equal to zero.",
     providerSlug: "Provider slug",
+    providerSlugExample: "acme",
     providerSlugHint: "Lowercase slug such as acme. This is the litellm_provider value.",
     providerName: "Provider name",
     apiBase: "API base",

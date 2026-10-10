@@ -6,13 +6,13 @@ Choose an endpoint to read authentication, parameters, examples and responses, t
 
 | Method | Endpoint | Path |
 | --- | --- | --- |
-| POST | [Bypass Anthropic Messages](native-anthropic) | /bypass/anthropic/v1/messages |
-| POST | [Bypass Vertex generateContent](native-vertex) | /bypass/vertex/v1/models/YOUR_MODEL_NAME:generateContent |
-| POST | [Bypass Gemini generateContent](native-gemini) | /bypass/gemini/v1beta/models/YOUR_MODEL_NAME:generateContent |
-| POST | [Bypass OpenAI image generation](native-images) | /bypass/openai/v1/images/generations |
-| POST | [Bypass OpenAI image edits](native-image-edits) | /bypass/openai/v1/images/edits |
-| POST | [Bypass OpenAI Responses](native-responses) | /bypass/openai/v1/responses |
-| POST | [Bypass OpenAI Chat Completions](native-chat) | /bypass/openai/v1/chat/completions |
+| POST | [Bypass Anthropic Messages](native-anthropic.md) | /bypass/anthropic/v1/messages |
+| POST | [Bypass Vertex generateContent](native-vertex.md) | /bypass/vertex/v1/models/YOUR_MODEL_NAME:generateContent |
+| POST | [Bypass Gemini generateContent](native-gemini.md) | /bypass/gemini/v1beta/models/YOUR_MODEL_NAME:generateContent |
+| POST | [Bypass OpenAI image generation](native-images.md) | /bypass/openai/v1/images/generations |
+| POST | [Bypass OpenAI image edits](native-image-edits.md) | /bypass/openai/v1/images/edits |
+| POST | [Bypass OpenAI Responses](native-responses.md) | /bypass/openai/v1/responses |
+| POST | [Bypass OpenAI Chat Completions](native-chat.md) | /bypass/openai/v1/chat/completions |
 
 ## Endpoint and authentication
 
@@ -51,6 +51,6 @@ Bypass is a transport mechanism, not a model family. Select a deployment support
 
 | Capability | Guide |
 | --- | --- |
-| Chat | [OpenAI](chat-completions), [Anthropic](messages), [Gemini](gemini) |
-| Images | [Generation](images), [Edits](image-edits) |
-| Video | [OpenAI](videos), [Content generation](ark), [Seedance Fal](fal-seedance) |
+| Chat | [OpenAI](chat.md), [Anthropic](messages.md), [Gemini](gemini.md) |
+| Images | [Generation](images.md), [Edits](image-edits.md) |
+| Video | [OpenAI](videos.md), [Content generation](ark.md), [Seedance Fal](fal-seedance.md) |

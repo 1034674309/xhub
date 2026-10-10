@@ -2,8 +2,42 @@ package live
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
+
+// TestRatePlanLimitChangeKeepsUsage 验证同一分钟从共享改成固定限额不能消除已累计用量。
+// 前置纯内存单密钥窗口；覆盖共享、恰好用完、增大后恢复、显式零及 TPM 边界。
+// 参数 t 为测试上下文，无返回；检查失败不修改计划或用量，场景无外部资源需要清理。
+func TestRatePlanLimitChangeKeepsUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		rpm, tpm *int
+		want     string
+	}{
+		{"共享仍累计用量", nil, nil, ""},
+		{"RPM低于历史用量", ratePlanTestLimit(1), nil, "key rpm_limit"},
+		{"RPM正好耗尽", ratePlanTestLimit(2), nil, "key rpm_limit"},
+		{"RPM提高后恢复", ratePlanTestLimit(3), nil, ""},
+		{"RPM零始终禁用", ratePlanTestLimit(0), nil, "key rpm_limit"},
+		{"TPM下一请求超出", nil, ratePlanTestLimit(29), "key tpm_limit"},
+		{"TPM含下一请求正好够用", nil, ratePlanTestLimit(30), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := RatePlan{Nodes: []RateNode{{RateScope: RateScope{ID: "key/historical", Kind: "key", RPM: tc.rpm, TPM: tc.tpm}, Parent: -1}}, Path: []int{0}}
+			rpm, tpm := []int64{2}, []int64{20}
+			if got := CheckRatePlan(plan, rpm, tpm, 10); got != tc.want {
+				t.Fatalf("修改限额必须沿用窗口消费: got=%q want=%q", got, tc.want)
+			}
+			if !reflect.DeepEqual(rpm, []int64{2}) || !reflect.DeepEqual(tpm, []int64{20}) {
+				t.Fatalf("只读准入校验修改窗口: rpm=%v tpm=%v", rpm, tpm)
+			}
+		})
+	}
+}
+
+// ratePlanTestLimit 为分钟限额边界表提供独立指针；参数 value 为非负上限，返回指针，无外部副作用。
+func ratePlanTestLimit(value int) *int { return &value }
 
 // TestRatePlanAllOrders 穷举小容量完整四层树的全部调用顺序，验证固定 2+2 与共享 1 的充分性和上界。
 // 前置纯内存配置；期望来自各叶分配，不复用实现算法。容量内都放行，任一池多一次都拒绝且没有副作用，无需清理。

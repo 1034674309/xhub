@@ -7,7 +7,8 @@ import { routeTemplatesZhCN } from "./routeTemplates.zh-CN";
 export const zhCN = {
   quotaGuide: {
     rateAllocationError: "下级 RPM/TPM 固定分配合计超过上级限制，请减少分配或调整上级限制。",
-    rates: "RPM、TPM 与金额额度按同一层级分配：下级固定分配合计不能超过上级。留空共享未分配容量，0 禁止调用。个人所有 Key 与会话汇总，再逐级汇总到团队和组织；固定分配的未用容量每个 UTC 自然分钟保留，TPM 按准入时预估 token 计数。",
+    rates:
+      "RPM、TPM 与金额额度按同一层级分配：下级固定分配合计不能超过上级。留空共享未分配容量，0 禁止调用。个人所有 Key 与会话汇总，再逐级汇总到团队和组织；固定分配的未用容量每个 UTC 自然分钟保留，TPM 按准入时预估 token 计数。",
     rateBlank: "共享上级剩余容量",
     editMember: "编辑成员",
     deleteMember: "删除成员",
@@ -426,6 +427,7 @@ export const zhCN = {
     unitRatesHint: "按张或按秒。",
     invalidRate: "请输入大于或等于 0 的有限数字。",
     providerSlug: "供应商标识",
+    providerSlugExample: "acme",
     providerSlugHint: "小写 slug，例如 acme。与 litellm_provider 一致。",
     providerName: "供应商名称",
     apiBase: "API 地址",

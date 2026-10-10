@@ -248,8 +248,7 @@ describe("DataTable pagination", () => {
     await user.click(screen.getByRole("button", { name: "Go to next page" }));
     await user.click(screen.getByRole("button", { name: "Go to next page" }));
     expect(names()).toEqual(["P2"]);
-    await user.click(screen.getByRole("combobox", { name: "Rows per page" }));
-    await user.click(screen.getByRole("option", { name: "2", exact: true }));
+    await chooseSelectOption(user, screen.getByRole("combobox", { name: "Rows per page" }), "2", "option");
     expect(names()).toEqual(["P0", "P1"]);
     expect(screen.getByTestId("pagination-page")).toHaveTextContent("Page 1 of 3");
   });

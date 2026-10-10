@@ -7994,4 +7994,40 @@ export const enPhrases: Record<string, string> = {
   "调用后（响应） · post_call（暂不支持）": "After call (response) · post_call (not supported yet)",
   "MCP 工具调用前 · pre_mcp_call（暂不支持）": "Before MCP tool call · pre_mcp_call (not supported yet)",
   "当前支持调用前检查，其他阶段尚未接通。": "Before-call checks are supported. Other stages are not connected yet.",
+  "Failed to load team user usage": "Failed to load team user usage. Refresh and try again.",
+  "Usage dimension unavailable": "Usage dimension unavailable",
+  "Tag and customer attribution is not recorded by this gateway. Use organization, team, user, key or model usage to inspect recorded calls.":
+    "Tag and customer attribution is not recorded by this gateway. Use organization, team, user, key or model usage to inspect recorded calls.",
+  "Counts recorded calls in the selected period, using the same usage records as cost, key and model breakdowns.":
+    "Counts recorded calls in the selected period, using the same usage records as cost, key and model breakdowns.",
+  "Recorded calls grouped by endpoint for the selected period. Running asynchronous tasks are included after completion.":
+    "Recorded calls grouped by endpoint for the selected period. Running asynchronous tasks are included after completion.",
+  "Credential Information": "Credential Information",
+  "Upstream protocol": "Upstream protocol",
+  "The current connection type {protocol} does not support this model's registered upstream protocol, so it cannot be saved. Check the provider connection type.":
+    "The current connection type {protocol} does not support this model's registered upstream protocol, so it cannot be saved. Check the provider connection type.",
+  "The catalog does not provide an available upstream protocol, so this model cannot be saved. Check the upstream model ID and provider connection type.":
+    "The catalog does not provide an available upstream protocol, so this model cannot be saved. Check the upstream model ID and provider connection type.",
+  "Loading endpoint catalog…": "Loading endpoint catalog…",
+  "Select a call method supported by the upstream provider": "Select a call method supported by the upstream provider",
+  "Bypass forwarding (including Fal)": "Bypass forwarding (including Fal)",
+  "Preselected for the provider. Switch it to match upstream support.":
+    "Preselected for the provider. Switch it to match upstream support.",
+  "Failed to load the endpoint catalog. Reopen the editor. Saved endpoint declarations were preserved.":
+    "Failed to load the endpoint catalog. Reopen the editor. Saved endpoint declarations were preserved.",
+  "Select a call protocol supported by the upstream provider. Ordinary models do not require dedicated capabilities.":
+    "Select a call protocol supported by the upstream provider. Ordinary models do not require dedicated capabilities.",
+  "The selected {protocol} protocol does not support the current model or catalog. Enter an upstream model path supported by this protocol, or select a standard protocol such as OpenAI or Vertex / Gemini. This dedicated capability is validated when saving.":
+    "The selected {protocol} protocol does not support the current model or catalog. Enter an upstream model path supported by this protocol, or select a standard protocol such as OpenAI or Vertex / Gemini. This dedicated capability is validated when saving.",
+  "Enter a FAL task path as the upstream model, for example byteplus/seedance-2.0/text-to-video.":
+    "Enter a FAL task path as the upstream model, for example byteplus/seedance-2.0/text-to-video.",
+  "XHub public endpoints": "XHub public endpoints",
+  "Standard endpoints are enabled automatically and use the same public model name.":
+    "Standard endpoints are enabled automatically and use the same public model name.",
+  "This model uses a provider-specific protocol. The passthrough endpoints below are enabled from registered capabilities.":
+    "This model uses a provider-specific protocol. The passthrough endpoints below are enabled from registered capabilities.",
+  "Enabled endpoints": "Enabled endpoints",
+  "Optional passthrough endpoints": "Optional passthrough endpoints",
+  "Connection test failed": "Connection test failed",
+  "Connection is healthy and the model responded.": "Connection is healthy and the model responded.",
 };

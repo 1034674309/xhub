@@ -78,8 +78,8 @@ curl "$XHUB_BASE_URL/queue/fal-ai/kling-video/v2.5-turbo/pro/text-to-video" \
 
 ## 按模型系列接入
 
-- [Seedance](fal-seedance)
-- [Kling](fal-kling)
-- [Vidu](fal-vidu)
-- [Veo 3.1](fal-veo)
-- [MiniMax H3 Max](fal-minimax)
+- [Seedance](fal-seedance.md)
+- [Kling](fal-kling.md)
+- [Vidu](fal-vidu.md)
+- [Veo 3.1](fal-veo.md)
+- [MiniMax H3 Max](fal-minimax.md)

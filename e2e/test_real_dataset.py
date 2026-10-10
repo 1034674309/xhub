@@ -298,12 +298,15 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(chat_candidates({}, random.Random(1)), [])
 
     def test_bill(self):
-        """目的：验证五级账单与价格快照；前置固定费率，核对成功、归属错、零用量和错误金额，不产生数据库数据。"""
+        """目的：验证五级账单、派生计费归属与价格快照；前置固定费率，核对成功、归属错、零用量和错误金额，不产生数据库数据。"""
         rates = load_manifest()["billing"]
         key = dict(token_id="k", user_id="u", team_id="t", project_id="p", organization_id="o")
         bill = dict(api_key="k", user="u", team_id="t", project_id="p", organization_id="o",
                     prompt_tokens=11, completion_tokens=7, spend=0.000025, metadata={"cost_breakdown": {"source": "snapshot"}})
         self.assertAlmostEqual(bill_check(bill, key, rates), 0.000025)
+        derived = {**key, "team_id": "", "organization_id": "",
+                   "billing_team_id": "t", "billing_organization_id": "o"}
+        self.assertAlmostEqual(bill_check(bill, derived, rates), 0.000025)
         for field, value in (("user", "foreign"), ("prompt_tokens", 0), ("spend", 1), ("metadata", {})):
             with self.subTest(field=field), self.assertRaises(AssertionError):
                 bill_check({**bill, field: value}, key, rates)

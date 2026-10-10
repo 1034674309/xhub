@@ -13,6 +13,7 @@ import (
 func quotaLimit(value float64) *float64 { return &value }
 
 // TestQuotaUnused 验证逐级未消费保留；前置纯内存树，覆盖固定、共享、零、已消费和非法输入，无外部数据需清理。
+// 参数 t 为测试上下文，无返回；包含密钥重置恢复预留后超配拒绝、父级扩容恢复的边界。
 func TestQuotaUnused(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -24,6 +25,9 @@ func TestQuotaUnused(t *testing.T) {
 		{"共享传递", &quotaNode{Children: []*quotaNode{{Limit: quotaLimit(400), Spend: 100}, {Limit: quotaLimit(300)}}}, 600, false},
 		{"正好分满", &quotaNode{Limit: quotaLimit(1000), Children: []*quotaNode{{Limit: quotaLimit(500)}, {Limit: quotaLimit(500)}}}, 1000, false},
 		{"消费后超配", &quotaNode{Limit: quotaLimit(1000), Spend: 100, Children: []*quotaNode{{Limit: quotaLimit(1000)}}}, 0, true},
+		{"重置前消费抵消密钥预留", &quotaNode{Limit: quotaLimit(1000), Spend: 100, Children: []*quotaNode{{Limit: quotaLimit(1000), Spend: 100}}}, 900, false},
+		{"重置密钥不得抹去父级消费", &quotaNode{Limit: quotaLimit(1000), Spend: 100, Children: []*quotaNode{{Limit: quotaLimit(1000), Spend: 0}}}, 0, true},
+		{"父级扩容后允许密钥重新预留", &quotaNode{Limit: quotaLimit(1100), Spend: 100, Children: []*quotaNode{{Limit: quotaLimit(1000), Spend: 0}}}, 1000, false},
 		{"零", &quotaNode{Limit: quotaLimit(0)}, 0, false},
 		{"负数", &quotaNode{Limit: quotaLimit(-1)}, 0, true},
 		{"非数", &quotaNode{Limit: quotaLimit(math.NaN())}, 0, true},

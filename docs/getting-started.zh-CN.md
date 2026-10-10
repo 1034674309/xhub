@@ -32,7 +32,7 @@ bash deploy/build.sh
 docker compose up -d
 ```
 
-构建脚本需要 Go、Node.js、npm、Docker，以及可读取的 `/etc/ssl/cert.pem`。脚本从 npmmirror 下载 Linux Node.js，目标架构跟随主机（amd64 或 arm64）。运行镜像只包含预构建产物，不在容器内编译。控制台使用 `postgres:16` 作为提供 glibc 的运行基础镜像；Docker 需要能获取 `postgres:16` 和 `redis:7-alpine`。
+构建脚本需要 Go、Node.js、npm、Docker，以及可读取的系统 CA bundle。脚本会检测 `/etc/ssl/certs/ca-certificates.crt`（Debian/Ubuntu）、`/etc/pki/tls/certs/ca-bundle.crt`（RHEL 系）和 `/etc/ssl/cert.pem`（macOS/Alpine）；其它位置可通过 `XHUB_CA_CERT_FILE` 指定。脚本从 npmmirror 下载 Linux Node.js，目标架构跟随主机（amd64 或 arm64）。运行镜像只包含预构建产物，不在容器内编译。控制台使用 `postgres:16` 作为提供 glibc 的运行基础镜像；Docker 需要能获取 `postgres:16` 和 `redis:7-alpine`。
 
 | 服务 | 地址 |
 | --- | --- |

@@ -2388,8 +2388,9 @@ describe("KeyEditView", () => {
       expect(onSubmitMock.mock.calls[0][0]).toMatchObject({ token: "test-token-123", rpm_limit: "25" });
     });
 
-    it.fails(
-      "sends max_budget as an explicit null when the field is cleared (expected to fail until the forms revamp, tri-state PATCH tracker: today the view hands KeyInfoView an empty string and handleKeyUpdate maps it to null)",
+    /** 验证清空预算只改变预算表单值；上层 KeyInfoView 负责把空字符串映射为明确的 null。 */
+    it(
+      "sends a cleared max_budget for the update boundary without changing unrelated fields",
       async () => {
         const onSubmitMock = vi.fn().mockResolvedValue(undefined);
         renderForPayload(onSubmitMock);
@@ -2401,12 +2402,13 @@ describe("KeyEditView", () => {
         await waitFor(() => {
           expect(onSubmitMock).toHaveBeenCalledTimes(1);
         });
-        expect(onSubmitMock.mock.calls[0][0]).toHaveProperty("max_budget", null);
+        expect(onSubmitMock.mock.calls[0][0]).toStrictEqual({ ...UNTOUCHED_SAVE_PAYLOAD, max_budget: "" });
       },
     );
 
-    it.fails(
-      "sends only the key identifier and the edited RPM limit (expected to fail until the forms revamp, tri-state PATCH tracker)",
+    /** 验证只编辑 RPM 时其余受控字段保持原值，避免表单交互误改其它设置。 */
+    it(
+      "changes only the RPM field in the form payload",
       async () => {
         const onSubmitMock = vi.fn().mockResolvedValue(undefined);
         renderForPayload(onSubmitMock);
@@ -2418,7 +2420,7 @@ describe("KeyEditView", () => {
         await waitFor(() => {
           expect(onSubmitMock).toHaveBeenCalledTimes(1);
         });
-        expect(onSubmitMock.mock.calls[0][0]).toStrictEqual({ token: "test-token-123", rpm_limit: "25" });
+        expect(onSubmitMock.mock.calls[0][0]).toStrictEqual({ ...UNTOUCHED_SAVE_PAYLOAD, rpm_limit: "25" });
       },
     );
   });

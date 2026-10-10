@@ -277,7 +277,12 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteAuthz(w, r, err)
 		return
 	}
-	out, err := s.Identity().UpdateKey(r.Context(), actorOf(p), k.ID, patchFrom(k, body))
+	patch, err := patchFrom(k, body)
+	if err != nil {
+		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		return
+	}
+	out, err := s.Identity().UpdateKey(r.Context(), actorOf(p), k.ID, patch)
 	if err != nil {
 		s.WriteIAMError(w, r, err)
 		return
@@ -489,10 +494,10 @@ func keyModels(raw any) []string {
 
 // patchFrom 将部分请求合并到已有密钥；缺字段保留原值，“全部模型”转成继承当前授权范围。
 // 参数 cur（*iam.Key）：密钥行，含哈希、限额和归属，不含明文；body（map[string]any）：已解析或原始的 JSON。
-// 返回 KeyInput（iam.KeyInput）：在已存密钥上套用正文里出现的字段。正文没写的字段保持原值，不会被写成空。
+// 返回 KeyInput 和期限解析错误；正文没写的字段保持原值，非法期限不会被静默忽略。
 // 调用：gateway/keys/admin.go
 // 测试：key_input_test.go。
-func patchFrom(cur *iam.Key, body map[string]any) iam.KeyInput {
+func patchFrom(cur *iam.Key, body map[string]any) (iam.KeyInput, error) {
 	in := iam.KeyInput{Name: cur.Name, Models: cur.Models,
 		MaxBudget: cur.MaxBudget, TPMLimit: cur.TPMLimit, RPMLimit: cur.RPMLimit}
 	in.RouteTemplateID = routeTemplatePatch(body)
@@ -512,11 +517,13 @@ func patchFrom(cur *iam.Key, body map[string]any) iam.KeyInput {
 		in.RPMLimit = httpx.Rate(body, "rpm_limit")
 	}
 	if _, ok := body["duration"]; ok {
-		if exp, err := iam.ParseExpiry(str(body["duration"])); err == nil {
-			in.ExpiresAt = exp
+		exp, err := iam.ParseExpiry(str(body["duration"]))
+		if err != nil {
+			return in, err
 		}
+		in.ExpiresAt = exp
 	}
-	return in
+	return in, nil
 }
 
 // actorOf is the audit actor for a key-level write.

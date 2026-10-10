@@ -1,58 +1,50 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "@/i18n";
 import RouteTemplateJsonGuide, { ROUTE_TEMPLATE_EXAMPLE } from "./RouteTemplateJsonGuide";
 import { parseDocument } from "./templateForm";
 
+const renderGuide = (locale: "en" | "zh-CN" = "zh-CN") =>
+  render(<I18nProvider initialLocale={locale}><RouteTemplateJsonGuide /></I18nProvider>);
+
 describe("RouteTemplateJsonGuide", () => {
-  /** 前置当前指南组件；验证可见字段与严格模板一致，不再展示废弃字段；纯渲染由测试环境清理。 */
-  it("documents only supported template fields", () => {
-    render(<RouteTemplateJsonGuide />);
-    expect(screen.getByText("路由模板 JSON 指南")).toBeInTheDocument();
-    for (const field of [
-      "routing_groups",
-      "model_routes",
-      "retry_policy.max_attempts",
-      "retry_policy.timeout_seconds",
-      "retry_policy.failure_threshold",
-      "retry_policy.cooldown_seconds",
-    ])
+  /** 目的：验证严格顶层字段在中英文界面一致；前置静态指南；结果不把废弃字段当成可导入字段，DOM 自动清理。 */
+  it.each([
+    ["zh-CN", "路由模板 JSON 说明", "完整字段"],
+    ["en", "Route-template JSON guide", "Complete fields"],
+  ] as const)("renders the strict contract in %s", (locale, title, tab) => {
+    renderGuide(locale);
+    expect(screen.getByText(title)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: tab })).toBeInTheDocument();
+    for (const field of ["model_routes", "retry_policy", "routing_groups", "fallbacks"])
       expect(screen.getByRole("cell", { name: field, exact: true })).toBeInTheDocument();
-    for (const field of ["model_routing", "model_overrides", "num_retries", "endpoint_id", "allocations"])
-      expect(screen.queryByText(field, { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "num_retries", exact: true })).not.toBeInTheDocument();
   });
-  /** 前置可导入示例；验证正常解析、负数和未知字段拒绝；纯函数测试不产生外部数据。 */
-  it("provides a valid example and rejects invalid edits", () => {
+
+  /** 目的：验证公开示例可被前端严格解析且旧字段被拒绝；前置共享 JSON；纯函数无外部数据与清理。 */
+  it("parses the shared example and rejects legacy fields", () => {
     expect(parseDocument(JSON.stringify(ROUTE_TEMPLATE_EXAMPLE))).toMatchObject({ ok: true });
     expect(parseDocument(JSON.stringify({ ...ROUTE_TEMPLATE_EXAMPLE, num_retries: 1 }))).toEqual({ ok: false });
     expect(parseDocument(JSON.stringify({ ...ROUTE_TEMPLATE_EXAMPLE, stream_timeout: 120 }))).toEqual({ ok: false });
   });
-  /** 前置指南示例分区及可用剪贴板；验证复制完整正文和成功提示，卸载清理 UI 并恢复剪贴板方法。 */
-  it("copies the complete example with success feedback", async () => {
+
+  /** 目的：验证中英文复制成功与失败反馈；前置可控剪贴板；示例正文保持完整，测试后恢复方法。 */
+  it.each([
+    ["zh-CN", "可导入示例", "完整路由模板正文", "复制示例", "已复制", "复制失败，请手动选择代码复制。"],
+    ["en", "Importable example", "Complete route-template document", "Copy example", "Copied", "Copy failed. Select the code and copy it manually."],
+  ] as const)("reports clipboard outcomes in %s", async (locale, tab, region, copy, copied, failed) => {
     const user = userEvent.setup();
-    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValueOnce().mockRejectedValueOnce(new Error("denied"));
     try {
-      render(<RouteTemplateJsonGuide />);
-      await user.click(screen.getByRole("tab", { name: "可导入示例" }));
-      const example = screen.getByRole("region", { name: "完整模板示例" });
-      await user.click(within(example).getByRole("button", { name: "复制 JSON" }));
-      expect(write).toHaveBeenCalledWith(JSON.stringify(ROUTE_TEMPLATE_EXAMPLE, null, 2));
-      expect(within(example).getByRole("status")).toHaveTextContent("已复制");
-    } finally {
-      write.mockRestore();
-    }
-  });
-  /** 前置剪贴板权限拒绝；验证复制错误可见且示例保留，卸载清理 UI 并恢复方法，无外部数据。 */
-  it("reports clipboard rejection without hiding the example", async () => {
-    const user = userEvent.setup();
-    const write = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
-    try {
-      render(<RouteTemplateJsonGuide />);
-      await user.click(screen.getByRole("tab", { name: "可导入示例" }));
-      const example = screen.getByRole("region", { name: "完整模板示例" });
-      await user.click(within(example).getByRole("button", { name: "复制 JSON" }));
-      expect(within(example).getByRole("status")).toHaveTextContent("复制失败，请手动选择代码复制");
-      expect(example).toHaveTextContent('"routing_strategy": "cost-based-routing"');
+      renderGuide(locale);
+      await user.click(screen.getByRole("tab", { name: tab }));
+      const example = screen.getByRole("region", { name: region });
+      await user.click(within(example).getByRole("button", { name: copy }));
+      expect(write).toHaveBeenLastCalledWith(JSON.stringify(ROUTE_TEMPLATE_EXAMPLE, null, 2));
+      expect(within(example).getByRole("status")).toHaveTextContent(copied);
+      await user.click(within(example).getByRole("button", { name: copy }));
+      expect(within(example).getByRole("status")).toHaveTextContent(failed);
     } finally {
       write.mockRestore();
     }

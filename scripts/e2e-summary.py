@@ -7,6 +7,21 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+def read_json(path, label, errors, *, missing=None):
+    """读取一份测试 JSON；path 是文件路径，label 用于诊断，errors 收集失败信息。
+
+    返回解析后的对象；文件不存在时返回 missing，格式或读取失败时记录可展示错误并返回
+    missing。调用方为报告汇总流程；除追加 errors 外无副作用，不会删除或改写测试证据。
+    """
+    if not path.exists():
+        return missing
+    try:
+        return json.loads(path.read_text(errors="replace"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        errors.append(f"{label} 无法解析：{type(error).__name__}: {error}")
+        return missing
+
 root = Path(__file__).resolve().parent.parent
 out = Path(os.environ.get("E2E_ACCEPTANCE_DIR", str(root / ".e2e")))
 out.mkdir(parents=True, exist_ok=True)
@@ -22,14 +37,25 @@ for i, line in enumerate(browser_log_lines):
         browser_diagnostics.extend(browser_log_lines[max(0, i - 1):i + 1])
 preflight_path = out / "preflight.log"
 preflight = preflight_path.read_text(errors="replace") if preflight_path.exists() else ""
-browser = json.loads(result.read_text()) if result.exists() else None
+input_errors = []
+browser = read_json(result, "浏览器 results.json", input_errors)
+if browser is not None and not isinstance(browser, dict):
+    input_errors.append("浏览器 results.json 顶层必须是 JSON 对象。")
+    browser = None
 browser_started = bool(re.search(r"Running \d+ tests? using", browser_log))
 incomplete_stages = []
 if not browser and browser_started:
     incomplete_stages.append("浏览器已开始执行，但没有完整结果；运行中断或报告未写出，不能计为通过。")
 if backend and not re.search(r"^(?:ok|FAIL)\s+.*cmd/regression", backend, re.M):
     incomplete_stages.append("后端已开始执行，但没有套件结束记录；不能计为通过。")
-metadata = json.loads(os.environ.get("E2E_PROVIDER_METADATA", "{}"))
+try:
+    metadata = json.loads(os.environ.get("E2E_PROVIDER_METADATA", "{}"))
+except json.JSONDecodeError as error:
+    input_errors.append(f"E2E_PROVIDER_METADATA 无法解析：JSONDecodeError: {error}")
+    metadata = {}
+if not isinstance(metadata, dict):
+    input_errors.append("E2E_PROVIDER_METADATA 顶层必须是 JSON 对象。")
+    metadata = {}
 backend_mode = os.environ.get("E2E_BACKEND_MODE", "live")
 scope = os.environ.get("E2E_SCOPE", "完整真实供应商入口" if backend_mode == "live" else "确定性回归")
 cases = []
@@ -63,7 +89,13 @@ backend_completed = bool(re.search(r"^(?:ok|FAIL)\s+.*cmd/regression", backend, 
 failed_assertions = [error for case in backend_cases if case["status"] == "fail" for error in case["errors"]]
 build_diagnostics = [line.strip() for line in backend.splitlines() if re.search(
     r"missing go.sum entry|no required module provides package|^[^\s]+\.go:\d+:\d+:|\[setup failed\]|\[build failed\]", line)]
-weighted = [json.loads(p.read_text()) for p in sorted((out / "evidence").glob("weighted-*.json"))]
+weighted = []
+for weighted_path in sorted((out / "evidence").glob("weighted-*.json")):
+    item = read_json(weighted_path, f"权重证据 {weighted_path.name}", input_errors)
+    if isinstance(item, dict):
+        weighted.append(item)
+    elif item is not None:
+        input_errors.append(f"权重证据 {weighted_path.name} 必须是 JSON 对象。")
 coverage = {}
 for name in ("pages", "routes", "chains"):
     p = out / ".e2e-report" / (name + ".txt")
@@ -87,12 +119,13 @@ summary = {
     "backend_completed": backend_completed,
     "backend_diagnostics": list(dict.fromkeys(failed_assertions + build_diagnostics)),
     "preflight_errors": preflight.splitlines()[-20:] if not browser and not browser_log and not backend else [],
+    "input_errors": input_errors,
     "incomplete_stages": incomplete_stages,
     "incomplete_browser_tail": browser_log_lines[-10:] if not browser and browser_started else [],
     "browser_cases": cases, "backend_cases": backend_cases, "weighted": weighted, "coverage": coverage,
     "unsupported_routes": [line for line in coverage["routes"] if line.startswith("route unsupported")],
 }
-weighted_missing = {s["name"] for s in metadata.get("weighted_scenarios", [])} - {w["scenario"] for w in weighted}
+weighted_missing = {s["name"] for s in metadata.get("weighted_scenarios", []) if isinstance(s, dict) and s.get("name")} - {w.get("scenario") for w in weighted}
 summary["missing_weighted_evidence"] = sorted(weighted_missing)
 def valid_weighted_evidence(w):
     calls = w.get("calls", [])
@@ -107,11 +140,11 @@ def valid_weighted_evidence(w):
             and all(sum(c.get("deployment") == deployment for c in calls) == count
                     for deployment, count in expected.items())
             and all(c.get("call_id") and c.get("cost_usd", 0) > 0 for c in calls))
-summary["invalid_weighted_evidence"] = [w["scenario"] for w in weighted if not valid_weighted_evidence(w)]
+summary["invalid_weighted_evidence"] = [w.get("scenario", "<missing scenario>") for w in weighted if not valid_weighted_evidence(w)]
 failed = (summary["browser_exit"] or summary["backend_exit"] or not browser or not cases
           or browser.get("stats", {}).get("unexpected", 0) or summary["browser_errors"]
           or summary["backend_fail"] or not summary["backend_ok"] or not top
-          or weighted_missing or summary["invalid_weighted_evidence"] or incomplete_stages)
+          or weighted_missing or summary["invalid_weighted_evidence"] or incomplete_stages or input_errors)
 summary["status"] = "failed" if failed else "passed"
 (out / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
 def cell(value): return str(value).replace("|", "\\|").replace("\n", " ")
@@ -161,6 +194,8 @@ if summary["backend_fail"] or (not summary["backend_ok"] and backend):
     lines += [re.sub(r"\x1b\[[0-9;]*m", "", line.strip()) for line in summary["backend_diagnostics"]]
 if summary["preflight_errors"]:
     lines += ["", "## 启动前检查失败", "", *summary["preflight_errors"]]
+if summary["input_errors"]:
+    lines += ["", "## 报告输入错误", "", *summary["input_errors"]]
 if incomplete_stages:
     lines += ["", "## 执行未完成", "", *incomplete_stages, "", *summary["incomplete_browser_tail"]]
 lines += ["", "## 跳过与范围限制", ""]
@@ -204,12 +239,14 @@ if failed:
             print("    " + short_error(error))
     for error in summary["preflight_errors"]:
         print("  [preflight] " + short_error(error))
+    for error in summary["input_errors"]:
+        print("  [report input] " + short_error(error))
     for scenario in summary["missing_weighted_evidence"]:
         print("  [weighted] Evidence missing: " + scenario)
     for scenario in summary["invalid_weighted_evidence"]:
         print("  [weighted] Evidence failed validation: " + scenario)
         for w in weighted:
-            if w["scenario"] == scenario and w.get("failure_reason"):
+            if w.get("scenario") == scenario and w.get("failure_reason"):
                 print("    " + short_error(w["failure_reason"]))
 print("Report HTML: " + str(out / "report.html"))
 print("Report Markdown: " + str(out / "report.md"))

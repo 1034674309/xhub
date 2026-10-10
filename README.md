@@ -76,7 +76,7 @@ Each call retains its applied price snapshot, so later price changes preserve hi
 
 Configure weighted traffic splits and deployment selection based on load, cost, latency, or usage through model settings and routing templates. Organize models into routing groups and define fallback chains for general errors, context limits, and upstream content-policy errors. Combine them with retries, timeouts, and failure cooldowns.
 
-Organizations, teams, and keys can select or inherit routing templates. Session affinity and complete response caching for non-streaming calls are supported. Once streaming content has been sent, XHub does not switch providers and replay the response.
+Organizations, teams, and keys can select or inherit routing templates. Session affinity and complete response caching for non-streaming calls are supported. Cross-model fallback happens only before response bytes are sent and can be disabled with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
 
 ### Security guardrails: built-in rules and business customization
 
@@ -158,7 +158,7 @@ docker version
 docker compose version
 ```
 
-The current deployment builds on your host and packages the output into Docker images. You also need **Git, Go 1.25, Node.js ≥24.14.1, npm ≥11.10.0**, and a readable `/etc/ssl/cert.pem`. The build script requires Bash; on Windows, install these tools inside WSL2 Linux and enable Docker Desktop WSL integration. The script supports amd64/arm64 and downloads Linux Node.js from npmmirror. See the [installation guide](docs/getting-started.md) for complete requirements.
+The current deployment builds on your host and packages the output into Docker images. You also need **Git, Go 1.25, Node.js ≥24.14.1, npm ≥11.10.0**, and a readable system CA bundle. The build script detects the common Debian/Ubuntu, RHEL, macOS, and Alpine paths; set `XHUB_CA_CERT_FILE` for another location. The build script requires Bash; on Windows, install these tools inside WSL2 Linux and enable Docker Desktop WSL integration. The script supports amd64/arm64 and downloads Linux Node.js from npmmirror. See the [installation guide](docs/getting-started.md) for complete requirements.
 
 ### 2. Build and start
 

@@ -23,7 +23,7 @@ export const docsHelpEn = {
     body2:
       "A public model may have multiple deployments. Configure actual capabilities, pricing and enabled state for each deployment, then test it in diagnostics or Playground. A provider name alone does not establish endpoint support.",
     body3:
-      "For an empty model list, check enabled deployments and the current user or key model scope. For unsupported protocol errors, compare the client endpoint with the deployment transport.",
+      "Connection Test selects the saved server-side deployment by model_info.id and sends a minimal English dialogue request. It reports success only for supported dialogue transports with a valid protocol response; media and unsupported transports return an unsupported result. The probe may incur provider charges and bypasses gateway key quotas, routing, cooldown and usage accounting.",
   },
   "help-workspace": {
     title: "Organizations, teams and access",
@@ -62,7 +62,7 @@ export const docsHelpEn = {
     body2:
       "Routing templates can inherit through key, team and organization scopes. Clearing a binding restores inheritance. Templates choose deployments within existing permissions and do not expand model access.",
     body3:
-      "For duplicate tasks or unexpected costs, inspect creation retry policies. Avoid resending media creation requests with unknown outcomes. Use deployment, error type and call ID in logs to trace selection.",
+      "Cross-model fallback is available only before response bytes are emitted. Set disable_fallbacks:true to disable it. Pinned continuations, native asynchronous creation and Responses background requests are not replayed on another model. For unknown task outcomes, preserve the task ID and x-litellm-call-id instead of blindly resending.",
   },
   "help-guardrails": {
     title: "Guardrail configuration and validation",
@@ -88,7 +88,7 @@ export const docsHelpEn = {
     body2:
       "Filter costs by user, key, team or project and check attribution and time range. Cached input is part of input usage. Images, audio and video use their own pricing units; see billing formulas and examples.",
     body3:
-      "Poll asynchronous tasks with the same task identity. Completed task costs may appear after creation. Preserve task ID, call ID, status and pricing snapshot when investigating discrepancies; logs are not a complete provider invoice.",
+      "Poll asynchronous tasks with the same identity and credentials. Completed task costs may appear after creation. Preserve task ID, x-litellm-call-id, status and pricing snapshot; a timeout or lost connection does not prove that the provider did no work or charged nothing, and logs are not a complete provider invoice.",
   },
   "help-troubleshooting": {
     title: "Common problems and troubleshooting",
@@ -101,6 +101,6 @@ export const docsHelpEn = {
     body2:
       "429: inspect RPM, TPM, quota and upstream rate limits. 5xx: use the call ID to locate deployment, upstream errors and timeouts. If curl works but browser requests fail, check gateway URL, HTTPS mixed content and CORS origins.",
     body3:
-      "Empty model list: check enabled deployments and key authorization. Tool connection failure: use Playground Base URL without appending /v1 and inspect paths added by the tool. Media failures: distinguish creation, polling and download, and check implemented capabilities.",
+      "GET /models is anonymous deployment discovery; GET /v1/models applies the caller's XHub key permissions. For tool failures, use the Playground gateway root without appending /v1 and inspect paths added by the tool. Preserve x-litellm-call-id, and distinguish media creation, polling and download.",
   },
 };

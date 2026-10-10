@@ -72,7 +72,7 @@ curl "$XHUB_BASE_URL/api/v3/contents/generations/tasks" \
 
 ## 任务查询与协议选择
 
-将创建响应 id 保存为 TASK_ID，查询直到终态。内容生成任务协议使用 content 数组。部署绑定 Fal 时参见 [Seedance Fal](fal-seedance)，两种协议不能直接互换。
+将创建响应 id 保存为 TASK_ID，查询直到终态。内容生成任务协议使用 content 数组。部署绑定 Fal 时参见 [Seedance Fal](fal-seedance.md)，两种协议不能直接互换。
 
 ~~~http
 GET /api/v3/contents/generations/tasks/{TASK_ID}
