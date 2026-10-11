@@ -136,7 +136,7 @@ test("hierarchical budgets reserve allocations and enforce a single team", async
         return Number((await response.json()).team_info.spend);
       })
       .toBeGreaterThan(0);
-    // 退出只解除归属：独立个人密钥继续消费，旧团队与组织账单不再增加。
+    // 退出只解除归属，保留旧 Key；显式个人预算授权仍可独立消费。
     const removed = await page.request.post(GATEWAY + "/team/member_delete", {
       headers,
       data: { team_id: team.team_id, user_id: userID },
@@ -148,7 +148,24 @@ test("hierarchical budgets reserve allocations and enforce a single team", async
       headers: { Authorization: "Bearer " + fixed.key },
       data: body,
     });
-    expect(independent.ok(), await independent.text()).toBeTruthy();
+    expect(independent.status()).toBe(200);
+    const newKeyResponse = await page.request.post(GATEWAY + "/key/generate", {
+      headers, data: { user_id: userID, key_alias: "quota-after-exit" },
+    });
+    expect(newKeyResponse.ok(), await newKeyResponse.text()).toBeTruthy();
+    const newKey = await newKeyResponse.json();
+    const newInference = await page.request.post(GATEWAY + "/v1/chat/completions", {
+      headers: { Authorization: "Bearer " + newKey.key }, data: body,
+    });
+    expect(newInference.status(), "固定 Key 已占满个人分配，新共享 Key 不能凭空增加预算").toBe(429);
+    const expanded = await page.request.post(GATEWAY + "/user/update", {
+      headers, data: { user_id: userID, max_budget: 401 },
+    });
+    expect(expanded.ok(), await expanded.text()).toBeTruthy();
+    const recovered = await page.request.post(GATEWAY + "/v1/chat/completions", {
+      headers: { Authorization: "Bearer " + newKey.key }, data: body,
+    });
+    expect(recovered.ok(), await recovered.text()).toBeTruthy();
     const afterExit = await page.request.get(GATEWAY + "/team/info?team_id=" + team.team_id, { headers });
     const afterExitData = await afterExit.json();
     expect(Number(afterExitData.team_info.spend)).toBe(previousSpend);

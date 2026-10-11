@@ -2,7 +2,7 @@
 """隔离浏览器调用的 Codex 模拟入口，复用真实数据集的三轮请求与逐轮对账。"""
 import json
 import sys
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 
 
 def resolve_billing_identity(dataset, key):

@@ -57,7 +57,7 @@ func TestTemplateVisibilityOrdinaryWrites(t *testing.T) {
 	if code != 404 {
 		t.Fatalf("bulk update accepted invisible template: %d %s", code, raw)
 	}
-	code, raw = call(f.teamAdmin, "/key/service-account/generate", map[string]any{"team_id": f.teamA.ID, "route_template_id": id})
+	code, raw = call(f.teamAdmin, "/key/generate", map[string]any{"team_id": f.teamA.ID, "route_template_id": id})
 	if code != 404 {
 		t.Fatalf("service account accepted invisible template: %d %s", code, raw)
 	}

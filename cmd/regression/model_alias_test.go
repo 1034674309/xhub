@@ -12,7 +12,7 @@ import (
 // 合法编辑、持久化和 Google/OpenAI 数据面；显式删除部署和凭据，harness 清理账单及 schema。
 func TestDialogueAliasLifecycle(t *testing.T) {
 	h := newHarness(t)
-	admin := h.adminSession()
+	admin := h.personalBillingSession()
 	h.ok("POST", "/credentials", admin, map[string]any{
 		"credential_name": "alias-supplier", "credential_info": map[string]any{"custom_llm_provider": "openai"},
 		"credential_values": map[string]any{"api_base": h.prices.URL + "/v1", "api_key": "sk-fake"},

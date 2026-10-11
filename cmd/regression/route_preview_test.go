@@ -69,7 +69,7 @@ func TestRoutePreviewMatchesInference(t *testing.T) {
 	assertAcceptanceRejected(t, h, admin, c, model, "key-window-exhausted", http.StatusTooManyRequests, "rpm_limit")
 	preview(c.session, team, "team", "preview-b")
 	personal := h.keyWith(t, c.session, map[string]any{"key_alias": "preview-personal"})
-	preview(personal, "", "builtin", "")
+	preview(personal, team, "team", "preview-b")
 	for _, input := range []map[string]any{{"model_name": model, "endpoint_id": "chat", "template_id": key}, {"model_name": model, "endpoint_id": "chat", "body": routeTemplateBody([]any{}, 1, 60, 0, 0)}} {
 		if r := h.do(http.MethodPost, "/route_template/preview", c.key, input); r.status != 403 {
 			t.Fatalf("密钥获得模板管理权限: %s", r.describe())

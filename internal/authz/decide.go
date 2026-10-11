@@ -35,14 +35,13 @@ const (
 	ActionOrgAdmin Action = "org.admin"
 
 	// Teams.
-	ActionTeamRead    Action = "team.read"
-	ActionTeamWrite   Action = "team.write"
-	ActionTeamCreate  Action = "team.create"
-	ActionTeamDelete  Action = "team.delete"
-	ActionTeamMove    Action = "team.move"
-	ActionTeamBudget  Action = "team.budget"
-	ActionTeamModels  Action = "team.models"
-	ActionTeamService Action = "team.service_keys"
+	ActionTeamRead   Action = "team.read"
+	ActionTeamWrite  Action = "team.write"
+	ActionTeamCreate Action = "team.create"
+	ActionTeamDelete Action = "team.delete"
+	ActionTeamMove   Action = "team.move"
+	ActionTeamBudget Action = "team.budget"
+	ActionTeamModels Action = "team.models"
 
 	// Members.
 	ActionMemberRead   Action = "member.read"
@@ -249,7 +248,7 @@ func (g *Guard) CheckKey(ctx context.Context) error {
 		}
 	}
 	if k.OwnerType != iam.OwnerPersonal {
-		return nil
+		return ErrForbidden
 	}
 	if k.UserID == nil || *k.UserID == "" {
 		return ErrForbidden
@@ -520,11 +519,6 @@ func (g *Guard) decide(ctx context.Context, action Action, obj Object) error {
 			return nil
 		}
 		return ErrForbidden
-	case ActionTeamService:
-		if admin || g.TeamAdminOf(obj.TeamID) || g.OrgAdminOf(obj.OrgID) {
-			return nil
-		}
-		return ErrForbidden
 
 	// ---------- members ----------
 	case ActionMemberRead:
@@ -554,8 +548,7 @@ func (g *Guard) decide(ctx context.Context, action Action, obj Object) error {
 	case ActionKeyRead:
 		return g.decideKeyRead(obj, admin)
 	case ActionKeyWrite, ActionKeyDelete:
-		// Personal keys are the owner's alone; a team administrator may not
-		// touch them, only the service keys of the team.
+		// 所有密钥均属于用户；团队管理员不能读取或修改其他成员的密钥。
 		if obj.OwnerType == iam.OwnerPersonal {
 			if obj.OwnerUserID == g.actor.UserID {
 				return nil
@@ -564,9 +557,6 @@ func (g *Guard) decide(ctx context.Context, action Action, obj Object) error {
 				return nil
 			}
 			return ErrNotFound
-		}
-		if admin || g.TeamAdminOf(obj.TeamID) {
-			return nil
 		}
 		return ErrForbidden
 	case ActionKeyInspect:
@@ -710,42 +700,40 @@ func (g *Guard) decideTeamRead(obj Object, admin bool) error {
 	return ErrNotFound
 }
 
-// decideKeyCreate 判定创建权限；用户可创建本人无团队个人密钥，指定团队时必须是成员，服务密钥要求团队管理权限。
+// decideKeyCreate 判定创建权限；用户可创建本人无团队个人密钥，指定团队时必须是成员，仅支持用户密钥。
 // 参数 ctx（context.Context）：上下文，取消时停止；obj（Object）：要判定的对象，含类型、团队、组织和归属用户；admin（bool）：为真时操作者按管理员处理，可以越过普通成员的限制。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：仅在 decide.go 内使用
 // 测试：personal_keys_test.go。
 func (g *Guard) decideKeyCreate(ctx context.Context, obj Object, admin bool) error {
+	// 所有 Key 都必须先确认用户归属，随后实时派生团队；请求不需要选择团队。
+	if obj.OwnerType != iam.OwnerPersonal || obj.OwnerUserID == "" || (!admin && obj.OwnerUserID != g.actor.UserID) {
+		return ErrForbidden
+	}
+	if g.z != nil && g.z.db != nil {
+		teams, err := g.z.db.MemberTeams(ctx, obj.OwnerUserID)
+		if err != nil {
+			return notFoundOrInternal(err)
+		}
+		if len(teams) > 1 {
+			return ErrForbidden
+		}
+		teamID := ""
+		if len(teams) == 1 {
+			teamID = teams[0].TeamID
+		}
+		if obj.TeamID != "" && obj.TeamID != teamID {
+			return ErrForbidden
+		}
+		obj.TeamID = teamID
+	}
 	if obj.TeamID == "" {
-		if obj.OwnerType == iam.OwnerPersonal && obj.OwnerUserID != "" && obj.ProjectID == "" &&
-			(admin || obj.OwnerUserID == g.actor.UserID) {
-			return nil
+		if obj.ProjectID != "" {
+			return ErrForbidden
 		}
-		return ErrForbidden
-	}
-	if obj.OwnerUserID != "" && obj.OwnerUserID != g.actor.UserID && !admin {
-		return ErrForbidden
-	}
-	if obj.OwnerType == iam.OwnerService {
-		if admin || g.TeamAdminOf(obj.TeamID) || g.OrgAdminOf(obj.OrgID) {
-			return nil
-		}
-		return ErrForbidden
-	}
-	if admin {
 		return nil
 	}
-	// The team hint must be a team the actor really belongs to, and a project
-	// hint must live in that team.
-	if obj.TeamID == "" {
-		return ErrForbidden
-	}
-	if err := g.assertLoaded(ctx); err != nil {
-		return err
-	}
-	if !g.InTeam(obj.TeamID) {
-		return ErrForbidden
-	}
+	// 即使平台管理员代建，项目也必须属于 Key 属主的团队，避免权限链和额度链分叉。
 	if obj.ProjectID != "" && g.z != nil && g.z.db != nil {
 		p, err := g.z.db.GetProject(ctx, obj.ProjectID)
 		if err != nil {
@@ -754,6 +742,15 @@ func (g *Guard) decideKeyCreate(ctx context.Context, obj Object, admin bool) err
 		if p.TeamID != obj.TeamID {
 			return ErrForbidden
 		}
+	}
+	if admin {
+		return nil
+	}
+	if err := g.assertLoaded(ctx); err != nil {
+		return err
+	}
+	if !g.InTeam(obj.TeamID) {
+		return ErrForbidden
 	}
 	return nil
 }
@@ -771,11 +768,6 @@ func (g *Guard) decideKeyRead(obj Object, admin bool) error {
 			return nil
 		}
 		return ErrNotFound
-	}
-	// A service key is visible to the team's administrators; ordinary members
-	// may not see service keys at all.
-	if admin || g.TeamAdminOf(obj.TeamID) {
-		return nil
 	}
 	return ErrNotFound
 }
@@ -804,13 +796,13 @@ func (g *Guard) decideUsageRead(obj Object, admin bool) error {
 	return ErrForbidden
 }
 
-// 判定日志读取。管理员、有监督权的人，或个人日志的本人可以看。
+// 判定日志读取。平台管理员或日志本人可以看，团队管理不授予员工请求正文访问权。
 // 参数 obj（Object）：要判定的对象，含类型、团队、组织和归属用户；admin（bool）：为真时操作者按管理员处理，可以越过普通成员的限制。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：仅在 decide.go 内使用
 // 测试：无直接单测
 func (g *Guard) decideLogRead(obj Object, admin bool) error {
-	if admin || g.oversees(obj.TeamID, obj.OrgID) {
+	if admin {
 		return nil
 	}
 	if obj.OwnerType == iam.OwnerPersonal && obj.OwnerUserID == g.actor.UserID {
@@ -864,8 +856,6 @@ type Scope struct {
 	UserID     string
 	KeyIDs     []string
 	OwnerTypes []string
-	// ServiceOnly narrows a team administrator's log view to service keys.
-	ServiceOnly bool
 }
 
 // ScopeKind names the SQL shape a scope is meant for.
@@ -887,7 +877,7 @@ const (
 	ScopeAllUsage ScopeKind = "all_usage"
 	// ScopeOwnLogs lists request logs of the actor's own personal keys.
 	ScopeOwnLogs ScopeKind = "own_logs"
-	// ScopeTeamLogs lists the actor's own logs plus the team's service-key logs.
+	// ScopeTeamLogs 是保留的团队过滤维度；实际日志查询仍必须收窄为本人。
 	ScopeTeamLogs ScopeKind = "team_logs"
 	// ScopeAllLogs is the platform administrator listing, audited on read.
 	ScopeAllLogs ScopeKind = "all_logs"
@@ -932,27 +922,14 @@ func (g *Guard) KeysScope(ctx context.Context) (*Scope, error) {
 	return g.keyScopeFor(teams), nil
 }
 
-// keyScopeFor combines the personal keys of the actor with the service keys of the teams the actor administers. An ordinary member sees only their own.
+// keyScopeFor 只返回当前用户的个人密钥，团队管理员无权读取员工凭证。
 // 参数 teams（[]string）：teams列表。空切片表示没有可处理的项。
-// 返回 *Scope（*Scope）：自己的个人密钥，加上所管理团队的服务密钥。没有管理的团队时只含个人密钥。
+// 返回 *Scope（*Scope）：本人个人密钥，团队管理身份不扩大范围。
 // 调用：仅在 decide.go 内使用
 // 测试：无直接单测
 func (g *Guard) keyScopeFor(teams []string) *Scope {
-	managed := g.ManagedTeamIDs()
-	own := builder.Eq{"owner_type": iam.OwnerPersonal, "user_id": g.actor.UserID}
-	if len(managed) == 0 {
-		return &Scope{Cond: own, Kind: ScopeOwnKeys, UserID: g.actor.UserID,
-			OwnerTypes: []string{iam.OwnerPersonal}}
-	}
-	service := builder.Cond(builder.Eq{"owner_type": iam.OwnerService})
-	service = service.And(builder.In("team_id", managed))
-	return &Scope{
-		Cond:       own.Or(service),
-		Kind:       ScopeTeamKeys,
-		TeamIDs:    managed,
-		UserID:     g.actor.UserID,
-		OwnerTypes: []string{iam.OwnerPersonal, iam.OwnerService},
-	}
+	// 所有密钥统一属于用户；管理团队不意味着可读取员工凭证。
+	return &Scope{Cond: builder.Eq{"user_id": g.actor.UserID}, Kind: ScopeOwnKeys, UserID: g.actor.UserID, OwnerTypes: []string{iam.OwnerPersonal}}
 }
 
 // UsageScope returns the usage-listing scope for an actor. teamID optionally narrows to one team, and the guard checks the actor may see it at all.
@@ -999,9 +976,9 @@ func (g *Guard) UsageScope(ctx context.Context, teamID string) (*Scope, error) {
 	return &Scope{Cond: own.Or(builder.In("team_id", watch)), Kind: ScopeTeamUsage, TeamIDs: watch, UserID: g.actor.UserID}, nil
 }
 
-// LogsScope returns the request-log scope for an actor: own personal logs, plus the service-key logs of the teams the actor administers. A platform administrator sees everything.
+// LogsScope returns the request-log scope for an actor: own personal logs, only their own logs. A platform administrator sees everything.
 // 参数 ctx（context.Context）：上下文，取消或超时时停止后续工作。
-// 返回 *Scope（*Scope）：请求日志的范围。本人的个人日志，加上所管理团队的服务密钥日志。平台管理员能看全部；error（error）：成员关系读失败。nil 表示范围已经定好。
+// 返回 *Scope（*Scope）：请求日志的范围。本人的个人日志，不含其他成员的请求正文。平台管理员能看全部；error（error）：成员关系读失败。nil 表示范围已经定好。
 // 调用：gateway/usage/host.go、gateway/usage/reports.go、gateway/wire.go
 // 测试：authz_test.go
 func (g *Guard) LogsScope(ctx context.Context) (*Scope, error) {
@@ -1020,25 +997,7 @@ func (g *Guard) LogsScope(ctx context.Context) (*Scope, error) {
 		}
 		return &Scope{Cond: builder.Eq{"key_id": g.actor.KeyID}, Kind: ScopeOwnLogs, KeyIDs: []string{g.actor.KeyID}}, nil
 	}
-	own := builder.Eq{"owner_type": iam.OwnerPersonal, "user_id": g.actor.UserID}
-	watch, err := g.oversightTeamIDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(watch) == 0 {
-		return &Scope{Cond: own, Kind: ScopeOwnLogs, UserID: g.actor.UserID,
-			OwnerTypes: []string{iam.OwnerPersonal}}, nil
-	}
-	service := builder.Cond(builder.Eq{"owner_type": iam.OwnerService})
-	service = service.And(builder.In("team_id", watch))
-	return &Scope{
-		Cond:        own.Or(service),
-		Kind:        ScopeTeamLogs,
-		TeamIDs:     watch,
-		UserID:      g.actor.UserID,
-		OwnerTypes:  []string{iam.OwnerPersonal, iam.OwnerService},
-		ServiceOnly: true,
-	}, nil
+	return &Scope{Cond: builder.Eq{"user_id": g.actor.UserID}, Kind: ScopeOwnLogs, UserID: g.actor.UserID}, nil
 }
 
 // 列出这个用户能够监督的团队 id。没有库或没有用户时为空。
@@ -1181,8 +1140,6 @@ func (g *Guard) decideRouteTemplateWrite(obj Object, admin bool) error {
 // configurations somebody already approved, and it applies to exactly the scopes
 // the caller already belongs to, so it grants no reach they did not have.
 //
-// A service key is the team's rather than a person's, so selecting for it takes
-// the team administrator, matching how service keys are created and rotated.
 // 参数 obj（Object）：要判定的对象，含类型、团队、组织和归属用户；admin（bool）：为真时操作者按管理员处理，可以越过普通成员的限制。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：仅在 decide.go 内使用
@@ -1198,9 +1155,6 @@ func (g *Guard) decideRouteTemplateSelect(obj Object, admin bool) error {
 				return nil
 			}
 			return ErrNotFound
-		}
-		if g.TeamAdminOf(obj.TeamID) {
-			return nil
 		}
 		return ErrForbidden
 	case ObjectTeam:

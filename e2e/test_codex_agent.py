@@ -6,7 +6,7 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 from fake_upstream import codex_answer
 from codex_simulator import resolve_billing_identity
 

@@ -29,11 +29,11 @@ type fixture struct {
 	gone  *iam.User // disabled account
 	solo  *iam.User // active account in no team at all
 
-	orgA, orgB                          *iam.Organization
-	teamA1, teamA2, teamB1              string
-	projA1, projB1                      *iam.Project
-	aliceKey, aliceServiceKey, carolKey *iam.Key
-	plainKey                            *iam.Key
+	orgA, orgB                         *iam.Organization
+	teamA1, teamA2, teamB1             string
+	projA1, projB1                     *iam.Project
+	aliceKey, aliceSecondKey, carolKey *iam.Key
+	plainKey                           *iam.Key
 }
 
 // sys is the fixture's acting identity for writes made by the test itself. It is
@@ -128,7 +128,7 @@ func newFixture(t *testing.T) *fixture {
 		return k
 	}
 	f.aliceKey = key(iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.alice.ID, TeamID: f.teamA1, Name: "alice-personal"})
-	f.aliceServiceKey = key(iam.KeyInput{OwnerType: iam.OwnerService, TeamID: f.teamA1, Name: "a1-service"})
+	f.aliceSecondKey = key(iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.alice.ID, TeamID: f.teamA1, Name: "alice-second"})
 	f.carolKey = key(iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.carol.ID, TeamID: f.teamB1, Name: "carol-personal"})
 	f.plainKey = key(iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.plain.ID, TeamID: f.teamA1, Name: "plain-personal"})
 
@@ -301,15 +301,15 @@ func TestSessionMatrix(t *testing.T) {
 		{"a member cannot create a key in a foreign team", session(f.plain), ActionKeyCreate,
 			Object{Type: ObjectKey, TeamID: f.teamB1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.plain.ID}, "forbidden"},
 
-		// ---- service keys ----
-		{"member cannot see a service key", session(f.plain), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "notfound"},
-		{"team admin sees the team's service key", session(f.alice), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "allow"},
-		{"carol cannot see A1's service key", session(f.carol), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "notfound"},
-		{"member cannot create a service key", session(f.plain), ActionKeyCreate,
-			Object{Type: ObjectKey, TeamID: f.teamA1, OwnerType: iam.OwnerService}, "forbidden"},
-		{"team admin creates a service key", session(f.alice), ActionKeyCreate,
-			Object{Type: ObjectKey, TeamID: f.teamA1, OwnerType: iam.OwnerService}, "allow"},
-		{"team admin rotates the team's service key", session(f.alice), ActionKeyWrite, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "allow"},
+		// ---- 同一用户的多个个人密钥与非法归属类型 ----
+		{"member cannot see another user's key", session(f.plain), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "notfound"},
+		{"team admin sees own second personal key", session(f.alice), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "allow"},
+		{"carol cannot see Alice's second key", session(f.carol), ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "notfound"},
+		{"member cannot create another user's key", session(f.plain), ActionKeyCreate,
+			Object{Type: ObjectKey, TeamID: f.teamA1, OwnerType: "service"}, "forbidden"},
+		{"team admin cannot create unsupported service key", session(f.alice), ActionKeyCreate,
+			Object{Type: ObjectKey, TeamID: f.teamA1, OwnerType: "service"}, "forbidden"},
+		{"team admin rotates own second personal key", session(f.alice), ActionKeyWrite, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "allow"},
 
 		// ---- router templates ----
 		//
@@ -357,10 +357,10 @@ func TestSessionMatrix(t *testing.T) {
 			Object{Type: ObjectKey, ID: f.plainKey.ID}, "allow"},
 		{"member cannot select for a colleague's key", session(f.plain), ActionRouteTemplateSelect,
 			Object{Type: ObjectKey, ID: f.aliceKey.ID}, "notfound"},
-		{"member cannot select for a service key", session(f.plain), ActionRouteTemplateSelect,
-			Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "forbidden"},
-		{"team admin selects for the team's service key", session(f.alice), ActionRouteTemplateSelect,
-			Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}, "allow"},
+		{"member cannot select for another user's key", session(f.plain), ActionRouteTemplateSelect,
+			Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "notfound"},
+		{"team admin selects for own second personal key", session(f.alice), ActionRouteTemplateSelect,
+			Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}, "allow"},
 
 		// ---- usage ----
 		{"member reads own usage", session(f.plain), ActionUsageRead, Object{Type: ObjectUsage, OwnerUserID: f.plain.ID}, "allow"},
@@ -377,13 +377,13 @@ func TestSessionMatrix(t *testing.T) {
 		{"owner reads own personal log", session(f.alice), ActionLogRead,
 			Object{Type: ObjectLog, ID: "r1", TeamID: f.teamA1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.alice.ID}, "allow"},
 		{"team admin reads a member's log inside the team", session(f.alice), ActionLogRead,
-			Object{Type: ObjectLog, ID: "r2", TeamID: f.teamA1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.carol.ID}, "allow"},
-		{"team admin reads the team's service log", session(f.alice), ActionLogRead,
-			Object{Type: ObjectLog, ID: "r3", TeamID: f.teamA1, OwnerType: iam.OwnerService}, "allow"},
-		{"member cannot read the team's service log", session(f.plain), ActionLogRead,
-			Object{Type: ObjectLog, ID: "r4", TeamID: f.teamA1, OwnerType: iam.OwnerService}, "notfound"},
-		{"carol cannot read A1's service log", session(f.carol), ActionLogRead,
-			Object{Type: ObjectLog, ID: "r5", TeamID: f.teamA1, OwnerType: iam.OwnerService}, "notfound"},
+			Object{Type: ObjectLog, ID: "r2", TeamID: f.teamA1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.carol.ID}, "notfound"},
+		{"team admin reads another member's personal log", session(f.alice), ActionLogRead,
+			Object{Type: ObjectLog, ID: "r3", TeamID: f.teamA1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.plain.ID}, "notfound"},
+		{"member cannot read another member's personal log", session(f.plain), ActionLogRead,
+			Object{Type: ObjectLog, ID: "r4", TeamID: f.teamA1, OwnerType: "service"}, "notfound"},
+		{"carol cannot read A1's unknown-owner log", session(f.carol), ActionLogRead,
+			Object{Type: ObjectLog, ID: "r5", TeamID: f.teamA1, OwnerType: "service"}, "notfound"},
 		{"admin reads any log", session(f.admin), ActionLogRead,
 			Object{Type: ObjectLog, ID: "r6", TeamID: f.teamA1, OwnerType: iam.OwnerPersonal, OwnerUserID: f.carol.ID}, "allow"},
 
@@ -438,7 +438,7 @@ func TestKeyActorCannotManage(t *testing.T) {
 		t.Run(string(action), func(t *testing.T) {
 			keyActor := Actor{Kind: KindKey, KeyID: f.aliceKey.ID, UserID: f.alice.ID,
 				Role: iam.RoleAdmin, KeyTeamID: f.teamA1, OwnerType: iam.OwnerPersonal}
-			if got := f.decide(t, keyActor, action, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}); got != "forbidden" {
+			if got := f.decide(t, keyActor, action, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}); got != "forbidden" {
 				t.Fatalf("key actor got %s for %s, want forbidden", got, action)
 			}
 		})
@@ -453,7 +453,7 @@ func TestKeyActorCannotManage(t *testing.T) {
 	if got := f.decide(t, keyActor, ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceKey.ID}); got != "allow" {
 		t.Fatalf("key reads itself: got %s, want allow", got)
 	}
-	if got := f.decide(t, keyActor, ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceServiceKey.ID}); got != "notfound" {
+	if got := f.decide(t, keyActor, ActionKeyRead, Object{Type: ObjectKey, ID: f.aliceSecondKey.ID}); got != "notfound" {
 		t.Fatalf("key reads another key: got %s, want notfound", got)
 	}
 
@@ -466,13 +466,13 @@ func TestKeyActorCannotManage(t *testing.T) {
 	}
 }
 
-// TestKeyRevalidatedEveryRequest covers the plan's immediate-effect rule: a
-// removed member's personal key, a disabled owner's key, a blocked team and a
-// blocked project all stop working on the next call.
+// TestKeyRevalidatedEveryRequest 验证每次调用重新读取用户状态及当前授权。
+// 参数 t 为测试上下文；有独立额度的成员退出后保留个人 Key，停用用户/团队/项目即时拒绝。
+// 无返回；隔离数据库由 fixture 清理，不依赖外部服务。
 func TestKeyRevalidatedEveryRequest(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("removing the member kills their personal key", func(t *testing.T) {
+	t.Run("removing the member preserves personal billing and key", func(t *testing.T) {
 		f := newFixture(t)
 		k, _, err := f.db.CreateKey(ctx, f.sys(), iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.plain.ID, TeamID: f.teamA1, Name: "plain-key"})
 		if err != nil {
@@ -485,8 +485,11 @@ func TestKeyRevalidatedEveryRequest(t *testing.T) {
 		if err := f.db.RemoveMember(ctx, f.sys(), f.teamA1, f.plain.ID); err != nil {
 			t.Fatalf("remove member: %v", err)
 		}
-		if got := f.decide(t, actor, ActionInfer, Object{Type: ObjectModel}); got != "forbidden" {
-			t.Fatalf("after removal: got %s, want forbidden", got)
+		if got := f.decide(t, actor, ActionInfer, Object{Type: ObjectModel}); got != "allow" {
+			t.Fatalf("退出后应保留独立个人计费授权: got %s, want allow", got)
+		}
+		if got := f.decide(t, actor, ActionTeamRead, Object{Type: ObjectTeam, ID: f.teamA1}); got == "allow" {
+			t.Fatal("个人 Key 保留不应保留原团队管理权限")
 		}
 	})
 
@@ -507,11 +510,11 @@ func TestKeyRevalidatedEveryRequest(t *testing.T) {
 
 	t.Run("blocking the team kills the key", func(t *testing.T) {
 		f := newFixture(t)
-		k, _, err := f.db.CreateKey(ctx, f.sys(), iam.KeyInput{OwnerType: iam.OwnerService, TeamID: f.teamA1, Name: "a1-service"})
+		k, _, err := f.db.CreateKey(ctx, f.sys(), iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.alice.ID, TeamID: f.teamA1, Name: "alice-second"})
 		if err != nil {
 			t.Fatalf("create key: %v", err)
 		}
-		actor := Actor{Kind: KindKey, KeyID: k.ID, KeyTeamID: f.teamA1, OwnerType: iam.OwnerService}
+		actor := Actor{Kind: KindKey, KeyID: k.ID, UserID: f.alice.ID, KeyTeamID: f.teamA1, OwnerType: iam.OwnerPersonal}
 		if got := f.decide(t, actor, ActionInfer, Object{Type: ObjectModel}); got != "allow" {
 			t.Fatalf("before block: got %s, want allow", got)
 		}
@@ -525,11 +528,11 @@ func TestKeyRevalidatedEveryRequest(t *testing.T) {
 
 	t.Run("blocking a project kills its key", func(t *testing.T) {
 		f := newFixture(t)
-		k, _, err := f.db.CreateKey(ctx, f.sys(), iam.KeyInput{OwnerType: iam.OwnerService, TeamID: f.teamA1, ProjectID: f.projA1.ID, Name: "proj-service"})
+		k, _, err := f.db.CreateKey(ctx, f.sys(), iam.KeyInput{OwnerType: iam.OwnerPersonal, UserID: f.alice.ID, TeamID: f.teamA1, ProjectID: f.projA1.ID, Name: "project-personal"})
 		if err != nil {
 			t.Fatalf("create key: %v", err)
 		}
-		actor := Actor{Kind: KindKey, KeyID: k.ID, KeyTeamID: f.teamA1, KeyProjectID: f.projA1.ID, OwnerType: iam.OwnerService}
+		actor := Actor{Kind: KindKey, KeyID: k.ID, KeyTeamID: f.teamA1, UserID: f.alice.ID, KeyProjectID: f.projA1.ID, OwnerType: iam.OwnerPersonal}
 		if got := f.decide(t, actor, ActionInfer, Object{Type: ObjectModel}); got != "allow" {
 			t.Fatalf("before block: got %s, want allow", got)
 		}
@@ -553,11 +556,8 @@ func TestTeamAdminLogScopeExcludesOtherPersonalKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render scope: %v", err)
 	}
-	if !strings.Contains(query, "owner_type") || !strings.Contains(query, "team_id") || !scope.ServiceOnly {
-		t.Fatalf("team log scope does not restrict team rows to service keys: query=%q args=%v scope=%#v", query, args, scope)
-	}
-	if strings.Count(query, "owner_type") < 2 {
-		t.Fatalf("scope must independently constrain own personal and team service logs: %q", query)
+	if !strings.Contains(query, "user_id") || strings.Contains(query, "team_id") {
+		t.Fatalf("团队管理员不应读取其他用户私有日志: query=%q args=%v scope=%#v", query, args, scope)
 	}
 }
 
@@ -651,10 +651,10 @@ func TestScopeFailsClosed(t *testing.T) {
 		return n
 	}
 
-	// alice administers teamA1: her own personal key and the team's service key,
+	// alice administers teamA1: her own personal key and own second personal key,
 	// and never carol's personal key.
 	if n := count(f.guard(t, session(f.alice)).KeysScope(ctx)); n != 2 {
-		t.Fatalf("team admin sees %d keys, want 2 (own personal + team service)", n)
+		t.Fatalf("team admin sees %d keys, want 2 (two own personal keys)", n)
 	}
 	// An ordinary member sees only their own, so carol sees just her own key.
 	if n := count(f.guard(t, session(f.carol)).KeysScope(ctx)); n != 1 {

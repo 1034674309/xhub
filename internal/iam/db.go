@@ -97,14 +97,6 @@ func (db *DB) Migrate(ctx context.Context) error {
 	if _, err := db.Engine.Context(ctx).Exec(archiveSchemaSQL); err != nil {
 		return err
 	}
-	// Names and hashes that already exist on the referenced rows. TTFT and
-	// headers were never stored, so they stay empty.
-	_, _ = db.Engine.Context(ctx).Exec(`
-		UPDATE usage_events e SET team_alias = t.name
-		FROM teams t WHERE e.team_id = t.id AND e.team_alias = '' AND e.team_id <> ''`)
-	_, _ = db.Engine.Context(ctx).Exec(`
-		UPDATE usage_events e SET key_alias = k.name, key_hash = k.token_hash
-		FROM api_keys k WHERE e.key_id = k.id AND e.key_alias = '' AND e.key_id <> ''`)
 	return nil
 }
 
@@ -196,11 +188,11 @@ func mapErr(err error) error {
 	if errors.As(err, &pg) {
 		switch pg.Code {
 		case "23505":
-			return fmt.Errorf("%w: %s", ErrConflict, pg.ConstraintName)
-		case "23503", "23514", "23502":
-			if pg.ConstraintName == "single_team_required" {
+			if pg.ConstraintName == "team_members_user_id_key" {
 				return ErrMultipleTeams
 			}
+			return fmt.Errorf("%w: %s", ErrConflict, pg.ConstraintName)
+		case "23503", "23514", "23502":
 			return fmt.Errorf("%w: %s", ErrInvalid, pg.ConstraintName)
 		}
 	}

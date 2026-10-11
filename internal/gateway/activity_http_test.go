@@ -25,7 +25,7 @@ func TestDailyActivityHTTPReadsRecordedUsage(t *testing.T) {
 		t.Fatalf("create admin: %v", err)
 	}
 	key, plain, err := db.CreateKey(ctx, iam.Actor{ID: admin.ID, Kind: "session"}, iam.KeyInput{
-		Name: "activity-probe", TeamID: testTeam(t, db, admin.ID), OwnerType: iam.OwnerService,
+		UserID: admin.ID, Name: "activity-probe", TeamID: testTeam(t, db, admin.ID), OwnerType: iam.OwnerPersonal,
 	})
 	if err != nil {
 		t.Fatalf("create key: %v", err)
@@ -35,7 +35,7 @@ func TestDailyActivityHTTPReadsRecordedUsage(t *testing.T) {
 	id := "activity-probe-" + time.Now().UTC().Format("20060102150405.000000000")
 	start := time.Date(2026, 9, 27, 8, 0, 0, 0, time.UTC)
 	if err := db.RecordUsage(ctx, []iam.UsageRecord{{
-		RequestID: id, TS: start, KeyID: key.ID, OwnerType: iam.OwnerService,
+		RequestID: id, TS: start, KeyID: key.ID, OwnerType: iam.OwnerPersonal,
 		UserID: admin.ID, TeamID: key.TeamID, Model: "activity-probe-model",
 		CallType: "chat", Status: "success",
 		PromptTokens: 11, CompletionTokens: 7, Cost: 3.5, DurationMS: 1000,

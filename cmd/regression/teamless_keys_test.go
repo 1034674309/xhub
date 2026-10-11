@@ -15,8 +15,8 @@ func TestTeamlessPersonalKeys(t *testing.T) {
 	admin := h.adminSession()
 	member := h.provision(t, admin, "already-member")
 	memberKey := h.ok(http.MethodPost, "/key/generate", member.session, map[string]any{"team_id": nil, "models": []string{"all-proxy-models"}}).json()
-	if memberKey["team_id"] != nil || memberKey["user_id"] != member.userID {
-		t.Fatalf("已有团队用户被强制绑定团队: %v", memberKey)
+	if memberKey["team_id"] != member.teamID || memberKey["user_id"] != member.userID {
+		t.Fatalf("密钥未派生用户团队归属: %v", memberKey)
 	}
 	h.ok(http.MethodPost, "/v1/chat/completions", firstString(memberKey, "key"), chatRequest("solo-chat", "already member"))
 	h.ok(http.MethodPost, "/key/delete", member.session, map[string]any{"keys": []string{firstString(memberKey, "token_id")}})
@@ -59,8 +59,8 @@ func TestTeamlessPersonalKeys(t *testing.T) {
 		status int
 	}{
 		{"/key/generate", map[string]any{"user_id": "someone-else"}, 403},
-		{"/key/service-account/generate", map[string]any{}, 400},
-		{"/key/generate", map[string]any{"project_id": "project"}, 400},
+		{"/key/service-account/generate", map[string]any{}, 404},
+		{"/key/generate", map[string]any{"project_id": "project"}, 403},
 		{"/key/generate", map[string]any{"owner_type": "unknown"}, 400},
 	} {
 		if r := h.do(http.MethodPost, tc.path, session, tc.body); r.status != tc.status {
@@ -74,6 +74,12 @@ func TestTeamlessPersonalKeys(t *testing.T) {
 		t.Fatalf("本人列表缺少独立密钥: %d", got)
 	}
 	h.ok(http.MethodGet, "/key/info?scope=personal&key="+id, session, nil)
+	markPending := len(h.upstreamCalls())
+	pending := h.do(http.MethodPost, "/v1/chat/completions", secret, chatRequest("solo-chat", "pending billing"))
+	if pending.status != 403 || !strings.Contains(pending.describe(), "billing_source_required") || len(h.upstreamSince(markPending)) != 0 {
+		t.Fatalf("待计费用户应保留Key但不调用上游: %s", pending.describe())
+	}
+	h.setUserBudget(t, admin, uid, 100)
 	h.ok(http.MethodPost, "/v1/chat/completions", secret, chatRequest("solo-chat", "teamless first"))
 	h.flushSpend()
 	k, err := h.db.GetKey(context.Background(), id)

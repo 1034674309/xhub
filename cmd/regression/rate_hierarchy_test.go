@@ -92,8 +92,11 @@ func TestRateAllocationHTTP(t *testing.T) {
 			}
 			mark := len(h.upstreamCalls())
 			response = h.do(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("allocation-model", "reserved for fixed"))
-			if response.status != 429 || len(h.upstreamSince(mark)) != 0 {
-				t.Fatalf("共享占用固定 Key: %s", response.describe())
+			if dimension == "rpm_limit" && response.status != 200 {
+				t.Fatalf("共享 Key 应借用空闲速率: %s", response.describe())
+			}
+			if dimension == "tpm_limit" && (response.status != 429 || len(h.upstreamSince(mark)) != 0) {
+				t.Fatalf("输入超过TPM上限应拒绝: %s", response.describe())
 			}
 			if dimension == "rpm_limit" {
 				h.ok(http.MethodPost, "/v1/chat/completions", firstString(fixed, "key"), chatRequest("allocation-model", "fixed succeeds"))
@@ -135,7 +138,12 @@ func TestRateSiblingAggregationHTTP(t *testing.T) {
 				t.Fatalf("普通个人自行解除组织上限: %s", denied.describe())
 			}
 			h.ok(http.MethodPost, "/team/member_delete", admin, map[string]any{"team_id": firstString(other, "team_id"), "user_id": firstString(member, "user_id")})
-			h.ok(http.MethodPost, "/v1/chat/completions", firstString(key, "key"), body)
+			if revoked := h.do(http.MethodPost, "/v1/chat/completions", firstString(key, "key"), body); revoked.status != 403 {
+				t.Fatalf("退出未暂停待计费密钥: %s", revoked.describe())
+			}
+			h.ok(http.MethodPost, "/user/update", admin, map[string]any{"user_id": firstString(member, "user_id"), "max_budget": 100})
+			independent := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"user_id": firstString(member, "user_id")}).json()
+			h.ok(http.MethodPost, "/v1/chat/completions", firstString(independent, "key"), body)
 			response = h.do(http.MethodPost, "/v1/chat/completions", tn.key, body)
 			if response.status != 429 {
 				t.Fatalf("退出重置了旧组织分钟用量: %s", response.describe())
@@ -184,10 +192,9 @@ func TestRateAtomicUpdateHTTP(t *testing.T) {
 	fixed := h.ok(http.MethodPost, "/key/generate", tn.session, map[string]any{"key_alias": "atomic-fixed", "rpm_limit": 4, "tpm_limit": 64}).json()
 	h.ok(http.MethodPost, "/user/update", admin, map[string]any{"user_id": tn.userID, "rpm_limit": nil, "tpm_limit": nil})
 	h.ok(http.MethodPost, "/team/update", admin, map[string]any{"team_id": tn.teamID, "rpm_limit": nil, "tpm_limit": nil})
-	mark := len(h.upstreamCalls())
 	blocked := h.do(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("atomic-rate-model", "ok"))
-	if blocked.status != 429 || !strings.Contains(blocked.describe(), "org rpm_limit") || len(h.upstreamSince(mark)) != 0 {
-		t.Fatalf("清空中间层绕过固定后代分配: %s", blocked.describe())
+	if blocked.status != 200 {
+		t.Fatalf("共享后代应借用组织空闲速率: %s", blocked.describe())
 	}
 	h.ok(http.MethodPost, "/v1/chat/completions", firstString(fixed, "key"), chatRequest("atomic-rate-model", "ok"))
 }

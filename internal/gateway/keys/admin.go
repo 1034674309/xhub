@@ -14,54 +14,6 @@ import (
 
 var logTraceOnceAdmin sync.Once
 
-// ServiceAccount generates a service key for a team or one of its projects. It has no owner, so it requires the team's administration rather than mere membership; Authorize makes that decision.
-// 参数 s（Host）：ServiceAccount使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
-// 返回：无。状态码和正文写进调用方的响应。
-// 调用：gateway/keys/mount.go
-// 测试：无直接单测
-func ServiceAccount(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceAdmin.Do(func() { util.Trace("enter keys.ServiceAccount") })
-
-	util.SetCallID(w, util.CallID())
-	p := s.RequireUser(w, r)
-	if p == nil {
-		return
-	}
-	body := readMap(r)
-	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
-	if err := util.ValidateRateFields(body); err != nil {
-		util.WriteError(w, 400, "invalid_request", err.Error())
-		return
-	}
-	if err := util.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
-		util.WriteError(w, 400, "invalid_request", err.Error())
-		return
-	}
-	body["owner_type"] = iam.OwnerService
-	body["user_id"] = ""
-	in, err := keyInputFrom(body, p.UserID)
-	if err != nil {
-		util.WriteError(w, 400, "invalid_request", err.Error())
-		return
-	}
-	obj := authz.Object{Type: authz.ObjectKey, TeamID: in.TeamID, ProjectID: in.ProjectID,
-		OwnerType: iam.OwnerService}
-	if err := s.Authorize(r, p, authz.ActionKeyCreate, obj); err != nil {
-		s.WriteAuthz(w, r, err)
-		return
-	}
-	if err := templateauth.Selection(s, r, p, str(body["route_template_id"])); err != nil {
-		s.WriteAuthz(w, r, err)
-		return
-	}
-	k, plain, err := s.Identity().CreateKey(r.Context(), actorOf(p), in)
-	if err != nil {
-		s.WriteIAMError(w, r, err)
-		return
-	}
-	util.WriteJSON(w, 200, Response(*k, plain, true))
-}
-
 // Regenerate rotates the key plaintext. The old plaintext stops working immediately, and the key's own limits and narrowing are untouched.
 // 参数 s（Host）：Regenerate使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。

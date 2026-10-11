@@ -6,7 +6,6 @@ const baseInput: KeyCreateInput = {
   existingKeys: null,
   keyOwner: "you",
   userID: "test-user",
-  selectedAgentId: null,
   loggingSettings: [],
   disabledCallbacks: [],
   autoRotationEnabled: false,
@@ -143,25 +142,9 @@ describe("key ownership", () => {
     ).toStrictEqual(expected);
   });
 
-  it("does not send an agent id for an agent-owned key", () => {
-    const expected = { key_alias: "my-key", duration: null, metadata: "{}" };
-    expect(payloadOf(build({ key_alias: "my-key" }, { keyOwner: "agent", selectedAgentId: "agent-1" }))).toStrictEqual(
-      expected,
-    );
-  });
-
-  it("reports agent_not_selected instead of building a payload when no agent is selected", () => {
-    expect(build({ key_alias: "my-key" }, { keyOwner: "agent", selectedAgentId: null })).toStrictEqual({
-      kind: "agent_not_selected",
-    });
-  });
-
-  it("stamps the alias into metadata as the service account id and sends no user_id", () => {
-    expect(payloadOf(build({ key_alias: "svc-key" }, { keyOwner: "service_account" }))).toStrictEqual({
-      key_alias: "svc-key",
-      duration: null,
-      metadata: '{"service_account_id":"svc-key"}',
-    });
+  /** 验证管理员为已存在普通用户创建 Key；前置已创建用户 ID，无存储副作用。 */
+  it("creates a key for an explicitly selected existing user", () => {
+    expect(payloadOf(build({ user_id: "user-b" }, { keyOwner: "another_user" })).user_id).toBe("user-b");
   });
 });
 
@@ -195,14 +178,14 @@ describe("metadata", () => {
     );
   });
 
-  it("keeps an array metadata as an array when stamping the service account id", () => {
+  it("keeps an array metadata as an array without synthetic identity", () => {
     expect(
-      payloadOf(build({ key_alias: "svc-key", metadata: '["a"]' }, { keyOwner: "service_account" })),
+      payloadOf(build({ key_alias: "svc-key", metadata: '["a"]' }, { keyOwner: "another_user" })),
     ).toStrictEqual({ key_alias: "svc-key", duration: null, metadata: '["a"]' });
   });
 
-  it("rejects a service account whose metadata parses to a primitive", () => {
-    expect(() => build({ key_alias: "svc-key", metadata: "5" }, { keyOwner: "service_account" })).toThrow(TypeError);
+  it("preserves primitive metadata", () => {
+    expect(payloadOf(build({ key_alias: "svc-key", metadata: "5" }, { keyOwner: "another_user" })).metadata).toBe("5");
   });
 
   it("keeps every metadata contributor in one object", () => {
@@ -211,7 +194,7 @@ describe("metadata", () => {
         build(
           { key_alias: "svc-key", metadata: '{"team":"core"}' },
           {
-            keyOwner: "service_account",
+            keyOwner: "another_user",
             loggingSettings: [{ callback_name: "otel" }],
             disabledCallbacks: ["Datadog"],
           },
@@ -221,7 +204,7 @@ describe("metadata", () => {
       key_alias: "svc-key",
       duration: null,
       metadata:
-        '{"team":"core","service_account_id":"svc-key","logging":[{"callback_name":"otel"}],"litellm_disabled_callbacks":["datadog"]}',
+        '{"team":"core","logging":[{"callback_name":"otel"}],"litellm_disabled_callbacks":["datadog"]}',
     });
   });
 });
@@ -447,11 +430,11 @@ describe("duplicate alias", () => {
     });
   });
 
-  it("checks the alias before the agent selection", () => {
+  it("checks the alias before submitting an ordinary user key", () => {
     expect(
       build(
         { key_alias: "taken" },
-        { existingKeys: [{ team_id: null, key_alias: "taken" }], keyOwner: "agent", selectedAgentId: null },
+        { existingKeys: [{ team_id: null, key_alias: "taken" }], keyOwner: "you" },
       ).kind,
     ).toBe("duplicate_alias");
   });
@@ -461,9 +444,8 @@ describe("endpoint", () => {
   it.each([
     ["you", "standard"],
     ["another_user", "standard"],
-    ["service_account", "service_account"],
   ])("routes a %s key to the %s endpoint", (keyOwner, endpoint) => {
-    const result = build({ key_alias: "my-key" }, { keyOwner });
+    const result = build({ key_alias: "my-key" }, { keyOwner: keyOwner as "you" | "another_user" });
     expect(result.kind === "ok" && result.endpoint).toBe(endpoint);
   });
 });

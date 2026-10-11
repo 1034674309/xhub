@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestPersonalKeysIsolation 验证个人密钥 HTTP 契约及生命周期；前置独立数据库、管理员、两个成员和服务密钥。
+// TestPersonalKeysIsolation 验证个人密钥 HTTP 契约及生命周期；前置独立数据库、管理员、两个成员和另一用户密钥。
 // 参数 t 为测试上下文，返回无；验证本人列表、管理员代建的他人密钥不可见、越界详情 404、分页、非法参数 400、推理和删除失效。
 // 清理：harness 自动停止网关并删除独立 schema，测试不调用外部供应商。
 func TestPersonalKeysIsolation(t *testing.T) {
@@ -13,9 +13,9 @@ func TestPersonalKeysIsolation(t *testing.T) {
 	admin := h.adminSession()
 	a := h.provision(t, admin, "personal-a")
 	b := h.provision(t, admin, "personal-b")
-	own := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"team_id": a.teamID, "key_alias": "personal-admin"}).json()
+	own := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"key_alias": "personal-admin"}).json()
 	delegated := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"team_id": a.teamID, "user_id": a.userID, "key_alias": "personal-delegated"}).json()
-	service := h.ok(http.MethodPost, "/key/service-account/generate", admin, map[string]any{"team_id": a.teamID, "key_alias": "personal-service"}).json()
+	secondUserKey := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"user_id": b.userID, "key_alias": "personal-second-user"}).json()
 	// 管理接口继续允许管理员管理全局密钥，个人入口必须额外收窄，避免误伤团队管理用途。
 	if got := len(rowsOf(h.ok(http.MethodGet, "/key/list", admin, nil), "keys")); got != 5 {
 		t.Fatalf("管理列表权限被个人页面改动误收窄: got=%d want=5", got)
@@ -23,25 +23,25 @@ func TestPersonalKeysIsolation(t *testing.T) {
 	for _, tc := range []struct {
 		token string
 		want  int
-	}{{admin, 1}, {a.session, 2}, {b.session, 1}} {
+	}{{admin, 1}, {a.session, 2}, {b.session, 2}} {
 		body := h.ok(http.MethodGet, "/key/list?scope=personal&include_team_keys=true&include_created_by_keys=true", tc.token, nil)
 		if got := len(rowsOf(body, "keys")); got != tc.want {
 			t.Fatalf("本人列表混入他人密钥: got=%d want=%d body=%s", got, tc.want, body.describe())
 		}
 	}
-	for _, token := range []string{a.key, firstString(delegated, "key"), firstString(service, "key")} {
+	for _, token := range []string{a.key, firstString(delegated, "key"), firstString(secondUserKey, "key")} {
 		r := h.do(http.MethodGet, "/key/info?scope=personal&key="+token, admin, nil)
 		if r.status != http.StatusNotFound {
-			t.Fatalf("管理员个人详情泄露他人/服务密钥: %s", r.describe())
+			t.Fatalf("管理员个人详情泄露他人/另一用户密钥: %s", r.describe())
 		}
 	}
-	// 团队管理员拥有服务密钥管理权，但个人入口仍只包含本人个人密钥。
+	// 团队管理员不能管理其他成员密钥，个人入口只包含本人密钥。
 	h.ok(http.MethodPost, "/team/member_update", admin, map[string]any{"team_id": a.teamID, "user_id": a.userID, "role": "admin"})
 	if got := len(rowsOf(h.ok(http.MethodGet, "/key/list?scope=personal", a.session, nil), "keys")); got != 2 {
 		t.Fatalf("团队管理员个人列表归属错误: got=%d want=2", got)
 	}
-	if r := h.do(http.MethodGet, "/key/info?scope=personal&key="+firstString(service, "token_id"), a.session, nil); r.status != 404 {
-		t.Fatalf("团队管理员个人详情泄露服务密钥: %s", r.describe())
+	if r := h.do(http.MethodGet, "/key/info?scope=personal&key="+firstString(secondUserKey, "token_id"), a.session, nil); r.status != 404 {
+		t.Fatalf("团队管理员个人详情泄露另一用户密钥: %s", r.describe())
 	}
 	h.ok(http.MethodGet, "/key/info?scope=personal&key="+firstString(own, "key"), admin, nil)
 	for _, suffix := range []string{"&user_id=" + a.userID, "&search=delegated", "&key_hash=" + firstString(delegated, "token_id")} {

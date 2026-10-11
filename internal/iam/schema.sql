@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS route_templates (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name       TEXT NOT NULL UNIQUE CHECK (name <> ''),
     body       TEXT NOT NULL DEFAULT '{}',
+    organization_id TEXT,
+    team_id TEXT,
+    CONSTRAINT route_templates_team_needs_org CHECK (team_id IS NULL OR organization_id IS NOT NULL),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -39,10 +42,20 @@ CREATE TABLE IF NOT EXISTS users (
     session_version INT  NOT NULL DEFAULT 1,
     max_budget      NUMERIC CHECK (max_budget IS NULL OR max_budget >= 0),
     spend           NUMERIC NOT NULL DEFAULT 0,
+    rpm_limit INT CHECK (rpm_limit IS NULL OR rpm_limit >= 0),
+    tpm_limit INT CHECK (tpm_limit IS NULL OR tpm_limit >= 0),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower ON users (lower(email));
+
+-- 请求预占无外键：团队转移/删除不改变执行中请求的计费路径。结算与释放使用同一事务。
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    request_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('key','user')),
+    node_id TEXT NOT NULL, key_id TEXT NOT NULL DEFAULT '', user_id TEXT NOT NULL,
+    team_id TEXT NOT NULL DEFAULT '', org_id TEXT NOT NULL DEFAULT '',
+    amount NUMERIC NOT NULL CHECK (amount >= 0), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS organizations (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -50,8 +63,11 @@ CREATE TABLE IF NOT EXISTS organizations (
     status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
     max_budget NUMERIC CHECK (max_budget IS NULL OR max_budget >= 0),
     spend      NUMERIC NOT NULL DEFAULT 0,
+    rpm_limit INT CHECK (rpm_limit IS NULL OR rpm_limit >= 0),
+    tpm_limit INT CHECK (tpm_limit IS NULL OR tpm_limit >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    route_template_id TEXT REFERENCES route_templates (id) ON DELETE SET NULL
 );
 
 -- Deleting an organization that still has teams is refused (RESTRICT).
@@ -69,10 +85,13 @@ CREATE TABLE IF NOT EXISTS teams (
     models          TEXT NOT NULL DEFAULT '[]',
     max_budget      NUMERIC CHECK (max_budget IS NULL OR max_budget >= 0),
     spend           NUMERIC NOT NULL DEFAULT 0,
+    rpm_limit INT CHECK (rpm_limit IS NULL OR rpm_limit >= 0),
+    tpm_limit INT CHECK (tpm_limit IS NULL OR tpm_limit >= 0),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (organization_id, name),
-    UNIQUE (id, organization_id)
+    UNIQUE (id, organization_id),
+    route_template_id TEXT REFERENCES route_templates (id) ON DELETE SET NULL
 );
 
 -- An organization administrator runs one organization: its teams, their
@@ -93,12 +112,11 @@ CREATE INDEX IF NOT EXISTS organization_members_user ON organization_members (us
 
 CREATE TABLE IF NOT EXISTS team_members (
     team_id    TEXT NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
-    user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
     role       TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('team_admin', 'member')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (team_id, user_id)
 );
-CREATE INDEX IF NOT EXISTS team_members_user ON team_members (user_id);
 
 CREATE TABLE IF NOT EXISTS projects (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -118,10 +136,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     token_hash   TEXT NOT NULL UNIQUE,
     key_prefix   TEXT NOT NULL DEFAULT '',
-    owner_type   TEXT NOT NULL CHECK (owner_type IN ('personal', 'service')),
-    user_id      TEXT REFERENCES users (id) ON DELETE CASCADE,
-    team_id      TEXT NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
-    project_id   TEXT,
+    owner_type   TEXT NOT NULL DEFAULT 'personal' CHECK (owner_type = 'personal'),
+    user_id      TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    project_id   TEXT REFERENCES projects (id) ON DELETE CASCADE,
     created_by   TEXT REFERENCES users (id) ON DELETE SET NULL,
     name         TEXT NOT NULL DEFAULT '',
     models       TEXT NOT NULL DEFAULT '[]',
@@ -134,24 +151,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
     last_used_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK ((owner_type = 'personal' AND user_id IS NOT NULL)
-        OR (owner_type = 'service' AND user_id IS NULL)),
-    UNIQUE (id, team_id),
-    FOREIGN KEY (project_id, team_id) REFERENCES projects (id, team_id) ON DELETE CASCADE
+    route_template_id TEXT REFERENCES route_templates (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys (user_id);
-CREATE INDEX IF NOT EXISTS api_keys_team ON api_keys (team_id);
-
--- 个人密钥可独立于团队；保留已有外键以及团队/项目密钥的归属约束。
--- 重复启动可安全应用；已有团队密钥的数据和删除级联规则保持不变。
-ALTER TABLE api_keys ALTER COLUMN team_id DROP NOT NULL;
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'api_keys'::regclass
-                   AND conname = 'api_keys_team_binding') THEN
-        ALTER TABLE api_keys ADD CONSTRAINT api_keys_team_binding
-            CHECK (team_id IS NOT NULL OR (owner_type = 'personal' AND project_id IS NULL));
-    END IF;
-END $$;
 
 -- Ownership is snapshotted at write time and has no foreign keys, so later
 -- membership changes or deletions never re-attribute historical spend.
@@ -160,7 +162,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     request_id        TEXT NOT NULL UNIQUE,
     ts                TIMESTAMPTZ NOT NULL DEFAULT now(),
     key_id            TEXT NOT NULL DEFAULT '',
-    owner_type        TEXT NOT NULL CHECK (owner_type IN ('personal', 'service', 'session')),
+    owner_type        TEXT NOT NULL CHECK (owner_type IN ('personal', 'session')),
     user_id           TEXT NOT NULL DEFAULT '',
     team_id           TEXT NOT NULL DEFAULT '',
     project_id        TEXT NOT NULL DEFAULT '',
@@ -182,32 +184,16 @@ CREATE TABLE IF NOT EXISTS usage_events (
     provider          TEXT NOT NULL DEFAULT '',
     cached_tokens     INT,
     session_id        TEXT NOT NULL DEFAULT '',
-    cache_key         TEXT NOT NULL DEFAULT ''
+    cache_key         TEXT NOT NULL DEFAULT '',
+    guardrail         TEXT NOT NULL DEFAULT '',
+    price_snapshot    TEXT NOT NULL DEFAULT '',
+    task_settled      BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS usage_events_team_ts ON usage_events (team_id, ts);
 CREATE INDEX IF NOT EXISTS usage_events_user_ts ON usage_events (user_id, ts);
 CREATE INDEX IF NOT EXISTS usage_events_key_ts ON usage_events (key_id, ts);
 CREATE INDEX IF NOT EXISTS usage_events_org_ts ON usage_events (organization_id, ts);
 
--- Tables created before these columns existed keep their rows. New installs
--- already have the columns from CREATE TABLE, so each ADD is a no-op there.
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS ttft_ms INT;
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS key_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS key_alias TEXT NOT NULL DEFAULT '';
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS team_alias TEXT NOT NULL DEFAULT '';
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT '';
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS cached_tokens INT;
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS cache_key TEXT NOT NULL DEFAULT '';
--- http_status 是网关最终对调用方返回的状态码；0 仅表示历史行尚未记录该字段。
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS http_status INT NOT NULL DEFAULT 0;
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS guardrail TEXT NOT NULL DEFAULT '';
--- price_snapshot holds the rates this call was actually billed at, as the JSON
--- catalog.Snapshot writes. TEXT rather than JSONB, matching how guardrail keeps
--- its JSON here: nothing queries inside it, the log detail only hands it back.
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS price_snapshot TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS usage_events_session_ts ON usage_events (session_id, ts);
 
 -- Router template selection, one scope per level of the inheritance chain.
@@ -219,12 +205,6 @@ CREATE INDEX IF NOT EXISTS usage_events_session_ts ON usage_events (session_id, 
 -- ON DELETE SET NULL is a backstop only. The delete endpoint refuses while a
 -- template is still selected, so in practice no row is ever cleared this way;
 -- the constraint is there so an out-of-band delete cannot leave a dangling id.
-ALTER TABLE organizations ADD COLUMN IF NOT EXISTS route_template_id TEXT
-    REFERENCES route_templates (id) ON DELETE SET NULL;
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS route_template_id TEXT
-    REFERENCES route_templates (id) ON DELETE SET NULL;
-ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS route_template_id TEXT
-    REFERENCES route_templates (id) ON DELETE SET NULL;
 -- These three indexes back "which scopes currently select this template", the
 -- query the delete path runs before refusing.
 CREATE INDEX IF NOT EXISTS organizations_route_template ON organizations (route_template_id);
@@ -243,15 +223,18 @@ CREATE INDEX IF NOT EXISTS api_keys_route_template ON api_keys (route_template_i
 -- CASCADE, unlike the SET NULL on the selection columns below: those say "which
 -- one was chosen", so a deleted template means nothing was chosen. These say
 -- "who owns it", and a configuration whose owner is gone has no meaning.
-ALTER TABLE route_templates ADD COLUMN IF NOT EXISTS organization_id TEXT
-    REFERENCES organizations (id) ON DELETE CASCADE;
-ALTER TABLE route_templates ADD COLUMN IF NOT EXISTS team_id TEXT
-    REFERENCES teams (id) ON DELETE CASCADE;
--- A team template without an organization would be unreachable by every rule that
--- reads the organization first, so the pair is constrained rather than trusted.
-ALTER TABLE route_templates DROP CONSTRAINT IF EXISTS route_templates_team_needs_org;
-ALTER TABLE route_templates ADD CONSTRAINT route_templates_team_needs_org
-    CHECK (team_id IS NULL OR organization_id IS NOT NULL);
+-- 路由模板和组织/团队互相引用，必须在全部表创建后补齐外键。
+-- 这里只处理全新结构的循环依赖；不添加旧列、不修复旧数据、不安装触发器。
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'route_templates'::regclass AND conname = 'route_templates_organization_fk') THEN
+        ALTER TABLE route_templates ADD CONSTRAINT route_templates_organization_fk
+            FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'route_templates'::regclass AND conname = 'route_templates_team_fk') THEN
+        ALTER TABLE route_templates ADD CONSTRAINT route_templates_team_fk
+            FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE;
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS route_templates_ownership ON route_templates (organization_id, team_id);
 
 CREATE TABLE IF NOT EXISTS request_logs (
@@ -259,11 +242,9 @@ CREATE TABLE IF NOT EXISTS request_logs (
     request_body  TEXT NOT NULL DEFAULT '',
     response_body TEXT NOT NULL DEFAULT '',
     error         TEXT NOT NULL DEFAULT '',
-    proxy_request TEXT NOT NULL DEFAULT ''
+    proxy_request TEXT NOT NULL DEFAULT '',
+    upstream_response TEXT NOT NULL DEFAULT ''
 );
-ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS proxy_request TEXT NOT NULL DEFAULT '';
--- 完整上游响应头及转换前统计，旧日志保持空值表示未捕获。
-ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS upstream_response TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS usage_daily (
     day               DATE NOT NULL,
@@ -295,39 +276,3 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     detail      JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS audit_logs_ts ON audit_logs (ts);
-
--- 异步任务原日志结算标记，零费用完成同样只认领一次。
-ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS task_settled boolean NOT NULL DEFAULT false;
-
--- 服务密钥保留原权限类型，由团队业务账号承接个人额度层。
-ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS billing_user_id TEXT NOT NULL DEFAULT '';
-INSERT INTO users (id,email,name,spend)
-SELECT 'business-' || t.id, 'business-' || t.id || '@internal.invalid', 'Business account',
- COALESCE((SELECT SUM(k.spend) FROM api_keys k WHERE k.team_id=t.id AND k.owner_type='service'),0)
-FROM teams t WHERE EXISTS (SELECT 1 FROM api_keys k WHERE k.team_id=t.id AND k.owner_type='service')
-ON CONFLICT (id) DO NOTHING;
-INSERT INTO team_members (team_id,user_id)
-SELECT DISTINCT team_id, 'business-' || team_id FROM api_keys WHERE owner_type='service'
-ON CONFLICT DO NOTHING;
-UPDATE api_keys SET billing_user_id='business-' || team_id WHERE owner_type='service' AND billing_user_id='';
-
--- 保留存量多团队关系供管理员修复；禁止新建第二个归属，不自动删除历史。
-CREATE OR REPLACE FUNCTION enforce_single_team() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.user_id, 314159));
-    IF EXISTS (SELECT 1 FROM team_members WHERE user_id=NEW.user_id AND team_id<>NEW.team_id) THEN
-        RAISE EXCEPTION 'a person may belong to only one team' USING ERRCODE='23514', CONSTRAINT='single_team_required';
-    END IF;
-    RETURN NEW;
-END; $$;
-DROP TRIGGER IF EXISTS single_team_required ON team_members;
-CREATE TRIGGER single_team_required BEFORE INSERT OR UPDATE OF user_id,team_id ON team_members
-FOR EACH ROW EXECUTE FUNCTION enforce_single_team();
-
--- 各层分钟上限独立汇总；迁移保持旧数据未设本层限制。
-ALTER TABLE users ADD COLUMN IF NOT EXISTS rpm_limit INT CHECK (rpm_limit >= 0);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS tpm_limit INT CHECK (tpm_limit >= 0);
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS rpm_limit INT CHECK (rpm_limit >= 0);
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS tpm_limit INT CHECK (tpm_limit >= 0);
-ALTER TABLE organizations ADD COLUMN IF NOT EXISTS rpm_limit INT CHECK (rpm_limit >= 0);
-ALTER TABLE organizations ADD COLUMN IF NOT EXISTS tpm_limit INT CHECK (tpm_limit >= 0);

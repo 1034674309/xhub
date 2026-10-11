@@ -59,7 +59,7 @@ Account roles, organization roles, and team roles are separate assignments. A pe
 | --- | --- | --- |
 | Platform administrator | Configure providers/models, create accounts and organizations, create/delete/move teams, set team models and budgets, block teams, inspect all usage/logs | Inference still requires its own authorized scope |
 | Organization administrator | Manage its organization's name and administrators, team names/members/projects, organization usage/logs | Cannot create/delete teams, change team models/budgets, or read other people's personal secrets; this role alone does not grant service-key management |
-| Team administrator | Manage its team's members/projects/service keys and inspect team usage/logs | Cannot change team model scope/budget or platform account roles |
+| Team administrator | Manage its team's members, projects and user allocations; inspect aggregate team usage | Cannot change team model scope/budget or platform account roles |
 | Member | Use permitted models and manage personal keys; inspect personal usage/logs | Cannot administer other members |
 
 Only platform administrators create accounts. Account creation does not send an invitation email. Password recovery currently uses a direct administrator reset rather than an email reset link. A team administrator cannot reset a platform or organization administrator's password. Password changes invalidate older sessions, so the affected user must sign in again.
@@ -182,7 +182,7 @@ The [pricing reference](development/zh-CN/pricing.md) explains rate units, snaps
 
 1. Assign another team administrator if necessary.
 2. Remove the user's team membership. Personal keys for that team are revoked; historical usage remains attributed to the original call.
-3. Revoke or rotate service keys whose secrets the departing user knew. Those keys do not belong to the member and survive departure.
+3. All existing keys belonging to the departing user are revoked. The user may create new keys after departure; historical team usage remains unchanged.
 4. Remove organization-administrator assignments separately. For full account offboarding, have a platform administrator disable the account.
 
 ## 10. Troubleshoot common problems

@@ -18,7 +18,7 @@ import (
 
 var logTraceOnceGenerate sync.Once
 
-// Generate 创建虚拟密钥，明文仅在本次响应返回；个人密钥可不绑定团队，指定团队时仍校验成员关系，服务密钥要求团队管理权限。
+// Generate 创建虚拟密钥，明文仅在本次响应返回；只接受用户归属；团队由用户唯一成员关系派生，无团队用户也可创建。
 // 参数 s（Host）：Generate使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/keys/mount.go
@@ -409,7 +409,7 @@ func keyFilter(sc *authz.Scope) iam.KeyFilter {
 	case authz.ScopeAllKeys:
 		return iam.KeyFilter{}
 	case authz.ScopeTeamKeys:
-		return iam.KeyFilter{OwnOrService: true, UserID: sc.UserID, TeamIDs: sc.TeamIDs}
+		return iam.KeyFilter{UserID: sc.UserID, TeamIDs: sc.TeamIDs}
 	default:
 		if len(sc.KeyIDs) > 0 {
 			return iam.KeyFilter{KeyIDs: sc.KeyIDs}
@@ -461,14 +461,8 @@ func keyInputFrom(body map[string]any, defaultUserID string) (iam.KeyInput, erro
 	if in.OwnerType == iam.OwnerPersonal && in.UserID == "" {
 		return in, errUserRequired
 	}
-	if in.OwnerType == iam.OwnerService {
-		in.UserID = ""
-	}
-	if in.OwnerType != iam.OwnerPersonal && in.OwnerType != iam.OwnerService {
+	if in.OwnerType != iam.OwnerPersonal {
 		return in, errString("invalid owner_type")
-	}
-	if in.TeamID == "" && (in.OwnerType == iam.OwnerService || in.ProjectID != "") {
-		return in, errTeamRequired
 	}
 	exp, err := iam.ParseExpiry(str(body["duration"]))
 	if err != nil {

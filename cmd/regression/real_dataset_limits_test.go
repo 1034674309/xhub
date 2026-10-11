@@ -24,6 +24,15 @@ func TestRealDatasetLimitsAcceptance(t *testing.T) {
 	templateID := routeTemplate(t, h, admin, "limits inherited route", routeTemplateBody([]any{}, 1, 30, 3, 0))
 	bindTemplate(t, h, admin, "organization", baseline.orgID, templateID)
 	h.assertBilled(t, baseline, admin, model, "baseline already spent", []string{model})
+	// 重现共享基线：管理员没有个人团队，但其个人 Key 已有固定分配；
+	// 创建临时团队不能默认吸入这个管理员，否则新组织设零会合法地触发超配。
+	controller, err := h.db.UserByEmail(t.Context(), "regression-admin@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.ok(http.MethodPost, "/team/member_update", admin, map[string]any{"team_id": baseline.teamID, "user_id": baseline.userID, "role": "team_admin"})
+	h.ok(http.MethodPost, "/team/member_delete", admin, map[string]any{"team_id": baseline.teamID, "user_id": controller.ID})
+	h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"user_id": controller.ID, "key_alias": "teamless controller allocation", "max_budget": 3})
 	denied := h.do(http.MethodPatch, "/organization/update", admin, map[string]any{
 		"organization_id": baseline.orgID, "max_budget": 0})
 	if denied.status != http.StatusBadRequest || denied.json()["error"].(map[string]any)["type"] != "quota_allocation_exceeded" {
@@ -56,7 +65,7 @@ import json, sys
 from pathlib import Path
 from urllib.request import urlopen
 sys.path.insert(0, "../../e2e")
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 
 class LocalObserver:
     """用途：只读本地供应商调用记录；无实例参数，rows 返回列表；供 refuse 核对零外发，不包含供应商凭据。"""
@@ -101,13 +110,18 @@ def tracking_api(route, body=None, **kwargs):
         created.append((route, reply[0]))
     return reply
 dataset.api = tracking_api
-dataset.verify_limits(key)
+dataset.state["keys"] = [key]
+dataset.representative = False
+dataset.start_checklist(False, ["limits"])
+dataset.verify()
+assert [(row["id"], row["status"]) for row in dataset.checklist.rows] == [("limits", "passed")], "分类验收只执行 limits，不能触发视频、其它模型或浏览器"
 expected_checks = {"budget-" + scope + "-no-egress" for scope in ("organization", "team", "project", "user", "key")}
 expected_checks.update(("" if scope == "key" else scope + "-") + field + "-reject-and-real-recovery"
     for scope in ("organization", "team", "user", "key") for field in ("rpm_limit", "tpm_limit"))
 expected_checks.update(("model-allowlist-no-egress", "member-key-generate-block-rotate-real-calls"))
 assert expected_checks <= {c["name"] for c in dataset.report["checks"] if c["passed"]}, "五预算、八限流、白名单、生命周期必须全部通过"
 assert snapshot() == before, "验收不得改动保留租户额度"
+assert len(dataset.api("/auth/me")[0]["teams"]) == 0, "临时团队不得改变管理员成员关系"
 
 for failure in ("create", "recovery"):
     def failing_api(route, body=None, **kwargs):

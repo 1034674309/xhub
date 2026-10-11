@@ -1170,7 +1170,7 @@ const TeamInfoView: React.FC<TeamInfoProps> = ({
       <DeleteResourceModal
         isOpen={isDeleteModalOpen}
         title={t("Delete Team Member")}
-        alertMessage={t("Removing this member revokes the personal keys they hold for this team. Service keys stay.")}
+        alertMessage={t("quotaGuide.leaveTeamWarning")}
         message={t("Are you sure you want to remove this member from the team? This action cannot be undone.")}
         resourceInformationTitle={t("Team Member Information")}
         resourceInformation={[

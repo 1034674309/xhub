@@ -98,7 +98,7 @@ type Actor struct {
 	// merged across teams.
 	KeyTeamID    string
 	KeyProjectID string
-	OwnerType    string // iam.OwnerPersonal or iam.OwnerService
+	OwnerType    string // iam.OwnerPersonal
 }
 
 // ObjectType is the kind of thing an action is requested against.
@@ -395,7 +395,6 @@ const (
 	CapMembers         = "members.manage"
 	CapMemberPassword  = "members.password"
 	CapProjects        = "projects.manage"
-	CapServiceKeys     = "keys.service"
 	CapUsageTeam       = "usage.team"
 	CapUsageTeamDetail = "usage.team.detail"
 	CapPlatformAdmin   = "platform.admin"
@@ -428,7 +427,6 @@ func (g *Guard) Capabilities() []string {
 		set[CapMembers] = true
 		set[CapMemberPassword] = true
 		set[CapProjects] = true
-		set[CapServiceKeys] = true
 		set[CapUsageTeamDetail] = true
 	}
 	if len(g.AdminOrgIDs()) > 0 {
@@ -452,7 +450,7 @@ func (g *Guard) Capabilities() []string {
 		// the console hides pages the server would serve. Omitting these left a
 		// deployment's own administrator unable to open the teams page.
 		for _, c := range []string{CapTeamRead, CapUsageTeam, CapTeamManage, CapMembers, CapMemberPassword,
-			CapProjects, CapServiceKeys, CapUsageTeamDetail} {
+			CapProjects, CapUsageTeamDetail} {
 			set[c] = true
 		}
 	}

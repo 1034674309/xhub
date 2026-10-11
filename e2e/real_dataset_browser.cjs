@@ -1,5 +1,5 @@
 /** 用途：浏览器操作真实数据集；环境传入 UI/网关/私有目录，输出脱敏报告与截图。
- * 调用：e2e-real-dataset.py；异常保留报告，finally 清理临时护栏及浏览器，响应来自真实供应商。 */
+ * 调用：e2e.py；异常保留报告，finally 清理临时护栏及浏览器，响应来自真实供应商。 */
 const fs = require('fs');
 const path = require('path');
 const {chromium, expect} = require('../frontend/node_modules/@playwright/test');

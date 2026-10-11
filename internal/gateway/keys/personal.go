@@ -19,11 +19,6 @@ func personalFilter(base iam.KeyFilter, p *auth.Principal) iam.KeyFilter {
 	if p == nil || p.Kind != authz.KindSession || p.UserID == "" {
 		return iam.KeyFilter{KeyIDs: []string{}}
 	}
-	if base.OwnOrService {
-		// 原团队范围是“本人或服务密钥”，团队限制仅针对服务分支，不能套到本人分支。
-		base.TeamIDs = nil
-	}
-	base.OwnOrService = false
 	base.UserID = p.UserID
 	base.OwnerType = iam.OwnerPersonal
 	return base

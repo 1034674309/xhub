@@ -12,12 +12,10 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 from checklist import Checklist
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('checklist_runner', ROOT / 'scripts/e2e-real-dataset.py')
-runner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runner)
+from acceptance import runner_browser as runner
 
 
 class ChecklistTests(unittest.TestCase):
@@ -92,7 +90,7 @@ class ChecklistTests(unittest.TestCase):
         """目的：用户原始入口无需 PYTHONPATH 即可加载；前置干净环境，验证帮助成功且无导入错误，无外部数据清理。"""
         env = dict(os.environ)
         env.pop('PYTHONPATH', None)
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/e2e-real-dataset.py'), '--help'],
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/e2e.py'), '--help'],
                                 env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('--shared-target', result.stdout)

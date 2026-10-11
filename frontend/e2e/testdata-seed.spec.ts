@@ -17,7 +17,7 @@ test("testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模�
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "xhub-testdata-"));
   try {
     try {
-      execFileSync("python3", [path.resolve(__dirname, "../../e2e/real_dataset.py"),
+      execFileSync("python3", [path.resolve(__dirname, "../../scripts/e2e.py"),
       "--gateway", GATEWAY, "--directory", directory, "--seed-only"], {
       env: { ...process.env, E2E_DATASET_ADMIN: "admin", E2E_DATASET_PASSWORD: MASTER,
         FENNO_AI_API_KEY: "", QINIU_API_KEY: "" }, timeout: 90_000,

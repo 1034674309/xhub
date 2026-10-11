@@ -39,6 +39,86 @@ func TestRatePlanLimitChangeKeepsUsage(t *testing.T) {
 // ratePlanTestLimit 为分钟限额边界表提供独立指针；参数 value 为非负上限，返回指针，无外部副作用。
 func ratePlanTestLimit(value int) *int { return &value }
 
+// TestRateThousandUserExamples 验证用户例子1000=300+300+400在分钟准入中的边界，而非只验证保存配置。
+// 参数 t 为测试上下文；纯内存组织/团队/用户/Key，覆盖两固定用户、两共享用户、零用户、共享耗尽和跨Key合计，无资源需清理。
+func TestRateThousandUserExamples(t *testing.T) {
+	for _, tokens := range []bool{false, true} {
+		t.Run(fmt.Sprint(tokens), func(t *testing.T) {
+			plan := RatePlan{Nodes: []RateNode{
+				{RateScope: RateScope{ID: "org", Kind: "org"}, Parent: -1},
+				{RateScope: RateScope{ID: "team", Kind: "team"}, Parent: 0},
+				{RateScope: RateScope{ID: "alice", Kind: "user"}, Parent: 1},
+				{RateScope: RateScope{ID: "alice-key1", Kind: "key"}, Parent: 2},
+				{RateScope: RateScope{ID: "alice-key2", Kind: "key"}, Parent: 2},
+				{RateScope: RateScope{ID: "bob", Kind: "user"}, Parent: 1},
+				{RateScope: RateScope{ID: "shared-a", Kind: "user"}, Parent: 1},
+				{RateScope: RateScope{ID: "shared-b", Kind: "user"}, Parent: 1},
+				{RateScope: RateScope{ID: "zero", Kind: "user"}, Parent: 1},
+			}}
+			for index, limit := range map[int]int{0: 1000, 1: 1000, 2: 300, 5: 300, 8: 0} {
+				if tokens {
+					plan.Nodes[index].TPM = ratePlanTestLimit(limit)
+				} else {
+					plan.Nodes[index].RPM = ratePlanTestLimit(limit)
+				}
+			}
+			rpm, tpm := make([]int64, 9), make([]int64, 9)
+			// 准入成功才沿路径记数；TPM每次100，RPM每次1，用同一独立分配预期验证。
+			admit := func(path []int, amount int, allowed bool) {
+				plan.Path = path
+				input := 1
+				if tokens {
+					input = amount
+				}
+				got := CheckRatePlan(plan, rpm, tpm, input)
+				if (got == "") != allowed {
+					t.Fatalf("路径%v 用量%d 准入应%v: %s", path, amount, allowed, got)
+				}
+				if got == "" {
+					for _, i := range path {
+						rpm[i]++
+						tpm[i] += int64(input)
+					}
+				}
+			}
+			admit([]int{8, 1, 0}, 1, false)
+			iterations, amount := 200, 1
+			if tokens {
+				iterations, amount = 2, 100
+			}
+			for _, path := range [][]int{{6, 1, 0}, {7, 1, 0}} {
+				for range iterations {
+					admit(path, amount, true)
+				}
+			}
+			// 此时团队仅用400，闲置成员不保留容量；单独检查共享下一次可用，不提交额外计数。
+			plan.Path = []int{6, 1, 0}
+			if got := CheckRatePlan(plan, rpm, tpm, 1); got != "" {
+				t.Fatalf("共享应可借用闲置速率: %s", got)
+			}
+			iterations = 150
+			if tokens {
+				iterations = 1
+				amount = 150
+			}
+			for _, path := range [][]int{{3, 2, 1, 0}, {4, 2, 1, 0}} {
+				for range iterations {
+					admit(path, amount, true)
+				}
+			}
+			admit([]int{3, 2, 1, 0}, 1, false)
+			iterations, amount = 300, 1
+			if tokens {
+				iterations, amount = 3, 100
+			}
+			for range iterations {
+				admit([]int{5, 1, 0}, amount, true)
+			}
+			admit([]int{5, 1, 0}, 1, false)
+		})
+	}
+}
+
 // TestRatePlanAllOrders 穷举小容量完整四层树的全部调用顺序，验证固定 2+2 与共享 1 的充分性和上界。
 // 前置纯内存配置；期望来自各叶分配，不复用实现算法。容量内都放行，任一池多一次都拒绝且没有副作用，无需清理。
 func TestRatePlanAllOrders(t *testing.T) {
@@ -76,7 +156,7 @@ func TestRatePlanAllOrders(t *testing.T) {
 				for candidate, path := range paths {
 					plan.Path = path
 					rejected := CheckRatePlan(plan, rpm, tpm, 1)
-					if used[candidate] == capacities[candidate] {
+					if used[0]+used[1]+used[2] == total || (candidate < 2 && used[candidate] == capacities[candidate]) {
 						if rejected == "" {
 							t.Fatalf("已用%v，第%d池多一次仍放行", used, candidate)
 						}
@@ -89,6 +169,9 @@ func TestRatePlanAllOrders(t *testing.T) {
 					for _, i := range path {
 						nextRPM[i]++
 						nextTPM[i]++
+					}
+					if used[candidate] == capacities[candidate] {
+						continue
 					}
 					used[candidate]++
 					visit(used, nextRPM, nextTPM)

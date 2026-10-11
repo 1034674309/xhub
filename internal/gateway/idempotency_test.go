@@ -41,7 +41,7 @@ func TestIdempotencyScopesHashesAndExpires(t *testing.T) {
 	}
 
 	teamID := testTeam(t, db, user.ID)
-	key, plain, err := db.CreateKey(context.Background(), iam.Actor{ID: user.ID, Kind: "session"}, iam.KeyInput{Name: "idem", TeamID: teamID, OwnerType: iam.OwnerService})
+	key, plain, err := db.CreateKey(context.Background(), iam.Actor{ID: user.ID, Kind: "session"}, iam.KeyInput{Name: "idem", UserID: user.ID, TeamID: teamID, OwnerType: iam.OwnerPersonal})
 	if err != nil {
 		t.Fatal(err)
 	}

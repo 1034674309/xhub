@@ -135,7 +135,7 @@ func TestQuotaHierarchy(t *testing.T) {
 	}
 	old, err := db.GetKey(ctx, k.ID)
 	if err != nil || old.Status != StatusActive {
-		t.Fatalf("独立个人密钥不应撤销: %+v %v", old, err)
+		t.Fatalf("退出团队必须保留个人密钥: %+v %v", old, err)
 	}
 	if _, err = db.AddMember(ctx, by, shared.ID, u.Email, TeamMember); !errors.Is(err, ErrQuotaAllocation) {
 		t.Fatalf("转入团队超配未拒绝: %v", err)
@@ -190,12 +190,16 @@ func TestQuotaSharedAncestorsAndBusiness(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	service, _, e := db.CreateKey(ctx, by, KeyInput{OwnerType: OwnerService, TeamID: business.ID, MaxBudget: quotaLimit(1000000)})
+	account, e := db.CreateUser(ctx, by, UserInput{Email: "orders@example.com", Name: "Orders service", Password: "password123", TeamID: business.ID})
 	if e != nil {
 		t.Fatal(e)
 	}
-	if service.BillingUserID == "" {
-		t.Fatal("服务密钥缺少个人层业务账号")
+	service, _, e := db.CreateKey(ctx, by, KeyInput{OwnerType: OwnerPersonal, UserID: account.ID, MaxBudget: quotaLimit(1000000)})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if service.UserID == nil || *service.UserID != account.ID {
+		t.Fatal("应用密钥必须属于显式创建的普通用户")
 	}
 	if tid, oid, scope, e := db.QuotaPath(ctx, "key", service.ID, nil); e != nil || scope != "" || tid != business.ID || oid != unlimited.ID {
 		t.Fatalf("不限额业务路径: %s %s %s %v", tid, oid, scope, e)

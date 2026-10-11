@@ -69,7 +69,7 @@ export const en = {
     spendHelp:
       "All personal keys and session usage count toward cumulative personal spending. It does not reset monthly and remains after leaving a team.",
     title: "How quota allocation works",
-    chain: "Organization → Team → Person → API Key · USD",
+    chain: "Organization → Team → User → API Key · USD / RPM / TPM",
     organization:
       "A fixed organization budget reserves money for its teams. A budget of $1,000 can allocate $500 + $300 + $200; additional allocations are rejected.",
     team: "Fixed personal allocations and shared consumption must fit within the team budget. Team administrators allocate personal budgets; organization administrators allocate team budgets.",
@@ -79,9 +79,10 @@ export const en = {
     shared:
       "Blank means share the parent’s available pool; it does not bypass a parent limit. Zero blocks spending. Consumed money plus unused child allocations cannot exceed a fixed budget.",
     singleTeam:
-      "Each person belongs to one team. To change teams, remove the old membership first; team-bound keys are revoked, independent personal keys remain usable, and historical spending stays with the original team.",
+      "Each person belongs to one team. To change teams, remove the old membership first; all existing personal keys are revoked, and historical spending stays with the original team.",
     business:
-      "For unrestricted business usage, create a separate unlimited organization and team. Service keys use a separate business account in that team.",
+      "For unrestricted usage, leave all four levels unlimited in a separate organization and team. Every account is a regular user and every key belongs to a user.",
+    leaveTeamWarning: "Removing this member revokes all their existing keys. Historical spend stays with the original team; new keys can be created after leaving.",
     blank: "Shared parent budget",
     amount: "of ${amount}",
   },

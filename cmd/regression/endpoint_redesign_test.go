@@ -22,7 +22,7 @@ func TestEndpointAvailableContract(t *testing.T) {
 	mixed.ModelName = "mixed"
 	valid := config.ModelEntry{ModelName: "mixed", LiteLLMParams: map[string]any{"model": "real"}, ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat", "responses"}}}
 	h := newHarness(t, invalid, mixed, valid)
-	admin := h.adminSession()
+	admin := h.personalBillingSession()
 	rows := listField(h.ok("GET", "/model/available", admin, nil).json(), "data")
 	if len(rows) != 2 {
 		t.Fatalf("端点别名未合并: %+v", rows)
@@ -269,7 +269,7 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 // 参数 t 为上下文；前置隔离数据库，直接写旧字段只构造失败复现，真实 HTTP 验证后 schema 清理。
 func TestEndpointRetiredGlobals(t *testing.T) {
 	h := newHarness(t, chatDeployment("globals"))
-	admin := h.adminSession()
+	admin := h.personalBillingSession()
 	for _, key := range []string{"stream_timeout", "enable_tag_filtering"} {
 		if err := h.store.PutConfig("router_settings", key, true); err != nil {
 			t.Fatal(err)

@@ -138,8 +138,6 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 			orgID = p.BillingOrgID
 			if p.Key.UserID != nil {
 				userID = *p.Key.UserID
-			} else {
-				userID = p.Key.BillingUserID
 			}
 		} else if p.Kind == authz.KindSession && userID != "" && s.IAM != nil {
 			ownerType, teamID, orgID = iam.OwnerSession, p.BillingTeamID, p.BillingOrgID

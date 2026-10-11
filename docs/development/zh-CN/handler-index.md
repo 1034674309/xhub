@@ -150,7 +150,6 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | 方法与路径 | 处理器 | 注册源码 |
 | --- | --- | --- |
 | `POST /key/generate` | `Generate` | [mount.go](../../../internal/gateway/keys/mount.go) |
-| `POST /key/service-account/generate` | `ServiceAccount` | [mount.go](../../../internal/gateway/keys/mount.go) |
 | `GET /key/list` | `List` | [mount.go](../../../internal/gateway/keys/mount.go) |
 | `GET /key/info` | `Info` | [mount.go](../../../internal/gateway/keys/mount.go) |
 | `POST /v2/key/info` | `Info` | [mount.go](../../../internal/gateway/keys/mount.go) |

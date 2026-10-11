@@ -17,7 +17,7 @@ func TestTestdataSeedWithoutModelCalls(t *testing.T) {
 	h := newHarness(t)
 	admin := h.adminSession()
 	directory := t.TempDir()
-	command := exec.Command("python3", "../../e2e/real_dataset.py", "--gateway", h.server.URL, "--directory", directory, "--seed-only")
+	command := exec.Command("python3", "../../scripts/e2e.py", "--gateway", h.server.URL, "--directory", directory, "--seed-only")
 	command.Env = append(os.Environ(), "E2E_DATASET_ADMIN=regression-admin@example.com", "E2E_DATASET_PASSWORD=regression-admin-password", "FENNO_AI_API_KEY=", "QINIU_API_KEY=")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("无供应商凭据建数失败: %v\n%s", err, output)
@@ -75,7 +75,7 @@ func TestTestdataSeedWithoutModelCalls(t *testing.T) {
 import json, sys
 from pathlib import Path
 sys.path.insert(0, "../../e2e")
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 directory = Path(sys.argv[2])
 access = json.loads((directory / "access.json").read_text())
 dataset = Dataset(sys.argv[1], directory, load_manifest())
@@ -98,7 +98,7 @@ for team in dataset.state["teams"]:
 	if len(h.upstreamCalls()) != 0 {
 		t.Fatal("权限验收不应产生供应商调用")
 	}
-	command = exec.Command("python3", "../../e2e/real_dataset.py", "--gateway", h.server.URL, "--directory", t.TempDir(), "--seed-only")
+	command = exec.Command("python3", "../../scripts/e2e.py", "--gateway", h.server.URL, "--directory", t.TempDir(), "--seed-only")
 	command.Env = append(os.Environ(), "E2E_DATASET_ADMIN=regression-admin@example.com", "E2E_DATASET_PASSWORD=regression-admin-password")
 	if err := command.Run(); err == nil {
 		t.Fatal("已有组织时建数应拒绝覆盖")

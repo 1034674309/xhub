@@ -171,6 +171,9 @@ function ModelFilterField({ value, onChange }: { value: string; onChange: (value
   );
 }
 
+/** 用户日志筛选器接收当前值、变更回调和日志时间窗，返回分页选择控件。
+ * 调用方为日志筛选表单；空值与重复用户被过滤，仅更新筛选，不修改用户内容或后台数据。
+ */
 function UserIdFilterField({
   value,
   onChange,
@@ -190,7 +193,7 @@ function UserIdFilterField({
   const options = useMemo<SearchSelectOption[]>(() => {
     const seen = new Set<string>();
     return (data?.pages ?? []).flatMap((page) =>
-      page.data.flatMap((userId) => {
+      page.data.flatMap((userId: string) => {
         if (!userId || seen.has(userId)) return [];
         seen.add(userId);
         return [{ label: userId, value: userId }];
@@ -216,6 +219,9 @@ function UserIdFilterField({
   );
 }
 
+/** 终端请求用户筛选器接收当前值、变更回调和时间窗，返回去重后的分页选项。
+ * 调用方为日志筛选表单；终端请求标识不是新的账号类型，仅改变日志查询，无写入副作用。
+ */
 function EndUserFilterField({
   value,
   onChange,
@@ -235,7 +241,7 @@ function EndUserFilterField({
   const options = useMemo<SearchSelectOption[]>(() => {
     const seen = new Set<string>();
     return (data?.pages ?? []).flatMap((page) =>
-      page.data.flatMap((endUser) => {
+      page.data.flatMap((endUser: string) => {
         if (!endUser || seen.has(endUser)) return [];
         seen.add(endUser);
         return [{ label: endUser, value: endUser }];

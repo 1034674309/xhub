@@ -27,7 +27,7 @@ func TestLogRecordRoundTripKeepsTheFactsTheConsoleReads(t *testing.T) {
 	}
 	teamID := testTeam(t, db, admin.ID)
 	key, _, err := db.CreateKey(ctx, iam.Actor{ID: admin.ID, Kind: "session"}, iam.KeyInput{
-		Name: "probe-key", TeamID: teamID, OwnerType: iam.OwnerService,
+		UserID: admin.ID, Name: "probe-key", TeamID: teamID, OwnerType: iam.OwnerPersonal,
 	})
 	if err != nil {
 		t.Fatalf("create key: %v", err)
@@ -48,7 +48,7 @@ func TestLogRecordRoundTripKeepsTheFactsTheConsoleReads(t *testing.T) {
 			RequestID: id, CallType: "chat", Model: "gpt-oss-120b",
 			KeyID: key.ID, KeyHash: key.TokenHash, KeyAlias: key.Name,
 			TeamID: teamID, TeamAlias: "Activity Team",
-			UserID: admin.ID, OwnerType: iam.OwnerService,
+			UserID: admin.ID, OwnerType: iam.OwnerPersonal,
 			Prompt: 96, Completion: 5, Spend: 0.000384, SpendValid: true,
 			Start: start.Format(time.RFC3339Nano), End: end.Format(time.RFC3339Nano),
 			CacheHit: hit, Status: "success",

@@ -33,7 +33,6 @@ const (
 	StatusRevoked  = "revoked"
 
 	OwnerPersonal = "personal"
-	OwnerService  = "service"
 	// OwnerSession marks usage produced by a UI session rather than a key. It
 	// never appears on api_keys; the database CHECK keeps the two sets apart.
 	OwnerSession = "session"

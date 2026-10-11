@@ -29,7 +29,7 @@ test("acceptance fallback excludes both shared-model healthy deployments", async
     }
     // 调用本次修复的Python生成器，确保浏览器实际验证验收脚本产出的正文。
     const body = JSON.parse(execFileSync("python3", ["-c",
-      "import json,sys; sys.path.insert(0,'e2e'); from real_dataset import fallback_acceptance_deployments,fallback_acceptance_route; d=json.load(sys.stdin); healthy,target=fallback_acceptance_deployments(d['deployments'],d['primary'],d['backup'],'qiniu'); print(json.dumps(fallback_acceptance_route(d['primary'],d['fault'],healthy,d['backup'],target,60)))"],
+      "import json,sys; sys.path.insert(0,'e2e'); from acceptance import fallback_acceptance_deployments,fallback_acceptance_route; d=json.load(sys.stdin); healthy,target=fallback_acceptance_deployments(d['deployments'],d['primary'],d['backup'],'qiniu'); print(json.dumps(fallback_acceptance_route(d['primary'],d['fault'],healthy,d['backup'],target,60)))"],
       { cwd: "..", encoding: "utf8", input: JSON.stringify({ primary, backup, fault: ids[0], deployments: [
         { id: ids[2], public_name: primary, provider: "qiniu" },
         { id: ids[1], public_name: primary, provider: "fennoai" },

@@ -1,6 +1,6 @@
 # 真实数据验收：架构、运行方式与覆盖边界
 
-本目录描述 `scripts/e2e-real-dataset.py` 驱动的真实数据验收。它用公开管理 API 建立一套隔离租户数据，通过两个真实模型供应商完成请求，再从浏览器、网关报告、上游观察记录和 PostgreSQL 四个角度核对结果。`coverage.json` 是按当前 `frontend/src/app/**/page.tsx` 审计得到的覆盖库存，不是“所有前端均已测试”的声明。
+本目录描述 `scripts/e2e.py` 驱动的真实数据验收。它用公开管理 API 建立一套隔离租户数据，通过两个真实模型供应商完成请求，再从浏览器、网关报告、上游观察记录和 PostgreSQL 四个角度核对结果。`coverage.json` 是按当前 `frontend/src/app/**/page.tsx` 审计得到的覆盖库存，不是“所有前端均已测试”的声明。
 
 ## 数据流与证据
 
@@ -8,11 +8,11 @@
 dataset.json（声明资源、预算、角色、供应商环境变量）
         │
         ▼
-scripts/e2e-real-dataset.py
+scripts/e2e.py
   ├─ 随机 e2e_real_<12hex> PostgreSQL schema
   ├─ 独立 redis:7-alpine 容器和随机回环端口
   ├─ 本次构建的 cmd/gateway + 私有 c.yaml
-  ├─ e2e/real_dataset.py：管理 API 建数、数据面请求、契约断言
+  ├─ e2e/acceptance/：按业务拆分的建数、场景断言和运行生命周期
   ├─ Observer：网关与真实供应商之间的本地转发观察器
   ├─ e2e/real_dataset_browser.cjs：Next.js + Playwright 浏览器流程
   └─ psql：事件、日报和五级实体累计金额一致性
@@ -29,6 +29,36 @@ runtime 由 runner 每次生成：随机端口、管理员密码、master key、
 浏览器层启动独立 Next.js dev server，不拦截网关请求。它验证管理员登录、组织展示、Playground 真实回答与五级账单、日志可见、护栏创建/调试/保存/删除，以及 `platform_admin`、`organization_admin`、`team_admin`、`member` 四种身份的团队可见范围和编辑权限。API 与浏览器之后，SQL 读取隔离 schema：成功事件数、唯一 request ID 和总费用；`usage_daily` 总费用必须等于事件费用；organization、team、user、project、api_key 的 `spend` 必须分别等于对应事件维度的费用和。
 
 ## 运行
+
+### 单入口与模块职责
+
+原来 `e2e/real_dataset.py` 承载所有测试场景，`scripts/e2e-real-dataset.py` 承载启动、运行和清理；两者都能启动验收，维护边界不清。现在删除这两个旧文件，只保留 `scripts/e2e.py` 一个 Python 命令入口，业务实现放入 `e2e/acceptance/`，不提供第二个命令入口。
+
+| 模块 | 职责 |
+| --- | --- |
+| `cli.py`、`dataset.py`、`runtime.py` | 参数分发、场景组合、分类计划和报告 |
+| `seed.py`、`catalog.py` | 通过管理 API 建数、供应商目录与模型生命周期 |
+| `limits.py`、`permissions.py`、`guards.py` | 额度/RPM/TPM、权限与护栏场景 |
+| `chat.py`、`media.py`、`routing.py` | 对话、图片/视频、缓存/权重/回退场景 |
+| `billing.py`、`support.py`、`observer.py` | 账单断言、协议辅助、上游观察 |
+| `suite.py` | 分类执行顺序；未选中的模型阶段不运行、不打印已执行提示 |
+| `runner_shared.py`、`runner_isolated.py` | 共享和隔离环境生命周期 |
+| `runner_runtime.py`、`runner_database.py`、`runner_browser.py` | 服务/锁/配置、数据库核对、自动化浏览器 |
+
+分类运行复用已经生成的共享基线，不清空数据库；只有全量运行才默认执行所有分类。
+
+```bash
+make e2e-list
+make e2e limits
+make e2e limits permissions
+make e2e regression
+```
+
+`limits` 单类不会执行 GPT 三轮、媒体生成、浏览器或全套后台回归。报告记录 `verification_scope=selected` 和选中分类，不表示全量验收通过。未知分类会在运行前拒绝，避免拼写错误意外触发全套付费调用。
+
+限额夹具先创建临时普通用户，再通过 `admin_user_id` 指定该用户为临时团队管理员；不能使用默认管理员，否则会把基线管理员的已有 Key 分配带入临时组织，使设置零额度合法地返回 400。创建失败、调用失败和清理失败均有覆盖，资源逐项登记并逆序清理。
+
+后台和浏览器测试复用已启动隔离网关时，也使用同一入口：`python3 scripts/e2e.py --gateway URL --directory DIR --seed-only`。该模式只建数，不启动或删除调用方的服务、schema 和 Redis；不能与共享/隔离生命周期参数混用。
 
 ### 共享真实环境：先构建，后验收
 
@@ -76,7 +106,7 @@ export QINIU_API_KEY='…'
 # 可选；必须是无用户信息、无 Markdown 字符的 HTTPS URL
 export FENNO_AI_API_BASE='https://…'
 export QINIU_API_BASE='https://…'
-python3 scripts/e2e-real-dataset.py
+python3 scripts/e2e.py
 ```
 
 默认运行目录为 `.e2e/real-dataset-YYYYMMDD-HHMMSS`，权限设为 `0700`。`access.json`、`c.yaml` 含访问材料；不要提交、复制到公开位置或在日志中打印。`report.json` 是主报告，`browser-report.json` 是浏览器检查，`upstream-observations.json` 是上游观察证据，`gateway.log` 和 `console.log` 用于诊断，PNG 是浏览器截图。
@@ -85,13 +115,13 @@ python3 scripts/e2e-real-dataset.py
 
 ```bash
 # 仅运行 API、真实供应商和 SQL；报告会明确 browser=not-run
-python3 scripts/e2e-real-dataset.py --api-only
+python3 scripts/e2e.py --api-only
 
 # 保留 PostgreSQL schema 和私有检查点，供诊断或续跑
-python3 scripts/e2e-real-dataset.py --keep-data --directory .e2e/real-dataset-case
+python3 scripts/e2e.py --keep-data --directory .e2e/real-dataset-case
 
 # 从同一目录恢复；resume 强制要求 keep-data
-python3 scripts/e2e-real-dataset.py --resume --keep-data --directory .e2e/real-dataset-case
+python3 scripts/e2e.py --resume --keep-data --directory .e2e/real-dataset-case
 ```
 
 默认 cleanup 会终止 gateway、UI 和 observer，停止并删除本次 Redis 容器，删除本次 `e2e_real_*` schema，但保留报告目录并写入 `cleanup.txt`。`--keep-data` 会保留 schema，在 observer 退出前把主、备用部署的 `api_base` 恢复到供应商 HTTPS 地址，停止 Redis，并写入 `retained.txt`；再次使用配置前仍需启动可用 Redis 并重新导出供应商凭据。

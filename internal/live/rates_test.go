@@ -87,14 +87,14 @@ func TestRatePlanReservations(t *testing.T) {
 				fixed.RPM = &limit
 			}
 			plan := RatePlan{Nodes: []RateNode{root, {RateScope: RateScope{ID: fmt.Sprint(tokens, "/team"), Kind: "team"}, Parent: 0}, fixed, {RateScope: RateScope{ID: fmt.Sprint(tokens, "/shared"), Kind: "user"}, Parent: 1}}, Path: []int{3, 1, 0}}
-			if got := CheckRatePlan(plan, make([]int64, 4), make([]int64, 4), 1); got != "org "+map[bool]string{false: "rpm_limit", true: "tpm_limit"}[tokens] {
+			if got := CheckRatePlan(plan, make([]int64, 4), make([]int64, 4), 1); got != "" {
 				t.Fatalf("共享挤占固定分配: %s", got)
 			}
-			if got, err := c.AdmitRatePlan(plan, 1, now); err != nil || got == "" {
+			if got, err := c.AdmitRatePlan(plan, 1, now); err != nil || got != "" {
 				t.Fatalf("Redis 共享挤占: %s %v", got, err)
 			}
 			plan.Path = []int{2, 1, 0}
-			for i := 0; i < 4; i++ {
+			for i := 0; i < 3; i++ {
 				if got, err := c.AdmitRatePlan(plan, 1, now); err != nil || got != "" {
 					t.Fatalf("固定分配未穿过共享父级: %s %v", got, err)
 				}
@@ -146,7 +146,7 @@ func TestRatePlanPartialReservations(t *testing.T) {
 						rpm[i]++
 						tpm[i]++
 					}
-					if id == 4 && rpm[4] == 2 {
+					if id == 4 && rpm[0] == 10 {
 						pure := CheckRatePlan(plan, rpm, tpm, 1)
 						got, err := c.AdmitRatePlan(plan, 1, now)
 						if pure == "" || got != pure || err != nil {

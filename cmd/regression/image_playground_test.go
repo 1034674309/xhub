@@ -44,7 +44,7 @@ func TestImagePlaygroundParameters(t *testing.T) {
 				endpointType = "bypass:openai-images"
 			}
 			h := newHarness(t, config.ModelEntry{ModelName: "image-playground", LiteLLMParams: map[string]any{"model": "real-image", "custom_llm_provider": "openai", "api_base": up.URL, "api_key": "local-key", "input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002}, ModelInfo: map[string]any{"transport": tc.transport, "endpoint_types": []string{endpointType}}})
-			admin := h.adminSession()
+			admin := h.personalBillingSession()
 			body := map[string]any{"model": "image-playground", "prompt": "hello", "n": 1, "seed": 42}
 			if denied := h.do("POST", tc.path, "", body); denied.status != 401 {
 				t.Fatalf("缺失网关鉴权未拒绝: %s", denied.describe())

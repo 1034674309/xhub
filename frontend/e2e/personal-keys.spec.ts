@@ -9,6 +9,9 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
   const guard = watchGateway(page);
   await loginAdmin(page);
   const headers = { Authorization: "Bearer " + await sessionBearer(page) };
+  const adminIdentity = await page.request.get(GATEWAY + "/auth/me", { headers });
+  expect(adminIdentity.ok()).toBeTruthy();
+  const adminUser = await adminIdentity.json();
   const baselineResponse = await page.request.get(GATEWAY + "/key/list?scope=personal&size=1", { headers });
   expect(baselineResponse.ok()).toBeTruthy();
   const baselineCount = (await baselineResponse.json()).total_count;
@@ -21,6 +24,11 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
   });
   expect(createdUser.ok(), await createdUser.text()).toBeTruthy();
   const member = await createdUser.json();
+  const secondUserResponse = await page.request.post(GATEWAY + "/user/new", {
+    headers, data: { user_email: "personal-second-user@xhub.local", password: "personal-second-user-password", user_role: "user", team_id: teamID },
+  });
+  expect(secondUserResponse.ok(), await secondUserResponse.text()).toBeTruthy();
+  const secondUser = await secondUserResponse.json();
   const keys: string[] = [];
   let ownSecret = "";
   try {
@@ -30,11 +38,11 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
     expect(foreignResponse.ok(), await foreignResponse.text()).toBeTruthy();
     const foreign = await foreignResponse.json();
     keys.push(foreign.token_id);
-    const serviceResponse = await page.request.post(GATEWAY + "/key/service-account/generate", {
-      headers, data: { team_id: teamID, key_alias: "personal-service-key" },
+    const secondKeyResponse = await page.request.post(GATEWAY + "/key/generate", {
+      headers, data: { user_id: secondUser.user_id, key_alias: "personal-second-user-key" },
     });
-    expect(serviceResponse.ok(), await serviceResponse.text()).toBeTruthy();
-    keys.push((await serviceResponse.json()).token_id);
+    expect(secondKeyResponse.ok(), await secondKeyResponse.text()).toBeTruthy();
+    keys.push((await secondKeyResponse.json()).token_id);
 
     await page.getByTestId("create-key-button").click();
     await chooseKeyTeam(page);
@@ -42,14 +50,15 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
     const issued = page.waitForResponse((response) => response.url().includes("/key/generate") && response.request().method() === "POST");
     await page.getByRole("button", { name: t("pages.apiKeys.createSubmit"), exact: true }).click();
     const own = await (await issued).json();
-    expect(own.team_id, "已有团队的管理员创建个人密钥时不绑定团队").toBeNull();
+    expect(own.user_id, "个人 Key 必须属于当前登录用户").toBe(adminUser.user_id);
+    expect(own.team_id, "团队归属由当前用户成员关系推导，不由创建表单指定").toBe(adminUser.teams[0]?.team_id ?? null);
     keys.push(own.token_id);
     ownSecret = own.key;
     await expect(page.getByText(t("pages.apiKeys.saveKey"))).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByText("personal-admin-key", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("personal-member-key", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("personal-service-key", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("personal-second-user-key", { exact: true })).toHaveCount(0);
 
     const personal = await page.request.get(GATEWAY + "/key/list?scope=personal&size=1", { headers });
     expect(personal.ok()).toBeTruthy();
@@ -78,10 +87,10 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
     await stableGoto(page, "/api-keys");
     await expect(page.getByText("personal-member-key", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("personal-admin-key", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("personal-service-key", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("personal-second-user-key", { exact: true })).toHaveCount(0);
     const memberHeaders = { Authorization: "Bearer " + await sessionBearer(page) };
     const memberList = await page.request.get(GATEWAY + "/key/list?scope=personal", { headers: memberHeaders });
-    expect((await memberList.json()).keys.map((key: { token_id: string }) => key.token_id)).toEqual([foreign.token_id]);
+    expect((await memberList.json()).keys.map((key: { token_id: string }) => key.token_id)).toEqual(expect.arrayContaining([foreign.token_id]));
 
     await loginAdmin(page);
     await stableGoto(page, "/api-keys");
@@ -109,7 +118,7 @@ test("personal keys remain owned by the signed-in user through create, lookup, u
 
 for (const hasTeam of [true, false]) {
   /** 验证有团队和无团队普通用户均可直接创建个人 API Key；参数 page 为真实浏览器，前置隔离数据库与本地供应商。
-   * 覆盖不选团队、全选模型、接口归属、列表详情、真实推理和 UI 删除立即失效；finally 撤销密钥，脚本清理账号与 schema。
+   * 覆盖不选团队、全选模型、接口归属、待计费拒绝、显式个人授权后真实推理和 UI 删除立即失效；finally 撤销密钥，脚本清理账号与 schema。
    */
   test(`ordinary user ${hasTeam ? "with" : "without"} a team creates and uses a personal key without choosing a team`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -152,13 +161,26 @@ for (const hasTeam of [true, false]) {
       expect(response.request().postDataJSON()).toMatchObject({ user_id: user.user_id, team_id: null, models: ["all-proxy-models"] });
       const key = await response.json();
       id = key.token_id;
-      expect(key.team_id).toBeNull();
+      expect(key.team_id).toBe(hasTeam ? teamID : null);
       expect(key.user_id).toBe(user.user_id);
       await expect(page.getByText(t("pages.apiKeys.saveKey"))).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(page.getByText(alias, { exact: true }).first()).toBeVisible();
+      const inferenceBody = { model: "gpt-4o-mini", messages: [{ role: "user", content: alias }] };
+      if (!hasTeam) {
+        // 凭证创建不等于计费授权；无团队且未配置个人额度时拒绝，管理员授权后复用同一把 Key。
+        const pending = await page.request.post(GATEWAY + "/v1/chat/completions", {
+          headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
+        });
+        expect(pending.status()).toBe(403);
+        expect((await pending.json()).error.type).toBe("billing_source_required");
+        const granted = await page.request.post(GATEWAY + "/user/update", {
+          headers: adminHeaders, data: { user_id: user.user_id, max_budget: 100 },
+        });
+        expect(granted.ok(), await granted.text()).toBeTruthy();
+      }
       const inference = await page.request.post(GATEWAY + "/v1/chat/completions", {
-        headers: { Authorization: "Bearer " + key.key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: alias }] },
+        headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
       });
       expect(inference.ok(), await inference.text()).toBeTruthy();
       expect((await inference.json()).choices[0].message.content).toMatch(/ok/);

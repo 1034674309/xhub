@@ -8,7 +8,7 @@ import (
 )
 
 // TestTeamlessKeyCreatePolicy 验证创建权限矩阵；前置内存会话身份和不同归属输入。
-// 参数 t 为测试上下文，返回无；仅本人或平台管理员可代建个人密钥，服务和项目必须绑定团队；无需清理。
+// 参数 t 为测试上下文，返回无；仅本人或平台管理员可代建个人密钥，无团队用户不能选择项目，未知归属类型被拒绝；无需清理。
 func TestTeamlessKeyCreatePolicy(t *testing.T) {
 	g := &Guard{actor: Actor{Kind: KindSession, UserID: "me"}}
 	for _, tc := range []struct {
@@ -19,13 +19,38 @@ func TestTeamlessKeyCreatePolicy(t *testing.T) {
 		{iam.OwnerPersonal, "other", "", false, false},
 		{iam.OwnerPersonal, "other", "", true, true},
 		{iam.OwnerPersonal, "", "", true, false},
-		{iam.OwnerService, "", "", true, false},
+		{"service", "", "", true, false},
 		{iam.OwnerPersonal, "me", "project", true, false},
 		{"unknown", "me", "", true, false},
 	} {
 		err := g.decideKeyCreate(context.Background(), Object{OwnerType: tc.owner, OwnerUserID: tc.user, ProjectID: tc.project}, tc.admin)
 		if (err == nil) != tc.allowed {
 			t.Fatalf("无团队创建权限错误: %+v err=%v", tc, err)
+		}
+	}
+}
+
+// TestPersonalKeyProjectUsesDerivedTeam 验证创建 Key 无需团队参数，项目只能来自用户唯一团队。
+// 参数 t 为测试上下文；前置两个组织及团队，覆盖本人/管理员代建、正确/越界项目和错误团队提示；fixture 清理 schema。
+func TestPersonalKeyProjectUsesDerivedTeam(t *testing.T) {
+	f := newFixture(t)
+	for _, actor := range []*iam.User{f.plain, f.admin} {
+		for _, tc := range []struct {
+			name, project, team string
+			allowed             bool
+		}{
+			{"无需团队参数", "", "", true},
+			{"自动派生项目团队", f.projA1.ID, "", true},
+			{"跨组织项目拒绝", f.projB1.ID, "", false},
+			{"篡改团队提示拒绝", "", f.teamB1, false},
+			{"不存在项目拒绝", "missing", "", false},
+		} {
+			t.Run(actor.Email+"/"+tc.name, func(t *testing.T) {
+				err := f.guard(t, session(actor)).decideKeyCreate(t.Context(), Object{OwnerType: iam.OwnerPersonal, OwnerUserID: f.plain.ID, ProjectID: tc.project, TeamID: tc.team}, actor.ID == f.admin.ID)
+				if (err == nil) != tc.allowed {
+					t.Fatalf("用户项目归属判定错误: allowed=%v err=%v", tc.allowed, err)
+				}
+			})
 		}
 	}
 }
@@ -50,7 +75,7 @@ func TestTeamlessKeyLiveAuthorization(t *testing.T) {
 	if err := g.keyOnly(ctx, ActionKeyCreate, Object{}); err == nil {
 		t.Fatal("虚拟密钥获得管理权限")
 	}
-	for _, bad := range []Actor{{Kind: KindKey, OwnerType: iam.OwnerService}, {Kind: KindKey, OwnerType: iam.OwnerPersonal}} {
+	for _, bad := range []Actor{{Kind: KindKey, OwnerType: "service"}, {Kind: KindKey, OwnerType: iam.OwnerPersonal}} {
 		if err := (&Guard{actor: bad}).keyOnly(ctx, ActionInfer, Object{}); err == nil {
 			t.Fatalf("不完整独立密钥可推理: %+v", bad)
 		}

@@ -13,12 +13,9 @@ import (
 // TestPersonalFilter 验证 SQL 本人范围；前置各类权限与身份，确认管理员、团队管理员均不能扩大到他人或服务密钥。
 // 参数 t 为测试上下文，返回无；纯函数测试，无持久数据需要清理。
 func TestPersonalFilter(t *testing.T) {
-	for _, base := range []iam.KeyFilter{{}, {OwnOrService: true, TeamIDs: []string{"team"}, UserID: "other"}, {KeyIDs: []string{"key"}}} {
+	for _, base := range []iam.KeyFilter{{}, {UserID: "other"}, {KeyIDs: []string{"key"}}} {
 		got := personalFilter(base, &auth.Principal{Kind: authz.KindSession, UserID: "me", Role: "admin"})
-		if base.OwnOrService && got.TeamIDs != nil {
-			t.Fatal("个人分支错误地继承服务密钥团队限制")
-		}
-		if got.UserID != "me" || got.OwnerType != iam.OwnerPersonal || got.OwnOrService || !reflect.DeepEqual(got.KeyIDs, base.KeyIDs) {
+		if got.UserID != "me" || got.OwnerType != iam.OwnerPersonal || !reflect.DeepEqual(got.KeyIDs, base.KeyIDs) {
 			t.Fatalf("个人范围未正确收窄: %#v", got)
 		}
 	}
@@ -41,7 +38,7 @@ func TestPersonalKeyVisible(t *testing.T) {
 		{&iam.Key{OwnerType: iam.OwnerPersonal, UserID: &me}, true},
 		{&iam.Key{OwnerType: iam.OwnerPersonal, UserID: &other}, false},
 		{&iam.Key{OwnerType: iam.OwnerPersonal}, false},
-		{&iam.Key{OwnerType: iam.OwnerService, UserID: &me}, false}, {nil, false},
+		{&iam.Key{OwnerType: "service", UserID: &me}, false}, {nil, false},
 	} {
 		if got := personalKeyVisible(p, tc.key); got != tc.want {
 			t.Fatalf("详情归属错误: key=%#v got=%v", tc.key, got)

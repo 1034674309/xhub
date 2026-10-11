@@ -254,6 +254,16 @@ func TestPlaygroundCompletionReachesUpstream(t *testing.T) {
 	defer srv.Close()
 	base := srv.URL
 	key := loginAdmin(t, base, db)
+	// 本用例验证模型转发，不绕过计费授权：显式给无团队管理员配置个人额度。
+	admin, err := db.UserByEmail(context.Background(), "chain-admin@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := 100.0
+	ceiling := &budget
+	if _, err := db.AdminUpdateUser(context.Background(), testActor, admin.ID, iam.UserUpdate{MaxBudget: &ceiling}); err != nil {
+		t.Fatal(err)
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	payload := []byte(`{"model":"gpt-6-astra","messages":[{"role":"user","content":"ping"}]}`)
 	req, err := http.NewRequest(http.MethodPost, base+"/chat/completions", bytes.NewReader(payload))

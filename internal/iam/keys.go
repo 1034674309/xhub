@@ -15,25 +15,23 @@ import (
 	"xorm.io/xorm"
 )
 
-// Key 是虚拟密钥；个人密钥属于用户且可选绑定团队，服务密钥必须属于团队或其项目。
+// Key 是用户凭证；团队仅为读取时解析的用户当前归属，不独立绑定或分配团队。
 type Key struct {
-	// BillingUserID 是服务密钥的业务账号；个人密钥沿 user_id 分配。
-	BillingUserID string   `xorm:"'billing_user_id'" json:"billing_user_id"`
-	ID            string   `xorm:"pk 'id'" json:"id"`
-	TokenHash     string   `xorm:"'token_hash'" json:"-"`
-	KeyPrefix     string   `xorm:"'key_prefix'" json:"key_prefix"`
-	OwnerType     string   `xorm:"'owner_type'" json:"owner_type"`
-	UserID        *string  `xorm:"'user_id'" json:"user_id"`
-	TeamID        string   `xorm:"'team_id'" json:"team_id"`
-	ProjectID     *string  `xorm:"'project_id'" json:"project_id"`
-	CreatedBy     *string  `xorm:"'created_by'" json:"created_by"`
-	Name          string   `xorm:"'name'" json:"name"`
-	Models        []string `xorm:"json 'models'" json:"models"`
-	MaxBudget     *float64 `xorm:"'max_budget'" json:"max_budget"`
-	Spend         float64  `xorm:"'spend'" json:"spend"`
-	TPMLimit      *int     `xorm:"'tpm_limit'" json:"tpm_limit"`
-	RPMLimit      *int     `xorm:"'rpm_limit'" json:"rpm_limit"`
-	Status        string   `xorm:"'status'" json:"status"`
+	ID        string   `xorm:"pk 'id'" json:"id"`
+	TokenHash string   `xorm:"'token_hash'" json:"-"`
+	KeyPrefix string   `xorm:"'key_prefix'" json:"key_prefix"`
+	OwnerType string   `xorm:"'owner_type'" json:"owner_type"`
+	UserID    *string  `xorm:"'user_id'" json:"user_id"`
+	TeamID    string   `xorm:"-" json:"team_id"`
+	ProjectID *string  `xorm:"'project_id'" json:"project_id"`
+	CreatedBy *string  `xorm:"'created_by'" json:"created_by"`
+	Name      string   `xorm:"'name'" json:"name"`
+	Models    []string `xorm:"json 'models'" json:"models"`
+	MaxBudget *float64 `xorm:"'max_budget'" json:"max_budget"`
+	Spend     float64  `xorm:"'spend'" json:"spend"`
+	TPMLimit  *int     `xorm:"'tpm_limit'" json:"tpm_limit"`
+	RPMLimit  *int     `xorm:"'rpm_limit'" json:"rpm_limit"`
+	Status    string   `xorm:"'status'" json:"status"`
 	// RouteTemplateID is the named router settings this key selects. Empty means
 	// it selects nothing and inherits from its team.
 	RouteTemplateID *string    `xorm:"'route_template_id'" json:"route_template_id,omitempty"`
@@ -97,8 +95,7 @@ func NewPlainKey() string {
 	return "sk-" + hex.EncodeToString(b[:])
 }
 
-// KeyInput creates a key. A personal key requires UserID; a service key must
-// not have one, and the database enforces the same rule.
+// KeyInput 创建用户凭证；UserID 必填，TeamID 仅校验调用方提供的上下文，不持久化绑定。
 type KeyInput struct {
 	OwnerType string
 	UserID    string
@@ -117,7 +114,7 @@ type KeyInput struct {
 	RouteTemplateID **string
 }
 
-// CreateKey 持久化密钥并返回仅展示一次的明文；个人密钥可无团队，绑定团队时仍校验成员、状态和模型范围。
+// CreateKey 持久化用户密钥并返回一次性明文；从用户解析唯一团队，禁止无主或服务密钥。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；in（KeyInput）：创建或修改密钥的输入，含团队、名称、允许的模型和限额。
 // 返回 *Key（*Key）：写入后的密钥行，含哈希、限额和归属。失败时为 nil；string（string）：只展示这一次的明文密钥。失败时为空串，库里只存哈希；error（error）：失败原因。nil 表示创建成功。
 // 调用：gateway/keys/admin.go、gateway/keys/generate.go
@@ -126,9 +123,24 @@ func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, strin
 	plain := NewPlainKey()
 	var out *Key
 	err := db.tx(ctx, func(s *xorm.Session) error {
-		if in.OwnerType != OwnerPersonal && in.OwnerType != OwnerService {
+		if in.OwnerType != OwnerPersonal || in.UserID == "" {
 			return ErrInvalid
 		}
+		owner, err := getUser(ctx, s, in.UserID)
+		if err != nil {
+			return err
+		}
+		if !owner.Active() {
+			return ErrInactive
+		}
+		resolved, err := userTeam(s, in.UserID)
+		if err != nil {
+			return err
+		}
+		if in.TeamID != "" && in.TeamID != resolved {
+			return ErrInvalid
+		}
+		in.TeamID = resolved
 		if in.TeamID == "" {
 			if in.OwnerType != OwnerPersonal || in.ProjectID != "" {
 				return ErrInvalid
@@ -145,39 +157,12 @@ func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, strin
 				return ErrInactive
 			}
 		}
-		if in.OwnerType == OwnerPersonal {
-			if in.UserID == "" {
-				return ErrInvalid
-			}
-			if in.TeamID != "" {
-				if _, err := membership(ctx, s, in.TeamID, in.UserID); err != nil {
-					return ErrInvalid
-				}
-			} else {
-				owner, err := getUser(ctx, s, in.UserID)
-				if err != nil {
-					return err
-				}
-				if !owner.Active() {
-					return ErrInactive
-				}
-			}
-		} else if in.UserID != "" {
-			return ErrInvalid
-		}
 		if err := checkWithinTeam(s, in.TeamID, in.ProjectID, in.Models, in.MaxBudget); err != nil {
 			return err
 		}
 		k := Key{ID: newID(), TokenHash: HashKey(plain), KeyPrefix: plain[:11], OwnerType: in.OwnerType,
 			TeamID: in.TeamID, Name: in.Name, Models: nonNil(in.Models), MaxBudget: in.MaxBudget,
 			TPMLimit: in.TPMLimit, RPMLimit: in.RPMLimit, Status: StatusActive, ExpiresAt: in.ExpiresAt}
-		if in.OwnerType == OwnerService {
-			var err error
-			k.BillingUserID, err = businessOwner(s, in.TeamID)
-			if err != nil {
-				return err
-			}
-		}
 		if in.UserID != "" {
 			k.UserID = &in.UserID
 		}
@@ -193,10 +178,7 @@ func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, strin
 		if in.RouteTemplateID != nil {
 			k.RouteTemplateID = *in.RouteTemplateID
 		}
-		// 未绑定团队时省略该列，写入 SQL NULL；空串会违反团队外键，不能虚构默认团队。
-		if in.TeamID == "" {
-			s.Omit("team_id")
-		}
+		// TeamID 是派生字段；数据库只保存真正的用户归属，避免转移后两条身份链不一致。
 		if _, err := s.Insert(&k); err != nil {
 			return err
 		}
@@ -352,6 +334,9 @@ func (db *DB) KeyByHash(ctx context.Context, hash string) (*Key, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
+	if err := resolveKeyTeam(s, &k); err != nil {
+		return nil, err
+	}
 	return &k, nil
 }
 
@@ -366,10 +351,6 @@ type KeyFilter struct {
 	OwnerType string
 	TeamIDs   []string
 	KeyIDs    []string
-	// OwnOrService narrows to UserID's personal keys together with the service
-	// keys of TeamIDs. It is the team administrator's view, which no single
-	// OwnerType can express because the owner rule differs per branch.
-	OwnOrService bool
 }
 
 // ListKeys returns keys inside the filter, newest first.
@@ -381,18 +362,11 @@ func (db *DB) ListKeys(ctx context.Context, f KeyFilter) ([]Key, error) {
 	s := db.session(ctx)
 	defer s.Close()
 	switch {
-	case f.OwnOrService:
-		if f.UserID == "" || len(f.TeamIDs) == 0 {
-			return nil, nil
-		}
-		own := builder.Eq{"owner_type": OwnerPersonal, "user_id": f.UserID}
-		service := builder.Cond(builder.Eq{"owner_type": OwnerService}).And(builder.In("team_id", f.TeamIDs))
-		s = s.Where(own.Or(service))
 	case f.TeamIDs != nil:
 		if len(f.TeamIDs) == 0 {
 			return nil, nil
 		}
-		s = s.In("team_id", f.TeamIDs)
+		s = s.Where(builder.In("user_id", builder.Select("user_id").From("team_members").Where(builder.In("team_id", f.TeamIDs))))
 	}
 	if f.KeyIDs != nil {
 		if len(f.KeyIDs) == 0 {
@@ -401,12 +375,12 @@ func (db *DB) ListKeys(ctx context.Context, f KeyFilter) ([]Key, error) {
 		s = s.In("id", f.KeyIDs)
 	}
 	if f.TeamID != "" {
-		s = s.Where("team_id = ?", f.TeamID)
+		s = s.Where("user_id IN (SELECT user_id FROM team_members WHERE team_id = ?)", f.TeamID)
 	}
 	if f.ProjectID != "" {
 		s = s.Where("project_id = ?", f.ProjectID)
 	}
-	if f.UserID != "" && !f.OwnOrService {
+	if f.UserID != "" {
 		s = s.Where("user_id = ?", f.UserID)
 	}
 	if f.OwnerType != "" {
@@ -418,6 +392,11 @@ func (db *DB) ListKeys(ctx context.Context, f KeyFilter) ([]Key, error) {
 	}
 	if len(rows) == 0 {
 		return rows, nil
+	}
+	for i := range rows {
+		if err := resolveKeyTeam(s, &rows[i]); err != nil {
+			return nil, err
+		}
 	}
 	return rows, nil
 }
@@ -449,7 +428,7 @@ func (db *DB) RevokeTeamKeys(ctx context.Context, by Actor, teamID string) error
 		if err := lockTeam(ctx, s, teamID); err != nil {
 			return err
 		}
-		n, err := s.Where("team_id = ? AND status <> ?", teamID, StatusRevoked).
+		n, err := s.Where("user_id IN (SELECT user_id FROM team_members WHERE team_id = ?) AND status <> ?", teamID, StatusRevoked).
 			Cols("status").Update(&Key{Status: StatusRevoked})
 		if err != nil {
 			return err
@@ -469,7 +448,37 @@ func getKey(ctx context.Context, s *xorm.Session, id string) (*Key, error) {
 	if err := get(s.Where("id = ?", id), &k); err != nil {
 		return nil, err
 	}
+	if err := resolveKeyTeam(s, &k); err != nil {
+		return nil, err
+	}
 	return &k, nil
+}
+
+// userTeam 查询用户唯一团队；s 为当前会话、userID 为属主，返回团队或归属错误。
+// 密钥读取/创建调用；无团队返回空，异常多团队必须拒绝，不猜测计费来源，无写入副作用。
+func userTeam(s *xorm.Session, userID string) (string, error) {
+	var members []TeamMembership
+	if err := s.Where("user_id = ?", userID).Find(&members); err != nil {
+		return "", err
+	}
+	if len(members) > 1 {
+		return "", ErrMultipleTeams
+	}
+	if len(members) == 0 {
+		return "", nil
+	}
+	return members[0].TeamID, nil
+}
+
+// resolveKeyTeam 补齐密钥的派生团队；s 为会话、k 为密钥，返回归属错误并更新内存字段。
+// 查询和模型授权调用；无属主必须失败，永远不采用创建者作为计费对象，不写数据库。
+func resolveKeyTeam(s *xorm.Session, k *Key) error {
+	if k.UserID == nil || *k.UserID == "" || k.OwnerType != OwnerPersonal {
+		return ErrInvalid
+	}
+	team, err := userTeam(s, *k.UserID)
+	k.TeamID = team
+	return err
 }
 
 // ---------- model resolution ----------
@@ -585,11 +594,19 @@ func (db *DB) AllowedModelsForTeam(ctx context.Context, teamID string) ([]string
 func (db *DB) AllowedModelsForKey(ctx context.Context, k *Key) ([]string, error) {
 	s := db.session(ctx)
 	defer s.Close()
+	// 缓存中的团队提示不能决定模型权限，实时读取用户唯一团队。
+	if k == nil || k.UserID == nil {
+		return nil, ErrInvalid
+	}
+	teamID, err := userTeam(s, *k.UserID)
+	if err != nil {
+		return nil, err
+	}
 	projectID := ""
 	if k.ProjectID != nil {
 		projectID = *k.ProjectID
 	}
-	set, err := allowedModels(s, k.TeamID, projectID, k.ID)
+	set, err := allowedModels(s, teamID, projectID, k.ID)
 	if err != nil {
 		return nil, err
 	}

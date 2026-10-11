@@ -16,9 +16,8 @@ export interface ExistingKey {
 export interface KeyCreateInput {
   readonly formValues: Record<string, unknown>;
   readonly existingKeys: readonly ExistingKey[] | null;
-  readonly keyOwner: string;
+  readonly keyOwner: "you" | "another_user";
   readonly userID: string | null;
-  readonly selectedAgentId: string | null;
   readonly loggingSettings?: KeyLoggingSetting[];
   readonly disabledCallbacks?: string[];
   readonly autoRotationEnabled: boolean;
@@ -35,10 +34,9 @@ export type KeyPayloadResult =
   | {
       readonly kind: "ok";
       readonly payload: Record<string, unknown>;
-      readonly endpoint: "standard" | "service_account";
+      readonly endpoint: "standard";
     }
-  | { readonly kind: "duplicate_alias"; readonly alias: string; readonly teamId: string | null }
-  | { readonly kind: "agent_not_selected" };
+  | { readonly kind: "duplicate_alias"; readonly alias: string; readonly teamId: string | null };
 
 const parseMetadata = (raw: unknown): unknown => {
   try {
@@ -51,9 +49,6 @@ const parseMetadata = (raw: unknown): unknown => {
 
 const buildMetadataJson = (values: Record<string, unknown>, input: KeyCreateInput): string => {
   const parsed = parseMetadata(values.metadata);
-  if (input.keyOwner === "service_account") {
-    (parsed as Record<string, unknown>).service_account_id = values.key_alias;
-  }
   const logged =
     (input.loggingSettings?.length ?? 0) > 0
       ? { ...(parsed as object), logging: input.loggingSettings?.filter((config) => config.callback_name) }
@@ -96,13 +91,11 @@ const duplicateAlias = (input: KeyCreateInput): { alias: string; teamId: string 
   return taken.includes(alias) ? { alias, teamId } : undefined;
 };
 
+/** 构造普通用户 Key 请求；参数为表单和已认证归属，返回请求或重名错误；不创建业务身份，管理员可显式选择已有用户，无持久副作用。 */
 export const buildKeyCreatePayload = (input: KeyCreateInput): KeyPayloadResult => {
   const duplicate = duplicateAlias(input);
   if (duplicate) {
     return { kind: "duplicate_alias", ...duplicate };
-  }
-  if (input.keyOwner === "agent" && !input.selectedAgentId) {
-    return { kind: "agent_not_selected" };
   }
 
   const values = input.formValues;
@@ -121,7 +114,7 @@ export const buildKeyCreatePayload = (input: KeyCreateInput): KeyPayloadResult =
 
   return {
     kind: "ok",
-    endpoint: input.keyOwner === "service_account" ? "service_account" : "standard",
+    endpoint: "standard",
     payload: {
       ...withoutKeys(values, dropped),
       ...(values.organization_id === null && { organization_id: undefined }),

@@ -26,7 +26,7 @@ func TestMalformedNativeTerminalCannotPublishOwnership(t *testing.T) {
 	dep.ModelInfo = map[string]any{"id": "malformed-native-deployment", "transport": "bypass_openai_responses", "endpoint_types": []string{"responses", "bypass:openai-responses"}}
 	dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
 	h := newHarness(t, dep)
-	admin := h.adminSession()
+	admin := h.personalBillingSession()
 	result := h.ok("POST", "/bypass/openai/v1/responses", admin, map[string]any{"model": dep.ModelName, "input": "first", "stream": true})
 	if !strings.Contains(result.text(), "data: {broken") {
 		t.Fatalf("原生流字节被修改: %s", result.describe())

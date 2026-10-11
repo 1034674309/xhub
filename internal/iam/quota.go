@@ -45,7 +45,7 @@ func quotaUnused(n *quotaNode) (float64, error) {
 }
 
 // quotaTree 读取当前事务的额度归属；参数 s 是会话，返回节点索引或数据库错误。
-// 调用：分配校验、运行时检查；项目保持额外上限，服务密钥使用独立业务账号作为个人层。
+// 调用：分配校验、运行时检查；所有密钥只能沿用户唯一团队消费，项目是额外上限。
 func quotaTree(s *xorm.Session) (map[string]*quotaNode, error) {
 	nodes := map[string]*quotaNode{}
 	var orgs []Organization
@@ -89,14 +89,12 @@ func quotaTree(s *xorm.Session) (map[string]*quotaNode, error) {
 		uid := ""
 		if k.UserID != nil {
 			uid = *k.UserID
-		} else {
-			uid = k.BillingUserID
 		}
 		parent := ""
 		if uid != "" {
 			parent = "user:" + uid
-		} else if k.TeamID != "" {
-			parent = "team:" + k.TeamID
+		} else {
+			return nil, ErrInvalid
 		}
 		nodes["key:"+k.ID] = &quotaNode{ID: k.ID, Kind: "key", HotID: k.TokenHash, Parent: parent, Limit: k.MaxBudget, Spend: k.Spend, RPM: k.RPMLimit, TPM: k.TPMLimit}
 	}
@@ -109,7 +107,7 @@ func quotaTree(s *xorm.Session) (map[string]*quotaNode, error) {
 }
 
 // validateQuota 校验指定节点及祖先。参数 kind/id 标识修改对象；返回分配错误，事务调用方负责回滚。
-// 只验证受影响路径，允许存量超配数据通过降低子额度逐步修正，不阻断无关资料修改。
+// 只验证受影响路径，减少分配可释放未使用容量，历史消费不回退，不阻断无关资料修改。
 func validateQuota(s *xorm.Session, kind, id string) error {
 	nodes, err := quotaTree(s)
 	if err != nil {
@@ -118,6 +116,9 @@ func validateQuota(s *xorm.Session, kind, id string) error {
 	n := nodes[kind+":"+id]
 	if n == nil {
 		return ErrNotFound
+	}
+	if err := applyBudgetHolds(s, nodes); err != nil {
+		return err
 	}
 	for n != nil {
 		if n.Parent == "ambiguous" {
@@ -153,19 +154,6 @@ func singleTeamMember(s *xorm.Session, userID, teamID string) error {
 		}
 	}
 	return nil
-}
-
-// businessOwner 为服务密钥提供团队独立业务账号。参数 s/teamID 为事务和团队；返回个人层账号 ID 或错误。
-// 调用：密钥创建；账号无密码，额度由管理员分配，不与创建者额度混用。
-func businessOwner(s *xorm.Session, teamID string) (string, error) {
-	id := "business-" + teamID
-	if _, err := s.Exec("INSERT INTO users (id,email,name) VALUES (?,?,?) ON CONFLICT (id) DO NOTHING", id, id+"@internal.invalid", "Business account"); err != nil {
-		return "", err
-	}
-	if _, err := s.Exec("INSERT INTO team_members (team_id,user_id) VALUES (?,?) ON CONFLICT DO NOTHING", teamID, id); err != nil {
-		return "", err
-	}
-	return id, nil
 }
 
 // QuotaPath 检查调用节点及祖先的共享余额。参数 ctx/kind/id/hot 为上下文、主体与未落库消费读取器。

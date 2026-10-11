@@ -22,7 +22,6 @@ func TestTeamlessKeyInput(t *testing.T) {
 	}{
 		{map[string]any{}, ""},
 		{map[string]any{"owner_type": "service"}, "me"},
-		{map[string]any{"project_id": "project"}, "me"},
 		{map[string]any{"owner_type": "unknown"}, "me"},
 		{map[string]any{"duration": "invalid"}, "me"},
 	} {

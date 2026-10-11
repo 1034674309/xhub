@@ -464,7 +464,7 @@ func UserSetPassword(g Gate, w http.ResponseWriter, r *http.Request) {
 	util.WriteJSON(w, 200, map[string]any{"user_id": target, "password_updated": true})
 }
 
-// UserDelete removes an account. Its memberships go with it and its personal keys are revoked; service keys belong to teams and are untouched.
+// UserDelete 删除普通用户及其成员关系和全部所属 Key；历史用量保留原归属，不存在团队业务 Key。
 // 参数 g（Gate）：带当前操作者的鉴权守卫。允许时返回 nil，拒绝时返回禁止或未找到；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/identity/mount.go

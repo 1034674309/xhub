@@ -141,6 +141,19 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 		return false
 	}
 	p.BillingTeamID, p.BillingOrgID = team, org
+	// 无团队时，管理员设置的个人预算是独立计费授权；留空仅表示待计费，
+	// Key 上限不是资金来源，不能靠创建 Key 把待计费用户变成无限额用户。
+	if team == "" {
+		owner, err := s.IAM.GetUser(ctx, p.UserID)
+		if err != nil {
+			util.WriteTypedError(w, path, 503, "billing_unavailable", "billing authorization is temporarily unavailable")
+			return false
+		}
+		if owner.MaxBudget == nil {
+			util.WriteTypedError(w, path, 403, "billing_source_required", "a team or personal billing budget is required")
+			return false
+		}
+	}
 	if scope != "" {
 		names := map[string]string{"user": "User", "key": "Key", "team": "Team", "org": "Organization"}
 		budgetRefusal(w, path, errBudget{scope: names[scope]})
@@ -186,7 +199,7 @@ func selectRouteTemplate(p *auth.Principal, id *string, source string) {
 
 // resolvePreviewIdentity 只读补齐预览主体的团队、组织及继承模板，与推理共用模板选择规则。
 // 参数 ctx 为读取上下文、p 为鉴权主体；返回身份链读取错误，零或多团队会话使用默认。
-// 调用：路由预览；不检查预算、不消耗速率窗口，个人密钥不继承用户所在团队。
+// 调用：路由预览；不检查预算、不消耗速率窗口，密钥与用户使用相同的当前团队。
 func (s *Server) resolvePreviewIdentity(ctx context.Context, p *auth.Principal) error {
 	if s.IAM == nil {
 		return errors.New("identity store unavailable")
@@ -198,7 +211,10 @@ func (s *Server) resolvePreviewIdentity(ctx context.Context, p *auth.Principal) 
 		if err != nil {
 			return err
 		}
-		if len(memberships) != 1 {
+		if len(memberships) > 1 {
+			return iam.ErrMultipleTeams
+		}
+		if len(memberships) == 0 {
 			return nil
 		}
 		p.TeamID = memberships[0].TeamID
@@ -240,6 +256,7 @@ func (s *Server) keyBudgetOK(ctx context.Context, p *auth.Principal) error {
 		return errKeyGone
 	}
 	p.Key = k
+	p.TeamID = k.TeamID
 	if k.Status != iam.StatusActive {
 		return errKeyUnusable
 	}

@@ -19,10 +19,9 @@ import (
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-// TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks is the data-plane
-// half of a guardrail. A default-on pre-call rule refuses the chat itself, and
-// the provider is not dialed. A word that belongs only to a rule that is off,
-// or to a rule that runs after the call, still goes through.
+// TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks 验证有个人计费授权的会话受到默认护栏约束。
+// 参数 t 为上下文；前置真实数据库和本地上游，默认拦截不调用上游，关闭/后置规则不误拦截。
+// 无返回；隔离数据、连接池和本地服务由 cleanup 清理。
 func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 	st, err := store.Open(testsupport.Postgres(t, "guardrail"))
 	if err != nil {
@@ -74,8 +73,9 @@ func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	db := testIdentityStore(t)
+	budget := 100.0
 	user, err := db.CreateUser(context.Background(), testActor, iam.UserInput{
-		Email: "guard@example.com", Name: "Guard", Password: "password123", Role: iam.RoleUser,
+		Email: "guard@example.com", Name: "Guard", Password: "password123", Role: iam.RoleUser, MaxBudget: &budget,
 	})
 	if err != nil {
 		t.Fatalf("create user: %v", err)

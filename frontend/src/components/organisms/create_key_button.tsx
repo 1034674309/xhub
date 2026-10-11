@@ -13,7 +13,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { rolesWithWriteAccess } from "../../utils/roles";
 import { t } from "@/i18n";
-import BudgetDurationDropdown from "../common_components/budget_duration_dropdown";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
 import {
   MountedFormField,
@@ -32,7 +31,6 @@ import { Team } from "../key_team_helpers/key_list";
 import { toast } from "@/lib/toast";
 import {
   keyCreateCall,
-  keyCreateServiceAccountCall,
   modelAvailableCall,
 } from "../networking";
 import CreatedKeyDisplay from "../shared/CreatedKeyDisplay";
@@ -66,7 +64,7 @@ const ceilingRule = (ceiling: number | null | undefined, message: (limit: number
  * Interface for pre-filling the create key form from URL parameters
  */
 export interface CreateKeyPrefillData {
-  owned_by?: "you" | "service_account" | "another_user";
+  owned_by?: "you" | "another_user";
   team_id?: string;
   key_alias?: string;
   models?: string[];
@@ -199,18 +197,17 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
     }
   }, [autoOpenCreate, prefillData, teams, hasPrefilled, form, userRole]);
 
-  /** 提交已挂载字段；参数为表单值，返回异步完成状态；归属取当前用户及显式团队上下文，失败展示错误。 */
+  /** 提交已挂载字段；参数为表单值，返回异步完成状态；归属取当前用户，团队由后台唯一成员关系派生，失败展示错误。 */
   const handleCreate = async (formValues: MountedFormValues) => {
     try {
       const input: KeyCreateInput = {
         formValues: {
           ...formValues,
-          team_id: selectedCreateKeyTeam?.team_id ?? null,
+          team_id: null,
         },
         existingKeys: data,
         keyOwner,
         userID,
-        selectedAgentId: null,
         autoRotationEnabled,
         rotationInterval,
         routeTemplateId,
@@ -225,16 +222,9 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
       toast.info(t("Making API Call"));
       setIsModalVisible(true);
 
-      if (built.kind === "agent_not_selected") {
-        toast.fromError(t("Please select an agent"));
-        return;
-      }
-      const { payload, endpoint } = built;
+      const { payload } = built;
 
-      const response =
-        endpoint === "service_account"
-          ? await keyCreateServiceAccountCall(accessToken, payload)
-          : await keyCreateCall(accessToken, userID, payload);
+      const response = await keyCreateCall(accessToken, userID, payload);
 
       // Add the data to the state in the parent component
       // Also directly update the keys list in VirtualKeysTable without an API call
@@ -475,39 +465,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                           {(control) => <Input {...control} value={control.value as string | number ?? ""} type="number" min={0} max={2147483647} step={1} placeholder={t("quotaGuide.rateBlank")} />}
                         </MountedFormField>
                       ))}
-
-                      <MountedFormField
-                        label={
-                          <span>
-                            {t("Reset Budget")}{" "}
-                            <SimpleTooltip
-                              content={t(
-                                "How often the budget should reset. For example, setting 'daily' will reset the budget every 24 hours",
-                              )}
-                            >
-                              <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                            </SimpleTooltip>
-                          </span>
-                        }
-                        name="budget_duration"
-                        help={t("Team Reset Budget: {value0}", {
-                          value0:
-                            selectedCreateKeyTeam?.budget_duration !== null &&
-                            selectedCreateKeyTeam?.budget_duration !== undefined
-                              ? selectedCreateKeyTeam.budget_duration
-                              : t("None"),
-                        })}
-                      >
-                        {(control) => (
-                          <BudgetDurationDropdown
-                            id={control.id}
-                            value={control.value as string | null | undefined}
-                            showNeverResets
-                            placeholder={t("Not set")}
-                            onChange={(next) => control.onChange(next ?? undefined)}
-                          />
-                        )}
-                      </MountedFormField>
 
                       <div className="sm:col-span-2">
                         <p className="mb-2 text-sm font-medium">{t("pages.routeTemplates.title")}</p>

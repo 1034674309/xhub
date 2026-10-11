@@ -504,7 +504,7 @@ func reconcileDirectory(ctx context.Context, s *xorm.Session, c DirectoryConnect
 						return err
 					}
 				}
-				if _, err := revokePersonalKeys(ctx, s, "user_id = ? AND team_id = ?", d.UserID, membership.TeamID); err != nil {
+				if _, err := revokePersonalKeys(ctx, s, "user_id = ?", d.UserID); err != nil {
 					return err
 				}
 			}

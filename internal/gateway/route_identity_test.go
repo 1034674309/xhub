@@ -77,7 +77,7 @@ func TestPreviewIdentityInheritance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check("个人密钥不继承成员团队", &auth.Principal{Kind: authz.KindKey, KeyID: personal.ID, TeamID: "stale"}, "", "", "", "")
+	check("个人密钥继承用户唯一团队", &auth.Principal{Kind: authz.KindKey, KeyID: personal.ID, TeamID: "stale"}, f.teamA.ID, f.orgA.ID, team, "team")
 	if _, err := f.db.AddMember(ctx, by, f.teamB.ID, f.teamMember.user.Email, iam.TeamMember); err != iam.ErrMultipleTeams {
 		t.Fatalf("第二团队应拒绝: %v", err)
 	}

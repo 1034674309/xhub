@@ -469,7 +469,7 @@ func (db *DB) MoveTeam(ctx context.Context, by Actor, id, organizationID string)
 	return out, err
 }
 
-// DeleteTeam cascades to members, projects, keys and access-group assignments.
+// DeleteTeam 删除团队及成员关系、项目；保留个人凭证，未配置个人预算者进入待计费状态。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：团队 id。空串表示没有指定团队。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go
@@ -925,7 +925,7 @@ func (db *DB) SetMemberRoleBudget(ctx context.Context, by Actor, teamID, userID,
 	})
 }
 
-// RemoveMember 解除团队归属并撤销绑定本团队的个人密钥；独立个人密钥和额度继续有效，历史账单不迁移，保留最后管理员保护。
+// RemoveMember 解除团队归属但保留个人凭证；历史账单不迁移，没有个人预算时暂停计费调用。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；teamID（string）：团队 id。空串表示没有指定团队；userID（string）：用户 id。空串表示没有指定用户。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/identity/members.go
@@ -947,9 +947,6 @@ func (db *DB) RemoveMember(ctx context.Context, by Actor, teamID, userID string)
 		if err := affected(s.Where("team_id = ? AND user_id = ?", teamID, userID).Delete(&TeamMembership{})); err != nil {
 			return err
 		}
-		if _, err := revokePersonalKeys(ctx, s, "team_id = ? AND user_id = ?", teamID, userID); err != nil {
-			return err
-		}
 		return writeAudit(s, by, Audit{Action: "member.remove", ObjectType: "team_member", ObjectID: userID, TeamID: teamID})
 	})
 }
@@ -967,9 +964,9 @@ func membership(_ context.Context, s *xorm.Session, teamID, userID string) (*Tea
 	return &m, nil
 }
 
-// revokePersonalKeys ends personal keys matching the condition. Service keys are never touched: they belong to the team, not to a person.
+// revokePersonalKeys 撤销条件匹配用户的全部 Key；只在用户删除、目录停用等凭证撤销场景调用。
 // 参数 _（context.Context）：请求上下文。取消或超时后停止数据库调用；s（*xorm.Session）：当前事务里的数据库会话。调用方负责提交，这里不关闭它；cond（string）：追加的 SQL 条件，例如按 team_id 和 user_id；args（...any）：这个条件的参数。
-// 返回 int64（int64）：被改成 revoked 的个人密钥行数。服务密钥不会动。更新失败时为 0；error（error）：更新失败。nil 表示更新完成。
+// 返回 int64（int64）：被改成 revoked 的用户密钥行数，更新失败时为 0；error 为更新错误。
 // 调用：iam/users.go
 // 测试：无直接单测
 func revokePersonalKeys(_ context.Context, s *xorm.Session, cond string, args ...any) (int64, error) {

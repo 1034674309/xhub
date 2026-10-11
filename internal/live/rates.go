@@ -15,7 +15,7 @@ type RateScope struct {
 // rateAdmission 是 CheckRatePlan 的 Redis 原子实现，网关通过 AdmitRatePlan 调用。
 // KEYS 每节点两个键（RPM、TPM）；ARGV 每节点为 1 起始父下标、RPM、TPM，
 // 后接 est、路径长度和叶到根下标；父 0 表示根，限额 -1 表示共享，0 表示禁用。
-// reserve/credit 保留与纯函数相同的不变量；两个维度全部通过后才增加整条路径，
+// 各层合计用量与纯函数相同；两个维度全部通过后才增加整条路径，
 // 返回 0 放行或 1 起始“节点×维度”拒绝索引。拒绝不写计数，120 秒 TTL 清理旧桶。
 const rateAdmission = `
 local count=#KEYS/2
@@ -26,19 +26,11 @@ local est=tonumber(ARGV[count*3+1]); local pathCount=tonumber(ARGV[count*3+2])
 for dimension=1,2 do
  local usage=rpm; local limits=rpml; local delta=1
  if dimension==2 then usage=tpm; limits=tpml; delta=est end
- local function reserve(i)
-  if limits[i]>=0 then return math.max(0,limits[i]-usage[i]) end
-  local sum=0; for _,c in ipairs(children[i]) do sum=sum+reserve(c) end; return sum
- end
- local child=0; local credit=0
  for p=1,pathCount do
   local i=tonumber(ARGV[count*3+2+p])
   if limits[i]>=0 then
-   local reserved=0; for _,c in ipairs(children[i]) do local amount=reserve(c); if c==child then amount=math.max(0,amount-credit) end; reserved=reserved+amount end
-   if limits[i]==0 or usage[i]+reserved+delta>limits[i] then return (i-1)*2+dimension end
-   credit=math.max(0,limits[i]-usage[i])
+   if limits[i]==0 or usage[i]+delta>limits[i] then return (i-1)*2+dimension end
   end
-  child=i
  end
 end
 for p=1,pathCount do

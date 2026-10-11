@@ -16,7 +16,7 @@
   },
   "evidence_levels": {
     "manifest": "dataset.json 声明资源或 frontend_workflows；不是执行证据。",
-    "api": "e2e/real_dataset.py 对实际 gateway 路由的检查。",
+    "api": "e2e/acceptance/ 按业务模块对实际 gateway 路由的检查。",
     "browser": "e2e/real_dataset_browser.cjs 在真实 Next.js 页面执行的检查。",
     "sql": "runner 对隔离 PostgreSQL schema 的一致性查询。"
   },

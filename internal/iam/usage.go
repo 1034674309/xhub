@@ -177,6 +177,9 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 	}
 	return db.tx(ctx, func(s *xorm.Session) error {
 		for _, r := range records {
+			if err := settleBudgetHold(s, r); err != nil {
+				return err
+			}
 			fresh, err := insertEvent(s, r)
 			if err != nil {
 				return err
@@ -312,14 +315,17 @@ func day(t time.Time) time.Time {
 	return time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// ownerType is the stored owner, defaulting to service the way the schema does.
+// ownerType 为日志确定来源；未显式填写时，有 Key 的请求属于个人，否则属于会话。
 // 参数 r（UsageRecord）：一次调用的用量，含 token、费用、密钥和团队，准备写入用量表。
-// 返回 string（string）：库存的归属类型。空值按服务账号处理，和表的默认一致。
+// 返回 string（string）：个人或会话来源；仅转换输入，不写数据库，不创建业务账号。
 // 调用：仅在 usage.go 内使用
 // 测试：无直接单测
 func ownerType(r UsageRecord) string {
 	if r.OwnerType == "" {
-		return OwnerService
+		if r.KeyID != "" {
+			return OwnerPersonal
+		}
+		return "session"
 	}
 	return r.OwnerType
 }

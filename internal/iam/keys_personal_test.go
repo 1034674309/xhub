@@ -6,7 +6,7 @@ import (
 )
 
 // TestTeamlessPersonalKeyStorage 验证独立个人密钥持久化和数据库约束；前置隔离 PostgreSQL 与无团队账号。
-// 参数 t 为测试上下文，返回无；确认团队列为 NULL、迁移幂等、更新轮换正常、非法归属回滚；testDB 清理专属 schema。
+// 参数 t 为测试上下文，返回无；确认没有团队列、建表幂等、更新轮换正常、非法归属回滚；testDB 清理专属 schema。
 func TestTeamlessPersonalKeyStorage(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
@@ -22,9 +22,9 @@ func TestTeamlessPersonalKeyStorage(t *testing.T) {
 	if k.TeamID != "" || k.UserID == nil || *k.UserID != u.ID || k.TokenHash != HashKey(secret) {
 		t.Fatalf("个人归属或哈希错误: %+v", k)
 	}
-	rows, err := db.Engine.QueryString("SELECT team_id IS NULL AS unbound FROM api_keys WHERE id = ?", k.ID)
+	rows, err := db.Engine.QueryString("SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='api_keys' AND column_name='team_id') AS unbound FROM api_keys WHERE id = ?", k.ID)
 	if err != nil || len(rows) != 1 || rows[0]["unbound"] != "true" {
-		t.Fatalf("团队列必须存储 NULL: %v %v", rows, err)
+		t.Fatalf("Key 不应持久化团队列: %v %v", rows, err)
 	}
 	for i := 0; i < 2; i++ {
 		if err := db.Migrate(ctx); err != nil {
@@ -47,7 +47,7 @@ func TestTeamlessPersonalKeyStorage(t *testing.T) {
 		t.Fatalf("轮换改变团队或未生成新密钥: %v", err)
 	}
 	for _, in := range []KeyInput{
-		{OwnerType: OwnerService}, {OwnerType: OwnerPersonal},
+		{OwnerType: "service"}, {OwnerType: OwnerPersonal},
 		{OwnerType: OwnerPersonal, UserID: u.ID, ProjectID: "project"},
 		{OwnerType: "unknown", UserID: u.ID},
 		{OwnerType: OwnerPersonal, UserID: "missing"},

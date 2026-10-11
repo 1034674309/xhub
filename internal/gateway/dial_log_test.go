@@ -19,6 +19,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
+// TestHandlerDialFailureLogKeepsHostWithoutURL 验证有计费授权的用户连接失败时返回 502 且日志不泄露地址和秘密。
+// 参数 t 为上下文；前置隔离账户和关闭的本地端口，无返回；账户、日志捕获由 cleanup 清理。
 func TestHandlerDialFailureLogKeepsHostWithoutURL(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -31,8 +33,9 @@ func TestHandlerDialFailureLogKeepsHostWithoutURL(t *testing.T) {
 	// row on every request, so a hand-written session record with no row behind
 	// it is refused rather than trusted.
 	db := testIdentityStore(t)
+	budget := 100.0
 	user, err := db.CreateUser(context.Background(), testActor, iam.UserInput{
-		Email: "dial@example.com", Name: "Dial", Password: "password123", Role: iam.RoleUser,
+		Email: "dial@example.com", Name: "Dial", Password: "password123", Role: iam.RoleUser, MaxBudget: &budget,
 	})
 	if err != nil {
 		t.Fatalf("create user: %v", err)

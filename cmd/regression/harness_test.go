@@ -864,6 +864,20 @@ func (h *harness) adminSession() string {
 	return h.login(email, password)
 }
 
+// personalBillingSession 创建独立计费的管理员会话，供协议/日志等非计费来源用例使用。
+// 参数无，返回真实登录令牌；显式分配个人额度，不改变 adminSession 的待计费默认语义。
+// 调用方是需要实际推理的回归测试；修改仅作用于本例隔离 schema，由 harness 清理。
+func (h *harness) personalBillingSession() string {
+	h.t.Helper()
+	session := h.adminSession()
+	u, err := h.db.UserByEmail(h.t.Context(), "regression-admin@example.com")
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.setUserBudget(h.t, session, u.ID, 100)
+	return session
+}
+
 // login 登录并返回会话令牌。登录响应里 "token" 是 JWT、"key" 是会话 id；
 // 数据面和管理路由都认 JWT，所以优先取它。
 // 参数 username/password（string）：账号与密码。返回 string（string）：会话令牌。

@@ -69,7 +69,7 @@ The full bilingual UI guide, curl calls and source checklist are in docs/develop
     body1:
       "Create organizations and teams, add members and assign roles. Configure team model access and budgets; use projects for business attribution. Grant only the management permissions members need.",
     body2:
-      "When creating personal or service keys, check team ownership, model scope, expiration and budget. Model scope cannot exceed parent permissions. See billing and quota guides for allocated limits, shared balances and unlimited settings.",
+      "Every API key belongs to a user; the team is derived from that user's membership. Check model scope, expiration and budget. Model scope cannot exceed parent permissions. See billing and quota guides for allocated limits, shared balances and unlimited settings.",
     body3:
       "On departure, revoke related keys, remove membership and check whether services still use personal credentials. Preserve historical usage for auditing.",
   },

@@ -94,7 +94,7 @@ func TestEnterpriseIndependentHTTP(t *testing.T) {
 	input["enabled"] = true
 	request(session, http.MethodPut, route, input, 400)
 	// 此用例只验证入口查询和持久化；无法 discovery 必须拒绝启用，成功协议另由 TLS fixture 验证。
-	if _, err := db.Pool().Exec(ctx, "UPDATE enterprise_oidc SET enabled=true WHERE connection_id=$1", sso.ConnectionID); err != nil {
+	if _, err := db.Engine.Context(ctx).Exec("UPDATE enterprise_oidc SET enabled=true WHERE connection_id=?", sso.ConnectionID); err != nil {
 		t.Fatal(err)
 	}
 	var options []map[string]string

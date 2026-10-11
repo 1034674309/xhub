@@ -40,7 +40,7 @@ var logTraceOnceReports sync.Once
 // for the whole table.
 const logPageSize = 50
 
-// LogsV2 is the paged spend-log API behind GET /spend/logs/ui. Every row is narrowed by the caller's log scope, so a member sees their own calls and a team administrator additionally sees their team's service keys. The response shape is the one the console's table reads: data plus the paging metadata.
+// LogsV2 is the paged spend-log API behind GET /spend/logs/ui. Every row is narrowed by the caller's log scope, so a user only sees their own calls; platform administrators may inspect all logs. The response shape is the one the console's table reads: data plus the paging metadata.
 // 参数 s（Host）：LogsV2使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/usage/mount.go

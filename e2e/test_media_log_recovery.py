@@ -7,11 +7,9 @@ import tempfile
 import unittest
 import uuid
 
-from real_dataset import Dataset, load_manifest
+from acceptance import Dataset, load_manifest
 
-SPEC = importlib.util.spec_from_file_location("media_recovery_runner", Path(__file__).parents[1] / "scripts/e2e-real-dataset.py")
-RUNNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(RUNNER)
+from acceptance import runner_database as RUNNER
 
 
 @unittest.skipUnless(os.environ.get("XHUB_MEDIA_RECOVERY_DATABASE_TEST") == "1", "需要显式启用私有 PostgreSQL 回归")

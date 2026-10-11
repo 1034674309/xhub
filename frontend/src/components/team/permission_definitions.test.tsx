@@ -46,10 +46,10 @@ describe("permission_definitions", () => {
     });
 
     it("should find partial match for permission with pattern", () => {
-      const result = getPermissionInfo("/key/service-account/generate");
+      const result = getPermissionInfo("/prefix/key/generate");
       expect(result.method).toBe("POST");
-      expect(result.endpoint).toBe("/key/service-account/generate");
-      expect(result.description).toBe(PERMISSION_DESCRIPTIONS["/key/service-account/generate"]);
+      expect(result.endpoint).toBe("/prefix/key/generate");
+      expect(result.description).toBe(PERMISSION_DESCRIPTIONS["/key/generate"]);
     });
 
     it("should return correct info for team daily activity permission", () => {

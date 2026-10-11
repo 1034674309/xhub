@@ -21,7 +21,6 @@ func Module(h Host) util.Module {
 	traceModule("keys")
 	return util.Bind("keys", func(reg util.Registrar) {
 		reg.Handle("POST /key/generate", func(w http.ResponseWriter, r *http.Request) { Generate(h, w, r) })
-		reg.Handle("POST /key/service-account/generate", func(w http.ResponseWriter, r *http.Request) { ServiceAccount(h, w, r) })
 		reg.Handle("GET /key/list", func(w http.ResponseWriter, r *http.Request) { List(h, w, r) })
 		reg.Handle("GET /key/info", func(w http.ResponseWriter, r *http.Request) { Info(h, w, r) })
 		reg.Handle("POST /v2/key/info", func(w http.ResponseWriter, r *http.Request) { Info(h, w, r) })

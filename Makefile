@@ -1,4 +1,16 @@
-.PHONY: test run ui tidy testdata e2e e2e-all e2e-offline e2e-model-endpoints regression regression-live
+.PHONY: test run ui tidy testdata e2e e2e-list e2e-all e2e-offline e2e-model-endpoints regression regression-live
+
+# make 的第二个词本来是另一个目标；仅在 e2e 后把白名单内的词解释为分类。
+E2E_CATEGORIES := entities gpt-1 gpt-2 gpt-3 gpt-4 glm image ark-video fal-video kling-video inheritance chat-bills permissions xgo limits model-lifecycle guard-lifecycle global-guards profile-isolation cache-weight fallback media-logs database browser business-browser regression
+ifneq ($(filter e2e,$(MAKECMDGOALS)),)
+E2E_SELECTED := $(filter-out e2e,$(MAKECMDGOALS))
+ifneq ($(filter-out $(E2E_CATEGORIES),$(E2E_SELECTED)),)
+$(error Unknown E2E category: $(filter-out $(E2E_CATEGORIES),$(E2E_SELECTED)); run make e2e-list)
+endif
+.PHONY: $(E2E_SELECTED)
+$(E2E_SELECTED):
+	@:
+endif
 
 test:
 	go test ./...
@@ -28,11 +40,15 @@ tidy:
 
 # 清空指定 xhub/public 与 Redis DB 1，仅按清单构造数据与配置，不调用模型或供应商。
 testdata:
-	python3 scripts/e2e-real-dataset.py --shared-target --phase seed --directory .e2e/real-acceptance-current
+	python3 scripts/e2e.py --shared-target --phase seed --directory .e2e/real-acceptance-current
 
 # 每类路由只选一把代表，逐项打印编号/内容/结果；覆盖模型、业务浏览器、计量和后台回归，81密钥基线保留。
 e2e:
-	python3 scripts/e2e-real-dataset.py --shared-target --phase verify --with-regression --directory .e2e/real-acceptance-current
+	python3 scripts/e2e.py --shared-target --phase verify --with-regression $(foreach category,$(E2E_SELECTED),--category $(category)) --directory .e2e/real-acceptance-current
+
+# 只列分类，不读供应商凭据、不启动服务、不改测试数据。
+e2e-list:
+	python3 scripts/e2e.py --list-categories
 
 # 原有全套隔离验收保留为显式入口。
 e2e-all:

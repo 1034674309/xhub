@@ -83,9 +83,11 @@ func TestQuotaHierarchyHTTP(t *testing.T) {
 	if before != after {
 		t.Fatalf("退出后的个人消费增加了原团队账单: before=%v after=%v", before, after)
 	}
-	stale := h.do(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("quota-model", "revoked key"))
-	if stale.status != 401 {
-		t.Fatalf("退出旧密钥未失效: %s", stale.describe())
+	h.ok(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("quota-model", "retained personal key"))
+	h.flushSpend()
+	keyAfter := h.ok(http.MethodGet, "/team/info?team_id="+tn.teamID, admin, nil).json()["team_info"].(map[string]any)["spend"]
+	if keyAfter != after {
+		t.Fatalf("保留的个人 Key 不应向原团队计费: before=%v after=%v", after, keyAfter)
 	}
 }
 
