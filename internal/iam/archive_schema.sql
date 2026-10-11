@@ -1,11 +1,10 @@
 -- 配置版本不可变，旧积压写入原目标，凭据只存密文。
 CREATE TABLE IF NOT EXISTS archive_configs (
  revision BIGSERIAL PRIMARY KEY, bucket TEXT NOT NULL, region TEXT NOT NULL,
- prefix TEXT NOT NULL, credentials TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT false
+ prefix TEXT NOT NULL, credentials TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT false,
+ interval_seconds INTEGER NOT NULL DEFAULT 2 CHECK (interval_seconds BETWEEN 2 AND 86400),
+ batch_size INTEGER NOT NULL DEFAULT 20 CHECK (batch_size BETWEEN 1 AND 200)
 );
--- 兼容已部署的配置版本，调度变更仅影响后续消费轮次，不修改旧事件目标或内容。
-ALTER TABLE archive_configs ADD COLUMN IF NOT EXISTS interval_seconds INTEGER NOT NULL DEFAULT 2 CHECK (interval_seconds BETWEEN 2 AND 86400);
-ALTER TABLE archive_configs ADD COLUMN IF NOT EXISTS batch_size INTEGER NOT NULL DEFAULT 20 CHECK (batch_size BETWEEN 1 AND 200);
 CREATE TABLE IF NOT EXISTS archive_events (
  id BIGSERIAL PRIMARY KEY, request_id TEXT NOT NULL, revision BIGINT NOT NULL REFERENCES archive_configs(revision),
  payload TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

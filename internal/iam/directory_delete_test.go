@@ -39,8 +39,8 @@ func TestDirectoryDelete(t *testing.T) {
 	if err := db.SetDirectoryMapping(ctx, by, DirectoryMapping{ConnectionID: c.ID, GroupID: group.ID, TeamID: team.ID, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	cfg := EnterpriseOIDC{ConnectionID: c.ID, Issuer: "https://identity.example.com", ClientID: "client", RedirectURI: "https://console.example.com/auth/enterprise/callback", ReturnURI: "https://console.example.com/ui/login", IdentityClaim: "sub", Enabled: true}
-	if err := db.SaveEnterpriseOIDC(ctx, by, cfg); err != nil {
+	cfg := EnterpriseOIDC{Name: "Independent login", ConnectionID: c.ID, Issuer: "https://identity.example.com", ClientID: "client", RedirectURI: "https://console.example.com/auth/enterprise/callback", ReturnURI: "https://console.example.com/ui/login", IdentityClaim: "sub", Enabled: true}
+	if _, err := db.CreateEnterpriseOIDC(ctx, by, org.ID, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.EnterpriseLoginUser(ctx, c.ID, cfg.Issuer, "subject-delete", du.ExternalID, 1); err != nil {

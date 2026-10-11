@@ -92,18 +92,34 @@ try {
     assert.match(await page.getByRole("article").innerText(), /No new provider package/);
     await page.screenshot({ path: reportDirectory + "/provider-source-guide.png", fullPage: true });
   });
-  // 前置为真实静态网站和共享文档源，四类切换只显示本类正文及目录，验证帮助、中英对应页；无业务写入。
-  await scenario("同步文档中心 → 帮助 → 四分类 → 英文", async () => {
+  // 目的：侧栏不重复全局分类入口；前置真实网站与索引，从帮助经主导航进入 API，切换双语并刷新，目录、正文及搜索仍可用；只读页面，最终关闭上下文。
+  await scenario("同步文档中心 → 帮助 → 主导航 API → 双语精简侧栏", async () => {
     await page.goto(base + "docs/");
     await page.getByRole("heading", {name: "欢迎使用 XHub", exact: true}).waitFor();
     await page.getByRole("link", {name: "常见问题与故障排查", exact: true}).click();
     assert.match(await page.locator("article").innerText(), /401/);
-    await page.locator(".docs-sidebar").getByRole("link", {name: "API 文档", exact: true}).click();
+    await page.getByRole("navigation").getByRole("link", {name: "API 文档", exact: true}).click();
     await page.getByRole("heading", {name: "模型列表", exact: true}).waitFor();
     assert.equal(await page.locator(".docs-sidebar").getByRole("link", {name: "快速开始", exact: true}).count(), 0);
     assert.match(await page.locator("article").innerText(), /data\[\]\.id/);
     await page.getByRole("link", {name: "Switch to English", exact: true}).click();
     await page.getByRole("heading", {name: "List models", exact: true}).waitFor();
+    for (const [lang, categories, heading] of [
+      ["en", ["Product docs", "Integrations", "Billing", "API reference"], "List models"],
+      ["zh", ["产品文档", "工具接入", "计费说明", "API 文档"], "模型列表"],
+    ]) {
+      if (lang === "zh") await page.getByRole("link", {name: "切换到简体中文", exact: true}).click();
+      await page.reload();
+      await page.getByRole("heading", {name: heading, exact: true}).waitFor();
+      const sidebar = page.getByRole("complementary", {name: lang === "zh" ? "文档首页" : "Documentation", exact: true});
+      for (const name of categories) await expect(sidebar.getByRole("link", {name, exact: true})).toHaveCount(0);
+      await expect(sidebar.getByRole("link", {name: heading, exact: true})).toHaveAttribute("aria-current", "page");
+      await sidebar.getByRole("button").click();
+      await page.getByRole("searchbox").fill("data[]");
+      await expect(page.locator(".search-results").getByRole("link").first()).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.screenshot({path: `${reportDirectory}/api-sidebar-${lang}.png`});
+    }
   });
   // 前置为独立静态服务器，验证首页入口到安装页、命令和刷新；不写业务数据，结束关闭上下文。
   await scenario("首页 → Docker 安装文档 → 刷新保留正文", async () => {

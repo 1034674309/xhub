@@ -1,13 +1,10 @@
 -- 企业登录配置和稳定身份绑定；秘密由服务端加密后存储。
 CREATE TABLE IF NOT EXISTS enterprise_oidc (
- connection_id TEXT PRIMARY KEY REFERENCES directory_connections(id) ON DELETE RESTRICT,
+ connection_id TEXT PRIMARY KEY REFERENCES directory_connections(id) ON DELETE RESTRICT, name TEXT NOT NULL CHECK(name <> ''),
  issuer TEXT NOT NULL, client_id TEXT NOT NULL, secret TEXT NOT NULL DEFAULT '',
  redirect_uri TEXT NOT NULL, return_uri TEXT NOT NULL, identity_claim TEXT NOT NULL DEFAULT 'sub',
  enabled BOOLEAN NOT NULL DEFAULT false, revision BIGINT NOT NULL DEFAULT 1
 );
--- SSO 独立名称；仅迁移旧空值，重复启动不覆盖管理员修改。
-ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';
-UPDATE enterprise_oidc o SET name=d.name FROM directory_connections d WHERE d.id=o.connection_id AND o.name='';
 CREATE TABLE IF NOT EXISTS enterprise_login_transactions (
  state_hash TEXT PRIMARY KEY, connection_id TEXT NOT NULL REFERENCES enterprise_oidc(connection_id),
  revision BIGINT NOT NULL, browser_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL,

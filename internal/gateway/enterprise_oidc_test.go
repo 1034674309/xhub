@@ -91,10 +91,11 @@ func TestEnterpriseOIDCFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oc := iam.EnterpriseOIDC{ConnectionID: c.ID, Issuer: issuer, ClientID: "xhub", Secret: secret, RedirectURI: "https://console.example/auth/enterprise/callback", ReturnURI: "https://console.example/ui/login", IdentityClaim: "sub", Enabled: true}
-	if err = db.SaveEnterpriseOIDC(ctx, testActor, oc); err != nil {
+	oc := iam.EnterpriseOIDC{Name: "TLS login", Issuer: issuer, ClientID: "xhub", Secret: secret, RedirectURI: "https://console.example/auth/enterprise/callback", ReturnURI: "https://console.example/ui/login", IdentityClaim: "sub", Enabled: true}
+	if _, err = db.CreateEnterpriseOIDC(ctx, testActor, org.ID, oc); err != nil {
 		t.Fatal(err)
 	}
+	oc.ConnectionID = c.ID
 	// 删除同步配置后仍保留稳定身份，完整 TLS 回调必须可以独立工作。
 	if err = db.DeleteDirectoryConnection(ctx, testActor, c.ID); err != nil {
 		t.Fatal(err)

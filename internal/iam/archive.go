@@ -20,7 +20,7 @@ type ArchiveConfig struct {
 // TableName 返回配置表名供 xorm 映射，无参数和副作用。
 func (ArchiveConfig) TableName() string { return "archive_configs" }
 
-// ArchiveSchedule 校验并补齐调度参数；零值表示旧客户端默认，返回默认化间隔、每轮上限及合法标记。
+// ArchiveSchedule 校验并补齐调度参数；零值表示使用系统默认，返回默认化间隔、每轮上限及合法标记。
 // 管理接口与 worker 共用，间隔限制为 2 秒至一天、上限为 1 至 200；无数据库或网络副作用。
 func ArchiveSchedule(interval, batch int) (int, int, bool) {
 	if interval == 0 {

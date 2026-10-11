@@ -54,11 +54,11 @@ func TestEnterpriseIndependent(t *testing.T) {
 		t.Fatalf("空白 SSO 名称未拒绝: %v", err)
 	}
 	stored.Name = ""
-	if err := db.SaveEnterpriseOIDC(ctx, by, *stored); err != nil {
-		t.Fatal(err)
+	if err := db.SaveEnterpriseOIDC(ctx, by, *stored); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("省略 SSO 名称未拒绝: %v", err)
 	}
 	if saved, err := db.EnterpriseOIDCByID(ctx, c.ID); err != nil || saved.Name != cfg.Name {
-		t.Fatalf("旧客户端省略名称覆盖独立 SSO 名称: %+v %v", saved, err)
+		t.Fatalf("非法更新改变独立 SSO 名称: %+v %v", saved, err)
 	}
 	if err := db.ConfigureDirectory(ctx, by, c.ID, true, ""); err != nil {
 		t.Fatal(err)
@@ -86,6 +86,10 @@ func TestEnterpriseIndependent(t *testing.T) {
 	}
 	if err := db.DeleteEnterpriseOIDC(ctx, by, c.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("重复删除未拒绝: %v", err)
+	}
+	cfg.ConnectionID = c.ID
+	if err := db.SaveEnterpriseOIDC(ctx, by, cfg); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("更新意外重建已删除 SSO: %v", err)
 	}
 	if _, err := db.CreateEnterpriseOIDC(ctx, by, org.ID, cfg); err != nil {
 		t.Fatal(err)

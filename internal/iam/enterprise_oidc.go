@@ -39,33 +39,19 @@ type EnterpriseLoginTransaction struct {
 func (EnterpriseLoginTransaction) TableName() string { return "enterprise_login_transactions" }
 
 // SaveEnterpriseOIDC 保存加密后的配置并提升版本；by 为管理员，in 的连接不能改变组织。
-// 返回错误；关键配置改变使旧认证事务失效，成功记录审计，不删除稳定身份绑定。
+// 仅更新已存在的独立 SSO；名称必填，关键配置改变使未完成认证事务失效，成功记录审计。
 func (db *DB) SaveEnterpriseOIDC(ctx context.Context, by Actor, in EnterpriseOIDC) error {
 	return db.tx(ctx, func(s *xorm.Session) error {
 		if err := get(s.SQL("SELECT * FROM directory_connections WHERE id=? FOR UPDATE", in.ConnectionID), new(DirectoryConnection)); err != nil {
 			return err
 		}
-		if in.Name == "" {
-			// 旧客户端省略名称时优先保留已有登录名称，不能从 SCIM 名称覆盖独立配置。
-			var old EnterpriseOIDC
-			found, err := s.ID(in.ConnectionID).Get(&old)
-			if err != nil {
-				return err
-			}
-			if found {
-				in.Name = old.Name
-			}
-		}
-		if in.Name == "" {
-			var d DirectoryConnection
-			if err := get(s.ID(in.ConnectionID), &d); err != nil {
-				return err
-			}
-			in.Name = d.Name
+		if err := get(s.ID(in.ConnectionID), new(EnterpriseOIDC)); err != nil {
+			return err
 		}
 		if strings.TrimSpace(in.Name) == "" {
 			return ErrInvalid
 		}
+		in.Name = strings.TrimSpace(in.Name)
 		if err := saveEnterpriseOIDC(s, in); err != nil {
 			return err
 		}

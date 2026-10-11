@@ -3,10 +3,9 @@ CREATE TABLE IF NOT EXISTS directory_connections (
  id TEXT PRIMARY KEY, organization_id TEXT NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE RESTRICT,
  name TEXT NOT NULL CHECK(name <> ''), enabled BOOLEAN NOT NULL DEFAULT false,
  token_hash TEXT NOT NULL UNIQUE, default_team_id TEXT REFERENCES teams(id) ON DELETE RESTRICT,
- revision BIGINT NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+ revision BIGINT NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ scim_configured BOOLEAN NOT NULL DEFAULT false
 );
--- 旧连接已经签发 SCIM 凭据，迁移保留其原行为；SSO 单独创建的组织锚点显式写 false。
-ALTER TABLE directory_connections ADD COLUMN IF NOT EXISTS scim_configured BOOLEAN NOT NULL DEFAULT true;
 CREATE TABLE IF NOT EXISTS directory_users (
  id TEXT PRIMARY KEY, connection_id TEXT NOT NULL REFERENCES directory_connections(id) ON DELETE RESTRICT,
  external_id TEXT NOT NULL CHECK(external_id <> ''), user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE RESTRICT,

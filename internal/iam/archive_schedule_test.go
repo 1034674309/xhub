@@ -2,7 +2,7 @@ package iam
 
 import "testing"
 
-// TestArchiveSchedule 验证旧客户端默认、调度边界及非法参数；无外部前置、写入或清理需求。
+// TestArchiveSchedule 验证系统默认、调度边界及非法参数；无外部前置、写入或清理需求。
 func TestArchiveSchedule(t *testing.T) {
 	for _, tc := range []struct {
 		interval, batch, wantInterval, wantBatch int

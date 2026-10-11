@@ -119,6 +119,16 @@ func (k *kodoArchive) Delete(ctx context.Context, key string) error {
 	return storage.NewBucketManagerEx(k.mac, k.cfg, k.client).Delete(k.bucket, key)
 }
 
+// archiveProbe 验证随机对象上传并清理；ctx 为管理员请求，store/key 为受控目标，返回上传或清理错误。
+// 连接测试调用；上传可能已成功但响应被取消，因此清理使用独立的有限上下文，避免取消请求留下云端对象。
+func archiveProbe(ctx context.Context, store archiveObjectStore, key string) error {
+	err := store.Put(ctx, key, []byte("XHub archive connection probe"))
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	cleanErr := store.Delete(cleanup, key)
+	return errors.Join(err, cleanErr)
+}
+
 // archiveEncode 生成确定性的 JSONL.gz 与 SHA-256；参数为不可变事件，返回对象和哈希或错误。
 // 不收集请求正文；固定 gzip header 使不同 worker 生成同一内容。
 func archiveEncode(e *iam.ArchiveEvent) ([]byte, string, error) {
@@ -274,11 +284,7 @@ func (s *Server) archiveAdmin(w http.ResponseWriter, r *http.Request) {
 			err = e
 			if err == nil {
 				key := c.Prefix + "/probes/" + random
-				err = k.Put(r.Context(), key, []byte("XHub archive connection probe"))
-				cleanErr := k.Delete(r.Context(), key)
-				if err == nil {
-					err = cleanErr
-				}
+				err = archiveProbe(r.Context(), k, key)
 			}
 		}
 		if err != nil {

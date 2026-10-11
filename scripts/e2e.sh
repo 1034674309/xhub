@@ -5,6 +5,8 @@ cd "$ROOT/frontend"
 export E2E_UI_PORT="${E2E_UI_PORT:-3100}"
 export E2E_GW_PORT="${E2E_GW_PORT:-4100}"
 export E2E_UP_PORT="${E2E_UP_PORT:-4110}"
+# 企业集成使用 AES-GCM 保存秘密；默认测试密钥必须满足 32 字符限制，调用方仍可显式覆盖。
+export E2E_MASTER_KEY="${E2E_MASTER_KEY:-sk-e2e-enterprise-test-master-key-32}"
 export E2E_GATEWAY="http://127.0.0.1:$E2E_GW_PORT"
 export E2E_UPSTREAM="http://127.0.0.1:$E2E_UP_PORT"
 export E2E_RUN_DIR="$ROOT/.e2e/current"

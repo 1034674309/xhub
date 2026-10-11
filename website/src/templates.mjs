@@ -42,7 +42,7 @@ export function homepage(lang) {
   return shell({ lang, output, title: lang === "zh" ? "企业 AI 网关与治理平台" : "Enterprise AI gateway & governance", description: t.intro, body, alternate: lang === "zh" ? "./en/index.html" : "../index.html" });
 }
 
-/** 生成文档页面；参数包含已消毒正文、标题目录与文档清单，返回 HTML；不重新解析 Markdown。 */
+/** 生成文档页面；参数包含已消毒正文、标题目录与文档清单，返回 HTML，供构建器调用；侧栏只展示当前分类文章，跨分类入口由主导航和文档首页提供，不重新解析 Markdown。 */
 export function documentPage({ source, title, html, headings, documents, lang, alternate, centerGroups = [] }) {
   const output = documentPath(source);
   const prefix = rootPrefix(output);
@@ -51,7 +51,6 @@ export function documentPage({ source, title, html, headings, documents, lang, a
   const used = new Set();
   const center = source.startsWith("center/");
   const category = documents.find((item) => item.source === source)?.group;
-  const categoryNav = centerGroups.filter((item) => item.lang === lang).map((item) => '<a href="' + prefix + documentPath(item.files[0]) + '"' + (item.group === category ? ' aria-current="page"' : '') + '>' + e(item.title) + '</a>').join("");
   const selectedGroups = center ? centerGroups.filter((item) => item.lang === lang && item.group === category).map((item) => ({ zh: item.title, en: item.title, files: item.files })) : groups;
   const sidebar = selectedGroups.map((group) => {
     const files = (lang === "en" && group.english ? group.english : group.files).map((file) => {
@@ -77,6 +76,6 @@ export function documentPage({ source, title, html, headings, documents, lang, a
   }).join("");
   const remaining = documents.filter((item) => !center && !item.source.startsWith("center/") && !used.has(item.source) && item.lang === lang);
   const refs = remaining.map((item) => `<a href="${prefix}${documentPath(item.source)}" ${item.source === source ? 'aria-current="page"' : ""}>${e(item.title)}<small>${e(item.source.replace(/\/readme(?:_cn)?\.md$/i, ""))}</small></a>`).join("");
-  const body = `<div class="docs-layout"><aside class="docs-sidebar" aria-label="${t.documentHome}"><button class="search-open sidebar-search">${t.search}<kbd>/</kbd></button>${center ? categoryNav : ""}${sidebar}${refs ? `<details class="nav-group additional-docs" ${used.has(source) ? "" : "open"}><summary>${t.moduleDocs}</summary>${refs}</details>` : ""}</aside><main id="main" class="doc-main"><div class="doc-meta"><a href="${prefix}${documentPath(lang === "zh" ? "README.zh-CN.md" : "README.md")}">${t.documentHome}</a><span>/</span><span>${e(title)}</span></div><article class="prose">${html}</article><div class="doc-end"><a href="${repository}/blob/main/${documents.find((item) => item.source === source)?.repositorySource || (source.startsWith("modules/") ? source.slice(8) : `docs/${source}`)}">${t.source} ↗</a><a href="#main">↑ ${t.toc}</a></div></main><aside class="toc" aria-label="${t.toc}"><strong>${t.toc}</strong>${headings.filter((item) => item.depth === 2 || item.depth === 3).map((item) => `<a class="depth-${item.depth}" href="#${e(item.id)}">${e(item.text)}</a>`).join("")}</aside></div>`;
+  const body = `<div class="docs-layout"><aside class="docs-sidebar" aria-label="${t.documentHome}"><button class="search-open sidebar-search">${t.search}<kbd>/</kbd></button>${sidebar}${refs ? `<details class="nav-group additional-docs" ${used.has(source) ? "" : "open"}><summary>${t.moduleDocs}</summary>${refs}</details>` : ""}</aside><main id="main" class="doc-main"><div class="doc-meta"><a href="${prefix}${documentPath(lang === "zh" ? "README.zh-CN.md" : "README.md")}">${t.documentHome}</a><span>/</span><span>${e(title)}</span></div><article class="prose">${html}</article><div class="doc-end"><a href="${repository}/blob/main/${documents.find((item) => item.source === source)?.repositorySource || (source.startsWith("modules/") ? source.slice(8) : `docs/${source}`)}">${t.source} ↗</a><a href="#main">↑ ${t.toc}</a></div></main><aside class="toc" aria-label="${t.toc}"><strong>${t.toc}</strong>${headings.filter((item) => item.depth === 2 || item.depth === 3).map((item) => `<a class="depth-${item.depth}" href="#${e(item.id)}">${e(item.text)}</a>`).join("")}</aside></div>`;
   return shell({ lang, output, title, description: `${title} — XHub ${t.docs}`, body, alternate: `${prefix}${documentPath(alternate)}`, docs: true });
 }

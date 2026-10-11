@@ -189,10 +189,10 @@ func TestEnterpriseHTTP(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("组 PATCH 失败 %d %s", status, b)
 	}
-	configPath := "/admin/directory/connections/" + c.ID + "/oidc"
-	oidcBody := []byte(`{"issuer":"https://identity.example.com","client_id":"xhub","client_secret":"secret-value","redirect_uri":"https://console.example.com/auth/enterprise/callback","return_uri":"https://console.example.com/ui/login","identity_claim":"sub","enabled":false}`)
-	status, b = authed(t, srv.URL, session, http.MethodPut, configPath, oidcBody)
-	if status != 200 {
+	configPath := "/admin/enterprise/sso/" + c.ID
+	oidcBody, _ := json.Marshal(map[string]any{"organization_id": org.ID, "name": "Independent login", "issuer": "https://identity.example.com", "client_id": "xhub", "client_secret": "secret-value", "redirect_uri": "https://console.example.com/auth/enterprise/callback", "return_uri": "https://console.example.com/ui/login", "identity_claim": "sub", "enabled": false})
+	status, b = authed(t, srv.URL, session, http.MethodPost, "/admin/enterprise/sso", oidcBody)
+	if status != 201 {
 		t.Fatalf("SSO 配置失败 %d %s", status, b)
 	}
 	status, b = authed(t, srv.URL, session, http.MethodGet, configPath, nil)

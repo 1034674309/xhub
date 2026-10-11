@@ -6,6 +6,8 @@ import { loginAdmin, GATEWAY, sessionBearer, stableGoto } from "./helpers";
  */
 test("管理员目录连接驱动真实 SCIM 用户同步", async ({ page }) => {
   await loginAdmin(page);
+  // 真实浏览器授权剪贴板，验证写入结果，不替换或模拟 navigator.clipboard。
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {origin: new URL(page.url()).origin});
   const headers = { Authorization: "Bearer " + await sessionBearer(page) };
   const orgResponse = await page.request.post(GATEWAY + "/organization/new", { headers, data: { organization_alias: "directory-e2e-company" } });
   expect(orgResponse.status(), await orgResponse.text()).toBe(200);
@@ -58,16 +60,17 @@ test("管理员目录连接驱动真实 SCIM 用户同步", async ({ page }) => 
   await scim.getByLabel("组织 ID").selectOption(org.organization_id);
   await scim.getByLabel("XHub 公开访问地址").fill("https://console.example.com");
   await scim.getByLabel("目录名称").fill("Enterprise Directory E2E");
-  await section.getByRole("button", { name: "创建目录连接" }).click();
+  await scim.getByRole("button", { name: "创建目录连接" }).click();
   const token = await scim.getByLabel("SCIM 同步凭据").inputValue();
   const base = new URL(await scim.getByLabel("SCIM 基础地址").inputValue()).pathname;
   expect(token).not.toBe("");
   await scim.getByRole("button", {name:"复制 SCIM 凭据"}).click();
   await expect(scim.getByText("已复制 SCIM 凭据。")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(token);
   await scim.getByRole("button", {name:"关闭配置"}).click();
   const scimHeaders = { Authorization: "Bearer " + token, "Content-Type": "application/scim+json" };
   expect((await page.request.get(GATEWAY + base + "/Users", { headers: scimHeaders })).status()).toBe(401);
-  await section.getByRole("switch", { name: "启用 Enterprise Directory E2E" }).check();
+  await section.getByRole("switch", { name: "启用 Enterprise Directory E2E" }).click();
   await expect(section.getByRole("switch", { name: "停用 Enterprise Directory E2E" })).toBeChecked();
   const userResponse = await page.request.post(GATEWAY + base + "/Users", { headers: scimHeaders, data: {
     schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"], externalId: "employee-e2e-1",
@@ -159,6 +162,15 @@ test("管理员目录连接驱动真实 SCIM 用户同步", async ({ page }) => 
   await expect(assignments).toContainText("人工固定");
   detail = await (await page.request.get(detailPath, { headers })).json();
   expect(detail.users[0]).toMatchObject({team_id: "", mode: "manual"});
+  // 同步用户的实际密钥必须能访问数据面；后续 SCIM 删除验证撤权，而非只检查目录 active 字段。
+  const approvedBudget = await page.request.post(GATEWAY + "/user/update", {headers, data: {user_id: detail.users[0].user_id, max_budget: 10}});
+  expect(approvedBudget.status(), await approvedBudget.text()).toBe(200);
+  const provisionedKey = await page.request.post(GATEWAY + "/key/generate", {headers, data: {user_id: detail.users[0].user_id, key_alias: "scim-provisioned-e2e"}});
+  expect(provisionedKey.status(), await provisionedKey.text()).toBe(200);
+  const employeeKey = (await provisionedKey.json()).key;
+  const employeeRequest = {headers: {Authorization: "Bearer " + employeeKey}, data: {model: "gpt-4o-mini", messages: [{role: "user", content: "Verify provisioned user access"}]}};
+  const allowed = await page.request.post(GATEWAY + "/v1/chat/completions", employeeRequest);
+  expect(allowed.status(), await allowed.text()).toBe(200);
   await scim.getByLabel("归属模式").selectOption("auto");
   await scim.getByRole("button", { name: "保存用户归属" }).click();
   await expect(assignments).toContainText(team.team_id);
@@ -172,6 +184,10 @@ test("管理员目录连接驱动真实 SCIM 用户同步", async ({ page }) => 
   expect((await page.request.delete(GATEWAY + base + "/Users/" + user.id, { headers: scimHeaders })).status()).toBe(204);
   const stopped = await page.request.get(GATEWAY + base + "/Users/" + user.id, { headers: scimHeaders });
   expect((await stopped.json()).active).toBe(false);
+  const blocked = await page.request.post(GATEWAY + "/v1/chat/completions", employeeRequest);
+  expect([401, 403], "SCIM deactivation must revoke data-plane access").toContain(blocked.status());
+  const removedKey = await page.request.post(GATEWAY + "/key/delete", {headers, data: {keys: [employeeKey]}});
+  expect(removedKey.status(), await removedKey.text()).toBe(200);
   expect((await page.request.delete(GATEWAY + base + "/Groups/" + group.id, { headers: scimHeaders })).status()).toBe(204);
   await expect(scim.getByLabel("SCIM 同步凭据")).toHaveCount(0);
   await scim.getByRole("button", {name:"关闭配置"}).click();
@@ -185,9 +201,9 @@ test("管理员目录连接驱动真实 SCIM 用户同步", async ({ page }) => 
   await englishSCIM.getByRole("button", { name: "Load directory assignments" }).click();
   await expect(englishSCIM.getByLabel("Mapping priority")).toBeVisible();
   await expect(englishSCIM.getByRole("list", { name: "User assignments" })).toBeVisible();
-  await expect(english.getByRole("switch", { name: "Disable Enterprise Directory E2E" })).toBeChecked();
   await expect(englishSCIM.getByLabel("SCIM credential")).toHaveCount(0);
   await page.keyboard.press("Escape");
+  await expect(english.getByRole("switch", { name: "Disable Enterprise Directory E2E" })).toBeChecked();
   const englishArchiveOverview = english.getByRole("region", { name: "Qiniu Kodo billing archive" });
   const englishArchive = page.getByRole("dialog", {name:"Configure Kodo archive"});
   await english.getByRole("tab", { name: "Log settings" }).click();
@@ -284,8 +300,8 @@ test("归档调度配置驱动真实计费入队并保留停用积压", async ({
     await archiveOverview.getByRole("button", {name:"配置 Kodo 归档"}).click();
     await archive.getByRole("button", {name: "加载配置与状态"}).click();
     await expect(archive.getByLabel("归档队列")).toContainText("待处理 " + ((before.counts.pending ?? 0) + 1));
-    await archive.getByRole("button", {name: "配置 Kodo 归档"}).click();
-    await archive.getByRole("switch", {name: "启用计费日志归档"}).click();
+    await page.keyboard.press("Escape");
+    await archiveOverview.getByRole("switch", {name: "启用计费日志归档"}).click();
     await expect(archiveOverview.getByRole("switch", {name: "启用计费日志归档"})).not.toBeChecked();
     const disabledCall = await page.request.post(GATEWAY + "/v1/chat/completions", {headers: {Authorization: "Bearer " + key}, data: {model: "gpt-4o-mini", messages: [{role: "user", content: "Verify archive disabled"}]}});
     expect(disabledCall.status(), await disabledCall.text()).toBe(200);
