@@ -161,7 +161,7 @@ func TestPriceLocalListingRoutes(t *testing.T) {
 		t.Fatal("本地模型记录丢失")
 	}
 	h.ok(http.MethodPost, "/price/model/listing", admin, map[string]any{"id": "route-market-model", "delisted": false})
-	h.ok(http.MethodDelete, "/price/model", admin, map[string]any{"id": "route-market-model"})
+	h.ok(http.MethodPost, "/price/model/listing", admin, map[string]any{"id": "route-market-model", "delisted": true})
 	if r := h.do(http.MethodPost, "/price/model/listing", admin, map[string]any{"id": "route-market-model", "delisted": "true"}); r.status != 400 {
 		t.Fatal(r.describe())
 	}

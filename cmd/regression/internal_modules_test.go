@@ -263,26 +263,17 @@ func TestInternalLiveUnavailableBoundary(t *testing.T) {
 	if n, err := client.HitTPM("key", 7); err != nil || n != 0 {
 		t.Fatalf("无 Redis 时 TPM 计数错误: n=%d err=%v", n, err)
 	}
-	if err := client.ChargeSpend("key/id", 1.25); err != nil || client.HotSpend("key/id") != 0 {
-		t.Fatalf("无 Redis 时热花费未降级: err=%v", err)
-	}
-	if len(client.PeekSpend()) != 0 || len(client.TakeSpend()) != 0 {
-		t.Fatal("无 Redis 时花费队列应为空")
-	}
-	if err := client.AckSpend(map[string]float64{"key/id": 1}); err != nil || client.ClearSpendQueue() != nil {
-		t.Fatalf("无 Redis 时花费确认或清空失败: %v", err)
+	if client.HotSpend("key/id") != 0 {
+		t.Fatal("无 Redis 时热花费读取应返回零")
 	}
 	if err := client.EnqueueSpend(live.SpendLog{RequestID: "request-1"}); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("可靠花费入队未拒绝缺失 Redis: %v", err)
 	}
-	if err := client.EnqueueLog(live.SpendLog{RequestID: "request-1"}); err != nil {
-		t.Fatalf("兼容日志入队未按 nil 客户端降级: %v", err)
-	}
 	if rows, raw := client.PeekLogs(3); rows != nil || raw != nil {
 		t.Fatalf("无 Redis 时日志预览非空: rows=%#v raw=%#v", rows, raw)
 	}
-	if client.AckFlushed(nil, 1, "head") != nil || client.AckLogs(1) != nil || client.DrainLogs(1) != nil {
-		t.Fatal("无 Redis 时日志确认或提取未降级")
+	if client.AckFlushed(nil, 1, "head") != nil {
+		t.Fatal("无 Redis 时空日志确认应无副作用")
 	}
 	if value, ok := client.GetString(context.Background(), "pin"); ok || value != "" {
 		t.Fatalf("无 Redis 时字符串读取错误: %q/%v", value, ok)

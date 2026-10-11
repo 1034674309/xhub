@@ -181,7 +181,6 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | `GET /schedule/model_cost_map_reload/status` | `CostMapReloadStatus` | [mount.go](../../../internal/gateway/models/mount.go) |
 | `GET /price/catalog` | `PriceList` | [mount.go](../../../internal/gateway/models/mount.go) |
 | `POST /price/model` | `UpsertPriceModel` | [mount.go](../../../internal/gateway/models/mount.go) |
-| `DELETE /price/model` | `DeletePriceModel` | [mount.go](../../../internal/gateway/models/mount.go) |
 | `POST /price/model/reset` | `ResetPriceModel` | [mount.go](../../../internal/gateway/models/mount.go) |
 | `POST /price/provider` | `UpsertPriceProvider` | [mount.go](../../../internal/gateway/models/mount.go) |
 | `DELETE /price/provider` | `DeletePriceProvider` | [mount.go](../../../internal/gateway/models/mount.go) |

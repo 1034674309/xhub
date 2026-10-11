@@ -24,8 +24,8 @@ const (
 	priceListingNS  = "price_listing"
 	// priceProviderNS holds one row per hand-added supplier, keyed by slug.
 	priceProviderNS = "price_provider"
-	// priceRemovedNS holds the ids an operator deleted from the catalog.
-	priceRemovedNS = "price_removed"
+	// priceRemovedProviderNS 保存内置供应商的当前删除状态，防止重启后重新出现。
+	priceRemovedProviderNS = "price_removed_provider"
 )
 
 var logTraceOncePrice sync.Once
@@ -53,9 +53,8 @@ var textFields = []string{
 	"upstream_model",
 	"supplier_name",
 	"mode",
-	// 控制台价格下拉写入执行类型 ID；保留旧 endpoint_type 字段兼容历史目录。
+	// 控制台价格下拉只写入当前执行类型 ID，不接受旧手工字段别名。
 	"endpoint_id",
-	"endpoint_type",
 	"source",
 	"max_input_tokens",
 	"max_output_tokens",
@@ -97,22 +96,6 @@ func LoadPriceOverrides(s Host) {
 			}
 		}
 	}
-	// 旧版删除迁移为下架，恢复完整基线并保留既有手工价格。
-	if removed, err := st.ListConfig(priceRemovedNS); err == nil {
-		for id, raw := range removed {
-			if raw != true {
-				continue
-			}
-			if _, exists := catalog.ModelRow(id); !exists {
-				if row, ok := catalog.BaselineModel(id); ok {
-					catalog.SetModel(id, row)
-				}
-			}
-			if err := st.PutConfig(priceListingNS, id, true); err == nil {
-				_ = st.DeleteConfig(priceRemovedNS, id)
-			}
-		}
-	}
 	rows, err := st.ListConfig(priceModelNS)
 	if err != nil {
 		util.Error("price overrides unreadable: %v", err)
@@ -148,7 +131,7 @@ func LoadPriceOverrides(s Host) {
 	}
 	// A hand-added supplier that the operator removed is not stored again, so
 	// only the embedded ones need the provider tombstone.
-	if removed, err := st.ListConfig(priceRemovedNS + "_provider"); err == nil {
+	if removed, err := st.ListConfig(priceRemovedProviderNS); err == nil {
 		for slug, raw := range removed {
 			if gone, ok := raw.(bool); ok && gone {
 				catalog.RemoveProvider(slug)
@@ -169,12 +152,11 @@ func PriceList(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	rows := catalog.CostMap()
 	overrides := storedKeys(s, priceModelNS)
-	removed := storedKeys(s, priceRemovedNS)
 	listings := map[string]any{}
 	if s.RecordStore() != nil {
 		listings, _ = s.RecordStore().ListConfig(priceListingNS)
 	}
-	models := make([]map[string]any, 0, len(rows)+len(removed))
+	models := make([]map[string]any, 0, len(rows))
 	for id, row := range rows {
 		entry := make(map[string]any, len(row)+3)
 		for k, v := range row {
@@ -185,17 +167,6 @@ func PriceList(s Host, w http.ResponseWriter, r *http.Request) {
 		entry["overridden"] = overrides[id]
 		entry["delisted"] = listings[id] == true
 		models = append(models, entry)
-	}
-	// A baseline row the operator deleted is gone from the live map, so the
-	// console learns about it from the tombstone. Keeping it in the list is what
-	// makes the deletion undoable.
-	for id := range removed {
-		if _, live := rows[id]; live {
-			continue
-		}
-		models = append(models, map[string]any{
-			"id": id, "baseline": true, "overridden": false, "removed": true,
-		})
 	}
 	sort.Slice(models, func(i, j int) bool {
 		return str(models[i]["id"]) < str(models[j]["id"])
@@ -268,34 +239,20 @@ func UpsertPriceModel(s Host, w http.ResponseWriter, r *http.Request) {
 		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	// An id that was deleted and is now being written back is live again.
-	if s.RecordStore().DeleteConfig(priceRemovedNS, id) != nil {
-		util.Debug("price tombstone for %s was already absent", id)
-	}
 	catalog.SetModel(id, row)
 	util.WriteJSON(w, 200, map[string]any{"status": "success", "id": id})
 }
 
-// DeletePriceModel 兼容旧入口，将删除请求转为下架，完整价格与本地记录保留。
-// 参数为宿主和HTTP请求响应；返回HTTP状态；由旧客户端调用，与上下架接口使用相同持久化规则。
-func DeletePriceModel(s Host, w http.ResponseWriter, r *http.Request) { setPriceListing(s, w, r, true) }
-
 // SetPriceListing 设置本地模型上下架状态；参数为宿主和HTTP请求响应，正文含id及delisted布尔值。
 // 返回HTTP结果；管理列表调用。只改变广场展示，不删除价格或禁用已部署接口。
-func SetPriceListing(s Host, w http.ResponseWriter, r *http.Request) { setPriceListing(s, w, r, false) }
-
-// setPriceListing 校验并持久化上下架；legacy表示旧删除入口，默认下架。
-// 返回HTTP结果；被管理入口调用。未知模型404，错误输入400，数据库写入失败500，无价格清理副作用。
-func setPriceListing(s Host, w http.ResponseWriter, r *http.Request, legacy bool) {
+// 未知模型404，错误输入400，数据库写入失败500，无价格清理副作用。
+func SetPriceListing(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
 	body := readMap(r)
 	id := strings.TrimSpace(str(body["id"]))
 	delisted, valid := body["delisted"].(bool)
-	if legacy {
-		delisted, valid = true, true
-	}
 	if id == "" || !valid {
 		util.WriteError(w, 400, "invalid_request", "id and boolean delisted are required")
 		return
@@ -366,7 +323,7 @@ func UpsertPriceProvider(s Host, w http.ResponseWriter, r *http.Request) {
 		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	if err := s.RecordStore().DeleteConfig(priceRemovedNS+"_provider", slug); err != nil {
+	if err := s.RecordStore().DeleteConfig(priceRemovedProviderNS, slug); err != nil {
 		util.Debug("provider tombstone for %s was already absent", slug)
 	}
 	catalog.SetProvider(slug, row)
@@ -388,7 +345,7 @@ func DeletePriceProvider(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if catalog.IsBaselineProvider(slug) {
-		if err := s.RecordStore().PutConfig(priceRemovedNS+"_provider", slug, true); err != nil {
+		if err := s.RecordStore().PutConfig(priceRemovedProviderNS, slug, true); err != nil {
 			util.WriteError(w, 500, "internal", err.Error())
 			return
 		}

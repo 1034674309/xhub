@@ -35,7 +35,6 @@ describe("市场目录及内部接入", () => {
       { feed_unavailable: true },
       { retirement_at: "2020-01-01" },
       { market_catalog: false },
-      { removed: true },
     ])
       expect(marketSale(row(fields))).toBe(false);
     expect(marketRetired(row({ retirement_at: "invalid" }))).toBe(false);

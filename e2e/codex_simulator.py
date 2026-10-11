@@ -6,7 +6,7 @@ from acceptance import Dataset, load_manifest
 
 
 def resolve_billing_identity(dataset, key):
-    """用途：为未显式绑定团队的个人密钥解析调用时计费归属；参数为数据集客户端和密钥响应，返回保留显式字段并增加 billing_* 快照的副本。
+    """用途：为个人密钥解析调用时计费归属；参数为数据集客户端和密钥响应，返回保留显式字段并增加 billing_* 快照的副本。
 
     Playwright 的临时个人密钥调用此函数；它从 /user/info 的唯一成员关系读取团队和组织。
     无团队时两项均为空，多团队或不完整响应违反当前单团队契约并抛 AssertionError；不修改输入。
@@ -14,8 +14,11 @@ def resolve_billing_identity(dataset, key):
     resolved = dict(key)
     resolved["billing_team_id"] = key.get("team_id") or ""
     resolved["billing_organization_id"] = key.get("organization_id") or ""
-    if key.get("owner_type") != "personal" or resolved["billing_team_id"]:
+    if key.get("owner_type") != "personal":
         return resolved
+    # 创建响应的团队字段可能是旧快照，且不携带组织；个人凭证必须按调用时成员关系核对。
+    resolved["billing_team_id"] = ""
+    resolved["billing_organization_id"] = ""
     user_id = key.get("user_id")
     if not user_id:
         raise AssertionError("个人密钥缺少 user_id，无法解析计费归属")

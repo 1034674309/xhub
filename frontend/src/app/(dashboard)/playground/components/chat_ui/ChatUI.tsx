@@ -207,15 +207,8 @@ const ChatUI: React.FC<ChatUIProps> = ({
   // 选择状态使用真实公开路径；同一表单协议可以对应 adapted 和 bypass 两个入口。
   const [endpointPath, setEndpointPath] = useState<string | null>(() => {
     if (simplified) return null;
-    const saved = sessionStorage.getItem("endpointPath");
-    if (saved) return saved;
-    // 兼容旧会话仅保存协议的格式；取得模型目录后仍校验路径是否属于该模型。
-    const legacy = sessionStorage.getItem("endpointType");
-    return legacy === EndpointType.RESPONSES
-      ? "/v1/responses"
-      : legacy === EndpointType.CHAT
-        ? "/v1/chat/completions"
-        : null;
+    // 只恢复当前真实路径，协议枚举不能代替用户选择的部署入口。
+    return sessionStorage.getItem("endpointPath");
   });
   const selectedModelInfo = modelInfo.find((model) => model.model_group === selectedModel);
   const supportedEndpoints = modelEndpoints(selectedModelInfo);
@@ -363,20 +356,16 @@ const ChatUI: React.FC<ChatUIProps> = ({
     } catch {
       // Storage full or unavailable — non-critical, skip persisting.
     }
-    if (endpointType !== null) sessionStorage.setItem("endpointType", endpointType);
-    else if (!selectedModel) sessionStorage.removeItem("endpointType");
     if (!simplified) {
       if (endpointPath) sessionStorage.setItem("endpointPath", endpointPath);
       else sessionStorage.removeItem("endpointPath");
     }
     sessionStorage.setItem("selectedTags", JSON.stringify(selectedTags));
-    sessionStorage.removeItem("selectedVectorStores");
     sessionStorage.setItem("selectedGuardrails", JSON.stringify(selectedGuardrails));
     sessionStorage.setItem("selectedPolicies", JSON.stringify(selectedPolicies));
     sessionStorage.setItem("selectedMCPServers", JSON.stringify(selectedMCPServers));
     sessionStorage.setItem("mcpServerToolRestrictions", JSON.stringify(mcpServerToolRestrictions));
     sessionStorage.setItem("selectedVoice", selectedVoice);
-    sessionStorage.removeItem("selectedMCPTools"); // Clean up old key
 
     if (!simplified) {
       sessionStorage.setItem("streamingEnabled", JSON.stringify(streamingEnabled));

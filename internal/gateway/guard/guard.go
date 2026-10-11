@@ -205,38 +205,10 @@ func findingJSON(g map[string]any, action string, redacted bool) map[string]any 
 	}
 }
 
-// evalNamed 兼容旧单规则调试：优先指定规则，未找到时使用首条默认规则，无规则时放行。
-// 参数：s：配置和存储宿主；name：名称或 ID，空串表示默认规则；text：待检查文本。
-// 返回：action：执行动作，失败时 block；out：原文或修改后的文本。
-// 调用：兼容入口及 guard_test.go；实际数据面使用 Evaluate 执行整条规则链。
-// 测试：TestEvalNamedRunsTheAskedRuleAndOtherwiseTheDefault。
-func evalNamed(s Host, name, text string) (action, out string) {
-	if name != "" {
-		for _, g := range listGuardrails(s) {
-			n := str(g["guardrail_name"])
-			if n == "" {
-				n = str(g["name"])
-			}
-			if n == name || str(g["id"]) == name || str(g["guardrail_id"]) == name {
-				return matchGuardrail(g, text)
-			}
-		}
-	}
-	for _, g := range listGuardrails(s) {
-		if boolOf(g["default_on"]) {
-			return matchGuardrail(g, text)
-		}
-		if params, _ := g["litellm_params"].(map[string]any); boolOf(params["default_on"]) {
-			return matchGuardrail(g, text)
-		}
-	}
-	return "allow", text
-}
-
-// listGuardrails 合并 YAML、当前及历史 KV 规则，检查名称歧义、继承全局跳过设置并排序。
+// listGuardrails 合并 YAML 和唯一当前 KV 空间规则，检查名称歧义、继承全局跳过设置并排序。
 // 参数：s：配置和存储宿主；无 KV 时仍加载 YAML。
 // 返回：可执行规则列表；存储错误或歧义配置返回默认拦截哨兵，无配置返回空列表。
-// 调用：Apply、Evaluate、evalNamed；管理列表使用 storedRules。
+// 调用：Apply、Evaluate；管理列表使用 storedRules。
 // 测试：guard_regression_test.go、engine_test.go。
 func listGuardrails(s Host) []map[string]any {
 	if s == nil || s.RecordStore() == nil {
@@ -247,14 +219,12 @@ func listGuardrails(s Host) []map[string]any {
 		return out
 	}
 	out := configuredRules(s)
-	for _, kind := range []string{"guardrails", "guardrail"} {
-		list, err := s.RecordStore().ListKV(kind)
-		if err != nil {
-			util.Error("guardrail lookup failed kind=%s err=%v", kind, err)
-			return []map[string]any{{"name": "guardrail_store_unavailable", "default_on": true, "guardrail": "always_block"}}
-		}
-		out = append(out, list...)
+	list, err := s.RecordStore().ListKV("guardrails")
+	if err != nil {
+		util.Error("guardrail lookup failed kind=guardrails err=%v", err)
+		return []map[string]any{{"name": "guardrail_store_unavailable", "default_on": true, "guardrail": "always_block"}}
 	}
+	out = append(out, list...)
 	if out == nil {
 		out = []map[string]any{}
 	}
@@ -262,20 +232,6 @@ func listGuardrails(s Host) []map[string]any {
 	effectiveDefaults(s, out)
 	sortRules(out)
 	return out
-}
-
-// matchGuardrail 把单段文本包装成协议正文，通过统一执行器运行一条规则。
-// 参数：g：完整规则；text：待检查文本，包括空串。
-// 返回：action：规则动作，执行失败则 block；out：原文或改写后的 text。
-// 调用：evalNamed 和兼容单元测试。
-// 测试：guard_test.go。
-func matchGuardrail(g map[string]any, text string) (action, out string) {
-	body := map[string]any{"text": text}
-	action, _, err := runRule(g, body)
-	if err != nil {
-		return "block", text
-	}
-	return action, str(body["text"])
 }
 
 // extraWords 规范化配置中的字符串或字符串数组，忽略不支持的类型及动态数组中的空值。
@@ -352,7 +308,7 @@ func visitRequestText(body map[string]any, visit func(string) string) {
 // ruleIdentifies 判断选择器是否匹配规则的名称或任一历史 ID。
 // 参数：g：规则；name：客户端指定名称或 ID。
 // 返回：bool：匹配且名称非空时为真。
-// 调用：Evaluate、Manage、evalNamed。
+// 调用：Evaluate、Manage。
 // 测试：engine_test.go 的选择器及重名测试。
 func ruleIdentifies(g map[string]any, name string) bool {
 	if name == "" {
@@ -364,7 +320,7 @@ func ruleIdentifies(g map[string]any, name string) bool {
 // preCallMode 判断历史或多值模式是否包含可执行的请求前阶段。
 // 参数：value：mode 动态值；缺失沿用历史请求前行为。
 // 返回：bool：pre_call 或兼容 redact 为真；响应阶段为假。
-// 调用：Evaluate、evalNamed。
+// 调用：Evaluate。
 // 测试：engine_test.go。
 func preCallMode(value any) bool {
 	if value == nil {

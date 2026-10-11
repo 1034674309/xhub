@@ -200,10 +200,10 @@ func asFloat(value any) *float64 {
 }
 
 // ModelsURL 生成供应商首选模型目录地址，保留自定义地址的路径前缀和查询参数。
-// 参数 provider：兼容旧调用方的提示，不参与地址选择；base：保存的 API 根地址。
+// 参数 base：保存的 API 根地址，供应商身份不参与 URL 推断。
 // 返回：目录 URL；已以 /models 结尾的地址保持原路径，非法地址留给 fetchCatalog 报错。
 // 调用：ListBuiltin；测试：builtin_test.go、discovery_test.go。
-func ModelsURL(provider, base string) string {
+func ModelsURL(base string) string {
 	u, err := url.Parse(strings.TrimSpace(base))
 	if err != nil {
 		return strings.TrimSpace(base)
@@ -243,7 +243,7 @@ func ListBuiltin(s Host, w http.ResponseWriter, r *http.Request) {
 	var items []CatalogModel
 	var err error
 	if source.discover {
-		items, err = fetchCatalog(r.Context(), ModelsURL("", source.spec.Base), source.key)
+		items, err = fetchCatalog(r.Context(), ModelsURL(source.spec.Base), source.key)
 	}
 	items = mergeCatalogModels(items, providerregistry.CatalogModels()[source.catalogID])
 	if err != nil {

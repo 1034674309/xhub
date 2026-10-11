@@ -36,6 +36,19 @@ test("official Ark credential saves edits and calls its native task model", asyn
     model_info: { transport: "ark_contents_generation", endpoint_types: ["bypass:ark-video"] },
   });
   const id = (await saved.json()).model_info.id;
+  const missingProtocol = credential + "-missing-protocol";
+  expect((await page.request.post(GATEWAY + "/credentials", { headers, data: {
+    credential_name: missingProtocol, credential_values: { api_base: UPSTREAM, api_key: "sk-fake" },
+  } })).status()).toBe(200);
+  try {
+    const invalid = await page.request.patch(GATEWAY + "/model/" + id + "/update", { headers, data: {
+      litellm_params: { litellm_credential_name: missingProtocol },
+    } });
+    expect(invalid.status(), "未声明协议的凭据不能借助历史默认行为调用模型").toBe(400);
+    expect((await invalid.json()).error.message).toContain("protocol");
+  } finally {
+    expect((await page.request.delete(GATEWAY + "/credentials/" + missingProtocol, { headers })).status()).toBe(200);
+  }
   await page.reload();
   await stableGoto(page, "/models-and-endpoints");
   await page.getByRole("tab", { name: t("pages.models.all") }).click();

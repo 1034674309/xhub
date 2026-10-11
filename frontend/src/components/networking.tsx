@@ -225,7 +225,7 @@ export interface CredentialItem {
   credential_name: string;
   credential_values: any;
   credential_info: {
-    /** 认证表单唯一标识；区分共用协议的 OpenAI 和兼容端点，旧数据允许缺省。 */
+    /** 认证表单唯一标识；区分共用协议的 OpenAI 和兼容端点，直接通过协议 API 创建时可缺省。 */
     provider_id?: string;
     /** 编译时供应商实现目录 ID；不作为认证参数发送上游。 */
     catalog_id?: string;
@@ -570,10 +570,6 @@ export const getPriceCatalog = async (accessToken: string) => {
 
 export const upsertPriceModel = async (accessToken: string, body: Record<string, unknown>) => {
   return await apiClient.post(`/price/model`, { accessToken, body });
-};
-
-export const deletePriceModel = async (accessToken: string, id: string) => {
-  return await apiClient.delete(`/price/model`, { accessToken, body: { id } });
 };
 
 export const resetPriceModel = async (accessToken: string, id: string) => {

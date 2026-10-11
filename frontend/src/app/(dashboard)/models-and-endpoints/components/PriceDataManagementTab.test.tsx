@@ -9,7 +9,6 @@ vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({ default: () => ({ acce
 vi.mock("@/components/networking", () => ({
   getPriceCatalog: vi.fn().mockResolvedValue({ models: {}, providers: [] }),
   upsertPriceModel: vi.fn(),
-  deletePriceModel: vi.fn(),
   resetPriceModel: vi.fn(),
   upsertPriceProvider: vi.fn(),
   deletePriceProvider: vi.fn(),

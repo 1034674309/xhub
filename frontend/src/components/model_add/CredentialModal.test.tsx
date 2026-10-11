@@ -80,13 +80,29 @@ describe("CredentialModal", () => {
     await userEvent.click(screen.getByRole("button",{name:"Add model provider"}));
     expect(await screen.findByText("Required")).toBeVisible(); expect(submit).not.toHaveBeenCalled();
   });
-  /** 验证旧 slug 编辑正确填值、锁名称与类型，避免后台合并保留不同协议的旧认证；只改草稿，自动清理。 */
-  it("hydrates legacy slug credentials and locks provider identity", async () => {
-    renderModal({mode:"edit",existingCredential:{credential_name:"legacy",credential_info:{custom_llm_provider:"openai"},credential_values:{api_key:"legacy-secret",api_base:"https://legacy.example"}}});
-    expect(await screen.findByLabelText("OpenAI API Key")).toHaveValue("legacy-secret");
+  /** 前置当前协议 API 创建的凭据；验证回填认证、锁名称与类型，不修改存储；RTL 自动清理。 */
+  it("hydrates current protocol API credentials and locks provider identity", async () => {
+    renderModal({mode:"edit",existingCredential:{credential_name:"api-created",credential_info:{custom_llm_provider:"openai"},credential_values:{api_key:"current-secret",api_base:"https://current.example"}}});
+    expect(await screen.findByLabelText("OpenAI API Key")).toHaveValue("current-secret");
     expect(screen.getByLabelText("Provider name")).toBeDisabled();
     expect(screen.getByRole("combobox",{name:"Provider type"})).toBeDisabled();
   });
+  /** 前置当前 UI 保存的唯一身份；验证按 provider_id 回填，不把协议或显示名称当成身份；自动卸载清理。 */
+  it("hydrates the explicit provider form identity", async () => {
+    renderModal({mode:"edit",existingCredential:{credential_name:"ui-created",credential_info:{provider_id:"NewSupplier",custom_llm_provider:"new_supplier"},credential_values:{api_key:"current-secret"}}});
+    expect(await screen.findByLabelText("Supplier API Key")).toHaveValue("current-secret");
+    expect(screen.getByRole("combobox",{name:"Provider type"})).toHaveValue("New Supplier");
+  });
+  for (const info of [{custom_llm_provider:"New Supplier"}, {provider_id:"new_supplier",custom_llm_provider:"new_supplier"}]) {
+    /** 前置显示名称或错误显式身份；验证不自动修复、不降级匹配且禁止保存，草稿随 RTL 清理。 */
+    it("does not repair invalid provider identity: "+JSON.stringify(info), async () => {
+      const submit=vi.fn();renderModal({mode:"edit",onSubmit:submit,existingCredential:{credential_name:"invalid",credential_info:info,credential_values:{api_key:"secret"}}});
+      await waitFor(()=>expect(screen.queryByText("Loading provider fields...")).not.toBeInTheDocument());
+      expect(screen.queryByLabelText("Supplier API Key")).not.toBeInTheDocument();
+      expect(screen.getByRole("button",{name:"Save model provider"})).toBeDisabled();
+      expect(submit).not.toHaveBeenCalled();
+    });
+  }
   /** 验证无法在弹窗完成授权的 ChatGPT 订阅账户不进入可创建目录；无外部账户，自动清理。 */
   it("omits ChatGPT Subscription from the provider picker", async () => {
     renderModal();
@@ -139,7 +155,7 @@ it("validates and persists a supplier directory separately from the connection n
 
 /** 前置已保存七牛目录连接；验证编辑回填并显式提交空目录以解除绑定；只改草稿，自动卸载清理。 */
 it("hydrates and clears an existing supplier directory", async () => {
- const submit=vi.fn();renderModal({mode:"edit",onSubmit:submit,existingCredential:{credential_name:"legacy",credential_info:{custom_llm_provider:"openai",catalog_id:"qiniu"},credential_values:{api_key:"legacy-secret",api_base:"https://legacy.example"}}});
+ const submit=vi.fn();renderModal({mode:"edit",onSubmit:submit,existingCredential:{credential_name:"current",credential_info:{provider_id:"OpenAI",custom_llm_provider:"openai",catalog_id:"qiniu"},credential_values:{api_key:"current-secret",api_base:"https://current.example"}}});
  const input=await screen.findByLabelText("Provider catalog ID");expect(input).toHaveValue("qiniu");
  await userEvent.clear(input);await userEvent.click(screen.getByRole("button",{name:"Save model provider"}));
  await waitFor(()=>expect(submit).toHaveBeenCalledWith(expect.objectContaining({catalog_id:""})));

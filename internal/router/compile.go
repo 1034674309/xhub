@@ -31,13 +31,13 @@ func Compile(selected RouteSettings, store ConfigReader, models []config.ModelEn
 		return fail(err)
 	}
 	selected.RoutingGroups = groups
-	// 旧模板没有组字段才读取历史全局组，新模板空数组表示没有模板组。
+	// 模板未配置组时使用当前全局组；显式空数组表示隔离全局组，并非旧数据迁移。
 	if _, local := selected.Settings["routing_groups"]; !local {
-		legacy, err := store.ListConfig("routing_groups")
+		globalGroups, err := store.ListConfig("routing_groups")
 		if err != nil {
 			return fail(err)
 		}
-		for name, raw := range legacy {
+		for name, raw := range globalGroups {
 			group, err := ParseGroup(raw)
 			if err != nil {
 				return fail(err)

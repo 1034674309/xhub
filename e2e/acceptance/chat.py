@@ -174,21 +174,10 @@ class ChatCases:
         self.save()
 
     def verify_glm_model(self):
-        """用途：验收 GLM 三轮会话；无参数，返回是否严格复验旧会话，供模型阶段调用；旧基线补齐模型和白名单，复验失败才发真实请求，目录缺模型抛断言。"""
+        """用途：验收 GLM 三轮会话；无参数，返回是否严格复验已有会话，供模型阶段调用；基线缺部署立即失败，不修改租户授权，复验失败才发真实请求。"""
         definition = next(row for row in self.data["models"] if row["id"] == "qiniu-glm")
         if not any(row["public_name"] == definition["public_name"] for row in self.state["deployments"]):
-            # 旧保留基线缺少 GLM 时只新增明确的模型和白名单，不重建租户或清理原数据。
-            provider = next(row for row in self.data["providers"] if row["id"] == definition["provider"])
-            catalog = self.provider_catalog(provider)
-            if definition["upstream_model"] not in catalog["model_ids"]:
-                raise AssertionError("七牛目录缺少指定 GLM 模型：" + definition["upstream_model"])
-            self.deployment(definition, provider)
-            models = list(dict.fromkeys(row["public_name"] for row in self.state["deployments"]
-                                        if not row.get("temporary")))
-            for team in self.state["teams"]:
-                self.api("/team/update", {"team_id": team["id"], "models": models})
-            for owner in self.state["keys"]:
-                self.api("/key/update", {"key": owner["token_id"], "models": models})
+            raise AssertionError("验收基线缺少 GLM 部署，请重新运行 make testdata：" + definition["public_name"])
         key = {**self.state["keys"][0], "call_model": definition["public_name"], "profile": "qiniu-only"}
         self.progress("  [模型阶段 2/6] GLM：Codex 三轮会话")
         revalidated = self.codex_conversation(key, revalidate=True) is not None
@@ -198,4 +187,3 @@ class ChatCases:
         self.report["checks"].append({"name": "glm-codex-multi-turn", "model": key["call_model"], "passed": True})
         self.save()
         return revalidated
-

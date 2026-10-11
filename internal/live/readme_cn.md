@@ -24,9 +24,9 @@
 
 ### 花费交接与字符串
 
-- `SpendRef(kind, id)` 生成 IAM 配额检查使用的热花费标识。`ChargeSpend`、`HotSpend`、`PeekSpend`、`AckSpend`、`TakeSpend`、`ClearSpendQueue` 提供旧聚合操作；只有查看后确认能在数据库失败时保留数据。
-- `EnqueueSpend(SpendLog)` 要求 request ID 和合法主体增量。Lua 原子追加日志并增加所有主体热花费。request ID 是永久幂等键：重试成功但不修改状态，第一次 payload 生效。`EnqueueLog` 只排入日志。
-- `PeekLogs(n)` 返回解码值和原始值但不删除，并在首个损坏项处停止。PostgreSQL 提交后，`AckFlushed(deltas, n, head)` 原子校验所见队头、扣减热花费并裁剪前缀；队头变化时不操作。`AckLogs`、`DrainLogs` 是破坏性更强的底层接口。
+- `SpendRef(kind, id)` 生成热花费标识；`HotSpend(id)` 读取尚未确认的金额，不消费队列。严格预算准入使用 IAM 持久化预占事务，不依靠读取失败返回零的遥测放行。
+- `EnqueueSpend(SpendLog)` 是唯一队列写入口，要求 request ID 和合法主体增量。Lua 原子追加日志并增加所有主体热花费。request ID 是永久幂等键：重试成功但不修改状态，第一次 payload 生效。免费和未计价事件同样入队，但不增加金额。
+- `PeekLogs(n)` 返回解码值和原始值但不删除，并在首个损坏项处停止。PostgreSQL 提交后，`AckFlushed(deltas, n, head)` 原子校验所见队头、扣减热花费并裁剪前缀；队头变化时不操作。不提供破坏性取出或独立聚合花费交接。
 - `GetString(ctx, key)` 只对存在且可读的键返回 `(value, true)`；`SetString(ctx, key, value, ttl)` 写 TTL 字符串，nil 客户端静默跳过。
 
 调用方包括推理准入和路由、用量刷写器、IAM 配额检查及部署遥测；HTTP 路由由 gateway 包注册。
@@ -41,7 +41,7 @@
 
 ### 可靠用量交接
 
-`EnqueueSpend` 先验证并序列化事件，再由脚本同时更新日志队列、去重集合、待刷集合和主体浮点计数。IAM 在 `QuotaPath` 中加入热值。刷写顺序是查看、数据库提交、确认：IAM 事务失败时 Redis 状态保留，成功后才进行队头校验确认。IAM 也按 `request_id` 去重，因此提交与确认之间崩溃后重放仍安全。
+`EnqueueSpend` 先验证并序列化事件，再由脚本同时更新日志队列、请求去重哈希和主体浮点计数。不需要独立的待刷主体索引，事件自身携带全部归属。IAM 在 `QuotaPath` 中加入热值。刷写顺序是查看、数据库提交、确认：IAM 事务失败时 Redis 状态保留，成功后才进行队头校验确认。IAM 也按 `request_id` 去重，因此提交与确认之间崩溃后重放仍安全。
 
 遥测读取在 Redis 缺失时有意降级，若干可选方法接受 nil；原子准入和可靠排队必须有真实 Redis。入队成功不等待磁盘 fsync 或副本 quorum，Redis 持久化和保留策略是外部部署边界。
 
@@ -61,4 +61,4 @@
 
 ### `redis.go`
 
-定义 `Client`、`SpendLog`、键规则、连接生命周期、冷却/延迟/分钟遥测、旧花费计数、可靠队列操作和 TTL 字符串。脚本保证入队幂等与确认原子性；私有解析可忽略损坏遥测值，但绝不越过损坏的可靠队列项。
+定义 `Client`、`SpendLog`、键规则、连接生命周期、冷却/延迟/分钟遥测、未确认花费读取、可靠队列操作和 TTL 字符串。脚本保证入队幂等与确认原子性；私有解析可忽略损坏遥测值，但绝不越过损坏的可靠队列项。

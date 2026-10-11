@@ -93,12 +93,11 @@ export function marketMoney(value: number | null, currency = "$"): string {
 }
 
 /** 判断模型是否可在广场展示；参数为本地价格行，返回在售公开状态。
- * 广场和刷新提示共同调用；下架、退役、上游撤回和历史删除均隐藏，本地列表仍保留记录。 */
+ * 广场和刷新提示共同调用；下架、退役和上游撤回均隐藏，本地列表仍保留记录。 */
 export function marketSale(row: PriceCatalogRow): boolean {
   return (
     row.raw.market_catalog === true &&
     row.raw.private !== true &&
-    !row.removed &&
     !row.raw.delisted &&
     !row.raw.feed_unavailable &&
     !marketRetired(row)

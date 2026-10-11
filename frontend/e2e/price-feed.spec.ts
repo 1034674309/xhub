@@ -6,6 +6,9 @@ import { GATEWAY, loginAdmin, sessionBearer, stableGoto, t } from "./helpers";
 test("market refresh preserves local records and listing state", async ({ page }) => {
   await loginAdmin(page);
   const headers = { Authorization: "Bearer " + (await sessionBearer(page)) };
+  // 旧删除别名不能偷偷改变目录，当前页面只能通过明确上下架状态操作。
+  const retired = await page.request.delete(GATEWAY + "/price/model", { headers, data: { id: "e2e-market-chat" } });
+  expect(retired.status(), "废弃价格删除入口必须不可用").toBe(404);
   await stableGoto(page, "/price-data");
   await expect(page.getByRole("tab", { name: "模型供应商", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: t("Price Data Management"), exact: true }).click();

@@ -136,8 +136,6 @@ func call(h *priceHost, method, path string, body any) (int, map[string]any) {
 	switch {
 	case path == "/price/model" && method == http.MethodPost:
 		UpsertPriceModel(h, w, r)
-	case path == "/price/model" && method == http.MethodDelete:
-		DeletePriceModel(h, w, r)
 	case path == "/price/model/listing":
 		SetPriceListing(h, w, r)
 	case path == "/price/model/reset":
@@ -276,11 +274,11 @@ func TestPriceModelEditOverridesTheBaselineAndResetRestoresIt(t *testing.T) {
 	}
 }
 
-// TestPriceModelDeleteOfABaselineRowIsRemembered 验证旧删除入口仅下架，重载保留价格且可重新上架。
+// TestPriceModelListingSurvivesReload 验证下架接口在重载后保留价格且可重新上架。
 // 前置隔离数据库；验证完整价格及持久状态；测试结束清理数据库，不调用外部服务。
-func TestPriceModelDeleteOfABaselineRowIsRemembered(t *testing.T) {
+func TestPriceModelListingSurvivesReload(t *testing.T) {
 	h := &priceHost{store: openPriceStore(t), allow: true}
-	status, _ := call(h, http.MethodDelete, "/price/model", map[string]any{"id": "kimi-k2"})
+	status, _ := call(h, http.MethodPost, "/price/model/listing", map[string]any{"id": "kimi-k2", "delisted": true})
 	if status != 200 {
 		t.Fatal(status)
 	}
@@ -337,7 +335,7 @@ func TestPriceModelRejectsAMissingIdOrProvider(t *testing.T) {
 	if status, _ := call(h, http.MethodPost, "/price/model", map[string]any{"id": "x-one"}); status != http.StatusBadRequest {
 		t.Fatalf("a model with no provider was accepted: %d", status)
 	}
-	if status, _ := call(h, http.MethodDelete, "/price/model", map[string]any{}); status != http.StatusBadRequest {
+	if status, _ := call(h, http.MethodPost, "/price/model/listing", map[string]any{}); status != http.StatusBadRequest {
 		t.Fatalf("a delete with no id was accepted: %d", status)
 	}
 }
@@ -350,7 +348,7 @@ func TestPriceWritesNeedManage(t *testing.T) {
 	}{
 		{http.MethodGet, "/price/catalog", nil},
 		{http.MethodPost, "/price/model", map[string]any{"id": "a", "litellm_provider": "custom"}},
-		{http.MethodDelete, "/price/model", map[string]any{"id": "a"}},
+		{http.MethodPost, "/price/model/listing", map[string]any{"id": "a", "delisted": true}},
 		{http.MethodPost, "/price/provider", map[string]any{"litellm_provider": "a"}},
 		{http.MethodDelete, "/price/provider", map[string]any{"litellm_provider": "a"}},
 	}

@@ -95,6 +95,20 @@ class CodexAgentTests(unittest.TestCase):
         resolved = resolve_billing_identity(dataset, key)
         self.assertEqual((resolved["billing_team_id"], resolved["billing_organization_id"]), ("", ""))
 
+    def test_personal_key_old_snapshot_never_controls_billing(self):
+        """目的：旧团队快照、缺组织及退出团队均不能控制当前计费；前置三种个人密钥响应，验证权威成员关系和原输入不变，仅内存夹具无需清理。"""
+        for teams in ([], [{"team_id": "new-team", "organization_id": "new-org"}]):
+            for organization in ("", "old-org"):
+                with self.subTest(teams=teams, organization=organization):
+                    key = {**self.key, "owner_type": "personal", "organization_id": organization}
+                    original = copy.deepcopy(key)
+                    dataset = mock.Mock()
+                    dataset.api.return_value = ({"user_info": {"teams": teams}}, {})
+                    resolved = resolve_billing_identity(dataset, key)
+                    self.assertEqual(resolved["billing_team_id"], teams[0]["team_id"] if teams else "")
+                    self.assertEqual(resolved["billing_organization_id"], teams[0]["organization_id"] if teams else "")
+                    self.assertEqual(key, original)
+
     def test_personal_key_billing_identity_rejects_ambiguous_or_incomplete_membership(self):
         """目的：夹具不能猜测多个团队或接受缺字段成员关系；前置三种错误接口响应，验证明确失败，全部为内存样本无需清理。"""
         key = {**self.key, "owner_type": "personal", "team_id": "", "organization_id": ""}
@@ -160,8 +174,8 @@ class CodexAgentTests(unittest.TestCase):
             self.dataset.verify_acceptance_models()
         self.assertEqual(events, ["gpt"])
 
-    def test_upgrade_missing_glm_and_catalog_failure(self):
-        """目的：旧基线只补GLM部署与白名单，目录缺模型时停止；前置隔离内存资源，验证顺序与错误且不调用媒体，目录自动清理。"""
+    def test_missing_glm_rejects_without_upgrading_baseline(self):
+        """目的：缺GLM部署立即拒绝且不隐式升级基线；前置隔离内存资源，验证无目录探测、部署、授权写入或媒体调用，目录自动清理。"""
         self.dataset.state["deployments"] = [{"public_name": "gpt-5.6-sol"}]
         self.dataset.state["teams"] = [{"id": "team"}]
         self.dataset.verify_codex_agents = mock.Mock()
@@ -170,28 +184,13 @@ class CodexAgentTests(unittest.TestCase):
         self.dataset.codex_conversation = mock.Mock(side_effect=[None, {"turns": []}])
         self.dataset.verify_media_models = mock.Mock()
 
-        def add_glm(definition, provider):
-            """用途：模拟旧基线增加GLM；参数为定义和供应商，返回部署ID；仅修改内存状态，供升级分支测试。"""
-            self.assertEqual(provider["id"], "qiniu")
-            self.dataset.state["deployments"].append({"public_name": definition["public_name"]})
-            return "glm-deployment"
-
-        self.dataset.deployment = mock.Mock(side_effect=add_glm)
-        self.dataset.verify_acceptance_models()
-        self.assertEqual(self.dataset.api.call_args_list, [
-            mock.call("/team/update", {"team_id": "team", "models": ["gpt-5.6-sol", "z-ai/glm-5"]}),
-            mock.call("/key/update", {"key": "key", "models": ["gpt-5.6-sol", "z-ai/glm-5"]}),
-        ])
-        self.assertEqual(self.dataset.codex_conversation.call_count, 2)
-        self.assertEqual(self.dataset.codex_conversation.call_args.args[0]["call_model"], "z-ai/glm-5")
-        self.dataset.verify_media_models.assert_called_once()
-        self.dataset.state["deployments"] = [{"public_name": "gpt-5.6-sol"}]
-        self.dataset.provider_catalog.return_value = {"model_ids": []}
-        self.dataset.api.reset_mock()
-        self.dataset.verify_media_models.reset_mock()
-        with self.assertRaisesRegex(AssertionError, "缺少指定 GLM"):
+        self.dataset.deployment = mock.Mock()
+        with self.assertRaisesRegex(AssertionError, "基线缺少 GLM 部署"):
             self.dataset.verify_acceptance_models()
+        self.dataset.provider_catalog.assert_not_called()
+        self.dataset.deployment.assert_not_called()
         self.dataset.api.assert_not_called()
+        self.dataset.codex_conversation.assert_not_called()
         self.dataset.verify_media_models.assert_not_called()
 
     def test_manifest_invalid_agent_glm_and_order(self):

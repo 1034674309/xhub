@@ -42,7 +42,6 @@ func Module(h Host) util.Module {
 		// operator adds or edits from the console.
 		reg.Handle("GET /price/catalog", func(w http.ResponseWriter, r *http.Request) { PriceList(h, w, r) })
 		reg.Handle("POST /price/model", func(w http.ResponseWriter, r *http.Request) { UpsertPriceModel(h, w, r) })
-		reg.Handle("DELETE /price/model", func(w http.ResponseWriter, r *http.Request) { DeletePriceModel(h, w, r) })
 		reg.Handle("POST /price/model/listing", func(w http.ResponseWriter, r *http.Request) { SetPriceListing(h, w, r) })
 		reg.Handle("POST /price/model/reset", func(w http.ResponseWriter, r *http.Request) { ResetPriceModel(h, w, r) })
 		reg.Handle("POST /price/provider", func(w http.ResponseWriter, r *http.Request) { UpsertPriceProvider(h, w, r) })

@@ -12,7 +12,7 @@ import { Logo } from "@/components/molecules/logo/Logo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useT } from "@/i18n";
 
-/** 提供商弹窗参数：open 控制显示，mode 决定新建或编辑，existingCredential 为旧数据。
+/** 提供商弹窗参数：open 控制显示，mode 决定新建或编辑，existingCredential 为当前已保存凭据。
  * onSubmit 返回 false 或抛错时保留草稿；成功时由调用方关闭；onCancel 负责关闭弹窗。 */
 interface CredentialModalProps {
   open: boolean;
@@ -24,7 +24,8 @@ interface CredentialModalProps {
 
 /** 根据后台供应商定义渲染可搜索的连接表单。
  * 参数见 CredentialModalProps；返回弹窗。新建不预选类型，新建切换清除旧认证且保留名称。
- * 编辑兼容旧 slug/枚举值并固定类型，避免后台合并留下跨协议旧字段；异步保存期间禁止重复提交，错误保留当前输入并可重试。 */
+ * 编辑固定类型：优先使用表单 provider_id，API 创建的协议凭据按 custom_llm_provider 匹配元数据。
+ * 不把显示名称当作身份，不修复历史格式；异步保存期间禁止重复提交，错误保留当前输入并可重试。 */
 export default function CredentialModal({ open, onCancel, onSubmit, mode, existingCredential = null }: CredentialModalProps) {
   const t = useT();
   const isEdit = mode === "edit";
@@ -39,15 +40,17 @@ export default function CredentialModal({ open, onCancel, onSubmit, mode, existi
   } });
   const registry = useMountRegistry();
   const selection = useWatch({ control: form.control, name: "custom_llm_provider" });
-  const selected = providers?.find(p => p.provider === selection)
-    ?? providers?.find(p => p.litellm_provider === selection || p.provider_display_name === selection);
+  // provider_id 是表单身份，协议 slug 是当前 API 契约；显式身份无效时不能静默降级成另一供应商。
+  const selected = isEdit && !existingCredential?.credential_info.provider_id
+    ? providers?.find(p => p.litellm_provider === selection)
+    : providers?.find(p => p.provider === selection);
   // ChatGPT 订阅账户需要独立授权流程，当前弹窗无法完成连接，因此不放入可创建供应商目录。
   const options = useMemo(() => (providers ?? []).filter(p => p.provider !== "CHATGPT" && p.litellm_provider !== "chatgpt").map(p => ({
     label: p.provider_display_name, value: p.provider, sublabel: p.litellm_provider,
     icon: <Logo provider={p.litellm_provider} label={p.provider_display_name} className="size-5" />,
   })), [providers]);
 
-  // 默认值写入真实表单状态，保证未触碰字段也进入提交；旧数据和用户输入优先。
+  // 默认值写入真实表单状态，保证未触碰字段也进入提交；已保存值和用户输入优先。
   useEffect(() => {
     for (const field of selected?.credential_fields ?? []) {
       if (form.getValues(field.key) == null && field.default_value != null) {

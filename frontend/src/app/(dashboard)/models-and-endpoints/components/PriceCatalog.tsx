@@ -118,7 +118,6 @@ function ModelCard({
           {categoryLabel(row.category)}
         </Badge>
         {row.overridden && <Badge variant="secondary">{t("priceData.edited")}</Badge>}
-        {row.removed && <Badge variant="destructive">{t("priceData.removed")}</Badge>}
         {row.capabilities.map((capability) => (
           <Badge key={capability} variant="secondary">
             {t("priceCatalog." + capability)}

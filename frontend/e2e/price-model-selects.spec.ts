@@ -80,7 +80,6 @@ test("price model classifications use dropdowns and persist selections", async (
         litellm_provider: original.litellm_provider,
         mode: original.mode ?? null,
         endpoint_id: original.endpoint_id ?? null,
-        endpoint_type: original.endpoint_type ?? null,
         input_cost_per_token: original.input_cost_per_token ?? null,
       },
     });

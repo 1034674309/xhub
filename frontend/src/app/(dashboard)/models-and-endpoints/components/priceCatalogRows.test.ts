@@ -99,18 +99,20 @@ describe("priceCatalogRows", () => {
     ]);
   });
 
-  it("carries the baseline and override flags the page edits by", () => {
+  /** 前置当前来源、覆盖和上下架标记；验证当前状态保留且不生成历史删除态；纯函数无需清理。 */
+  it("carries current flags without a retired removal state", () => {
     const rows = priceCatalogRows(
       doc({
         "from-file": { mode: "chat", baseline: true, overridden: false },
         edited: { mode: "chat", baseline: true, overridden: true },
-        "removed-one": { baseline: true, overridden: false, removed: true },
+        "delisted-one": { baseline: true, overridden: false, delisted: true },
         added: { mode: "chat", baseline: false, overridden: false },
       }),
     );
     expect(rows.find((row) => row.id === "from-file")).toMatchObject({ baseline: true, overridden: false });
     expect(rows.find((row) => row.id === "edited")).toMatchObject({ baseline: true, overridden: true });
-    expect(rows.find((row) => row.id === "removed-one")).toMatchObject({ removed: true });
+    expect(rows.find((row) => row.id === "delisted-one")?.raw.delisted).toBe(true);
+    expect(rows[0]).not.toHaveProperty("removed");
     expect(rows.find((row) => row.id === "added")).toMatchObject({ baseline: false });
   });
 
@@ -222,10 +224,9 @@ describe("priceModelPayload", () => {
     expect(body).not.toHaveProperty("endpoint_id");
   });
 
-  /** 前置已有分类与历史别名；验证选择未设置会清除所有旧字段，避免重开恢复；纯函数无需清理。 */
-  it("clears existing mode and endpoint selections including the legacy alias", () => {
-    expect(
-      priceModelPayload({
+  /** 前置当前分类及无效旧别名；验证仅清除当前字段、不生成旧字段迁移补丁；纯函数无需清理。 */
+  it("clears current selections without writing retired aliases", () => {
+    const body = priceModelPayload({
         id: "legacy",
         provider: "custom",
         mode: "",
@@ -233,8 +234,9 @@ describe("priceModelPayload", () => {
         tokenRates: {},
         unitRates: {},
         original: { mode: "chat", endpoint_id: "chat", endpoint_type: "old" },
-      }),
-    ).toMatchObject({ mode: null, endpoint_id: null, endpoint_type: null });
+      });
+    expect(body).toMatchObject({ mode: null, endpoint_id: null });
+    expect(body).not.toHaveProperty("endpoint_type");
   });
 
   it("sends only rates changed while editing, including an intentional clear", () => {

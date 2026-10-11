@@ -454,11 +454,11 @@ func proxyModel(m config.ModelEntry) store.ProxyModel {
 	return store.ProxyModel{ID: id, ModelName: m.ModelName, Params: m.LiteLLMParams, Info: m.ModelInfo}
 }
 
-// LoadStored 在启动阶段把数据库部署合并进进程目录，并按最终完整目录清理历史权重引用。
+// LoadStored 在启动阶段把当前数据库部署合并进进程目录，不执行数据升级或修复。
 // 参数 s 提供尚未对外服务的模型目录和配置存储；调用方必须保证此时没有并发请求修改目录。
 // 返回：无。成功时数据库部署带上稳定 ID 和 db_model 标记；读取失败时保留配置目录并直接返回。
-// 调用场景：gateway.Server 启动。副作用包括补齐旧部署字段、修复默认权重和模板中的悬空部署 ID。
-// 边界：单行字段迁移失败会记录日志并继续装载；历史权重清理失败只记录错误，事务会回滚且不阻止服务启动。
+// 调用场景：gateway.Server 启动。仅修改内存目录，部署增删时的引用维护由管理事务负责。
+// 边界：空存储或读取失败直接返回；重复装载不会追加相同 ID，不回写运行时元数据。
 func LoadStored(s Host) {
 	if s.RecordStore() == nil {
 		return
@@ -471,19 +471,6 @@ func LoadStored(s Host) {
 		if row.Info == nil {
 			row.Info = map[string]any{}
 		}
-		changed := false
-		if _, ok := row.Info["disabled"].(bool); !ok {
-			row.Info["disabled"] = false
-			changed = true
-		}
-		before := len(row.Info)
-		stripModelOwnership(row.Info)
-		changed = changed || len(row.Info) != before
-		if changed {
-			if err := s.RecordStore().UpsertProxyModel(row); err != nil {
-				util.Error("stored model %s: %v", row.ID, err)
-			}
-		}
 		row.Info["id"] = row.ID
 		row.Info["db_model"] = true
 		if _, _, ok := findByID(*s.ModelTable(), row.ID); ok {
@@ -492,10 +479,6 @@ func LoadStored(s Host) {
 		*s.ModelTable() = append(*s.ModelTable(), config.ModelEntry{
 			ModelName: row.ModelName, LiteLLMParams: row.Params, ModelInfo: row.Info,
 		})
-	}
-	// 启动时目录已经包含 YAML 与数据库部署，可据此一次性删除停机期间遗留的部署引用。
-	if err := s.RecordStore().SaveModelDirectory(nil, "", append([]config.ModelEntry(nil), (*s.ModelTable())...)); err != nil {
-		util.Error("clean stored model weights: %v", err)
 	}
 }
 

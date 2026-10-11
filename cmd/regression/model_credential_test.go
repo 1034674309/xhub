@@ -43,6 +43,21 @@ func TestOfficialCredentialSupportsNativeModel(t *testing.T) {
 	info := map[string]any{"transport": "ark_contents_generation", "endpoint_types": []string{"bypass:ark-video"}, "pricing_source": "manual", "billing_mode": "token"}
 	created := h.ok(http.MethodPost, "/model/new", admin, map[string]any{"model_name": "official-model", "litellm_params": params, "model_info": info}).json()
 	id := stringField(created["model_info"].(map[string]any), "id")
+	// 无协议凭据不能因名字或历史默认行为获得任意部署权限；失败不污染已有模型。
+	h.ok(http.MethodPost, "/credentials", admin, map[string]any{"credential_name": "missing-protocol", "credential_values": map[string]any{"api_base": up.URL, "api_key": "saved-secret"}})
+	params["litellm_credential_name"] = "missing-protocol"
+	for _, path := range []string{"/model/new", "/model/" + id + "/update"} {
+		method := http.MethodPost
+		if strings.HasSuffix(path, "/update") {
+			method = http.MethodPatch
+		}
+		bad := h.do(method, path, admin, map[string]any{"model_name": "invalid-protocol", "litellm_params": params, "model_info": info})
+		if bad.status != 400 || !strings.Contains(errorMessage(bad), "protocol") {
+			t.Fatalf("空协议未拒绝: %s", bad.describe())
+		}
+	}
+	params["litellm_credential_name"] = "volcengine"
+	h.ok(http.MethodDelete, "/credentials/missing-protocol", admin, nil)
 	h.ok(http.MethodPatch, "/model/"+id+"/update", admin, map[string]any{"model_name": "official-model-edited", "litellm_params": params, "model_info": info})
 	params["litellm_credential_name"] = "openai"
 	r := h.do(http.MethodPatch, "/model/"+id+"/update", admin, map[string]any{"litellm_params": params})

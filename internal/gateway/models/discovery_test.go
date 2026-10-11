@@ -15,25 +15,25 @@ import (
 // 参数 t：测试上下文；返回：无。纯函数测试不发网络请求，无需清理数据。
 func TestCatalogURLs(t *testing.T) {
 	for _, tc := range []struct {
-		provider, base string
-		want           []string
+		base string
+		want []string
 	}{
-		{"ignored", "https://provider.example", []string{"https://provider.example/models", "https://provider.example/v1/models"}},
-		{"qiniu", "https://configured.example/v1", []string{"https://configured.example/v1/models", "https://configured.example/models"}},
-		{"", " https://relay.example/ ", []string{"https://relay.example/models", "https://relay.example/v1/models"}},
-		{"", "https://relay.example/v1/", []string{"https://relay.example/v1/models", "https://relay.example/models"}},
-		{"", "https://relay.example/proxy/models/", []string{"https://relay.example/proxy/models", "https://relay.example/proxy/v1/models"}},
-		{"", "https://relay.example/proxy/v1?tenant=one", []string{"https://relay.example/proxy/v1/models?tenant=one", "https://relay.example/proxy/models?tenant=one"}},
+		{"https://provider.example", []string{"https://provider.example/models", "https://provider.example/v1/models"}},
+		{"https://configured.example/v1", []string{"https://configured.example/v1/models", "https://configured.example/models"}},
+		{" https://relay.example/ ", []string{"https://relay.example/models", "https://relay.example/v1/models"}},
+		{"https://relay.example/v1/", []string{"https://relay.example/v1/models", "https://relay.example/models"}},
+		{"https://relay.example/proxy/models/", []string{"https://relay.example/proxy/models", "https://relay.example/proxy/v1/models"}},
+		{"https://relay.example/proxy/v1?tenant=one", []string{"https://relay.example/proxy/v1/models?tenant=one", "https://relay.example/proxy/models?tenant=one"}},
 	} {
-		t.Run(tc.provider+tc.base, func(t *testing.T) {
-			got, err := catalogURLs(ModelsURL(tc.provider, tc.base))
+		t.Run(tc.base, func(t *testing.T) {
+			got, err := catalogURLs(ModelsURL(tc.base))
 			if err != nil || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("目录候选错误：got=%v want=%v err=%v", got, tc.want, err)
 			}
 		})
 	}
 	for _, base := range []string{"", "/v1", "ftp://relay.example", "https://user:secret@relay.example", "https://%"} {
-		if _, err := catalogURLs(ModelsURL("", base)); err == nil {
+		if _, err := catalogURLs(ModelsURL(base)); err == nil {
 			t.Errorf("非法地址未被拒绝")
 		}
 	}
@@ -80,7 +80,7 @@ func TestFetchCatalogFallback(t *testing.T) {
 				_, _ = io.WriteString(w, tc.body)
 			}))
 			defer upstream.Close()
-			items, err := fetchCatalog(context.Background(), ModelsURL("", upstream.URL+tc.base+"?token=query-secret"), "server-secret")
+			items, err := fetchCatalog(context.Background(), ModelsURL(upstream.URL+tc.base+"?token=query-secret"), "server-secret")
 			if !reflect.DeepEqual(paths, tc.wantPaths) {
 				t.Fatalf("目录请求顺序错误：%v want=%v", paths, tc.wantPaths)
 			}
@@ -133,7 +133,7 @@ func TestFetchCatalogInvalidResponseFallback(t *testing.T) {
 				_, _ = io.WriteString(w, tc.secondBody)
 			}))
 			defer upstream.Close()
-			rawURL := ModelsURL("", upstream.URL+tc.base+"?token=query-secret")
+			rawURL := ModelsURL(upstream.URL + tc.base + "?token=query-secret")
 			items, err := fetchCatalog(context.Background(), rawURL, "server-secret")
 			wantURLs, _ := catalogURLs(rawURL)
 			if len(paths) != len(wantURLs) {

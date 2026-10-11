@@ -21,7 +21,7 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-// directorySchemaSQL 保存独立目录迁移；由 Migrate 在基础资源建表后执行，不删除既有数据。
+// directorySchemaSQL 定义当前外部目录表；由 Migrate 在基础资源建表后幂等初始化，不升级旧结构。
 //
 //go:embed directory_schema.sql
 var directorySchemaSQL string
@@ -29,7 +29,7 @@ var directorySchemaSQL string
 //go:embed enterprise_schema.sql
 var enterpriseSchemaSQL string
 
-// archiveSchemaSQL 安装账务事务内 outbox，迁移不需要外部凭据。
+// archiveSchemaSQL 初始化当前账务事务内 outbox，无旧数据迁移，也不需要外部凭据。
 //
 //go:embed archive_schema.sql
 var archiveSchemaSQL string

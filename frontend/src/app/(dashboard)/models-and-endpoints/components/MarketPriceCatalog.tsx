@@ -59,7 +59,6 @@ function MarketCard({ row, onDetail, onEdit, onDelete, onReset }: PriceCatalogPr
             </span>
           ))}
         {row.overridden && <span className="rounded border px-2 py-1">已编辑</span>}
-        {row.removed && <span className="text-destructive">已移除</span>}
         {row.raw.private === true && <span>非公开</span>}
         {marketRetired(row) && <span>已退役</span>}
       </div>

@@ -9,9 +9,9 @@ import (
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
-// SaveModelDirectory 原子保存部署变更并清理模型默认、历史组及客户模板里的失效分配。
+// SaveModelDirectory 原子保存部署变更并清理模型默认、全局路由组及客户模板里的失效分配。
 // 参数 entry 非空表示创建/更新，deletedID 非空表示删除，directory 是变更后的完整目录（含配置文件部署）。
-// 管理接口和启动迁移调用；两变更参数均空仅修复历史数据。失败整笔回滚，成功后清缓存，不修改内存目录。
+// 由当前部署管理接口调用；失败整笔回滚，成功后清缓存，不修改内存目录，也不在启动时执行数据修复。
 func (s *Store) SaveModelDirectory(entry *ProxyModel, deletedID string, directory []config.ModelEntry) error {
 	if s == nil {
 		return nil
@@ -52,7 +52,7 @@ func (s *Store) SaveModelDirectory(entry *ProxyModel, deletedID string, director
 		return err
 	}
 	for _, row := range defaults {
-		// 单部署无需解析遗留权重，连同损坏的历史分配一起删除。
+		// 变更后仅剩一个部署无需权重分配，直接移除配置；避免无效权重影响后续路由。
 		count := 0
 		for _, dep := range directory {
 			if dep.ModelName == row.Key {

@@ -71,8 +71,6 @@ export type PriceCatalogRow = {
   baseline: boolean;
   /** True when this id is stored in the database as an override of the baseline. */
   overridden: boolean;
-  /** True when the operator deleted a baseline row; the id stays listed so it can be restored. */
-  removed: boolean;
   /** The fields as the API sent them, so the edit form can seed every rate it does not show. */
   raw: Record<string, unknown>;
 };
@@ -222,7 +220,6 @@ export function priceCatalogRows(doc: PriceCatalogDocument | null | undefined): 
       windowed: rates.some((group) => group.rates.some((rate) => rate.window === "peak" || rate.window === "offpeak")),
       baseline: entry.baseline === true,
       overridden: entry.overridden === true,
-      removed: entry.removed === true,
       raw: entry,
     };
     rows.push(row);
@@ -274,9 +271,7 @@ export function priceModelPayload(input: {
   if (input.mode?.trim()) body.mode = input.mode.trim();
   else if (input.original?.mode != null) body.mode = null;
   if (input.endpointType?.trim()) body.endpoint_id = input.endpointType.trim();
-  else if (input.original?.endpoint_id != null || input.original?.endpoint_type != null) body.endpoint_id = null;
-  // 写入标准字段时清除历史别名，避免“未设置”在重新打开表单时被旧 endpoint_type 恢复。
-  if (input.original?.endpoint_type != null) body.endpoint_type = null;
+  else if (input.original?.endpoint_id != null) body.endpoint_id = null;
   for (const [field, raw] of Object.entries(input.tokenRates)) {
     if (
       input.original &&

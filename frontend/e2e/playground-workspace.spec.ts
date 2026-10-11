@@ -110,7 +110,7 @@ test("chat explains missing credentials and unavailable deployment, then recover
   }
 });
 
-/** 前置隔离真实聊天部署；验证单工作区无对比入口、中英文切换保留草稿、curl 和真实请求及账单。
+/** 前置隔离真实聊天部署；验证忽略旧协议状态、只保存当前路径、单工作区、中英文草稿、curl 和真实账单。
  * finally 删除专用部署，runner 清理账单和会话，无外部服务凭据。 */
 test("single workspace has no comparison controls and preserves bilingual chat", async ({ page }) => {
   await loginAdmin(page);
@@ -118,11 +118,21 @@ test("single workspace has no comparison controls and preserves bilingual chat",
   const id = await deployment(page, name);
   const headers = { Authorization: "Bearer " + (await sessionBearer(page)) };
   try {
+    await page.evaluate(() => {
+      sessionStorage.setItem("selectedModel", "e2e-single-workspace");
+      sessionStorage.setItem("endpointType", "responses");
+      sessionStorage.removeItem("endpointPath");
+    });
     await stableGoto(page, "/playground");
     await expect(page.getByRole("tablist")).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "对比", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "添加对比卡片", exact: true })).toHaveCount(0);
+    await expect(page.getByPlaceholder(t("Select an endpoint"), { exact: true })).not.toBeDisabled();
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem("endpointPath"))).toBe("/v1/chat/completions");
+    await page.evaluate(() => sessionStorage.removeItem("endpointType"));
     await selectChat(page, name);
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem("endpointPath"))).toBe("/v1/chat/completions");
+    expect(await page.evaluate(() => sessionStorage.getItem("endpointType"))).toBeNull();
     const prompt = "Describe a sunrise in one sentence.";
     await page.getByPlaceholder(t("Type your message... (Shift+Enter for new line)")).fill(prompt);
     await page.getByRole("button", { name: "English", exact: true }).click();

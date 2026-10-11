@@ -28,6 +28,39 @@ async function deleteProvider(page:Page,name:string) {
   await expect(page.getByTestId("credential-actions-"+name)).toHaveCount(0);
 }
 
+/** 前置真实网关的隔离凭据；验证当前协议 API 凭据可编辑，显示名称不能充当身份。
+ * 测试只保存本地假密钥，不调用外部服务；finally 删除全部凭据，隔离 schema 兜底清理。 */
+test("provider editor uses current API protocol without repairing display-name identities",async({page})=>{
+  const guard=watchGateway(page);await loginAdmin(page);
+  const headers={Authorization:"Bearer "+await sessionBearer(page)};
+  const names=["e2e-current-api-provider","e2e-invalid-display-provider"];
+  try {
+    for (const [index,name] of names.entries()) {
+      const created=await page.request.post(GATEWAY+"/credentials",{headers,data:{credential_name:name,
+        credential_info:{custom_llm_provider:index===0?"openai":"OpenAI-Compatible Endpoints (Together AI, etc.)"},
+        credential_values:{api_key:"sk-fake",api_base:UPSTREAM+"/v1"}}});
+      expect(created.status(),await created.text()).toBe(200);
+    }
+    await stableGoto(page,"/model-providers");
+    await page.getByTestId("credential-actions-"+names[0]).click();await page.getByTestId("credential-action-edit").click();
+    const edit=page.getByRole("dialog",{name:t("Edit model provider")});
+    // 列表接口返回脱敏凭据，编辑回填不能要求后台暴露明文。
+    await expect(edit.getByLabel("OpenAI API Key")).toHaveValue("sk***ke");
+    await expect(edit.getByRole("button",{name:t("Save model provider")})).toBeEnabled();
+    await edit.getByRole("button",{name:t("Cancel"),exact:true}).click();
+    await page.getByTestId("credential-actions-"+names[1]).click();await page.getByTestId("credential-action-edit").click();
+    await expect(edit.getByText(t("Select a provider to see its configuration fields."))).toBeVisible();
+    await expect(edit.getByLabel("OpenAI API Key")).toHaveCount(0);
+    await expect(edit.getByRole("button",{name:t("Save model provider")})).toBeDisabled();
+    await edit.getByRole("button",{name:t("Cancel"),exact:true}).click();guard.assertOk();
+  } finally {
+    for (const name of names) {
+      const deleted=await page.request.delete(GATEWAY+"/credentials/"+name,{headers});
+      expect(deleted.status(),await deleted.text()).toBe(200);
+    }
+  }
+});
+
 /** 前置真实浏览器、网关和数据库；验证专属字段切换、默认值、DeepSeek 创建编辑和删除。
  * 全流程只保存隔离测试凭据，无外部请求；显式删除，失败时测试 schema 自动清理。 */
 test("provider forms switch and persist DeepSeek credentials",async({page})=>{

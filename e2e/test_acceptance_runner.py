@@ -248,7 +248,7 @@ class AcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
             dataset.state["deployments"] = [
-                {"id": "chat-a", "provider": "fennoai", "kind": "chat", "observed": True},
+                {"id": "chat-a", "provider": "fennoai", "kind": "chat", "observed": True, "endpoint_types": ["chat"]},
                 {"id": "image-a", "provider": "fennoai", "kind": "image", "observed": False},
                 {"id": "video-a", "provider": "qiniu", "kind": "video", "observed": False},
             ]
@@ -258,6 +258,7 @@ class AcceptanceTests(unittest.TestCase):
             SHARED.attach_chat_observer(dataset, observer)
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][1]["model_info"]["id"], "chat-a")
+            self.assertEqual(calls[0][1]["model_info"], {"id": "chat-a"})
+            self.assertEqual(dataset.state["deployments"][0]["endpoint_types"], ["chat"])
             self.assertEqual(calls[0][1]["litellm_params"]["api_base"], "http://127.0.0.1:4567/fennoai")
-
 

@@ -108,10 +108,6 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 	if id != "" {
 		var err error
 		row, err = s.RecordStore().GetKV(kind, id)
-		if errors.Is(err, sql.ErrNoRows) {
-			kind = "guardrail"
-			row, err = s.RecordStore().GetKV(kind, id)
-		}
 		if err != nil {
 			fail(err)
 			return true
@@ -213,7 +209,7 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// normalizeRule 补齐旧存储字段别名，保证新旧规则具有稳定的管理响应结构。
+// normalizeRule 统一配置文件与管理接口的规则别名和可选字段，保证响应结构稳定。
 // 参数：row：可修改的规则 map。
 // 返回：原规则对象；补齐 guardrail_id、guardrail_name、litellm_params、定义来源。
 // 调用：Manage、storedRules、configuredRules。
@@ -234,21 +230,19 @@ func normalizeRule(row map[string]any) map[string]any {
 	return row
 }
 
-// storedRules 合并 YAML 规则与两个历史 KV 命名空间，再按优先级排序。
+// storedRules 合并 YAML 规则与唯一 guardrails KV 命名空间，再按优先级排序。
 // 参数：s：具备非 nil RecordStore 的宿主；调用方处理存储不可用情况。
 // 返回：规则列表和存储错误；读取失败不返回部分规则作为成功结果。
 // 调用：Manage、listGuardrails。
 // 测试：engine_test.go、internal/gateway/guardrail_manage_test.go。
 func storedRules(s Host) ([]map[string]any, error) {
 	out := configuredRules(s)
-	for _, kind := range []string{"guardrails", "guardrail"} {
-		rows, err := s.RecordStore().ListKV(kind)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			out = append(out, normalizeRule(row))
-		}
+	rows, err := s.RecordStore().ListKV("guardrails")
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out = append(out, normalizeRule(row))
 	}
 	sortRules(out)
 	return out, nil

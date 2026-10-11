@@ -47,12 +47,11 @@ def restore_supplier_addresses(dataset, data):
         dataset.report["retention_error"] = "；".join(failures)
 
 def attach_chat_observer(dataset, observer):
-    """用途：把聊天部署接入观察器并补齐旧基线的 Responses 声明；参数为数据集和观察器，返回无；供共享和隔离续跑使用，媒体仍直连真实供应商。"""
+    """用途：把聊天部署接入观察器；参数为数据集和观察器，返回无；只切换上游地址，保留创建时声明的端点，媒体仍直连真实供应商。"""
     for deployment in dataset.state.get("deployments", []):
         if not deployment.get("observed"):
             continue
-        deployment["endpoint_types"] = ["chat", "responses"]
-        dataset.api("/model/update", {"model_info": {"id": deployment["id"], "endpoint_types": deployment["endpoint_types"]},
+        dataset.api("/model/update", {"model_info": {"id": deployment["id"]},
             "litellm_params": {"api_base": observer.base + "/" + deployment["provider"]}})
 
 def shared_main(args, data):
@@ -128,10 +127,6 @@ def shared_main_locked(args, data):
             saved = json.loads((directory / "access.json").read_text())
             dataset.state = {key: value for key, value in saved.items() if key not in ("admin", "gateway")}
             dataset.report = json.loads((directory / "report.json").read_text())
-            # 兼容旧报告：候选探测是模型选择诊断，不是最终验收项；迁移后正式 checks 只表示必须通过的断言。
-            legacy_probes = [row for row in dataset.report.get("checks", []) if row.get("name") == "real-model-probe"]
-            dataset.report["checks"] = [row for row in dataset.report.get("checks", []) if row.get("name") != "real-model-probe"]
-            dataset.report.setdefault("probe_attempts", []).extend(legacy_probes)
             categories = getattr(args, "category", None)
             dataset.report.update(status="running", phase="verify",
                                   selected_categories=categories or list(E2E_CATEGORIES),

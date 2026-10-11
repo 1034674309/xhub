@@ -47,7 +47,7 @@ SELECT json_build_object(
     return result
 
 def video_log_conditions(task):
-    """用途：生成视频日志的精确任务、创建与结算条件；参数为报告任务，返回三个 SQL 条件；供恢复及计量审计共用，兼容原日志更新和历史独立结算。缺少模型、任务或不支持的协议抛 ValueError，无数据库副作用。"""
+    """用途：生成视频日志的精确任务、创建与结算条件；参数为报告任务，返回三个 SQL 条件；供恢复及计量审计共用，覆盖当前跟踪任务原事件和未跟踪任务独立结算。缺少模型、任务或不支持的协议抛 ValueError，无数据库副作用。"""
     if not task.get("model") or not task.get("task_id") or task.get("transport") not in (
             "qiniu_contents_generation", "qiniu_fal_doubao_20", "qiniu_fal_kling"):
         raise ValueError("视频日志恢复需要模型、Task ID 和支持的协议")
@@ -60,14 +60,14 @@ def video_log_conditions(task):
       THEN coalesce(nullif(l.response_body::jsonb->>'id', ''), l.response_body::jsonb->>'request_id')='{task_id}'
       ELSE false END"""
     create = f"u.call_type='{transport}:create'"
-    # 新协议在原创建事件上写 completed/task_settled；旧协议保留 success 的独立结算事件。
+    # 跟踪任务在原创建事件上结算；未跟踪任务用稳定请求 ID 写独立事件，两者均为当前数据面路径。
     settled = f"""(({create} AND u.status='completed' AND u.task_settled) OR
       (u.call_type='{transport}:{suffix}' AND u.status='success'
        AND u.request_id LIKE 'official-settlement:%'))"""
     return scope, create, settled
 
 def audit_video_settlement(task, schema="public"):
-    """用途：核对精确视频任务只有一次有价格及正费用的结算；参数为任务和受控 schema，返回计数及日志 ID；供数据库验收调用，兼容原日志完成与旧独立结算，缺失或重复均抛断言，只读查询。"""
+    """用途：核对精确视频任务只有一次有价格及正费用的结算；参数为任务和受控 schema，返回计数及日志 ID；供数据库验收调用，覆盖当前跟踪及未跟踪任务，缺失或重复均抛断言，只读查询。"""
     scope, _, settled = video_log_conditions(task)
     row = sql(f"""SET search_path TO {schema};
 SELECT json_build_object('rows',count(*),'priced',count(*) FILTER (WHERE u.price_snapshot<>''),
@@ -80,7 +80,7 @@ WHERE {scope} AND {settled};""").strip()
     return proof
 
 def recover_media_log_ids(dataset, schema="public"):
-    """用途：按模型、协议与精确 Task ID 恢复视频日志；参数为数据集和受控 schema，返回任务数；原日志结算时两个 ID 相同，兼容旧独立结算。缺失证据抛断言，只读 PostgreSQL 并保存报告，无供应商调用。"""
+    """用途：按模型、协议与精确 Task ID 恢复视频日志；参数为数据集和受控 schema，返回任务数；跟踪任务原事件结算时两个 ID 相同，未跟踪任务使用当前独立结算事件。缺失证据抛断言，只读 PostgreSQL 并保存报告，无供应商调用。"""
     recovered = 0
     for task in dataset.report.get("media_tasks", []):
         scope, create, settled = video_log_conditions(task)
@@ -189,4 +189,3 @@ ORDER BY u.ts DESC;"""
     dataset.save()
     dataset.progress(f"    ✅ [PostgreSQL / request_logs / 中断恢复] 已恢复并预校验 {len(recovered)}/81 把密钥的真实调用证据；运行期将逐条通过日志接口复验")
     return len(recovered)
-

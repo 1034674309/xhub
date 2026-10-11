@@ -29,16 +29,25 @@ func TestPriceSelectionContract(t *testing.T) {
 	const id = "regression-price-selection"
 	t.Cleanup(func() { catalog.RemoveModel(id) })
 	h.ok(http.MethodPost, "/price/model", admin, map[string]any{
-		"id": id, "litellm_provider": "openai", "mode": "chat", "endpoint_id": "bypass_openai_chat", "input_cost_per_token": 0.000002,
+		"id": id, "litellm_provider": "openai", "mode": "chat", "endpoint_id": "bypass_openai_chat", "endpoint_type": "retired-alias", "input_cost_per_token": 0.000002,
 	})
 	// 从真实读取路由取回分类，避免只断言 POST 请求没有真正验证写入结果。
 	row := priceSelectionRow(t, h.ok(http.MethodGet, "/price/catalog", admin, nil), id)
-	if row["litellm_provider"] != "openai" || row["mode"] != "chat" || row["endpoint_id"] != "bypass_openai_chat" {
+	if row["litellm_provider"] != "openai" || row["mode"] != "chat" || row["endpoint_id"] != "bypass_openai_chat" || row["endpoint_type"] != nil {
 		t.Fatalf("下拉分类未保存到价格目录: %#v", row)
 	}
 	if input, _, ok := catalog.TokenRates(id); !ok || input != 0.000002 {
 		t.Fatalf("保存分类后计价不可用: input=%v ok=%v", input, ok)
 	}
+	removed := h.do(http.MethodDelete, "/price/model", admin, map[string]any{"id": id})
+	if removed.status != 404 {
+		t.Fatalf("废弃删除入口仍可用: %s", removed.describe())
+	}
+	h.ok(http.MethodPost, "/price/model/listing", admin, map[string]any{"id": id, "delisted": true})
+	if priceSelectionRow(t, h.ok(http.MethodGet, "/price/catalog", admin, nil), id)["delisted"] != true {
+		t.Fatal("当前下架入口未持久化状态")
+	}
+	h.ok(http.MethodPost, "/price/model/listing", admin, map[string]any{"id": id, "delisted": false})
 	for _, tc := range []struct {
 		token  string
 		body   map[string]any

@@ -102,11 +102,12 @@ func TestFillFromCostMapUsesPriceData(t *testing.T) {
 	}
 }
 
+// TestModelsURL 验证当前模型目录地址只取配置根路径；覆盖根路径和 v1 尾斜线，纯函数无清理需求。
 func TestModelsURL(t *testing.T) {
-	if ModelsURL("ignored", "https://api.fenno.ai") != "https://api.fenno.ai/models" {
-		t.Fatal(ModelsURL("ignored", "https://api.fenno.ai"))
+	if ModelsURL("https://api.fenno.ai") != "https://api.fenno.ai/models" {
+		t.Fatal(ModelsURL("https://api.fenno.ai"))
 	}
-	if ModelsURL("ignored", "https://api.qnaigc.com/v1/") != "https://api.qnaigc.com/v1/models" {
-		t.Fatal(ModelsURL("ignored", "https://api.qnaigc.com/v1/"))
+	if ModelsURL("https://api.qnaigc.com/v1/") != "https://api.qnaigc.com/v1/models" {
+		t.Fatal(ModelsURL("https://api.qnaigc.com/v1/"))
 	}
 }

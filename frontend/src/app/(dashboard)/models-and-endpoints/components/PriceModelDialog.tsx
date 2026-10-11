@@ -58,7 +58,7 @@ export function PriceModelDialog({
   const [provider, setProvider] = useState(editing?.provider ?? providers[0]?.slug ?? "");
   const [displayName, setDisplayName] = useState(editing?.displayName ?? "");
   const [mode, setMode] = useState(typeof draft.mode === "string" ? draft.mode : "");
-  const initialEndpoint = draft.endpoint_id ?? draft.endpoint_type;
+  const initialEndpoint = draft.endpoint_id;
   const [endpointType, setEndpointType] = useState(typeof initialEndpoint === "string" ? initialEndpoint : "");
   const [endpoints, setEndpoints] = useState<PriceSelectOption[]>([]);
   const [endpointState, setEndpointState] = useState<"loading" | "ready" | "failed">("loading");

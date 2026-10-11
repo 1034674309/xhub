@@ -269,11 +269,13 @@ func TestPreCallOnlyStopsOnADefaultPreCallBlock(t *testing.T) {
 	}
 }
 
+// TestPreCallNamesAnUnnamedRule 验证当前命名空间的无名规则仍执行默认拦截。
+// 前置隔离数据库和无名规则；验证返回可定位的拦截原因，清理钩子销毁 schema。
 func TestPreCallNamesAnUnnamedRule(t *testing.T) {
 	st := openGuardStore(t)
 	h := &savedHost{store: st}
 	raw := `{"litellm_params":{"default_on":true,"guardrail":"always_block"}}`
-	if err := st.PutKV("guardrail", "bare", raw); err != nil {
+	if err := st.PutKV("guardrails", "bare", raw); err != nil {
 		t.Fatal(err)
 	}
 	blocked, msg := PreCall(h, map[string]any{"text": "anything"})
@@ -282,47 +284,16 @@ func TestPreCallNamesAnUnnamedRule(t *testing.T) {
 	}
 }
 
-func TestEvalNamedRunsTheAskedRuleAndOtherwiseTheDefault(t *testing.T) {
-	st := openGuardStore(t)
-	h := &savedHost{store: st}
-	putGuardrail(t, st, "id-secret", map[string]any{
-		"guardrail_id":   "id-secret",
-		"guardrail_name": "secrets",
-		"litellm_params": map[string]any{"default_on": false, "blocked_words": []any{"secret"}},
-	})
-	putGuardrail(t, st, "id-live", map[string]any{
-		"guardrail_name": "live",
-		"litellm_params": map[string]any{"default_on": true, "blocked_words": []any{"bomb"}},
-	})
-
-	action, out := evalNamed(h, "secrets", "a secret")
-	if action != "block" || out != "a secret" {
-		t.Fatalf("by name: %s %q", action, out)
+// matchGuardrail 是 runRule 的单元测试适配器，不向产品暴露旧单规则执行入口。
+// 参数为完整规则和输入文本，返回动作及结果；错误按阻断断言，无数据库写入或清理需求。
+func matchGuardrail(g map[string]any, text string) (action, out string) {
+	body := map[string]any{"text": text}
+	action, _, err := runRule(g, body)
+	if err != nil {
+		return "block", text
 	}
-	action, _ = evalNamed(h, "id-secret", "a secret")
-	if action != "block" {
-		t.Fatalf("by id: %s", action)
-	}
-	action, _ = evalNamed(h, "missing", "drop the bomb")
-	if action != "block" {
-		t.Fatalf("unknown name falls through to the default rule: %s", action)
-	}
-	action, out = evalNamed(h, "", "hello")
-	if action != "allow" || out != "hello" {
-		t.Fatalf("no default match: %s %q", action, out)
-	}
-
-	only := openGuardStore(t)
-	putGuardrail(t, only, "quiet", map[string]any{
-		"guardrail_name": "quiet",
-		"litellm_params": map[string]any{"default_on": false, "blocked_words": []any{"secret"}},
-	})
-	action, out = evalNamed(&savedHost{store: only}, "nope", "a secret")
-	if action != "allow" || out != "a secret" {
-		t.Fatalf("no default rule: %s %q", action, out)
-	}
+	return action, str(body["text"])
 }
-
 func TestApplyTrialsOneRuleWithoutWritingIt(t *testing.T) {
 	st := openGuardStore(t)
 	h := &savedHost{store: st, allow: true}

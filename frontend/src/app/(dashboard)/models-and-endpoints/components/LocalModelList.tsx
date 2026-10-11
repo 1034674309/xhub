@@ -66,7 +66,6 @@ export function LocalModelList({
                 row.raw.private === true ||
                 marketRetired(row) ||
                 row.raw.feed_unavailable === true ||
-                row.removed ||
                 row.raw.market_catalog !== true;
               return (
                 <tr key={row.id} className="border-b last:border-0" data-testid={"local-model-" + row.id}>

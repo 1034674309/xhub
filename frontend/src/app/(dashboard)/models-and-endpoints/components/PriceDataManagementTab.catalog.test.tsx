@@ -11,7 +11,6 @@ import { PriceCatalog } from "./PriceCatalog";
 vi.mock("@/components/networking", () => ({
   getPriceCatalog: vi.fn(),
   upsertPriceModel: vi.fn(),
-  deletePriceModel: vi.fn(),
   resetPriceModel: vi.fn(),
   upsertPriceProvider: vi.fn(),
   deletePriceProvider: vi.fn(),
@@ -113,7 +112,6 @@ describe("PriceCatalog filtering", () => {
     windowed: false,
     baseline: true,
     overridden: false,
-    removed: false,
     raw: {},
   }));
 

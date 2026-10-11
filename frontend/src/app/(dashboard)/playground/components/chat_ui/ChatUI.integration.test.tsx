@@ -71,6 +71,22 @@ const endpoint = (path: string, kind: "adapted" | "bypass" = "adapted", protocol
 });
 
 describe("ChatUI", () => {
+  /** 前置仅旧协议枚举及多入口模型；验证依当前目录选首入口而非旧协议，切换后只持久化路径；卸载及存储重置清理。 */
+  it("只恢复当前路径而不迁移旧协议状态", async () => {
+    sessionStorage.setItem("selectedModel", "Model 1");
+    sessionStorage.setItem("endpointType", "responses");
+    render(
+      <ChatUI accessToken="test" token="test" userRole="user" userID="test" disabledPersonalKeyCreation={false} />,
+    );
+    await waitFor(() => expect(screen.getByPlaceholderText("Select an endpoint")).toHaveValue(
+      endpointLabel(endpoint("/v1/chat/completions")),
+    ));
+    expect(sessionStorage.getItem("endpointPath")).toBe("/v1/chat/completions");
+    sessionStorage.removeItem("endpointType");
+    await selectComboboxOption("Select an endpoint", "/v1/messages");
+    await waitFor(() => expect(sessionStorage.getItem("endpointPath")).toBe("/v1/messages"));
+    expect(sessionStorage.getItem("endpointType")).toBeNull();
+  });
   /** 前置保存的模型、端点和完成历史；验证初始化恢复不清空历史，切换模型后清空；自动卸载并清理存储。 */
   it("恢复历史保留绑定，切换模型才重置", async () => {
     sessionStorage.setItem("selectedModel", "Model 1");

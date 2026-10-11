@@ -36,8 +36,10 @@ func TestCredentialProtocolMatches(t *testing.T) {
 		{"fallback", "qiniu", "", "openai", "qiniu", false},
 		{"normalized", "qiniu", " OpenAI ", "", " OpenAI ", true},
 		{"compatible-chat", "qiniu", "qiniu", "", "openai", false},
-		{"empty-credential", "", "", "", "openai", true},
-		{"empty-model", "", "openai", "", "", true},
+		{"empty-credential", "", "", "", "openai", false},
+		{"empty-model", "", "openai", "", "", false},
+		{"both-empty", "", "", "", "", false},
+		{"whitespace", "", "  ", "", "openai", false},
 		{"ordinary-openai", "", "openai", "", "qiniu", false},
 		{"wrong-builtin", "fenno", "openai", "", "qiniu", false},
 		{"qiniu", "fenno", "openai", "", "qiniu", false},
@@ -55,8 +57,8 @@ func TestCredentialProtocolMatches(t *testing.T) {
 			}
 		})
 	}
-	if !credentialProtocolMatches("missing", nil, "openai") {
-		t.Fatal("缺字段凭据应保持空协议的历史兼容行为")
+	if credentialProtocolMatches("missing", nil, "openai") {
+		t.Fatal("缺字段凭据不能授予协议调用能力")
 	}
 }
 

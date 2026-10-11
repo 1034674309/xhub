@@ -24,9 +24,9 @@ The package registers no HTTP handlers. Request execution builds an IAM rate pla
 
 ### Spend handoff and strings
 
-- `SpendRef(kind, id)` forms the hot-spend identity consumed by IAM quota checks. `ChargeSpend`, `HotSpend`, `PeekSpend`, `AckSpend`, `TakeSpend`, and `ClearSpendQueue` expose legacy aggregate operations; only peek then acknowledge preserves data over a failed database flush.
-- `EnqueueSpend(SpendLog)` requires a request ID and valid scope deltas. Lua atomically appends the log and increments all hot-spend scopes. Request IDs are permanent idempotency keys: retries are successful no-ops and the first payload wins. `EnqueueLog` queues a log without scope deltas.
-- `PeekLogs(n)` returns decoded and raw entries without deletion and stops at the first corrupt queue item. After PostgreSQL commits, `AckFlushed(deltas, n, head)` verifies the observed head, subtracts hot spend, and trims the prefix atomically; a changed head is a no-op. `AckLogs` and `DrainLogs` are destructive lower-level alternatives.
+- `SpendRef(kind, id)` forms the hot-spend identity; `HotSpend(id)` reads the unacknowledged amount without consuming it. Strict budget admission uses the durable IAM reservation transaction, not a telemetry read that degrades to zero.
+- `EnqueueSpend(SpendLog)` is the only queue writer and requires a request ID and valid scope deltas. Lua atomically appends the log and increments all hot-spend scopes. Request IDs are permanent idempotency keys: retries are successful no-ops and the first payload wins. Free and unpriced events use the same queue without monetary increments.
+- `PeekLogs(n)` returns decoded and raw entries without deletion and stops at the first corrupt queue item. After PostgreSQL commits, `AckFlushed(deltas, n, head)` verifies the observed head, subtracts hot spend, and trims the prefix atomically; a changed head is a no-op. There is no destructive drain or independent aggregate-spend handoff.
 - `GetString(ctx, key)` returns `(value, true)` only for an existing readable key. `SetString(ctx, key, value, ttl)` stores a TTL value and silently skips nil clients.
 
 Callers include inference admission/routing, the usage flusher, IAM quota checks, and deployment telemetry. Their HTTP routes live in gateway packages.
@@ -41,7 +41,7 @@ A tree is required because fixed child allocations reserve capacity at shared an
 
 ### Reliable usage handoff
 
-`EnqueueSpend` validates and serializes the event before a script updates the log queue, dedup set, pending-spend set, and floating-point scope counters together. IAM adds these hot values during `QuotaPath`. The flusher follows peek, database commit, acknowledge: failed IAM transactions leave Redis intact, while successful commits receive one head-checked acknowledgement. IAM also deduplicates `request_id`, making replay safe after a crash between commit and acknowledgement.
+`EnqueueSpend` validates and serializes the event before a script updates the log queue, request-dedup hash, and floating-point scope counters together. No separate pending-subject index is needed: each event carries its scope identities. IAM adds these hot values during `QuotaPath`. The flusher follows peek, database commit, acknowledge: failed IAM transactions leave Redis intact, while successful commits receive one head-checked acknowledgement. IAM also deduplicates `request_id`, making replay safe after a crash between commit and acknowledgement.
 
 Telemetry reads deliberately degrade when Redis is absent, and several optional methods accept nil clients. Atomic admission and reliable queued accounting require a real Redis client. Enqueue success does not wait for disk fsync or replica quorum, so Redis persistence and retention remain deployment boundaries.
 
@@ -61,4 +61,4 @@ Defines `RateScope`, the `rateAdmission` Lua program, `AdmitRates`, and `AdmitRa
 
 ### `redis.go`
 
-Defines `Client`, `SpendLog`, key construction, connection lifecycle, cooldown/latency/minute telemetry, legacy spend counters, reliable queue operations, and TTL strings. Its scripts provide enqueue idempotency and atomic acknowledgement; private parsers may omit bad telemetry values but never skip past a corrupt reliable-queue entry.
+Defines `Client`, `SpendLog`, key construction, connection lifecycle, cooldown/latency/minute telemetry, unacknowledged spend reads, reliable queue operations, and TTL strings. Its scripts provide enqueue idempotency and atomic acknowledgement; private parsers may omit bad telemetry values but never skip past a corrupt reliable-queue entry.

@@ -1,10 +1,44 @@
 package regression
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+// TestGuardrailRetiredStorageIsNotActive 验证真实管理和数据面只使用当前规则存储。
+// 前置隔离库中的废弃负向夹具；检查404、列表、默认放行、当前规则拦截和删除，harness 销毁 schema。
+func TestGuardrailRetiredStorageIsNotActive(t *testing.T) {
+	h := newHarness(t, chatDeployment("current-guard-storage"))
+	admin := h.adminSession()
+	tn := h.provision(t, admin, "current-guard-storage")
+	raw, err := json.Marshal(guardrailRow("retired-storage", "always_block", nil, "pre_call"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.PutKV("guardrail", "retired-storage", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		response := h.do(method, "/guardrails/retired-storage", admin, nil)
+		if response.status != 404 || errorMessage(response) == "" {
+			t.Fatalf("废弃存储被管理接口读取: %s", response.describe())
+		}
+	}
+	if rows := listField(h.ok(http.MethodGet, "/guardrails/list", admin, nil).json(), "guardrails"); len(rows) != 0 {
+		t.Fatalf("废弃规则出现在列表: %v", rows)
+	}
+	h.ok(http.MethodPost, "/v1/chat/completions", tn.key, map[string]any{"model": "current-guard-storage", "messages": []any{map[string]any{"role": "user", "content": "hello"}}})
+	created := h.ok(http.MethodPost, "/guardrails", admin, guardrailRow("retired-storage", "always_block", nil, "pre_call")).json()
+	id := stringField(created, "guardrail_id")
+	h.resetUpstream()
+	blocked := h.do(http.MethodPost, "/v1/chat/completions", tn.key, map[string]any{"model": "current-guard-storage", "messages": []any{map[string]any{"role": "user", "content": "hello"}}})
+	if blocked.status != 400 || len(h.upstreamCalls()) != 0 {
+		t.Fatalf("当前规则未在上游前拦截: %s", blocked.describe())
+	}
+	h.ok(http.MethodDelete, "/guardrails/"+id, admin, nil)
+}
 
 // 引擎认识的几种护栏类型，取值来自 internal/gateway/guard。
 //

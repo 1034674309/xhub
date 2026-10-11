@@ -257,27 +257,10 @@ func (c *Client) bump(prefix string, n int64) (int64, error) {
 
 var incrementWithTTL = redis.NewScript("local n = redis.call('INCRBY', KEYS[1], ARGV[1]); redis.call('PEXPIRE', KEYS[1], ARGV[2]); return n")
 
-// ChargeSpend adds a dollar delta to hot spend and puts the id in the set waiting to be flushed.
-// 参数 id（string）：Charge花费使用的主键。空串表示调用方没有指定记录；usd（float64）：Charge花费使用的小数。0 表示没有费用或尚未计价。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) ChargeSpend(id string, usd float64) error {
-	if c == nil || id == "" || usd == 0 {
-		return nil
-	}
-	ctx := context.Background()
-	if err := c.rdb.IncrByFloat(ctx, "xhub:spend:"+id, usd).Err(); err != nil {
-		return err
-	}
-	return c.rdb.SAdd(ctx, "xhub:spend:ids", id).Err()
-}
-
-// HotSpend is the spend delta not yet flushed to PostgreSQL. A missing id returns 0.
-// 参数 id（string）：热花费使用的主键。空串表示调用方没有指定记录。
-// 返回 float64（float64）：热花费。没有计数或类型不符时为 0。
-// 调用：gateway/limits.go、gateway/spend.go
-// 测试：无直接单测
+// HotSpend 读取尚未确认落库的花费，供网关限额展示和检查使用，不消费队列。
+// 参数 id 为 SpendRef 生成的主体标识；返回对应金额，缺少客户端、标识或可读计数时返回零。
+// 严格预算准入不依靠此遥测读取降级放行；写入和释放只经过 EnqueueSpend 与 AckFlushed。
+// 测试：redis_test.go 验证各层计数、非法入队、并发去重和重复确认。
 func (c *Client) HotSpend(id string) float64 {
 	if c == nil || id == "" {
 		return 0
@@ -287,100 +270,6 @@ func (c *Client) HotSpend(id string) float64 {
 		return 0
 	}
 	return v
-}
-
-// PeekSpend reads hot spend with GET and does not subtract or delete it. After a failed flush the same deltas can still be read.
-// 参数：无。
-// 返回 map[string]float64（map[string]float64）：Peek花费的数值表，例如花费或 token。没有该键表示还没有发生过。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) PeekSpend() map[string]float64 {
-	out := map[string]float64{}
-	if c == nil {
-		return out
-	}
-	ctx := context.Background()
-	ids, err := c.rdb.SMembers(ctx, "xhub:spend:ids").Result()
-	if err != nil {
-		return out
-	}
-	for _, id := range ids {
-		v, err := c.rdb.Get(ctx, "xhub:spend:"+id).Float64()
-		if err != nil || v == 0 {
-			continue
-		}
-		out[id] = v
-	}
-	return out
-}
-
-// AckSpend subtracts a delta only after PostgreSQL has committed it. It decrements the Redis counters for the map it is given and does not read the database itself.
-// 参数 deltas（map[string]float64）：这次要累加的热计数，键是花费或 token 维度。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) AckSpend(deltas map[string]float64) error {
-	if c == nil || len(deltas) == 0 {
-		return nil
-	}
-	ctx := context.Background()
-	for id, delta := range deltas {
-		if id == "" || delta == 0 {
-			continue
-		}
-		if err := c.rdb.IncrByFloat(ctx, "xhub:spend:"+id, -delta).Err(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ClearSpendQueue drops spend waiting to be flushed. Use it only from a test or an explicit reset.
-// 参数：无。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) ClearSpendQueue() error {
-	if c == nil {
-		return nil
-	}
-	ctx := context.Background()
-	ids, _ := c.rdb.SMembers(ctx, "xhub:spend:ids").Result()
-	keys := []string{"xhub:spendlog", "xhub:spend:ids"}
-	for _, id := range ids {
-		keys = append(keys, "xhub:spend:"+id)
-	}
-	return c.rdb.Del(ctx, keys...).Err()
-}
-
-// TakeSpend reads and clears spend waiting to be flushed. Unlike Peek, a later failure no longer finds the delta in Redis.
-// 参数：无。
-// 返回 map[string]float64（map[string]float64）：取走花费的数值表，例如花费或 token。没有该键表示还没有发生过。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) TakeSpend() map[string]float64 {
-	out := map[string]float64{}
-	if c == nil {
-		return out
-	}
-	ctx := context.Background()
-	ids, err := c.rdb.SMembers(ctx, "xhub:spend:ids").Result()
-	if err != nil {
-		return out
-	}
-	script := redis.NewScript(`local v = redis.call('GET', KEYS[1]); if not v then return '0' end; redis.call('SET', KEYS[1], '0'); return v`)
-	for _, id := range ids {
-		raw, err := script.Run(ctx, c.rdb, []string{"xhub:spend:" + id}).Text()
-		if err != nil {
-			continue
-		}
-		n, err := strconv.ParseFloat(raw, 64)
-		if err != nil || n == 0 {
-			continue
-		}
-		out[id] = n
-	}
-	return out
 }
 
 // SpendLog is one spend log waiting in the queue to be written to PostgreSQL.
@@ -431,15 +320,11 @@ type SpendLog struct {
 	PriceSnapshot string `json:"price_snapshot,omitempty"`
 }
 
-// EnqueueSpend publishes a log and its hot budget deltas atomically. RequestID
-// must identify one immutable event globally (including the tenant namespace).
-// Replays are successful no-ops, even after AckFlushed; the first payload wins.
-// Dedup identities have no TTL. Redis persistence/retention is required until
-// PostgreSQL commits; this method does not wait for an fsync or replica quorum.
-// 参数 row（SpendLog）：从用量或目录读出的SpendLog。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：gateway/spend.go
-// 测试：无直接单测
+// EnqueueSpend 将网关用量日志与各层未落库花费原子入队，是唯一的队列写入口。
+// 参数 row 的 RequestID 必须是全局唯一的不可变事件标识；零费用日志仍须具有标识。
+// 返回 error：客户端不可用、身份或费用/token 非法、Redis 写入失败时非 nil；重复请求无副作用。
+// 首个 payload 生效，确认后重放也不重复扣费；去重身份不设置 TTL，依赖部署的 Redis 持久化。
+// 调用：gateway/spend.go；不会等待磁盘 fsync 或副本 quorum。测试：redis_test.go 覆盖边界和失败原子性。
 func (c *Client) EnqueueSpend(row SpendLog) error {
 	if c == nil || c.rdb == nil {
 		return fmt.Errorf("enqueue spend: Redis client is unavailable")
@@ -475,16 +360,12 @@ if redis.call('HEXISTS', KEYS[2], ARGV[3]) == 1 then
   return 0
 end
 local delta = tonumber(ARGV[2])
--- Lua errors do not roll back earlier writes. Check all mutable key types and
--- numeric results before publishing anything. Infrastructure failures such as
--- OOM still require operational recovery; Redis is not a database outbox.
+-- Lua 出错不会回滚此前写入，因此先检查队列类型与全部金额，再发布日志。
+-- 不维护无人消费的旧主体索引；队列记录自身携带确认所需的全部归属。
+-- OOM 等基础设施故障仍须运维恢复，Redis 并不是数据库事务 outbox。
 local queueType = redis.call('TYPE', KEYS[1]).ok
 if queueType ~= 'none' and queueType ~= 'list' then
   return redis.error_reply('spend queue is not a list')
-end
-local idsType = redis.call('TYPE', 'xhub:spend:ids').ok
-if idsType ~= 'none' and idsType ~= 'set' then
-  return redis.error_reply('spend ids is not a set')
 end
 for i = 4, #ARGV do
   if delta ~= 0 then
@@ -499,7 +380,6 @@ end
 for i = 4, #ARGV do
   if delta ~= 0 then
     redis.call('INCRBYFLOAT', 'xhub:spend:' .. ARGV[i], delta)
-    redis.call('SADD', 'xhub:spend:ids', ARGV[i])
   end
 end
 redis.call('RPUSH', KEYS[1], ARGV[1])
@@ -507,27 +387,9 @@ redis.call('HSET', KEYS[2], ARGV[3], '1')
 return 1
 `)
 
-// 把一条花费日志放进 Redis 队列，等刷写进 PostgreSQL。客户端为空时直接返回。
-// 参数 row（SpendLog）：从用量或目录读出的SpendLog。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：仅在 redis.go 内使用
-// 测试：无直接单测
-func (c *Client) EnqueueLog(row SpendLog) error {
-	if c == nil {
-		return nil
-	}
-	raw, err := json.Marshal(row)
-	if err != nil {
-		return err
-	}
-	return c.rdb.RPush(context.Background(), "xhub:spendlog", raw).Err()
-}
-
-// PeekLogs 查看花费队列头部的若干条，不删除。客户端为空或没有日志时两个返回值都是 nil。
-// 参数 n（int）：数量。
-// 返回 rows（[]SpendLog）：这一批花费日志；raw（[]string）：原始文本或 JSON 字节。
-// 调用：dataplane Flush，查看队列头部且不删除。
-// 测试：无直接单测
+// PeekLogs 为 dataplane Flush 查看最多 n 条花费日志而不删除，返回解码记录及对应原始字符串。
+// 客户端为空、n 小于一、读取失败或队列为空时返回 nil；损坏事件只返回其前面的合法前缀，不能越过坏记录。
+// 测试：redis_test.go 覆盖正常队列和损坏队头，cmd/regression/spend_queue_test.go 覆盖刷写失败保留记录。
 func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string) {
 	if c == nil || n < 1 {
 		return nil, nil
@@ -540,8 +402,7 @@ func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string) {
 	for i, item := range vals {
 		var row SpendLog
 		if json.Unmarshal([]byte(item), &row) != nil || row.RequestID == "" {
-			// Never acknowledge an undecodable event. Return only the valid
-			// prefix; a corrupt head blocks flushing until explicitly repaired.
+			// 不能确认无法解码的事件，否则会永久丢失用量；坏队头必须显式修复后才能继续刷写。
 			util.Error("spend queue contains an invalid event at offset %d", i)
 			return out, vals[:i]
 		}
@@ -550,11 +411,11 @@ func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string) {
 	return out, vals
 }
 
-// AckFlushed acknowledges spend deltas and the written log prefix together after the database transaction succeeds. AckFlushed subtracts hot spend and trims the log prefix in one Redis script. If the queue head is no longer the batch that was peeked, it does nothing, so a retry cannot subtract twice after a successful ack and cannot drop the logs first.
-// 参数 deltas（map[string]float64）：这次要累加的热计数，键是花费或 token 维度；n（int）：数量；head（string）：AckFlushed使用的head。空串表示调用方没有提供这项。
-// 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：dataplane/live.go
-// 测试：无直接单测
+// AckFlushed 在数据库事务成功后，原子释放各主体热花费并确认已写入的队列前缀。
+// 参数 deltas 为主体花费标识到本批金额的映射，n 为记录数，head 为 PeekLogs 返回的首条原文。
+// 返回 error：非法金额或 Redis 失败时非 nil；空客户端、空批次和队头已经改变时无副作用。
+// 调用：dataplane/runtime.Flush；队头校验防止成功确认后重试重复扣减，金额预检防止只释放部分主体。
+// 测试：redis_test.go 和 cmd/regression/spend_queue_test.go 验证确认原子性、重复确认及故障恢复。
 func (c *Client) AckFlushed(deltas map[string]float64, n int, head string) error {
 	if c == nil || n < 1 || head == "" {
 		return nil
@@ -581,7 +442,7 @@ if (not head) or head ~= ARGV[2] then
   return 0
 end
 local n = tonumber(ARGV[1])
--- Preflight every counter before subtracting any of them.
+-- Lua 错误不回滚已经执行的写入，必须在扣减前预检全部主体计数。
 for i = 3, #ARGV, 2 do
   local raw = redis.call('GET', 'xhub:spend:' .. ARGV[i])
   local current = raw and tonumber(raw) or 0
@@ -603,43 +464,6 @@ end
 redis.call('LTRIM', KEYS[1], n, -1)
 return 1
 `)
-
-// AckLogs 从花费队列头部丢掉已经刷进数据库的 n 条。
-// 参数 n（int）：要丢掉的条数。小于 1 时什么都不做。
-// 返回 error（error）：Redis 修剪失败时非 nil。客户端为空或 n 小于 1 时为 nil。
-// 调用：dataplane Flush。
-// 测试：无直接单测
-func (c *Client) AckLogs(n int) error {
-	if c == nil || n < 1 {
-		return nil
-	}
-	return c.rdb.LTrim(context.Background(), "xhub:spendlog", int64(n), -1).Err()
-}
-
-// DrainLogs 从队列头部弹出最多 n 条花费日志。弹出后队列里不再保留它们。
-// 参数 n（int）：最多弹出的条数。小于 1 时返回 nil。
-// 返回 []SpendLog（[]SpendLog）：弹出的花费日志。客户端为空或队列空时为 nil。
-// 调用：仅在 redis.go 内使用。
-// 测试：无直接单测
-func (c *Client) DrainLogs(n int) []SpendLog {
-	if c == nil || n < 1 {
-		return nil
-	}
-	ctx := context.Background()
-	var out []SpendLog
-	for i := 0; i < n; i++ {
-		raw, err := c.rdb.LPop(ctx, "xhub:spendlog").Bytes()
-		if err != nil {
-			break
-		}
-		var row SpendLog
-		if json.Unmarshal(raw, &row) != nil {
-			continue
-		}
-		out = append(out, row)
-	}
-	return out
-}
 
 // GetString reads one Redis string. A missing key returns ok false.
 // 参数 ctx（context.Context）：上下文，取消时停止；key（string）：缓存或配置表的键。

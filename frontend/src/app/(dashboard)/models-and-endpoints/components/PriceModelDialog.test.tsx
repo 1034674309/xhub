@@ -57,8 +57,8 @@ describe("PriceModelDialog classification selects", () => {
     );
   });
 
-  /** 前置三个字段均含目录外旧值；验证请求完成仍回显且保存保留；全局卸载与重置 mock 清理。 */
-  it("retains legacy values outside all three catalogs", async () => {
+  /** 前置三个当前字段均含自定义目录外值；验证请求完成仍回显且保存保留；全局卸载与重置 mock 清理。 */
+  it("retains custom values outside all three catalogs", async () => {
     const row = priceCatalogRows({
       models: [{ id: "legacy", litellm_provider: "old-provider", mode: "old-mode", endpoint_id: "old-endpoint" }],
     })[0];
@@ -84,19 +84,33 @@ describe("PriceModelDialog classification selects", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  /** 前置目录请求失败与历史 endpoint_type；验证错误可见、旧值仍可保存；全局卸载清理。 */
-  it("preserves the legacy endpoint alias on a catalog failure", async () => {
+  /** 前置目录请求失败与当前 endpoint_id；验证错误可见且当前值仍可保存，不写旧别名；全局卸载清理。 */
+  it("preserves the current endpoint on a catalog failure", async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error("offline"));
     const row = priceCatalogRows({
-      models: [{ id: "legacy", litellm_provider: "openai", endpoint_type: "ark_contents_generation" }],
+      models: [{ id: "current", litellm_provider: "openai", endpoint_id: "ark_contents_generation" }],
     })[0];
     const { user, onSave } = setup(row);
     expect(await screen.findByRole("alert")).toHaveTextContent("已有值已保留");
     expect(screen.getByLabelText(t("priceData.endpointType"))).toHaveValue("ark_contents_generation");
     await user.click(screen.getByRole("button", { name: t("Save"), exact: true }));
     expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ endpoint_id: "ark_contents_generation", endpoint_type: null }),
+      expect.objectContaining({ endpoint_id: "ark_contents_generation" }),
     );
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("endpoint_type");
+  });
+
+  /** 前置仅旧别名但无当前端点；验证表单不回退、不迁移、不写旧字段；全局卸载和重置 mock 清理。 */
+  it("does not promote a retired endpoint alias", async () => {
+    const row = priceCatalogRows({
+      models: [{ id: "retired-alias", litellm_provider: "openai", endpoint_type: "ark_contents_generation" }],
+    })[0];
+    const { user, onSave } = setup(row);
+    await screen.findByRole("option", { name: /Ark Video/ });
+    expect(screen.getByLabelText(t("priceData.endpointType"))).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: t("Save"), exact: true }));
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("endpoint_id");
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("endpoint_type");
   });
 
   /** 前置新建表单收到不合法端点响应；验证失败提示及端点禁用，其余价格可保存；全局卸载清理。 */

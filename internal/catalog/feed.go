@@ -575,8 +575,7 @@ func convertFeedModel(model feedModel) map[string]any {
 		}
 	}
 
-	// Build the structured rate table. It sits beside the flat fields so that
-	// old readers keep working while the billing path is migrated to use it.
+	// 结构化费率保留计费变体；并列的汇总字段供当前价格目录展示和协议接口使用，非历史数据迁移。
 	if rates := buildRates(details); len(rates) > 0 {
 		row["rates"] = rates
 	}

@@ -144,7 +144,7 @@ func validateNewDeploymentSurface(params, info map[string]any) error {
 
 // credentialProtocolMatches 校验部署协议与已存凭据的兼容性，供创建和更新模型调用。
 // 参数 name：凭据名称；record：已存凭据（允许缺字段）；current：部署声明的协议。
-// 返回 bool：兼容时为真；不修改凭据或部署，空协议沿用历史允许行为。
+// 返回 bool：两个非空协议兼容时为真；空协议拒绝，不修改凭据或部署。
 // 调用：validateCredential 在创建、更新模型时。
 // 协议必须匹配；凭据名和历史供应商提示不授予跨协议权限。
 // 测试：validate_credential_test.go、regression/model_credential_test.go。
@@ -158,7 +158,10 @@ func credentialProtocolMatches(name string, record map[string]any, current strin
 	}
 	protocol = strings.ToLower(protocol)
 	current = strings.ToLower(strings.TrimSpace(current))
-	if protocol == "" || current == "" || protocol == current {
+	if protocol == "" || current == "" {
+		return false
+	}
+	if protocol == current {
 		return true
 	}
 	return openAICompatibleProtocol(protocol) && openAICompatibleProtocol(current)
