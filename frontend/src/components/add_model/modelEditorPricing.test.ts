@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { setActiveLocale } from "@/i18n";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildEditorModel,
   catalogFieldValue,
@@ -140,3 +141,6 @@ describe("modelEditorPricing", () => {
     expect(rows).not.toHaveProperty("removed");
   });
 });
+
+/** 前置中文校验语境；只重置翻译状态，不访问外部资源。 */
+beforeEach(() => setActiveLocale("zh-CN"));

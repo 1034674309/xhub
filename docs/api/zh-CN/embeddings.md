@@ -13,14 +13,6 @@ POST /v1/embeddings
 
 Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际请求使用上面的完整接口路径。
 
-## 请求参数
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| model | string · required | 公开模型名，部署必须支持此协议。 |
-| input | string|string[] · required | 文本或文本批次。 |
-| encoding_format / dimensions | string / integer | float 或 base64；仅支持时可设置维数。 |
-
 ## 请求示例
 
 ~~~shell
@@ -29,6 +21,14 @@ curl "$XHUB_BASE_URL/v1/embeddings" \
   -H "Content-Type: application/json" \
   -d '{"model":"YOUR_MODEL_NAME","input":["Hello world"]}'
 ~~~
+
+## 请求参数
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| model | string · required | 公开模型名，部署必须支持此协议。 |
+| input | string|string[] · required | 文本或文本批次。 |
+| encoding_format / dimensions | string / integer | float 或 base64；仅支持时可设置维数。 |
 
 ## 成功响应
 
@@ -71,7 +71,3 @@ curl "$XHUB_BASE_URL/v1/embeddings" \
 | 401 | XHub 凭据缺失或无效。 |
 | 403 | 权限拒绝，请检查模型范围或策略。 |
 | 429 | 超过限制，请检查响应详情与 Retry-After。 |
-
-## 能力与计费边界
-
-参数支持取决于部署模型及转换或 Bypass 路径；XHub 不保证所有上游扩展字段在所有模型中可用。以已实现的协议适配和上游响应为准。usage 的明细属于对应输入/输出总量，不能重复相加；费用以网关日志保存的计费快照为准。示例响应仅用于理解字段。

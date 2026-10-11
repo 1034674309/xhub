@@ -65,11 +65,6 @@ curl "$XHUB_BASE_URL/queue/fal-ai/kling-video/v2.5-turbo/pro/text-to-video" \
 | 403 | 权限拒绝，请检查模型范围或策略。 |
 | 429 | 超过限制，请检查响应详情与 Retry-After。 |
 
-## 能力与计费边界
-
-参数支持取决于部署模型及转换或 Bypass 路径；XHub 不保证所有上游扩展字段在所有模型中可用。以已实现的协议适配和上游响应为准。usage 的明细属于对应输入/输出总量，不能重复相加；费用以网关日志保存的计费快照为准。示例响应仅用于理解字段。
-
-
 ## 按模型系列接入
 
 - [Seedance](fal-seedance.md)

@@ -1,7 +1,20 @@
-# Multiple-provider acceptance
+# Multi-provider model verification
 
-[简体中文](../zh-CN/multi-supplier-regression.md) · [Developer documentation](README.md)
+Validate each deployment independently before routing them under one public model name.
 
-Validate individual deployments then routing among compatible candidates sharing a public model. Observe retries, cooldown, fallback permissions, final result, and billing. Deterministic draws prove weighted intervals; a small random sample cannot guarantee exact traffic ratios.
+~~~bash
+go test ./cmd/regression/providerconfig ./e2e/providerconfig -count=1
+XHUB_REGRESSION_STRICT=1 go test ./cmd/regression -run '^TestMultiSupplier' -count=1 -v
+~~~
 
-See [testing](testing.md) for isolation, commands, evidence, and external boundaries.
+| Assertion | Evidence |
+| --- | --- |
+| Each deployment works | Provider, transport and upstream result |
+| Zero weight excluded | Upstream call counts |
+| Retry / cooldown / fallback | Actual attempt order and final deployment |
+| Successful charge once | Snapshot, logs and five scope totals |
+| Cleanup | Schema and dedicated Redis |
+
+Small random samples do not prove exact traffic ratios. Deterministic draws verify weighted intervals; real calls verify protocol, ownership and invoices.
+
+[Paid runs](regression-live.md) · [Template JSON](routing.md)

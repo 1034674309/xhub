@@ -1,28 +1,29 @@
-# Browser acceptance
+# Browser E2E
 
-[简体中文](../zh-CN/e2e-regression.md) · [Developer documentation](README.md)
+## Free isolated runs
 
-Use real browser, console, gateway, DB, and local upstream. Assert user-visible and data-plane outcomes for create/edit/debug/enable/block/redact/pass/export/delete. Static page presence and mock success are insufficient. Run bash scripts/e2e.sh with unique UI/GW/UP ports and report directory. Use accessible names in both languages and English examples; preserve inputs and clean failures.
+~~~bash
+make e2e-offline
+make e2e-model-endpoints
+bash scripts/e2e.sh provider-forms.spec.ts model-credential-protocol.spec.ts
+~~~
 
-## Related references
+The [runner](../../../scripts/e2e.sh) uses a real browser, console, gateway and database with local upstreams. Prefer roles/labels over fragile CSS. Delete created resources in finally; the runner cleans schemas.
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+| Flow | Cases |
+| --- | --- |
+| Provider → discovery → deployment save | provider-forms / model-discovery |
+| Key → Playground → logs | keys-playground |
+| Template → binding → actual routing | product-fixes / route-diagnostic |
+| Quota → rejection → recovery | quota-hierarchy / rate-hierarchy |
+| Guardrail → block / modify / allow | Guardrail specs |
 
+## Paid and shared-data runs
+
+make e2e and make e2e-all call real providers. make testdata clears shared xhub/public and Redis DB 1; it is not an isolated runner. Obtain explicit confirmation before using a working instance.
+
+## Reports
+
+.e2e/runs/<timestamp>-<pid>/ stores evidence; .e2e/latest points to the latest run. Record commands, filters, pass/fail/skip and cleanup. A screenshot alone does not prove HTTP, database and data-plane behavior.
+
+[Test environment](testing.md) · [Real providers](regression-live.md)

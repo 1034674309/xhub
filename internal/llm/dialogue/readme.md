@@ -11,3 +11,7 @@ go test ./internal/llm/dialogue/...
 model defines normalized values; request/response encode and decode; validation checks fields; usage normalizes reported facts; dialogue_google handles Google. No network calls.
 
 Backend regressions live in cmd/regression; browser flows in frontend/e2e. Offline tests use local HTTP upstreams and do not establish production credential or vendor availability.
+
+## Coverage gate
+
+Run scripts/core-codec-coverage.sh using bash. Registry and dialogue codec must each reach 95% statement coverage. Test failures, missing evidence, or a lower percentage fail the command. The profile uses package unit tests without adding backend regression or browser coverage.

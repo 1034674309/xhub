@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { appPageWritePath, dashboardAppPath } from "./middleware";
+import { appPageWritePath, dashboardAppPath, documentationAssetRequest } from "./middleware";
+
+/** 目的：帮助配图读取不误代理到网关；前置实际分流函数，正常读取通过，写入及相似路径拒绝，无业务数据清理。 */
+it("routes only documentation screenshot reads to public assets", () => {
+  expect(documentationAssetRequest("GET", "/assets/provider-guide/provider-form-en.jpg")).toBe(true);
+  expect(documentationAssetRequest("HEAD", "/assets/provider-guide/deployment-form-zh.jpg")).toBe(true);
+  expect(documentationAssetRequest("POST", "/assets/provider-guide/provider-form-en.jpg")).toBe(false);
+  expect(documentationAssetRequest("GET", "/assets/provider-guide-api")).toBe(false);
+  expect(documentationAssetRequest("GET", "/v1/models")).toBe(false);
+});
 
 const removed = [
   "/agents",

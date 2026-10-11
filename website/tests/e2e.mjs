@@ -27,6 +27,20 @@ try {
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  // 目的：双语入口可实际导航且共享翻译源不造成重复目录；前置真实构建服务器，只读页面，最终关闭上下文。
+  await scenario("整体文档入口 → 开发指南 → 双语目录无重复", async () => {
+    for (const [lang, home, label, locale] of [["zh", "", "开发指南", "zh-CN"], ["en", "en/", "Developer guide", "en"]]) {
+      await page.goto(base + home);
+      assert.equal(await page.locator(".doc-card").count(), 4);
+      await page.locator(".documentation-section").getByRole("link", { name: new RegExp(label) }).click();
+      await page.waitForURL(`**/development/${locale}/README.html`);
+      const links = await page.locator(".docs-sidebar .nav-group a").evaluateAll((items) => items.map((item) => item.href));
+      assert.equal(new Set(links).size, links.length, "目录不能出现重复目标地址");
+      assert.ok(links.some((value) => value.endsWith(`/center/${lang}/billing/usage-based-billing.html`)), "计费入口必须指向计费文章");
+      assert.ok(links.some((value) => value.endsWith(`/center/${lang}/api/chat-completions.html`)), "API 目录必须包含真实 Chat Completions 入口");
+      await page.screenshot({ path: `${reportDirectory}/docs-navigation-${lang}.png` });
+    }
+  });
   // 前置为实际构建产物，验证旧地址、锚点、中英同主题切换与英文导航；只读网站，浏览器上下文最终清理。
   await scenario("开发文档语言目录 → 旧地址兼容 → 同主题切换 → API", async () => {
     await page.goto(base + "docs/development/routing.html#main");
@@ -42,6 +56,42 @@ try {
     await page.getByRole("heading", { name: "模型列表", exact: true }).waitFor();
   });
   await scenario("构建回归：文档、资源、搜索页面和锚点均可达", async () => { assert.deepEqual(regression.errors, []); assert.ok(regression.indexedDocuments >= 100); });
+  // 目的：从真实帮助进入供应商操作及代码指南，验证双语、英文示例、源码链接和刷新；前置实际构建与 HTTP 索引，无上游调用，浏览器最终清理。
+  await scenario("供应商帮助 → NewAPI/Suno → 双语接入指南 → 源码", async () => {
+    await page.goto(base + "docs/center/zh/help/models.html");
+    await page.getByRole("heading", { name: "供应商与模型部署", exact: true }).waitFor();
+    await expect(page.getByRole("img", { name: "中文模型供应商连接表单" })).toBeVisible();
+    assert.ok(await page.getByRole("img", { name: "中文模型供应商连接表单" }).evaluate((img) => img.complete && img.naturalWidth > 0), "中文供应商截图必须加载");
+    assert.ok(await page.getByRole("img", { name: "中文模型部署表单" }).evaluate((img) => img.complete && img.naturalWidth > 0), "中文部署截图必须加载");
+    assert.match(await page.getByRole("article").innerText(), /NewAPI[\s\S]*Suno/);
+    await page.getByRole("link", { name: "Switch to English", exact: true }).click();
+    assert.match(await page.getByRole("article").innerText(), /no Suno executor/);
+    await expect(page.getByRole("img", { name: "English provider connection form" })).toBeVisible();
+    assert.ok(await page.getByRole("img", { name: "English provider connection form" }).evaluate((img) => img.complete && img.naturalWidth > 0), "英文供应商截图必须加载");
+    assert.ok(await page.getByRole("img", { name: "English model deployment form" }).evaluate((img) => img.complete && img.naturalWidth > 0), "英文部署截图必须加载");
+    await page.goto(base + "docs/development/zh-CN/provider-catalog.html");
+    await page.getByRole("heading", { name: "添加模型供应商与开发新协议", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "自己添加一个 provider", exact: true }).waitFor();
+    assert.equal(await page.getByRole("heading", { name: "config.yaml 只负责启动，不用手填 model_list", exact: true }).count(), 0);
+    assert.match(await page.getByRole("article").innerText(), /internal\/provider\/all\/all.go/);
+    assert.doesNotMatch(await page.getByRole("article").innerText(), /config\.yaml|model_list: \[\]/);
+    assert.match(await page.getByRole("article").innerText(), /registry\.RegisterTransport/);
+    assert.match(await page.getByRole("article").innerText(), /模型供应商/);
+    const examples = await page.locator("article pre:not(:has(code.language-go))").allTextContents();
+    assert.ok(await page.locator("article code.language-go .hljs-keyword").count() > 0, "Go 示例必须真正语法高亮");
+    assert.ok((await page.locator("article code.language-go").allTextContents()).some((value) => value.includes("registry.RegisterTransport(contract.Transport{")), "必须显示完整注册示例");
+    assert.ok(examples.some((value) => value.includes("Reply with the word ready.")));
+    assert.ok(examples.every((value) => !/[\u4e00-\u9fff]/.test(value)), "请求和配置示例应保持英文");
+    assert.ok(examples.every((value) => !value.includes("model_list:") && !value.includes("os.environ/NEWAPI_KEY")), "接入指南不得引导手写部署与内联认证");
+    await page.getByRole("link", { name: "Switch to English", exact: true }).click();
+    await page.getByRole("heading", { name: "Add model providers and implement new protocols", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Add your own provider", exact: true }).waitFor();
+    assert.equal(await page.getByRole("heading", { name: "config.yaml is for startup, not manual model_list editing", exact: true }).count(), 0);
+    await page.reload();
+    await page.getByRole("link", { name: "provider source guide", exact: true }).click();
+    assert.match(await page.getByRole("article").innerText(), /No new provider package/);
+    await page.screenshot({ path: reportDirectory + "/provider-source-guide.png", fullPage: true });
+  });
   // 前置为真实静态网站和共享文档源，四类切换只显示本类正文及目录，验证帮助、中英对应页；无业务写入。
   await scenario("同步文档中心 → 帮助 → 四分类 → 英文", async () => {
     await page.goto(base + "docs/");
@@ -72,11 +122,12 @@ try {
     await page.goto(base);
     await page.getByRole("button", { name: "搜索文档 /", exact: true }).click();
     await page.getByRole("searchbox").fill("XGo");
-    await page.locator(".search-results").getByRole("link", { name: /XHub 护栏/ }).click();
-    await page.getByRole("heading", { name: "XHub 护栏：配置与 XGo 自定义脚本", exact: true }).waitFor();
+    await page.locator(".search-results").getByRole("link", { name: /XGo 护栏二开/ }).click();
+    await page.getByRole("heading", { name: "XGo 护栏二开", exact: true }).waitFor();
     assert.match(await page.locator("article").innerText(), /ApplyGuardrail/);
-    await page.getByRole("complementary", { name: "本页内容" }).getByRole("link", { name: "用 Go 语法写 XGo", exact: true }).click();
-    assert.match(page.url(), /#用-go-语法写-xgo|#%E7%94%A8/);
+    assert.ok(await page.locator("article code.language-go .hljs-keyword").count() > 0, "护栏示例必须高亮");
+    await page.getByRole("link", { name: "Switch to English", exact: true }).click();
+    assert.match(await page.getByRole("article").innerText(), /ApplyGuardrail/);
   });
   // 前置为首页代码块，验证复制实际写入剪贴板；测试凭据均为占位符，无需清理业务数据。
   await scenario("复制 Docker 命令到剪贴板", async () => {
@@ -97,7 +148,7 @@ try {
   });
   // 前置为真实站点和仓库配图，验证双语安装/客户指南的图片完整加载、截图原图可达；无 mock 或业务数据，截图写入专用目录。
   await scenario("双语图文指南 → 图片加载 → 截图原图", async () => {
-    for (const [document, count] of [["getting-started.zh-CN", 3], ["getting-started", 3], ["user-guide.zh-CN", 5], ["user-guide", 5]]) {
+    for (const [document, count] of [["getting-started.zh-CN", 3], ["getting-started", 3], ["user-guide.zh-CN", 8], ["user-guide", 8]]) {
       await page.goto(`${base}docs/${document}.html`);
       const illustrations = page.getByRole("article").getByRole("img");
       assert.equal(await illustrations.count(), count, `${document} 应显示 ${count} 张配图`);
@@ -106,14 +157,26 @@ try {
         await illustration.scrollIntoViewIfNeeded();
         await expect.poll(() => illustration.evaluate((element) => element.complete && element.naturalWidth > 0), { message: `${document} 图片应从真实静态服务器加载` }).toBeTruthy();
       }
+      if (document.startsWith("user-guide")) {
+        const locale = document.endsWith("zh-CN") ? "zh" : "en";
+        for (const name of ["playground", "usage"]) {
+          const link = page.getByRole("article").locator(`a[href$="workflow-guide/${name}-${locale}.jpg"]`);
+          await link.click();
+          assert.equal(page.url(), `${base}assets/workflow-guide/${name}-${locale}.jpg`);
+          const original = await page.request.get(page.url());
+          assert.equal(original.status(), 200);
+          assert.match(original.headers()["content-type"], /image\/jpeg/);
+          await page.goBack();
+        }
+      }
     }
     await page.goto(`${base}docs/user-guide.zh-CN.html`);
-    const screenshot = page.getByRole("img", { name: "模型与端点页面：Providers 标签、Add Model 入口及模型部署列表", exact: true });
+    const screenshot = page.getByRole("img", { name: "中文模型供应商连接表单", exact: true });
     await screenshot.click();
-    assert.equal(page.url(), `${base}assets/console-deployments.png`);
+    assert.equal(page.url(), `${base}assets/provider-guide/provider-form-zh.jpg`);
     const response = await page.request.get(page.url());
     assert.equal(response.status(), 200);
-    assert.match(response.headers()["content-type"], /image\/png/);
+    assert.match(response.headers()["content-type"], /image\/jpeg/);
     await page.goBack();
     await page.getByRole("heading", { name: "XHub 客户使用与管理手册", exact: true }).waitFor();
     await screenshot.scrollIntoViewIfNeeded();
@@ -145,13 +208,14 @@ try {
       await failurePage.getByText("搜索索引加载失败，请使用文档目录或稍后重试。", { exact: true }).waitFor();
       await failurePage.unroute("**/search-index.json");
       await failurePage.getByRole("searchbox").fill("XGo");
-      await failurePage.locator(".search-results").getByRole("link", { name: /XHub 护栏/ }).waitFor();
+      await failurePage.locator(".search-results").getByRole("link", { name: /XGo 护栏二开/ }).waitFor();
     } finally { await failurePage.close(); }
   });
-  // 前置为架构文档，验证本地 Mermaid 脚本生成实际 SVG，无外部 CDN 或后台依赖。
-  await scenario("架构图由本地资源实际渲染", async () => {
+  // 前置为真实架构文档，验证精简请求链及模块入口可见；只读页面，无外部依赖及数据清理。
+  await scenario("架构请求链与源码导航实际渲染", async () => {
     await page.goto(`${base}docs/development/architecture.html`);
-    await page.locator(".mermaid svg").first().waitFor();
+    assert.match(await page.getByRole("article").innerText(), /Gateway :4000/);
+    await expect(page.getByRole("link", { name: "router", exact: true })).toBeVisible();
   });
   // 前置为移动设备尺寸，验证菜单、文档入口与横向布局，截图保存到专用报告目录。
   await scenario("移动端菜单 → 帮助文档，页面无横向溢出", async () => {

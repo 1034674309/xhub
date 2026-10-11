@@ -950,7 +950,11 @@ class DatasetTests(unittest.TestCase):
             self.assertFalse(passed)
             self.assertEqual(dataset.report["probe_attempts"][-1]["error"], "ConnectionError")
             self.assertFalse(any(row.get("name") == "real-model-probe" for row in dataset.report["checks"]))
-            self.assertIn("❌ [gpt-6-sol / bypass_openai_chat / 真实模型候选探测 1/5]", "\n".join(lines))
+            output = "\n".join(lines)
+            self.assertIn("⚠️ [gpt-6-sol / bypass_openai_chat / 真实模型候选探测 1/5]", output)
+            self.assertIn("本次探测不计入用例失败", output)
+            self.assertNotIn("❌", output)
+            self.assertNotIn("remote closed", output)
 
     def test_chat_probe_marks_only_nonzero_real_usage_as_success(self):
         """目的：真实聊天候选必须同时返回回答和非零计量；前置成功供应商响应，验证打勾日志和通过证据，不访问真实外网且无需清理。"""

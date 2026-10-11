@@ -1,3 +1,4 @@
+import { setActiveLocale } from "@/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -30,6 +31,7 @@ function mount() {
 }
 describe("公开模型默认权重", () => {
   beforeEach(() => {
+    setActiveLocale("zh-CN");
     vi.clearAllMocks();
     mocks.put.mockResolvedValue({});
   });

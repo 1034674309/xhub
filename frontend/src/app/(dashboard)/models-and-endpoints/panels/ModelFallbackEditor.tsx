@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 import { useState, useEffect } from "react";
 import { apiClient } from "@/components/networking";
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,10 @@ export type FallbackPolicy = {
   context_window_fallbacks?: string[];
   content_policy_fallbacks?: string[];
 };
-const categories = [
-  ["fallbacks", "通用错误", "限流、超时、连接失败或服务端错误时尝试。"],
-  ["context_window_fallbacks", "上下文超限", "请求超过模型上下文窗口时尝试。"],
-  ["content_policy_fallbacks", "内容策略错误", "上游模型返回内容策略错误时尝试。"],
+const categoryKeys = [
+  ["fallbacks", "providerGuideUI.generalErrors", "providerGuideUI.generalHelp"],
+  ["context_window_fallbacks", "providerGuideUI.contextErrors", "providerGuideUI.contextHelp"],
+  ["content_policy_fallbacks", "providerGuideUI.contentErrors", "providerGuideUI.contentHelp"],
 ] as const;
 /** 在公开模型标题旁编辑三类有序回退；参数为模型、策略、凭证与刷新回调。
  * 返回带标题、焦点管理的弹窗；打开时读取全部分页目录，保存失败保留草稿，取消不写入。
@@ -45,6 +46,9 @@ export default function ModelFallbackEditor({
   /** 外层弹窗取消回调；独立使用时仅关闭本地草稿。 */
   onCancel?: () => void;
 }) {
+  const t = useT();
+  const categories = categoryKeys.map(([key, label, help]) => [key, t(label), t(help)] as const);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState<FallbackPolicy | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +59,7 @@ export default function ModelFallbackEditor({
     setDraft(Object.fromEntries(categories.map(([key]) => [key, [...(policy?.[key] ?? [])]])));
     setError("");
     setLoading(true);
+    setLoadFailed(false);
     try {
       const names: string[] = [];
       let page = 1,
@@ -74,7 +79,8 @@ export default function ModelFallbackEditor({
           .sort(),
       );
     } catch {
-      setError("回退模型加载失败，请取消后重试。");
+      setLoadFailed(true);
+      setError(t("providerGuideUI.fallbackLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -93,7 +99,7 @@ export default function ModelFallbackEditor({
       setDraft(null);
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "回退配置保存失败");
+      setError(err instanceof Error ? err.message : t("providerGuideUI.fallbackSaveFailed"));
     } finally {
       setSaving(false);
       onBusyChange?.(false);
@@ -103,8 +109,11 @@ export default function ModelFallbackEditor({
   const update = (key: keyof FallbackPolicy, targets: string[]) =>
     setDraft((current) => ({ ...current, [key]: targets }));
   const form = draft && (
-    <section aria-label={model + " 回退配置"} className="min-h-0 w-full space-y-4 overflow-y-auto p-1">
-      {loading && <p role="status">正在加载回退模型…</p>}
+    <section
+      aria-label={t("providerGuideUI.fallbackTitle", { model })}
+      className="min-h-0 w-full space-y-4 overflow-y-auto p-1"
+    >
+      {loading && <p role="status">{t("providerGuideUI.fallbackLoading")}</p>}
       {categories.map(([key, label, help]) => (
         <fieldset key={key} disabled={loading || saving} className="space-y-2">
           <legend className="font-medium">{label}</legend>
@@ -113,7 +122,7 @@ export default function ModelFallbackEditor({
             <div key={index} className="flex flex-wrap gap-2">
               <select
                 className="w-full min-w-0 rounded border bg-background p-2 sm:flex-1"
-                aria-label={label + "目标 " + (index + 1)}
+                aria-label={t("providerGuideUI.targetLabel", { category: label, index: index + 1 })}
                 value={name}
                 onChange={(event) =>
                   update(
@@ -122,17 +131,17 @@ export default function ModelFallbackEditor({
                   )
                 }
               >
-                <option value="">选择回退模型</option>
+                <option value="">{t("providerGuideUI.selectFallback")}</option>
                 {Array.from(new Set([...options, ...targets.filter(Boolean)])).map((option) => (
                   <option key={option} value={option} disabled={targets.includes(option) && option !== name}>
                     {option}
-                    {!options.includes(option) ? "（不可用）" : ""}
+                    {!options.includes(option) ? t("providerGuideUI.unavailable") : ""}
                   </option>
                 ))}
               </select>
               <Button
                 variant="outline"
-                aria-label={label + "上移 " + (index + 1)}
+                aria-label={t("providerGuideUI.upLabel", { category: label, index: index + 1 })}
                 disabled={index === 0}
                 onClick={() => {
                   const next = [...targets];
@@ -140,11 +149,11 @@ export default function ModelFallbackEditor({
                   update(key, next);
                 }}
               >
-                上移
+                {t("providerGuideUI.up")}
               </Button>
               <Button
                 variant="outline"
-                aria-label={label + "下移 " + (index + 1)}
+                aria-label={t("providerGuideUI.downLabel", { category: label, index: index + 1 })}
                 disabled={index === targets.length - 1}
                 onClick={() => {
                   const next = [...targets];
@@ -152,11 +161,11 @@ export default function ModelFallbackEditor({
                   update(key, next);
                 }}
               >
-                下移
+                {t("providerGuideUI.down")}
               </Button>
               <Button
                 variant="ghost"
-                aria-label={label + "删除 " + (index + 1)}
+                aria-label={t("providerGuideUI.deleteLabel", { category: label, index: index + 1 })}
                 onClick={() =>
                   update(
                     key,
@@ -164,7 +173,7 @@ export default function ModelFallbackEditor({
                   )
                 }
               >
-                删除
+                {t("providerGuideUI.delete")}
               </Button>
             </div>
           ))}
@@ -173,7 +182,7 @@ export default function ModelFallbackEditor({
             disabled={(draft[key]?.length ?? 0) >= 32 || options.length === 0}
             onClick={() => update(key, [...(draft[key] ?? []), ""])}
           >
-            添加{label}回退
+            {t("providerGuideUI.addFallback", { category: label })}
           </Button>
         </fieldset>
       ))}
@@ -181,21 +190,18 @@ export default function ModelFallbackEditor({
       <div className="sticky bottom-0 flex flex-wrap gap-2 border-t bg-popover py-3">
         <Button
           disabled={
-            loading ||
-            saving ||
-            error.includes("加载失败") ||
-            categories.some(([key]) => (draft[key] ?? []).some((name) => !name))
+            loading || saving || loadFailed || categories.some(([key]) => (draft[key] ?? []).some((name) => !name))
           }
           onClick={save}
         >
-          {saving ? "正在保存…" : "保存回退"}
+          {saving ? t("providerGuideUI.saving") : t("providerGuideUI.saveFallback")}
         </Button>
         <Button
           variant="outline"
           disabled={saving}
           onClick={() => setDraft({ fallbacks: [], context_window_fallbacks: [], content_policy_fallbacks: [] })}
         >
-          清空回退
+          {t("providerGuideUI.clearFallback")}
         </Button>
         <Button
           variant="ghost"
@@ -205,7 +211,7 @@ export default function ModelFallbackEditor({
             onCancel?.();
           }}
         >
-          取消
+          {t("providerGuideUI.cancel")}
         </Button>
       </div>
     </section>
@@ -223,17 +229,21 @@ export default function ModelFallbackEditor({
       }}
     >
       <div className="min-w-0 max-w-sm space-y-2">
-        <DialogTrigger render={<Button size="sm" variant="outline" />}>配置回退</DialogTrigger>
+        <DialogTrigger render={<Button size="sm" variant="outline" />}>
+          {t("providerGuideUI.fallbackButton")}
+        </DialogTrigger>
         <p className="break-words text-xs text-muted-foreground">
           {categories
             .filter(([key]) => policy?.[key]?.length)
-            .map(([key, label]) => label + "：" + policy![key]!.join(" → "))
-            .join("；") || "未配置回退"}
+            .map(([key, label]) =>
+              t("providerGuideUI.fallbackSummary", { category: label, targets: policy![key]!.join(" → ") }),
+            )
+            .join(" · ") || t("providerGuideUI.noFallbacks")}
         </p>
       </div>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-3xl" showCloseButton={!saving}>
         <DialogHeader className="shrink-0 pr-8">
-          <DialogTitle className="break-words">{model} 回退配置</DialogTitle>
+          <DialogTitle className="break-words">{t("providerGuideUI.fallbackTitle", { model })}</DialogTitle>
           <DialogDescription>
             先尝试当前模型的部署，再按顺序尝试回退模型。目标模型也需具有调用权限；开始输出后不会切换模型。
           </DialogDescription>

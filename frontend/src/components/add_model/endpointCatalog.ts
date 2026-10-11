@@ -21,11 +21,11 @@ export const compatibleEndpoint = (endpoint: EndpointDescriptor, transport?: End
   return endpoint.id === transport.endpoint_id || (endpoint.kind === "bypass" && dialogueProtocol(transport.protocol));
 };
 /** protocolLabel 返回上游原厂协议的名称；参数为执行配置，供选择框展示，无副作用。
- * Fal/Ark 固定模型组同时展示协议和型号，未登记协议保留后台标签。 */
+ * 协议名称统一使用英文，不随界面语言改变；Fal/Ark 展示协议和型号，未知协议保留后台标签。 */
 export const protocolLabel = (transport: EndpointTransport): string => {
   const label = ({
   "openai-chat": "OpenAI · Chat Completions", "openai-responses": "OpenAI · Responses",
-  "anthropic-messages": "Anthropic · Messages", "openai-images": transport.endpoint_id.endsWith("edit") ? "OpenAI Images · 编辑图片" : "OpenAI Images · 创建图片",
+  "anthropic-messages": "Anthropic · Messages", "openai-images": transport.endpoint_id.endsWith("edit") ? "OpenAI Images · Edit Image" : "OpenAI Images · Generate Image",
   "openai-videos": "OpenAI · Video", "openai-embeddings": "OpenAI · Embedding",
   "openai-audio-translation": "OpenAI · Audio Translation",
   "openai-audio-speech": "OpenAI · Audio Speech", "openai-audio-transcription": "OpenAI · Audio Transcription",
@@ -36,6 +36,13 @@ export const protocolLabel = (transport: EndpointTransport): string => {
   // 媒体专用直通执行只有 Bypass 入口，与开放标准接口的同协议执行必须可区分。
   return transport.endpoint_id.startsWith("bypass:") && !dialogueProtocol(transport.protocol) ? label + " · Bypass" : label;
 };
+
+/** 返回公开端点展示名；参数为后台目录项，图片操作统一英文，其他登记标签保持原样。
+ * 供端点卡片及无障碍名称使用；不改变端点 ID、路径或表单草稿，无副作用。 */
+export const endpointLabel = (entry: EndpointDescriptor): string =>
+  entry.protocol === "openai-images"
+    ? protocolLabel({ ...entry, endpoint_id: entry.id })
+    : entry.label;
 
 /** 返回固定公开接口分组；参数为目录条目，返回三类原生协议或 Bypass，供上游菜单与接口说明使用。
  * 内部执行类型不决定公开协议；Fal/Ark 属于 Bypass，不产生第四种原生接口。 */

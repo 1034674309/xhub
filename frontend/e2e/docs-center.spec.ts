@@ -5,6 +5,28 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer } from "./helpers";
 
+/** 目的：真实控制台双语帮助加载对应操作截图，静态资源不得被代理到网关；前置隔离网关登录，语言切换与刷新后核对图片和 HTTP，无业务写入，schema 由脚本清理。 */
+test("provider help loads locale-specific screenshots through real console routes", async ({ page }) => {
+  await loginAdmin(page);
+  await page.goto("/docs/help/models");
+  for (const [locale, alt] of [["zh", "中文模型供应商连接表单"], ["en", "English provider connection form"]]) {
+    if (locale === "en") await page.getByRole("button", { name: "English", exact: true }).click();
+    const img = page.getByRole("img", { name: alt });
+    await expect(img).toBeVisible();
+    await expect.poll(() => img.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true);
+    const src = await img.getAttribute("src");
+    expect(src).toBe(`/assets/provider-guide/provider-form-${locale}.jpg`);
+    const response = await page.request.get(src!);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("image/jpeg");
+    const deployment = page.getByRole("img", { name: locale === "zh" ? "中文模型部署表单" : "English model deployment form" });
+    await expect.poll(() => deployment.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true);
+    await page.reload();
+    await expect(img).toBeVisible();
+  }
+  expect((await page.request.get("/assets/provider-guide/missing.jpg")).status()).toBe(404);
+});
+
 /** 目的：验证控制台入口、四分类、搜索、语言切换、复制、文章直达与移动布局；前置真实隔离网关，执行文档 curl 并核对返回及日志费用。
  * 创建专用模型和虚拟密钥，finally 删除；其余日志和登录夹具随隔离 schema 清理，不调用外部供应商。 */
 test("documentation guides a real gateway request in both languages", async ({ page, context }) => {

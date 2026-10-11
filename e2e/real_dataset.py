@@ -538,6 +538,11 @@ class Dataset:
         """用途：记录单项验收失败；参数为模型、协议、动作和异常，无返回值；不输出请求正文与密钥。"""
         self.progress(f"    ❌ [{model} / {protocol} / {action}] {type(error).__name__}: {error}")
 
+    def probe_warning(self, model, protocol, action, detail, retry):
+        """用途：输出候选探测的非致命警告；参数为模型、协议、动作、脱敏诊断及是否还有重试，返回无；供探测失败调用，仅打印下一步，不写正式 checks 或改变用例状态。"""
+        next_step = "将重试当前候选" if retry else "将继续下一候选（如有）；全部候选不可用时用例失败"
+        self.progress(f"    ⚠️ [{model} / {protocol} / {action}] 候选探测未成功：{detail}；{next_step}；本次探测不计入用例失败")
+
     def result_json(self, filename, value):
         """用途：把 bypass 返回结果保存为可复核 JSON；参数为文件名和脱敏后的响应，返回绝对路径；文件权限为0600。"""
         directory = self.directory / "artifacts"
@@ -698,7 +703,8 @@ class Dataset:
                 self.report.setdefault("probe_attempts", []).append({"name": "real-model-probe", "provider": provider["id"],
                     "model": upstream, "attempt": attempt, "attempts": attempts, "status": None,
                     "error": type(error).__name__, "max_tokens": max_tokens, "passed": False})
-                self.action_fail(upstream, protocol, attempt_label, error)
+                # 网络异常可能携带地址或凭据；警告只展示异常类型，完整状态仍由探测证据记录。
+                self.probe_warning(upstream, protocol, attempt_label, type(error).__name__, attempt < attempts)
                 if attempt < attempts:
                     self.action_wait(upstream, protocol, label,
                                      f"{delay} 秒后重试当前真实模型，随后仍失败则继续下一候选")
@@ -714,7 +720,7 @@ class Dataset:
             if result["passed"]:
                 self.action_ok(upstream, protocol, attempt_label, detail, record=False)
                 return True
-            self.action_fail(upstream, protocol, attempt_label, RuntimeError(detail))
+            self.probe_warning(upstream, protocol, attempt_label, detail, attempt < attempts)
             if attempt < attempts:
                 # 推理模型的输出预算可能先被思考耗尽；仅在上游明确截断时扩容，仍要求最终回答，不能把已计费当作成功。
                 truncated = status == 200 and result["finish_reason"] == "length" and result["content_chars"] == 0 and not result["response_error"]
@@ -1950,8 +1956,8 @@ class Dataset:
         if not candidates:
             raise RuntimeError("真实目录中没有未部署的额外聊天模型可用于生命周期验收")
         model = self.select_lifecycle_model(provider, candidates)
-        self.action_ok(model, "bypass_openai_chat", "生命周期探测",
-                       "真实供应商响应包含非空回答和非零 usage，允许进入创建、下架、恢复和删除流程")
+        self.action_ok(model, "bypass_openai_chat", "前置探测完成",
+                       f"选中 {model}；真实供应商响应包含非空回答和非零 usage，开始创建、下架、恢复和删除流程", record=False)
         self.progress(f"    [模型生命周期] 真实模型={model} 创建、调用、下架、恢复、删除")
         definition = next(row for row in self.data["models"] if row["id"] == "qiniu-chat")
         ident = self.deployment(definition, provider, model, temporary=True)

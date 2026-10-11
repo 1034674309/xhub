@@ -10,6 +10,7 @@ import { serve } from "../src/serve.mjs";
 test("预览服务器支持项目子路径并返回真实文件与错误状态", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "xhub-website-"));
   await writeFile(path.join(directory, "index.html"), "<h1>XHub</h1>");
+  await writeFile(path.join(directory, "guide.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   const server = serve({ directory, port: 0, mount: "/xhub/" });
   try {
     await once(server, "listening");
@@ -21,6 +22,15 @@ test("预览服务器支持项目子路径并返回真实文件与错误状态",
     const head = await fetch(`${origin}/xhub/index.html`, { method: "HEAD" });
     assert.equal(head.status, 200);
     assert.equal(await head.text(), "");
+    // 实际 HTTP 返回截图格式及原始字节，防止原图链接被当成下载文件；临时文件在 finally 清理。
+    const picture = await fetch(`${origin}/xhub/guide.jpg`);
+    assert.equal(picture.status, 200);
+    assert.equal(picture.headers.get("content-type"), "image/jpeg");
+    assert.deepEqual(Buffer.from(await picture.arrayBuffer()), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const pictureHead = await fetch(`${origin}/xhub/guide.jpg`, { method: "HEAD" });
+    assert.equal(pictureHead.headers.get("content-type"), "image/jpeg");
+    assert.equal(await pictureHead.text(), "");
+    assert.equal((await fetch(`${origin}/xhub/missing.jpg`)).status, 404);
     assert.equal((await fetch(`${origin}/`)).status, 404);
     assert.equal((await fetch(`${origin}/xhub/missing.html`)).status, 404);
     assert.equal((await fetch(`${origin}/xhub/`, { method: "POST" })).status, 404);

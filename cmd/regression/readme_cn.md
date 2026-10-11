@@ -23,7 +23,7 @@ route_template_config_test 覆盖完整配置往返、平台播种一次、整�
 
 ## 依赖关系
 
-[internal/logx](../../internal/logx/readme_cn.md).
+[internal/logx](../../internal/util/logx.zh-CN.md).
 
 ## 验证与维护入口
 

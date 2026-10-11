@@ -1,28 +1,35 @@
-# Model marketplace and accessible models
+# Marketplace and local catalog
 
-[简体中文](../zh-CN/model-marketplace.md) · [Developer documentation](README.md)
+Marketplace discovery does not create a deployment. Use Add this model, select a provider and protocol, and save before making calls.
 
-Catalog entries are distinct from deployments and caller-accessible models. They do not prove credentials, permissions, or live availability. My Models uses enabled deployments and scoped access. Unauthenticated GET /models exposes safe public metadata; explicit credentials enforce scope and invalid keys return 401. GET /v1/models retains authentication. Secrets and deployment addresses are omitted.
+## Example
 
-## Related references
+~~~http
+GET /price/catalog
+POST /price/model/listing
+Content-Type: application/json
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+{"id":"catalog-model","delisted":true}
+~~~
 
+## Contract
+
+This is a management request fragment; it requires an authorized management session.
+
+| Record | Persistence |
+| --- | --- |
+| Full feed snapshot | price_snapshot/catalog |
+| Manual override | price_model/<model ID> |
+| Listing state | price_listing/<model ID> |
+
+Default feed: https://api.modelink.ai/v1/market/models; XHUB_PRICE_FEED_URL selects a mirror. Reload failure keeps the saved snapshot. Delisting hides the marketplace record without disabling an existing deployment. Withdrawn models retain local history. Restoring an unbased custom price returns 409 instead of erasing its only price.
+
+## Source and verification
+
+[internal/gateway/models/schedule.go](../../../internal/gateway/models/schedule.go)
+
+~~~bash
+go test ./internal/catalog ./internal/gateway/models -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: pricing](pricing.md)

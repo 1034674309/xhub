@@ -1,28 +1,25 @@
-# Routing groups and failover
+# Routing groups and fallback
 
-[简体中文](../zh-CN/routing-groups.md) · [Developer documentation](README.md)
+Groups belong to a template. Call a group name to expand its members; call a member name to select only that model. Exact model_routes rules take precedence.
 
-Groups pool public models. Explicit routing_groups: [] isolates new templates from historical global groups. Authorize both group and actual member; neither permissions nor budgets expand. Model-specific rules outrank group strategy. Reject duplicate/invalid members and cycles. Referenced group deletion reports conflicts. Selected deployments determine billing.
+## Example
 
-## Related references
+~~~json
+{"routing_groups":[{"group_name":"chat-pool","models":["chat-main","chat-fast"],"routing_strategy":"least-busy"}],"fallbacks":[{"chat-pool":["chat-backup"]}]}
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+This fragment belongs inside a complete [template](routing.md), not a standalone save body. Group names are 1–64 characters, cannot contain whitespace or *, cannot be default or collide with public model names. Each model belongs to at most one group per template; nested groups are rejected.
+
+An empty fallback table inherits defaults. A source mapped to [] disables that source/category. Preserve target order; reject self-references and cycles across all fallback categories. Groups still require member-model authorization and budgets.
+
+## Source and verification
+
+[internal/router/groups.go](../../../internal/router/groups.go)
+
+~~~bash
+go test ./internal/router -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: routing](routing.md)

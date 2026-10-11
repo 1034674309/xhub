@@ -51,7 +51,7 @@ IAM 事务保存事件、归属及费率快照，并按请求/任务标识防止
 | [dataplane](dataplane/readme_cn.md) | 推理执行与结算数据面 |
 | [gateway](gateway/readme_cn.md) | HTTP 网关与模块组合 |
 | [hooks](hooks/readme_cn.md) | 请求在途计数 |
-| [httpx](httpx/readme_cn.md) | HTTP 错误与模块协议 |
+| [httpx](util/httpx.zh-CN.md) | HTTP 错误与模块协议 |
 | [iam](iam/readme_cn.md) | 身份、授权资源与事务账务 |
 | [live](live/readme_cn.md) | Redis 热状态与可靠用量队列 |
 | [llm](llm/readme_cn.md) | 上游请求构造与协议适配 |
@@ -59,7 +59,7 @@ IAM 事务保存事件、归属及费率快照，并按请求/任务标识防止
 | [provider](provider/readme_cn.md) | 供应商能力与传输登记 |
 | [router](router/readme_cn.md) | 部署过滤、排序与加权分流 |
 | [store](store/readme_cn.md) | 框架配置与模型存储 |
-| [util](util/readme_cn.md) | 响应缓存、运行日志与脱敏、防溢出分页工具 |
+| [util](util) | 响应缓存、运行日志与脱敏、防溢出分页工具 |
 
 ### 阅读与验证
 

@@ -13,6 +13,15 @@ POST /v1/responses
 
 Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际请求使用上面的完整接口路径。
 
+## 请求示例
+
+~~~shell
+curl "$XHUB_BASE_URL/v1/responses" \
+  -H "Authorization: Bearer $XHUB_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"YOUR_MODEL_NAME","input":"Hello, introduce yourself."}'
+~~~
+
 ## 请求参数
 
 | 字段 | 类型 | 说明 |
@@ -24,15 +33,6 @@ Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际�
 | stream | boolean | 支持时返回带类型 SSE。 |
 | tools / tool_choice | array / string or object | 仅上游支持的工具。 |
 | previous_response_id | string | 需要上游状态支持。 |
-
-## 请求示例
-
-~~~shell
-curl "$XHUB_BASE_URL/v1/responses" \
-  -H "Authorization: Bearer $XHUB_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"YOUR_MODEL_NAME","input":"Hello, introduce yourself."}'
-~~~
 
 ## 成功响应
 
@@ -85,7 +85,3 @@ curl "$XHUB_BASE_URL/v1/responses" \
 | 401 | XHub 凭据缺失或无效。 |
 | 403 | 权限拒绝，请检查模型范围或策略。 |
 | 429 | 超过限制，请检查响应详情与 Retry-After。 |
-
-## 能力与计费边界
-
-参数支持取决于部署模型及转换或 Bypass 路径；XHub 不保证所有上游扩展字段在所有模型中可用。以已实现的协议适配和上游响应为准。usage 的明细属于对应输入/输出总量，不能重复相加；费用以网关日志保存的计费快照为准。示例响应仅用于理解字段。

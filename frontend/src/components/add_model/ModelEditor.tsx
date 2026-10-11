@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 import { useState } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,6 +52,7 @@ export default function ModelEditor({
   onSaved?: (model: unknown) => void;
   onCancel?: () => void;
 }) {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
   const { data: credentials, isLoading: loadingSuppliers } = useCredentials();
@@ -118,14 +120,7 @@ export default function ModelEditor({
     if (name === values.supplier) return;
     if (name === "__existing__") {
       const existing = editorDefaults(model);
-      for (const key of [
-        "supplier",
-        "custom_llm_provider",
-        "model",
-        "model_name",
-        "transport",
-        "endpoint_types",
-      ])
+      for (const key of ["supplier", "custom_llm_provider", "model", "model_name", "transport", "endpoint_types"])
         set(key, existing[key]);
       return;
     }
@@ -133,9 +128,7 @@ export default function ModelEditor({
     set("supplier", name);
     set(
       "custom_llm_provider",
-      next?.credential_info?.custom_llm_provider ??
-        next?.credential_values?.custom_llm_provider ??
-        "",
+      next?.credential_info?.custom_llm_provider ?? next?.credential_values?.custom_llm_provider ?? "",
     );
     set("model", "");
     set("catalog_model", "");
@@ -144,9 +137,54 @@ export default function ModelEditor({
     if (values.model_name === suggestedModelName(String(values.model ?? ""), provider)) set("model_name", "");
   };
 
-  const categories = BILLING_CATEGORIES.filter((category) =>
-    category.modes.includes(values.billing_mode as BillingMode),
-  );
+  const categories = BILLING_CATEGORIES.map((category) => ({
+    ...category,
+    title: t(
+      (
+        {
+          token_offpeak: "Off-peak",
+          token_peak: "Peak",
+          token_cache: "Cache",
+          per_image: "Per image",
+          per_second: "Per second",
+          per_query: "Search",
+        } as Record<string, string>
+      )[category.id] ?? category.title,
+    ),
+    unit: t(
+      category.id === "token_offpeak"
+        ? "USD per 1M tokens · Mon–Fri outside 09:00–12:00 & 14:00–18:00 Beijing time, plus weekends and holidays"
+        : category.id === "token_peak"
+          ? "USD per 1M tokens · Mon–Fri 09:00–12:00 and 14:00–18:00 Beijing time (excl. public holidays)"
+          : category.id === "per_image"
+            ? "USD per image"
+            : category.id === "per_second"
+              ? "USD per second"
+              : category.id === "per_query"
+                ? "USD per search query"
+                : "USD per 1M tokens",
+    ),
+    fields: category.fields.map((field) => ({
+      ...field,
+      label: t(
+        (
+          {
+            input_cost_per_token: "Input",
+            output_cost_per_token: "Output",
+            input_cost_per_token_peak: "Input (peak)",
+            output_cost_per_token_peak: "Output (peak)",
+            cache_read_input_token_cost: "Cache read",
+            cache_creation_input_token_cost: "Cache write",
+            input_cost_per_image: "Input image",
+            output_cost_per_image: "Output image",
+            input_cost_per_second: "Input per second",
+            output_cost_per_second: "Output per second",
+            search_context_cost_per_query: "Per search",
+          } as Record<string, string>
+        )[field.name] ?? field.label,
+      ),
+    })),
+  })).filter((category) => category.modes.includes(values.billing_mode as BillingMode));
   /** set 统一更新表单字段并标记需要保存。参数 key/value：字段和新值；返回：无。 */
   const set = (key: string, value: unknown) => form.setValue(key, value, { shouldDirty: true });
   /** seedPrices 将目录价格投影到手动基础单价字段。
@@ -177,33 +215,33 @@ export default function ModelEditor({
       />
     </div>
   );
-  let submitLabel = model ? "保存修改" : "添加模型";
-  if (saving) submitLabel = "正在保存…";
+  let submitLabel = model ? t("providerGuideUI.saveChanges") : t("providerGuideUI.addModel");
+  if (saving) submitLabel = t("providerGuideUI.saving");
   /** save 校验连接引用和价格绑定后提交明确的模型部署契约。
    * 参数 submitted：当前表单值；返回：异步提交处理器，成功刷新列表并调用 onSaved。
    * 登录、字段或网络失败显示错误；finally 解除保存状态，防止表单永久禁用。 */
   const save = form.handleSubmit(async (submitted) => {
     setError("");
     try {
-      if (!accessToken) throw new Error("登录状态已失效，请重新登录。");
+      if (!accessToken) throw new Error(t("providerGuideUI.sessionExpired"));
       if (submitted.pricing_source === "catalog" && !hasPrice(rows[String(submitted.pricing_model)]))
-        throw new Error("该目录模型尚未定价，请选择有价格的模型或手动定价。");
+        throw new Error(t("providerGuideUI.unpricedCatalog"));
       if (
         submitted.supplier !== "__existing__" &&
         !suppliers.some((item) => item.credential_name === submitted.supplier)
       )
-        throw new Error("请选择已配置的供应商。");
+        throw new Error(t("providerGuideUI.chooseConfigured"));
       const payload = buildEditorModel(submitted, model);
       setSaving(true);
       const result = model
         ? await modelPatchUpdateCall(accessToken, payload, String(model.model_info.id))
         : await modelCreateCall(accessToken, payload);
       await queryClient.invalidateQueries({ queryKey: ["models"] });
-      toast.success(model ? "模型已更新" : "模型已添加");
+      toast.success(model ? t("providerGuideUI.updated") : t("providerGuideUI.added"));
       if (!model) form.reset(editorDefaults());
       onSaved?.(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "保存失败，请重试。");
+      setError(cause instanceof Error ? cause.message : t("providerGuideUI.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -223,22 +261,20 @@ export default function ModelEditor({
       <MountedFormProvider value={{ control: form.control, registry }}>
         <form onSubmit={save} className="space-y-6">
           <div>
-            <h2 className="text-xl font-semibold">{model ? "编辑模型" : "添加模型"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              依次选择提供商、模型和计费规则。连接凭据在供应商中统一管理。
-            </p>
+            <h2 className="text-xl font-semibold">
+              {model ? t("providerGuideUI.editModel") : t("providerGuideUI.addModel")}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("providerGuideUI.intro")}</p>
           </div>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
             <div className="space-y-6">
               <section className="space-y-5 rounded-xl border bg-card p-5 sm:p-6">
                 <div>
-                  <h3 className="font-semibold">1. 选择模型提供商</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    选择已配置的供应商，模型将使用它的连接地址与凭据。
-                  </p>
+                  <h3 className="font-semibold">{t("providerGuideUI.providerStep")}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{t("providerGuideUI.providerHelp")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="editor-supplier">模型提供商 *</Label>
+                  <Label htmlFor="editor-supplier">{t("providerGuideUI.providerLabel")}</Label>
                   <select
                     id="editor-supplier"
                     className={selectClass}
@@ -247,10 +283,14 @@ export default function ModelEditor({
                     disabled={loadingSuppliers || saving}
                     onChange={(event) => changeSupplier(event.target.value)}
                   >
-                    <option value="">{loadingSuppliers ? "正在加载供应商…" : "请选择模型提供商"}</option>
-                    {model && <option value="__existing__">保留当前提供商与连接</option>}
+                    <option value="">
+                      {loadingSuppliers ? t("providerGuideUI.loadingProviders") : t("providerGuideUI.chooseProvider")}
+                    </option>
+                    {model && <option value="__existing__">{t("providerGuideUI.keepProvider")}</option>}
                     {model && values.supplier !== "__existing__" && values.supplier && !supplier && (
-                      <option value={String(values.supplier)}>{String(values.supplier)}（原供应商）</option>
+                      <option value={String(values.supplier)}>
+                        {t("providerGuideUI.formerProvider", { name: values.supplier })}
+                      </option>
                     )}
                     {suppliers.map((item) => (
                       <option key={item.credential_name} value={item.credential_name}>
@@ -261,7 +301,9 @@ export default function ModelEditor({
                 </div>
                 {supplier && (
                   <p className="break-all text-sm text-muted-foreground">
-                    {supplier.credential_info?.api_base ?? supplier.credential_values?.api_base ?? "使用供应商默认地址"}
+                    {supplier.credential_info?.api_base ??
+                      supplier.credential_values?.api_base ??
+                      t("providerGuideUI.defaultAddress")}
                   </p>
                 )}
                 {supplier && (
@@ -274,7 +316,7 @@ export default function ModelEditor({
                         disabled={discovery.isFetching || saving}
                         onClick={() => void discovery.refetch()}
                       >
-                        {discovery.isFetching ? "正在获取模型列表…" : "获取模型列表"}
+                        {discovery.isFetching ? t("providerGuideUI.fetchingModels") : t("providerGuideUI.fetchModels")}
                       </Button>
                       <Button
                         type="button"
@@ -283,60 +325,68 @@ export default function ModelEditor({
                         disabled={saving}
                         onClick={() => setImporting(true)}
                       >
-                        导入模型到广场
+                        {t("providerGuideUI.importModels")}
                       </Button>
                     </div>
                     {discovery.data && (
                       <p className="text-xs text-muted-foreground">
-                        已获取 {discovery.data.models.length} 个模型（供应商 /models 的全部上架模型及已登记原生模型），可在下方搜索选择。实际可用性以供应商为准。
+                        {t("providerGuideUI.fetched", { count: discovery.data.models.length })}
                       </p>
                     )}
-                    {discovery.data?.warning && <p role="alert" className="text-xs text-destructive">供应商模型列表获取失败：{discovery.data.warning}。当前仅显示已登记原生模型，可重试或直接输入模型 ID。</p>}
+                    {discovery.data?.warning && (
+                      <p role="alert" className="text-xs text-destructive">
+                        {t("providerGuideUI.discoveryWarning", { error: discovery.data.warning })}
+                      </p>
+                    )}
                     {discovery.error && (
                       <p role="alert" className="text-xs text-destructive">
-                        获取模型列表失败：{discovery.error.message}。可重试或直接输入模型 ID。
+                        {t("providerGuideUI.discoveryError", { error: discovery.error.message })}
                       </p>
                     )}
                   </div>
                 )}
                 {!loadingSuppliers && suppliers.length === 0 && (
-                  <p className="text-sm text-muted-foreground">请先在“供应商”页签添加供应商及 API 凭据。</p>
+                  <p className="text-sm text-muted-foreground">{t("providerGuideUI.noProviders")}</p>
                 )}
               </section>
               <fieldset
                 disabled={!values.supplier || saving}
                 className="space-y-5 rounded-xl border bg-card p-5 sm:p-6 disabled:opacity-50"
               >
-                <h3 className="font-semibold">2. 选择模型与调用方式</h3>
-                {!values.supplier && <p className="text-sm text-muted-foreground">请先选择模型提供商。</p>}
+                <h3 className="font-semibold">{t("providerGuideUI.modelStep")}</h3>
+                {!values.supplier && (
+                  <p className="text-sm text-muted-foreground">{t("providerGuideUI.providerRequired")}</p>
+                )}
                 <div className="space-y-2">
-                  <Label htmlFor="editor-model-select">上游模型 *</Label>
+                  <Label htmlFor="editor-model-select">{t("providerGuideUI.upstreamLabel")}</Label>
                   <ModelAutocomplete
                     id="editor-model-select"
                     value={String(values.model ?? "")}
                     onChange={(value) => selectModel(value)}
                     onSelect={selectModel}
                     options={modelOptions}
-                    placeholder="输入上游模型 ID，或从联想列表中选择"
+                    placeholder={t("providerGuideUI.upstreamPlaceholder")}
                     required
                   />
-                  <p className="text-xs text-muted-foreground">
-                    联想列表包含当前供应商目录和已登记的原生模型，也可以直接输入模型 ID。
-                  </p>
-                  {catalogError && <p className="text-xs text-destructive">模型广场加载失败，仍可手动填写模型 ID。</p>}
+                  <p className="text-xs text-muted-foreground">{t("providerGuideUI.autocompleteHelp")}</p>
+                  {catalogError && <p className="text-xs text-destructive">{t("providerGuideUI.marketFailed")}</p>}
                 </div>
-                {textField("model_name", "对外模型名称 *", "客户端请求使用的模型名称")}
-                <p className="text-xs leading-relaxed text-muted-foreground">客户端使用此名称调用模型，支持 /、: 和 ：，例如 byteplus/seedance-2.0/text-to-video。上游协议按上方的上游模型 ID 匹配。</p>
+                {textField("model_name", t("providerGuideUI.publicName"), t("providerGuideUI.publicPlaceholder"))}
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("providerGuideUI.publicHelp")}</p>
                 <EndpointTypeField
                   key={String(values.supplier)}
                   selectedProvider={String(values.custom_llm_provider || "")}
-                  catalogId={supplier ? supplier.credential_info?.catalog_id ?? "" : String(model?.model_info?.catalog_id ?? "")}
+                  catalogId={
+                    supplier
+                      ? (supplier.credential_info?.catalog_id ?? "")
+                      : String(model?.model_info?.catalog_id ?? "")
+                  }
                   modelCostMap={rows}
                 />
                 <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
                   <div>
-                    <Label htmlFor="editor-enabled">启用模型</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">停用后不接受新请求，可随时重新启用。</p>
+                    <Label htmlFor="editor-enabled">{t("providerGuideUI.enable")}</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("providerGuideUI.enableHelp")}</p>
                   </div>
                   <Switch
                     id="editor-enabled"
@@ -351,26 +401,26 @@ export default function ModelEditor({
               className="space-y-5 rounded-xl border bg-card p-5 sm:p-6"
             >
               <div>
-                <h3 className="font-semibold">3. 设置计价</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  独立选择价格目录模型或自定义费率。修改提供商或上游模型不会改变计价设置。
-                </p>
+                <h3 className="font-semibold">{t("providerGuideUI.pricingStep")}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{t("providerGuideUI.pricingIntro")}</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editor-pricing-source">价格来源</Label>
+                <Label htmlFor="editor-pricing-source">{t("providerGuideUI.priceSource")}</Label>
                 <select
                   id="editor-pricing-source"
                   className={selectClass}
                   value={String(values.pricing_source)}
                   onChange={changePricingSource}
                 >
-                  <option value="catalog">使用价格目录</option>
-                  <option value="manual">手动设置部署价格</option>
+                  <option value="catalog">{t("providerGuideUI.catalogPrice")}</option>
+                  <option value="manual">{t("providerGuideUI.manualPrice")}</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="editor-pricing-model">
-                  目录定价模型{values.pricing_source === "catalog" ? " *" : "（参考）"}
+                  {t("providerGuideUI.pricingModel", {
+                    suffix: values.pricing_source === "catalog" ? " *" : t("providerGuideUI.reference"),
+                  })}
                 </Label>
                 <select
                   className={selectClass}
@@ -380,7 +430,7 @@ export default function ModelEditor({
                     set("pricing_model", event.target.value);
                   }}
                 >
-                  <option value="">请选择目录定价模型</option>
+                  <option value="">{t("providerGuideUI.choosePrice")}</option>
                   {Object.entries(rows)
                     .filter(([, item]) => hasPrice(item))
                     .map(([id]) => (
@@ -393,7 +443,7 @@ export default function ModelEditor({
               {values.pricing_source === "catalog" ? (
                 <>
                   {!hasPrice(row) ? (
-                    <p className="text-sm text-amber-600">请选择有价格的目录模型；目录中没有的模型需要手动定价。</p>
+                    <p className="text-sm text-amber-600">{t("providerGuideUI.priceHelp")}</p>
                   ) : (
                     <PricingTable row={row} />
                   )}
@@ -401,7 +451,7 @@ export default function ModelEditor({
               ) : (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="editor-pricing-format">费率设置方式</Label>
+                    <Label htmlFor="editor-pricing-format">{t("providerGuideUI.rateFormat")}</Label>
                     <select
                       id="editor-pricing-format"
                       className={selectClass}
@@ -418,8 +468,8 @@ export default function ModelEditor({
                         set("pricing_format", event.target.value);
                       }}
                     >
-                      <option value="flat">基础单价</option>
-                      <option value="rates">按项目、时段与规格设置费率</option>
+                      <option value="flat">{t("providerGuideUI.flat")}</option>
+                      <option value="rates">{t("providerGuideUI.rates")}</option>
                     </select>
                   </div>
                   {values.pricing_format === "rates" ? (
@@ -430,16 +480,16 @@ export default function ModelEditor({
                   ) : (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="editor-billing-mode">计费方式</Label>
+                        <Label htmlFor="editor-billing-mode">{t("providerGuideUI.billingMode")}</Label>
                         <select
                           id="editor-billing-mode"
                           className={selectClass}
                           value={String(values.billing_mode)}
                           onChange={(event) => set("billing_mode", event.target.value)}
                         >
-                          <option value="token">按 Token（缓存 / 闲时 / 高峰）</option>
-                          <option value="image">按图片张数</option>
-                          <option value="second">按秒</option>
+                          <option value="token">{t("providerGuideUI.tokens")}</option>
+                          <option value="image">{t("providerGuideUI.images")}</option>
+                          <option value="second">{t("providerGuideUI.seconds")}</option>
                         </select>
                       </div>
                       {categories.map((category) => (
@@ -456,7 +506,7 @@ export default function ModelEditor({
                                   step="any"
                                   value={String(values[field.name] ?? "")}
                                   onChange={(event) => set(field.name, event.target.value)}
-                                  placeholder="未设置"
+                                  placeholder={t("providerGuideUI.unset")}
                                 />
                               </div>
                             ))}
@@ -464,10 +514,7 @@ export default function ModelEditor({
                           <p className="text-xs text-muted-foreground">{category.unit}</p>
                         </fieldset>
                       ))}
-                      <p className="text-xs text-muted-foreground">
-                        留空表示未设置，0
-                        表示免费。高峰价留空时使用基础价；缓存价留空时沿用输入价。修改单价将以当前表单的价格替换部署费率表。
-                      </p>
+                      <p className="text-xs text-muted-foreground">{t("providerGuideUI.rateHelp")}</p>
                     </>
                   )}
                 </>
@@ -485,7 +532,7 @@ export default function ModelEditor({
           <div className="flex justify-end gap-3 border-t pt-5">
             {onCancel && (
               <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>
-                取消
+                {t("providerGuideUI.cancel")}
               </Button>
             )}
             <Button type="submit" disabled={saving || loadingSuppliers || !values.supplier || !values.model}>

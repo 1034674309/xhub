@@ -36,7 +36,7 @@ class Checklist:
 
     @contextmanager
     def case(self, ident):
-        """用途：包围一个真实业务用例；参数为已登记 ID，产出可标注复验/沿用的记录；成功记录耗时，任何异常或中断标失败并原样抛出，不执行后续用例。"""
+        """用途：包围一个真实业务用例；参数为已登记 ID，产出可标注复验/沿用的记录；包括清理在内的全部步骤完成后才输出用例通过，任何异常或中断标失败并原样抛出；失败日志仅展示异常类型，避免泄漏正文和凭据。"""
         row = next(row for row in self.rows if row["id"] == ident)
         if row["status"] != "pending":
             raise ValueError("本轮用例重复执行: " + ident)
@@ -49,13 +49,15 @@ class Checklist:
             yield row
         except BaseException as error:
             row.update(status="failed", error_type=type(error).__name__)
-            self.logger("[失败 " + label + "] " + type(error).__name__)
+            self.logger("❌ 用例失败：[失败 " + label + "] 异常类型=" + type(error).__name__ + "；具体失败步骤请查看上方接口及动作日志")
             raise
         else:
             if row["status"] == "running":
                 row["status"] = "passed"
             names = dict(passed="通过", revalidated="检查点已复验", reused="沿用历史证据，本轮未执行")
-            self.logger("[结果 " + label + "] " + names[row["status"]])
+            # 复验和历史沿用不能显示本轮完整用例通过，保留各自的明确语义。
+            prefix = "✅ 用例通过：" if row["status"] == "passed" else "ℹ️ 用例结果："
+            self.logger(prefix + "[结果 " + label + "] " + names[row["status"]])
         finally:
             row["seconds"] = round(time.monotonic() - started, 3)
             self.save()

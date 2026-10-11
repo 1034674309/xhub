@@ -1,28 +1,28 @@
 # Provider credential forms
 
-[简体中文](../zh-CN/provider-credential-forms.md) · [Developer documentation](README.md)
+Open Model providers → Add provider. Select the provider type first, then enter the address and authentication in that form. Changing type clears old authentication fields; editing a saved connection keeps its type fixed.
 
-Provider choice determines credential/address/region/project fields. Named credentials are separate from deployments. Hydration copies allowed fields: a nonempty named key replaces the old key; other allowed values fill blanks. Environment references resolve during hydration. Never publish secrets. Validate provider switching, required fields, masked editing, invalid credentials, and discovery failures. Preserve actual user input across language changes.
+## Example
 
-## Related references
+![English provider connection form](../../assets/provider-guide/provider-form-en.jpg)
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+| Definition | Source |
+| --- | --- |
+| Form fields | internal/catalog/publicdata/provider_fields.json |
+| Public merged definitions | /public/providers/fields |
+| Form identity | credential_info.provider_id |
+| Connection protocol | custom_llm_provider |
+
+The field snapshot is not an implementation of every upstream adapter. OAuth and native cloud authentication chains are not implied by a form entry. Entries without supported authentication cannot be saved as ordinary key connections. Price reload uses XHUB_PRICE_FEED_URL when set, otherwise catalog.MarketURL.
+
+## Source and verification
+
+[internal/catalog/credential_providers.go](../../../internal/catalog/credential_providers.go)
+
+~~~bash
+go test ./internal/catalog -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: provider-catalog](provider-catalog.md)

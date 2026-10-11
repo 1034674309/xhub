@@ -34,9 +34,19 @@ Platform administration and inference access are separate. A platform administra
 
 Several deployments can share a public model name. This gives routing a choice of upstreams without changing the application's model name.
 
-[![Models and Endpoints with Providers, Add Model and model deployment rows](assets/console-deployments.png)](assets/console-deployments.png)
+### Step 1: Add a model provider
 
-*Figure 2: Configure credentials in Providers, then return to All Models and use Add Model. Inspect the model, associated credential and price in the table. Click to open the full screenshot. This is an existing demonstration environment; its models and prices are examples. Labels can differ by console language and version.*
+Open **Model providers** and add a provider. For this example, select **Custom Openai** and name it `company-newapi`. Enter the address and API Key only in this provider connection. Leave the provider catalog ID empty for ordinary Chat models. The screenshot uses a fictional address and a masked demonstration key; do not use those values for a real connection.
+
+[![English provider connection form](assets/provider-guide/provider-form-en.jpg)](assets/provider-guide/provider-form-en.jpg)
+
+### Step 2: Add a model deployment
+
+Save the provider, then open **Model Management → Add Model**. Select the saved provider first, then enter an upstream model ID confirmed by your supplier, a public model name, the upstream protocol, and pricing. The screenshot shows the initial form before a provider is selected: complete step 1 to enable step 2. Do not repeat the address or secret in the model, and do not edit `model_list`. Click either image to view the original.
+
+[![English model deployment form](assets/provider-guide/deployment-form-en.jpg)](assets/provider-guide/deployment-form-en.jpg)
+
+For NewAPI field details, a real gateway request, and the development work required for currently unimplemented Suno support, see the [custom provider integration guide](development/en/provider-catalog.md).
 
 After saving a dialogue deployment, a platform administrator can run **Test connection**. The server uses the saved provider credentials and deployment ID to send a minimal real English dialogue request. This test does not support media deployments. It bypasses gateway key quotas, routing, cooldown, and gateway usage accounting, but the provider may still execute and charge for the request. A successful result confirms only this probe; it does not prove that streaming, tools, images, asynchronous operations, or the application's complete production request will work.
 
@@ -80,7 +90,7 @@ Budgets check recorded spend plus available hot spend. They do not reserve the c
 | Personal key | An individual developer's scripts and experiments | Owned by that person within a team, optionally a project. Secret access is restricted to the owner and platform administrators. Removing the team membership revokes personal keys for that team. |
 | Service key | A shared application, backend, or scheduled job | Owned by a team or project, managed by team/platform administrators. It remains active when a member leaves; rotate it if that member knew its secret. |
 
-Give each application a recognizable key name. The create dialog keeps its optional policy settings to a budget, budget reset period, and route template; key lifecycle settings remain available for expiry and rotation. Team, key type, and model access are basic access choices. RPM/TPM limits remain available when editing an existing key where the account is authorized to use them. Keep the secret in an environment variable or secret store.
+Open **Virtual Keys → Create New Key** and give each application a recognizable key name. Inspect model access, key type, maximum budget, RPM/TPM, budget reset, route template, expiry and rotation before creating it. The current creation dialog includes RPM/TPM; they are not restricted to editing existing keys. Blank quotas share the owner's available parent capacity; they do not bypass parent limits. Keep the generated secret in an environment variable or secret store, never in documentation screenshots.
 
 When creating or updating a key through the API, `duration` accepts a positive integer followed by `s`, `m`, `h`, or `d`, such as `30m`, `12h`, or `7d`. An empty string creates a key without an expiry. Zero, negative, malformed, and overflowing durations are rejected.
 
@@ -93,6 +103,15 @@ Open `/models-and-endpoints/mine` (**My models**) to inspect models available to
 [![My models with model filters, capabilities, prices and Use in Playground](assets/console-models.png)](assets/console-models.png)
 
 *Figure 4: Open the Playground from an available model card. The model, price and capability labels come from demonstration configuration and do not imply that every model supports them. Click to open the full screenshot.*
+
+### Test in the console before integrating your application
+
+[![English Playground model and endpoint selection](assets/workflow-guide/playground-en.jpg)](assets/workflow-guide/playground-en.jpg)
+
+1. Open **Playground** (`/playground`). Select the public model in **Select Model**, then a supported **Customer API**. The endpoint selector and send button remain unavailable until the required selections are valid.
+2. Expand **Connection settings** to inspect the request connection before sending. Provider authentication stays in the saved provider; do not paste the supplier's key into an application example.
+3. Enter an English test prompt, for example `Reply with the word ready.` Sending executes a real request and may incur supplier charges. The screenshot is the initial selection screen, not a successful-call result.
+4. Use **Get Code** to inspect the selected operation's example. For an external application, use the gateway address and an authorized XHub virtual key, not the console address or a provider secret.
 
 Install the OpenAI Python client with `pip install openai`. Set your virtual key and public model name:
 
@@ -139,6 +158,15 @@ Deployments of the same public model can fail over. Configure cross-public-model
 ## 8. Read usage, costs, and logs
 
 Use `/usage` for trends and breakdowns and `/logs` for individual calls. Visibility follows the current account's role and scope. Keep the response's `x-litellm-call-id` when investigating a call. Platform administrators can read administrative audit records through `GET /audit`.
+
+[![English Usage time range, scope, cost and request metrics](assets/workflow-guide/usage-en.jpg)](assets/workflow-guide/usage-en.jpg)
+
+1. Set **Select Time Range** to include the request you just sent. An empty period is not evidence that the request was free.
+2. Choose **Global Usage**, **Organization Usage**, **Team Usage**, or **User Usage** within your permissions. Use **Filter by user** to narrow a global view; do not compare totals from different time ranges or scopes.
+3. Start with **Cost** and **Usage Metrics**: compare total requests, successful/failed requests, total tokens, and spend. Switch to **Model Activity**, **Key Activity**, or **Endpoint Activity** to locate the relevant dimension.
+4. Open **Logs** for the individual request. Compare its status, timing, usage and cost with the response call ID. An aggregate chart alone does not explain a particular failure.
+
+The screenshot shows local development records, not a price quote or service-level guarantee. Both language screenshots use the same view; their recorded values can change as other requests run. Click any screenshot to open the full-size original.
 
 - Request prices are snapshotted so later price changes do not alter that request's recorded cost. Older records recalculated from current pricing are identified as such.
 - Gateway response-cache hits have zero upstream cost. A provider's prompt-cache hit can still incur charges.

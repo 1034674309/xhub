@@ -10,6 +10,7 @@
 让平台团队在自己的基础设施上统一管理模型、权限、成本、安全、路由与运行状态。
 
 [![Self-hosted](https://img.shields.io/badge/部署-自托管-0891B2)](docs/getting-started.zh-CN.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20兼容-412991)](#接入你的应用)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
@@ -20,7 +21,7 @@
 
 </div>
 
-XHub 面向企业建设统一的 **AI 接入与治理平台**，将多模型与多协议接入、组织权限、成本控制、安全护栏、请求路由、Agent 会话和媒体任务整合在同一网关与控制台中。平台团队集中管理 AI 资源，各业务团队在授权范围内接入应用、调试模型并追踪使用情况。
+XHub 是采用 **MIT 许可证、面向多模型使用团队的自托管 AI 网关**。为应用提供统一入口和独立虚拟密钥，在控制台集中管理模型权限、预算和使用记录。平台团队集中管理 AI 资源，各业务团队在授权范围内接入应用。
 
 **XHub 的特色：** 用 XGo 编排企业调用前检查；让路由模板沿密钥、团队、组织继承；用 Responses 历史续接支持 Agent 连续调用；保留每次请求的价格快照，并对支持的异步媒体任务去重结算。模型目录、Playground 与调用追踪把这些能力连接到日常使用中。
 
@@ -258,6 +259,10 @@ SDK 连接 **4000 端口的网关**；3000 端口提供 Web 控制台。集成�
 ## 项目状态与部署参考
 
 XHub 正在持续迭代。生产选型请结合[运行行为参考](docs/development/zh-CN/runtime.md)、[权限规则](docs/development/zh-CN/permissions.md)与[护栏指南](docs/development/zh-CN/guardrails.md)核对所需能力。预算没有请求费用预占，多实例的共享限额、缓存与幂等存在实现边界；实际费用需与供应商账单核对。当前账号登录与分级权限不包含 SSO/SCIM，本仓库不承诺商业 SLA 或合规认证。
+
+## 许可证
+
+XHub 采用 [MIT 许可证](LICENSE)，允许商用、修改和再分发，但必须保留版权声明和许可声明。第三方依赖及引入的材料继续遵守各自许可证与声明，包括[供应商目录来源声明](internal/catalog/publicdata/provider_fields.LICENSE)。软件不提供担保。
 
 ## 参与贡献
 

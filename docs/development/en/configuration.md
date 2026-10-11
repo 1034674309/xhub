@@ -1,28 +1,34 @@
-# Configuration and persistence
+# Configuration and storage
 
-[简体中文](../zh-CN/configuration.md) · [Developer documentation](README.md)
+Trace settings by owner. Model providers and deployments are managed in the console; configuration internals below are for maintainers.
 
-Startup YAML, Store overrides, IAM resources, templates, and Redis state have different lifecycles. OverlayDB replaces top-level keys; MergePatch recursively merges maps and replaces arrays. Template resolution selects a whole document. Endpoint types default to chat only when omitted; transport defaults to adapted. Only boolean disabled:true pauses. Stable IDs use model_info.id for DB or litellm_params.deployment_id for file entries. Allocations/groups/fallbacks/retry_policy compile and execute, not merely save. Check advanced/legacy fields against readers. Verify exact zero/false/null/empty round trips, atomic failures, disabled discovery, and historical prices.
+## Example
 
-## Related references
+~~~bash
+rg 'OverlayDB|MergePatch' internal/config internal/store
+rg 'RequestChain|Resolve' internal/router internal/gateway
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+| Data | Owner | Application |
+| --- | --- | --- |
+| Startup database / listener | internal/config | Process initialization |
+| Providers / deployments | Store | Model catalog and execution |
+| Templates / bindings | IAM | Whole-template resolution per request |
+| Identity / members / keys | IAM | Fresh authorization |
+| RPM / TPM / cooldown / usage queue | Redis | Shared hot state where configured |
+| Response cache | Process | Lost on restart |
+| Usage / snapshots | PostgreSQL | Historical identity and price |
+
+OverlayDB replaces top-level values, including null/0/false/arrays. MergePatch recursively merges maps and replaces arrays. Template Resolve selects one whole document, not a field merge. Failed identity/template reads must not silently grant access.
+
+## Source and verification
+
+[internal/config/config.go](../../../internal/config/config.go)
+
+~~~bash
+go test ./internal/router ./internal/store -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: routing](routing.md)

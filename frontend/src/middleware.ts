@@ -81,8 +81,16 @@ export function dashboardAppPath(pathname: string): string | null {
   return path === "/docs" || path.startsWith("/docs/") || APP_PAGES.has(path) ? path : null;
 }
 
+/** 判断帮助配图静态请求；参数为方法与路径，返回是否交给 Next public，供中间件使用。仅放行专属目录读取，写请求及相似 API 仍交网关，无副作用。 */
+export function documentationAssetRequest(method: string, pathname: string): boolean {
+  return (method === "GET" || method === "HEAD") && pathname.startsWith("/assets/provider-guide/");
+}
+
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+
+  // 帮助截图属于控制台 public，否则图片请求会被代理到数据面并返回 404。
+  if (documentationAssetRequest(req.method, pathname)) return NextResponse.next();
 
   if (pathname.startsWith("/_next") || pathname.startsWith("/favicon") || pathname === "/robots.txt") {
     return NextResponse.next();

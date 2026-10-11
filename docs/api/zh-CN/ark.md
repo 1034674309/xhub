@@ -13,6 +13,15 @@ POST /api/v3/contents/generations/tasks
 
 Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际请求使用上面的完整接口路径。
 
+## 请求示例
+
+~~~shell
+curl "$XHUB_BASE_URL/api/v3/contents/generations/tasks" \
+  -H "Authorization: Bearer $XHUB_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"YOUR_MODEL_NAME","content":[{"type":"text","text":"A lighthouse at sunrise."}]}'
+~~~
+
 ## 请求参数
 
 | 字段 | 类型 | 说明 |
@@ -29,15 +38,6 @@ Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际�
 | generate_audio | boolean | 模型支持时请求同步音频。 |
 | return_last_frame | boolean | 模型支持时请求尾帧结果。 |
 | seed / watermark | integer / boolean | 可选上游生成控制，支持情况取决于所选模型。 |
-
-## 请求示例
-
-~~~shell
-curl "$XHUB_BASE_URL/api/v3/contents/generations/tasks" \
-  -H "Authorization: Bearer $XHUB_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"YOUR_MODEL_NAME","content":[{"type":"text","text":"A lighthouse at sunrise."}]}'
-~~~
 
 ## 成功响应
 
@@ -59,10 +59,6 @@ curl "$XHUB_BASE_URL/api/v3/contents/generations/tasks" \
 | 401 | XHub 凭据缺失或无效。 |
 | 403 | 权限拒绝，请检查模型范围或策略。 |
 | 429 | 超过限制，请检查响应详情与 Retry-After。 |
-
-## 能力与计费边界
-
-参数支持取决于部署模型及转换或 Bypass 路径；XHub 不保证所有上游扩展字段在所有模型中可用。以已实现的协议适配和上游响应为准。usage 的明细属于对应输入/输出总量，不能重复相加；费用以网关日志保存的计费快照为准。示例响应仅用于理解字段。
 
 ## 任务查询与协议选择
 

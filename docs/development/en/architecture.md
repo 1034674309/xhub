@@ -1,28 +1,32 @@
-# Architecture and request lifecycle
+# Request lifecycle and module boundaries
 
-[简体中文](../zh-CN/architecture.md) · [Developer documentation](README.md)
+~~~text
+Console :3000 ─┐
+Application ──┴─> Gateway :4000
+                  -> Auth / Authz / Limits
+                  -> Router -> Dataplane -> Provider
+                  -> Usage -> PostgreSQL
+                           -> Redis queue (optional)
+~~~
 
-The console calls gateway APIs. Authentication and fresh IAM scope precede limits and routing. The router compiles candidates; the data plane executes guardrails, transport, streaming, fallback, usage, and logs. Store persists configuration; IAM owns identity and accounting. PostgreSQL supplies durability; Redis coordinates configured hot state.
+## Follow one request
 
-## Related references
+| Stage | Source | Boundary |
+| --- | --- | --- |
+| HTTP wiring | [gateway](../../../internal/gateway/readme.md) | UI buttons do not authorize requests |
+| Identity / authorization | [auth](../../../internal/auth/auth.go), [authz](../../../internal/authz/decide.go) | Client metadata is not trusted identity |
+| Candidate compilation | [router](../../../internal/router/readme.md) | Cannot expand model scope |
+| Upstream execution | [dataplane](../../../internal/dataplane/readme.md) | Cannot splice another provider after a partial stream |
+| Protocol registration / conversion | [provider](../../../internal/provider/readme.md), [llm](../../../internal/llm/readme.md) | A catalog entry does not prove executable support |
+| Configuration / identity / accounting | [store](../../../internal/store), [iam](../../../internal/iam/readme.md) | Current configuration must not rewrite historical ownership |
 
-- [Developer documentation](README.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+Normal inference runs authentication, limits, guardrails, routing, execution and accounting. Native tasks use a separate lifecycle; chat cache and retry rules do not apply automatically.
 
+## Verification
+
+~~~bash
+go test ./internal/router ./internal/dataplane/... -count=1
+go test ./internal/gateway -run 'TestVisibilityChain' -count=1
+~~~
+
+[Runtime boundaries](runtime.md) · [Pricing](pricing.md) · [Test environment](testing.md)

@@ -29,6 +29,15 @@ POST /v1/chat/completions
 
 Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际请求使用上面的完整接口路径。
 
+## 请求示例
+
+~~~shell
+curl "$XHUB_BASE_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $XHUB_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"YOUR_MODEL_NAME","messages":[{"role":"user","content":"Hello, introduce yourself."}],"stream":false}'
+~~~
+
 ## 请求参数
 
 | 字段 | 类型 | 说明 |
@@ -68,15 +77,6 @@ Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际�
 stream 默认 false。stream=true 时消费 SSE data 事件，按索引累积 choices[].delta.content 和工具参数片段，到 [DONE] 结束。usage 可能缺失，依赖上游支持。响应头已发送后，错误可能出现在事件中，不能改写 HTTP 状态。
 
 reasoning_effort、reasoning、thinking 的格式依模型而异。生图扩展、image_config、safety_settings、media_resolution 和 file_id 映射不属于 XHub 的统一保证。原厂 Bypass 保留相应上游协议；转换路径以实际适配器为准，不能假定同一参数在 OpenAI、Anthropic、Gemini 等供应商之间通用。
-
-## 请求示例
-
-~~~shell
-curl "$XHUB_BASE_URL/v1/chat/completions" \
-  -H "Authorization: Bearer $XHUB_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"YOUR_MODEL_NAME","messages":[{"role":"user","content":"Hello, introduce yourself."}],"stream":false}'
-~~~
 
 ## 成功响应
 
@@ -125,7 +125,3 @@ curl "$XHUB_BASE_URL/v1/chat/completions" \
 | 401 | XHub 凭据缺失或无效。 |
 | 403 | 权限拒绝，请检查模型范围或策略。 |
 | 429 | 超过限制，请检查响应详情与 Retry-After。 |
-
-## 能力与计费边界
-
-参数支持取决于部署模型及转换或 Bypass 路径；XHub 不保证所有上游扩展字段在所有模型中可用。以已实现的协议适配和上游响应为准。usage 的明细属于对应输入/输出总量，不能重复相加；费用以网关日志保存的计费快照为准。示例响应仅用于理解字段。

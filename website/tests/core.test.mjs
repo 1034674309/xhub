@@ -67,6 +67,15 @@ test("搜索摘要定位命中并处理非法长度", () => {
 
 const mapping = new Map([["docs/getting-started.md", "getting-started.md"], ["docs/development/routing.md", "development/routing.md"]]);
 
+/** 目的：控制台根配图转成 website 相对资源且保留部署前缀；前置真实链接改写器，验证两语言、空值及非法协议，纯函数无需清理。 */
+test("控制台帮助截图重写为站内相对资源", () => {
+  for (const lang of ["en", "zh"]) {
+    assert.equal(rewriteLink(`/assets/provider-guide/provider-form-${lang}.jpg`, "docs/center/en/help/models.md", "docs/center/en/help/models.html", mapping), `../../../../assets/provider-guide/provider-form-${lang}.jpg`);
+  }
+  assert.equal(rewriteLink(null, "docs/a.md", "docs/a.html", mapping), "");
+  assert.equal(rewriteLink("javascript:alert(1)", "docs/a.md", "docs/a.html", mapping), "");
+});
+
 // 验证 Markdown 相对链接指向真实站内页面和图片；前置映射已登记，无需网络或文件清理。
 test("Markdown 链接重写保留锚点与相对目录", () => {
   assert.equal(rewriteLink("../getting-started.md#docker", "docs/development/routing.md", "docs/development/routing.html", mapping), "../getting-started.html#docker");

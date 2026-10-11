@@ -77,7 +77,7 @@ func (s *Server) ModuleNames() []string {
 // 返回：无。进程自带的模块已挂上。新功能应走 Use，不要改这份名单。
 func (s *Server) installModules() {
 	builtins := []util.Module{
-		health.Module(s.Store.DB, Version),
+		health.Module(s.Store.DB, Version, s.enterpriseConfigured),
 		sessionModule(s),
 		publichub.Module(s, s.Store),
 		keys.Module(s),
@@ -86,6 +86,7 @@ func (s *Server) installModules() {
 		ingressModule(s),
 		accessModule(s),
 		identity.Module(s),
+		directoryModule(s),
 		usage.Module(s),
 		prefs.Module(s),
 		guard.Module(s),

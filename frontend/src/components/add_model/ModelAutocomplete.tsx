@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ export default function ModelAutocomplete({
   placeholder?: string;
   required?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [search, setSearch] = useState(value);
@@ -78,7 +80,7 @@ export default function ModelAutocomplete({
         <ul
           id={id + "-options"}
           role="listbox"
-          aria-label="上游模型联想列表"
+          aria-label={t("providerGuideUI.suggestions")}
           className="absolute z-floating mt-1 max-h-72 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md"
         >
           {matches.map((option, index) => (
@@ -97,7 +99,7 @@ export default function ModelAutocomplete({
               {option.label !== option.value && <span className="text-xs text-muted-foreground">{option.label}</span>}
             </li>
           ))}
-          {!matches.length && <li className="p-3 text-xs text-muted-foreground">没有匹配项，将使用输入的模型 ID。</li>}
+          {!matches.length && <li className="p-3 text-xs text-muted-foreground">{t("providerGuideUI.noSuggestions")}</li>}
         </ul>
       )}
     </div>

@@ -1,17 +1,24 @@
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PriceRate } from "./modelEditorPricing";
-const measures = { token: "百万 Token", picture: "张", second: "秒", query: "次" };
-const sides = {
-  input: "输入",
-  output: "输出",
-  cache_read: "缓存读取",
-  cache_write: "缓存写入",
-  batch_input: "批量输入",
-  batch_output: "批量输出",
+const measures = {
+  token: "providerGuideUI.millionTokens",
+  picture: "providerGuideUI.pictureUnit",
+  second: "providerGuideUI.secondUnit",
+  query: "providerGuideUI.queryUnit",
 };
-const windows = { all: "全天", offpeak: "闲时", peak: "高峰" };
+const sides = {
+  input: "providerGuideUI.input",
+  output: "providerGuideUI.output",
+  cache_read: "providerGuideUI.cacheRead",
+  cache_write: "providerGuideUI.cacheWrite",
+  batch_input: "providerGuideUI.batchInput",
+  batch_output: "providerGuideUI.batchOutput",
+};
+const windows = { all: "providerGuideUI.allDay", offpeak: "providerGuideUI.offpeak", peak: "providerGuideUI.peak" };
 const selectClass = "h-9 w-full rounded-md border bg-background px-2 text-sm";
+/** 编辑混合计费规则；参数为费率和更新回调，返回本地化表单，供模型编辑器使用；不写入后台。 */
 export default function RateEditor({
   rates,
   onChange,
@@ -19,64 +26,64 @@ export default function RateEditor({
   rates: PriceRate[];
   onChange: (rates: PriceRate[]) => void;
 }) {
+  const t = useT();
+  /** 合并指定行的变更；参数为行号及字段，返回无，通过回调更新草稿，不修改原数组。 */
   const update = (index: number, patch: Partial<PriceRate>) =>
     onChange(rates.map((rate, position) => (position === index ? { ...rate, ...patch } : rate)));
   return (
     <div className="space-y-4">
-      <p className="text-xs leading-5 text-muted-foreground">
-        可同时设置 Token、图片、秒数与缓存分时价。规格使用目录中的原有标识，例如分辨率或思考模式；留空表示通用费率。
-      </p>
+      <p className="text-xs leading-5 text-muted-foreground">{t("providerGuideUI.rateIntro")}</p>
       {rates.map((rate, index) => (
         <fieldset key={index} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs">
-            计费单位
+            {t("providerGuideUI.measure")}
             <select
-              aria-label={"费率 " + (index + 1) + " 单位"}
+              aria-label={t("providerGuideUI.rateUnitLabel", { index: index + 1 })}
               className={selectClass}
               value={rate.measure}
               onChange={(event) => update(index, { measure: event.target.value })}
             >
               {Object.entries(measures).map(([id, label]) => (
                 <option key={id} value={id}>
-                  {label}
+                  {t(label)}
                 </option>
               ))}
             </select>
           </label>
           <label className="space-y-1 text-xs">
-            计费项目
+            {t("providerGuideUI.item")}
             <select
-              aria-label={"费率 " + (index + 1) + " 项目"}
+              aria-label={t("providerGuideUI.rateItemLabel", { index: index + 1 })}
               className={selectClass}
               value={rate.side}
               onChange={(event) => update(index, { side: event.target.value })}
             >
               {Object.entries(sides).map(([id, label]) => (
                 <option key={id} value={id}>
-                  {label}
+                  {t(label)}
                 </option>
               ))}
             </select>
           </label>
           <label className="space-y-1 text-xs">
-            计费时段
+            {t("providerGuideUI.rateWindow")}
             <select
-              aria-label={"费率 " + (index + 1) + " 时段"}
+              aria-label={t("providerGuideUI.rateWindowLabel", { index: index + 1 })}
               className={selectClass}
               value={rate.window}
               onChange={(event) => update(index, { window: event.target.value })}
             >
               {Object.entries(windows).map(([id, label]) => (
                 <option key={id} value={id}>
-                  {label}
+                  {t(label)}
                 </option>
               ))}
             </select>
           </label>
           <label className="space-y-1 text-xs">
-            单价（USD / {measures[rate.measure as keyof typeof measures]}）
+            {t("providerGuideUI.ratePrice", { unit: t(measures[rate.measure as keyof typeof measures]) })}
             <Input
-              aria-label={"费率 " + (index + 1) + " 单价"}
+              aria-label={t("providerGuideUI.ratePriceLabel", { index: index + 1 })}
               type="number"
               min="0"
               step="any"
@@ -94,12 +101,12 @@ export default function RateEditor({
             />
           </label>
           <label className="space-y-1 text-xs">
-            规格标识
+            {t("providerGuideUI.variant")}
             <Input
-              aria-label={"费率 " + (index + 1) + " 规格"}
+              aria-label={t("providerGuideUI.rateVariantLabel", { index: index + 1 })}
               value={rate.variant ?? ""}
               onChange={(event) => update(index, { variant: event.target.value })}
-              placeholder="通用费率"
+              placeholder={t("providerGuideUI.generalRate")}
             />
           </label>
           <Button
@@ -108,7 +115,7 @@ export default function RateEditor({
             className="self-end text-destructive"
             onClick={() => onChange(rates.filter((_, position) => index !== position))}
           >
-            移除此费率
+            {t("providerGuideUI.removeRate")}
           </Button>
         </fieldset>
       ))}
@@ -117,7 +124,7 @@ export default function RateEditor({
         variant="outline"
         onClick={() => onChange([...rates, { measure: "token", side: "input", window: "all", usd: NaN }])}
       >
-        添加费率
+        {t("providerGuideUI.addRate")}
       </Button>
     </div>
   );

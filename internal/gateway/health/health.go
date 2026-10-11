@@ -83,7 +83,7 @@ func (s *handler) uiConfig(w http.ResponseWriter, r *http.Request) {
 	util.WriteJSON(w, 200, map[string]any{
 		"admin_ui_disabled":             false,
 		"auto_redirect_to_sso":          false,
-		"sso_configured":                false,
+		"sso_configured":                s.sso != nil && s.sso(r),
 		"hide_default_credentials_hint": false,
 		"is_control_plane":              false,
 		"proxy_base_url":                PublicOrigin(),
@@ -98,6 +98,7 @@ type Pinger interface{ Ping() error }
 type handler struct {
 	ping    func() error
 	version string
+	sso     func(*http.Request) bool
 }
 
 // Module serves liveness, readiness, and the dashboard startup config.
@@ -105,8 +106,11 @@ type handler struct {
 // 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：仅在 routes.go 内使用
 // 测试：无直接单测
-func Module(db Pinger, version string) util.Module {
+func Module(db Pinger, version string, sso ...func(*http.Request) bool) util.Module {
 	s := &handler{ping: db.Ping, version: version}
+	if len(sso) > 0 {
+		s.sso = sso[0]
+	}
 	return util.Bind("health", func(reg util.Registrar) {
 		reg.Handle("GET /health/liveliness", s.healthLive)
 		reg.Handle("GET /health/liveness", s.healthLive)

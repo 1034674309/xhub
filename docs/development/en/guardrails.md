@@ -1,28 +1,43 @@
-# Guardrails and XGo scripts
+# Extend XGo guardrails
 
-[简体中文](../zh-CN/guardrails.md) · [Developer documentation](README.md)
+Open Guardrails → XGo custom script, paste this code, test ordinary and matching text, then save. Only pre_call text checks on normal Chat / Responses are supported.
 
-Configure, draft-test, save, bind/enable, and verify real inference. Block prevents generation; redact changes supported upstream text and exchange/cache keys; flag permits and records. Default-enabled rules apply without explicit selection. Storage failure blocks rather than bypassing. ApplyGuardrail uses registered XGo helpers; draft/inference share execution and edits affect subsequent calls. Validate syntax/runtime failures. Supported pre-call Chat/Responses text is not all tool arguments, multimodal content, or official forwarding. External moderation needs configuration/credentials; test unsupported status, timeouts, malformed responses, and configured degradation. Verify monitor totals/details/logs after block/redact/flag.
+~~~go
+import . "xhub/guardrail"
 
-## Related references
+// ApplyGuardrail 检查请求文本，返回拦截或修改结果，供 pre_call 调用。
+// texts 数量与顺序不变；requestData 是 model/metadata 副本，inputType 为 request。
+func ApplyGuardrail(texts []string, requestData map[string]any, inputType string) map[string]any {
+    for i, text := range texts {
+        if Contains(Lower(text), "secret") {
+            return Block("Sensitive content detected")
+        }
+        texts[i] = RegexReplace(text, "1[3-9][0-9]{9}", "[REDACTED]")
+    }
+    return Modify(texts)
+}
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+Select a saved rule per request:
 
+~~~json
+{"model":"company-chat","messages":[{"role":"user","content":"Hello"}],"guardrails":["script-policy"]}
+~~~
+
+| Return / setting | Behavior |
+| --- | --- |
+| Allow() | Original text; does not write back texts |
+| Modify(texts) | Apply changes with the same count and order |
+| Block(reason) | Stop before upstream execution |
+| Flag(reason, metadata) | Log and continue |
+| default_on | Union with requested rules; client cannot disable defaults |
+| priority | Ascending; equal values sort by ID |
+| Error / timeout / invalid result | Block the request |
+
+Only xhub/guardrail imports are allowed. RE2 has no lookarounds. RegexReplace performs literal substitution, not $1 expansion. Client metadata is not authenticated identity. Post-call checks, image moderation and team approvals are not implemented.
+
+[Executor](../../../internal/gateway/guard/custom.go) · [Primitives](../../../internal/gateway/guard/primitives.go)
+
+~~~bash
+go test ./internal/gateway/guard -count=1
+~~~

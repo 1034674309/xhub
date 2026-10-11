@@ -1502,7 +1502,7 @@ export const zhPhrases: Record<string, string> = {
   Continue: "继续",
   "Continue to Authentication": "继续到认证",
   "Continue to Builder": "继续到 Builder",
-  "Continue to LLM": "继续攻读法学硕士",
+  "Continue to LLM": "继续调用 LLM",
   "Contribute Template": "Contribute 模板",
   "Control what team members can do when they are not team admins.":
     "Control 什么团队成员可以 do 当 they 是未团队 admins.",
@@ -2671,7 +2671,7 @@ export const zhPhrases: Record<string, string> = {
   "Filter by type…": "筛选由类型…",
   "Filter by user ID…": "筛选由用户 ID…",
   Filters: "筛选",
-  "Final Calculated Cost:": "Final Calculated 费用:",
+  "Final Calculated Cost:": "最终计算费用：",
   "Final Cost:": "Final 费用:",
   "Final cost after discount": "折扣后最终成本",
   "Final guardrails that will be applied (including inheritance):": "Final 护栏该将 applied (包括 inheritance):",
@@ -3023,7 +3023,7 @@ export const zhPhrases: Record<string, string> = {
   "Included Guardrails": "包含护栏",
   "Includes requests that failed to route to a provider, tool usage failures, and other request errors where the provider cannot be determined.":
     "Includes 请求该失败到路由到提供商, 工具用量 failures, 和其他请求错误 where 提供商无法 determined.",
-  "Incoming LLM Request": "传入的法学硕士请求",
+  "Incoming LLM Request": "传入的 LLM 请求",
   "Incoming webhook URL for your Teams channel (Workflows or incoming webhook connector)":
     "Teams 频道的 incoming webhook URL（工作流或 incoming webhook 连接器）",
   "Index Name": "索引名称",
@@ -3170,11 +3170,11 @@ export const zhPhrases: Record<string, string> = {
   "Keywords {value0}": "关键词 {value0}",
   "Kill switch: bypass every global guardrail for this team, including any added in the future. For per-guardrail opt-out instead, use the Guardrails dropdown above.":
     "总开关：为此团队绕过每一个全局护栏，包括将来新增的。若只想按护栏退出，请使用上方的护栏下拉框。",
-  "LLM Classifier": "法学硕士分类器",
-  "LLM Judge Results": "法学硕士评审结果",
+  "LLM Classifier": "LLM 分类器",
+  "LLM Judge Results": "LLM 评审结果",
   "LLM call": "界面：LLM call",
-  "LLM response:": "法学硕士回复：",
-  "LLM spend": "法学硕士花费",
+  "LLM response:": "LLM 回复：",
+  "LLM spend": "LLM 费用",
   "Lago Billing Logging Integration": "Lago 计费日志集成",
   "Langchain Py": "界面：Langchain Py",
   "Langfuse v2 Logging Integration": "Langfuse v2 日志集成",
@@ -4209,7 +4209,7 @@ export const zhPhrases: Record<string, string> = {
   "Organizations can have multiple teams. Learn more about the user management hierarchy":
     "组织可以 have multiple 团队. 了解更多关于用户管理 hierarchy",
   "Original Cost:": "原始成本：",
-  "Original LLM Cost:": "法学硕士原始费用：",
+  "Original LLM Cost:": "LLM 原始费用：",
   "Original Request": "Original 请求",
   "Original cost before discount": "Original 费用之前折扣",
   "Originating request, credentials masked": "Originating 请求, 凭证已掩码",
@@ -6124,7 +6124,7 @@ export const zhPhrases: Record<string, string> = {
   "Uncached input tokens": "Uncached 输入令牌",
   "Under {MIN_QUOTED_CONTEXT_TURN_CHARS} characters there is no room to quote a turn that does not already fit, so a long conversation reaches the classifier with no context at all. Set Context Window Size to 0 to turn context off deliberately.":
     "少于 {MIN_QUOTED_CONTEXT_TURN_CHARS} 个字符时，没有空间再引用一条尚未放下的轮次，于是长对话会在完全没有上下文的情况下到达分类器。若要故意关闭上下文，请把上下文窗口大小设为 0。",
-  "Underlying LLM": "基础法学硕士",
+  "Underlying LLM": "底层 LLM",
   "Unified guardrails only: omit role: system from guardrail evaluation input (OpenAI chat + Anthropic messages). The model still receives full messages. Use global default follows litellm_settings.skip_system_message_in_guardrail.":
     "仅统一护栏：省略角色：来自护栏评估输入的系统（OpenAI 聊天 + Anthropic 消息）。该模型仍然会收到完整的消息。使用全局默认值，遵循 litellm_settings.skip_system_message_in_guardrail。",
   "Unified guardrails only: omit role: tool from guardrail evaluation input (OpenAI chat + Anthropic messages). The model still receives full messages. Use global default follows litellm_settings.skip_tool_message_in_guardrail.":

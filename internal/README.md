@@ -51,7 +51,7 @@ IAM transactions retain events, ownership, and rate snapshots and prevent duplic
 | [dataplane](dataplane/readme.md) | Inference execution and settlement |
 | [gateway](gateway/readme.md) | HTTP gateway and module composition |
 | [hooks](hooks/readme.md) | In-flight request accounting |
-| [httpx](httpx/readme.md) | HTTP errors and module contracts |
+| [httpx](util/httpx.md) | HTTP errors and module contracts |
 | [iam](iam/readme.md) | Identity resources and transactional accounting |
 | [live](live/readme.md) | Redis hot state and usage queue |
 | [llm](llm/readme.md) | Upstream construction and protocol adaptation |
@@ -59,7 +59,7 @@ IAM transactions retain events, ownership, and rate snapshots and prevent duplic
 | [provider](provider/readme.md) | Provider capabilities and transports |
 | [router](router/readme.md) | Deployment filtering, ordering, and weighted split |
 | [store](store/readme.md) | Framework configuration and deployment storage |
-| [util](util/readme.md) | Response caching, runtime logging and redaction, and overflow-safe pagination |
+| [util](util) | Response caching, runtime logging and redaction, and overflow-safe pagination |
 
 ### Reading and verification
 

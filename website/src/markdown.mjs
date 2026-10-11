@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Marked } from "marked";
 import sanitizeHtml from "sanitize-html";
+import hljs from "highlight.js";
 import { documentPath, escapeHTML as e, headingSlug } from "./core.mjs";
 import { repository } from "./content.mjs";
 import { documentLanguage } from "./localization.mjs";
@@ -17,7 +18,10 @@ export function rewriteLink(href, source, output, mappings) {
   const [file, fragment = ""] = href.split("#");
   let decoded;
   try { decoded = decodeURIComponent(file); } catch { return ""; }
-  const target = path.posix.normalize(path.posix.join(path.posix.dirname(source), decoded));
+  // 控制台帮助使用站点根配图地址；生成 website 时转为相对路径，支持 /xhub/ 部署前缀。
+  const target = decoded.startsWith("/assets/provider-guide/")
+    ? `docs${decoded}`
+    : path.posix.normalize(path.posix.join(path.posix.dirname(source), decoded));
   let destination;
   if (mappings.has(target)) destination = documentPath(mappings.get(target));
   else if (target === "README.zh-CN.md") destination = "index.html";
@@ -59,7 +63,10 @@ export function renderMarkdown(markdown, source, websiteSource, mappings) {
     },
     code({ text, lang }) {
       if (lang === "mermaid") return `<pre class="mermaid">${e(text)}</pre>`;
-      return `<div class="doc-code"><button class="copy-code" aria-label="${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}">${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}</button><pre><code class="language-${e((lang || "text").split(" ")[0])}">${e(text)}</code></pre></div>`;
+      // 只高亮明确登记的语言，未知语言按纯文本转义；随后仍经过统一 HTML 消毒。
+      const language = (lang || "text").split(" ")[0];
+      const code = hljs.getLanguage(language) ? hljs.highlight(text, { language, ignoreIllegals: true }).value : e(text);
+      return `<div class="doc-code"><button class="copy-code" aria-label="${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}">${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}</button><pre><code class="language-${e(language)}">${code}</code></pre></div>`;
     },
   } });
   const html = sanitizeHtml(parser.parse(markdown), {

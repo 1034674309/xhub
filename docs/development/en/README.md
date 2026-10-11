@@ -1,28 +1,31 @@
-# Developer documentation
+# Developer guide
 
-[简体中文](../zh-CN/README.md) · [Developer documentation](README.md)
+| Task | Start here |
+| --- | --- |
+| Add a provider / protocol | [Complete Go registration example](provider-catalog.md) |
+| Change model forms / endpoints | [Models](model-endpoints.md), [Credential forms](provider-credential-forms.md) |
+| Change routing | [Template JSON](routing.md), [Groups](routing-groups.md) |
+| Change permissions / limits | [Authorization](permissions.md), [Quota chain](quota-chain.md) |
+| Change billing / guardrails | [Pricing](pricing.md), [XGo example](guardrails.md) |
+| Find HTTP handlers | [API and source](api-reference.md) |
+| Verify changes | [Commands](testing.md), [Regression](regression.md), [Browser E2E](e2e-regression.md) |
 
-References cover architecture, model setup, authorization, routing, pricing, safety, persistence, and acceptance. Test filenames identify evidence to inspect; existence alone is not a passing result.
+## Make a change
 
-## Related references
+~~~bash
+ git status --short
+ rg 'RegisterTransport' internal/provider
+ go test ./internal/provider/... -count=1
+~~~
 
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+Read the applicable AGENTS.md, CLAUDE.md and package README. Product changes need unit, backend regression and browser E2E tests. Use isolated schemas and clean up test records.
 
+## Preserve these rules
+
+- Reauthorize on the server; hiding buttons is not authorization.
+- Templates cannot expand model access. Never switch providers after emitting stream content.
+- Read historical price snapshots. Commit PostgreSQL before acknowledging the Redis queue.
+- Maintain both UI languages; keep request examples and prompts in English.
+- Do not edit schema.d.ts manually. Go OpenAPI generation is not available; gen:api fails explicitly. Verify contracts through real HTTP regression and frontend consumer tests.
+
+[Request lifecycle](architecture.md) · [Source map](implementation.md) · [User guide](../../user-guide.md)

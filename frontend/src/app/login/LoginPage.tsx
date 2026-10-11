@@ -24,6 +24,7 @@ import { z } from "zod/v4";
 import { useWorker } from "@/hooks/useWorker";
 import { t, useI18n } from "@/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import EnterpriseLogin from "@/components/EnterpriseLogin";
 
 type LoginFormValues = { username: string; password: string };
 
@@ -82,6 +83,7 @@ function LoginStage({ children }: { children: ReactNode }) {
             className="w-full max-w-md rounded-2xl border border-border bg-card px-7 py-9 text-card-foreground shadow-[0_20px_60px_rgba(15,23,42,0.12)] sm:px-10"
           >
             {children}
+            <EnterpriseLogin />
           </div>
         </section>
       </div>

@@ -1,7 +1,27 @@
-# Quota enforcement
+# Quota and rate-limit chain
 
-[简体中文](../zh-CN/quota-chain.md) · [Developer documentation](README.md)
+Amount, RPM and TPM are allocated through organization → team → person → key. A project adds a parallel ceiling, not another allocation pool.
 
-Amount/RPM/TPM allocate organization → team → person → key. Projects add ceilings, not pools. Numeric limits reserve; null shares remaining capacity; zero disables. Validate writes transactionally, authorization, over-allocation, service-account ownership, inference rejection, and historical records. Routing inheritance differs from quota inheritance.
+## Example
 
-See [testing](testing.md) for isolation, commands, evidence, and external boundaries.
+~~~text
+numeric limit -> fixed allocation
+null          -> share remaining parent capacity
+0             -> disabled
+~~~
+
+## Contract
+
+Increase limits parent-first; decrease child-first. Validate writes transactionally so a failed allocation cannot partially change roles or money. Resetting key spend restores its unused reservation; it does not erase historical personal/team/organization spend.
+
+Routing inheritance is independent from quota inheritance. There is no request-budget reservation, so concurrent calls and long tasks can overshoot budgets.
+
+## Source and verification
+
+[internal/iam](../../../internal/iam)
+
+~~~bash
+bash scripts/regression.sh --verbose "TestRate|TestQuotaHierarchy|TestBudget|TestTeamless|TestPersonalKey"
+~~~
+
+[Test prerequisites](testing.md) · [Next: permissions](permissions.md)

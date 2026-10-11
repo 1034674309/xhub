@@ -14,37 +14,6 @@ Choose an endpoint to read authentication, parameters, examples and responses, t
 | POST | [Bypass OpenAI Responses](native-responses.md) | /bypass/openai/v1/responses |
 | POST | [Bypass OpenAI Chat Completions](native-chat.md) | /bypass/openai/v1/chat/completions |
 
-## Endpoint and authentication
-
-Use an XHub API key: Authorization: Bearer <XHUB_API_KEY>. Do not use upstream provider credentials as gateway keys.
-
-Use the gateway root Base URL shown in the playground, without appending /v1; send requests to the full endpoint path above.
-
-## Request parameters
-
-This is a protocol guide. Use the corresponding endpoint article for its parameters.
-
-## Request example
-
-See the executable example in the corresponding endpoint article.
-
-## Success response
-
-Responses follow the selected native protocol and depend on the endpoint and upstream model.
-
-## Errors and troubleshooting
-
-| HTTP | Meaning |
-| --- | --- |
-| 400 | Invalid request. Check JSON, parameters and query. |
-| 401 | Missing or invalid XHub credential. |
-| 403 | Permission denied. Check model scope or policy. |
-| 429 | Limit exceeded. Inspect response details and Retry-After. |
-
-## Capabilities and billing boundaries
-
-Parameter support depends on the deployed model and conversion or Bypass path; upstream extension fields are not universally supported. Use the implemented protocol adapter and upstream response as the contract. Usage details are subsets of input/output totals and must not be added twice; reconcile costs against the billing snapshot in gateway logs. Example responses illustrate fields only.
-
 ## Capability and protocol selection
 
 Bypass is a transport mechanism, not a model family. Select a deployment supporting the registered protocol.

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export function serve({ directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist"), port = 4321, mount = "/" } = {}) {
   if (!mount.startsWith("/") || !mount.endsWith("/")) throw new Error("挂载路径必须以斜线开始和结束");
   const root = path.resolve(directory);
-  const types = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
+  const types = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg" };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://localhost");

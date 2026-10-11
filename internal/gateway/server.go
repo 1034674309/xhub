@@ -5,6 +5,7 @@
 package gateway
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync"
@@ -43,6 +44,8 @@ type Server struct {
 	Authz *authz.Authorizer
 	// Client is the upstream HTTP client. Its timeout is the router timeout.
 	Client *http.Client
+	// enterpriseClient 仅供隔离协议测试注入 TLS 身份服务；生产 nil 时强制公网安全客户端。
+	enterpriseClient *http.Client
 	// engine is the Gin mux. registered remembers "METHOD pattern" so a catalog
 	// route cannot replace a module route that was mounted first.
 	engine     *gin.Engine
@@ -170,5 +173,8 @@ func (s *Server) Run(addr string) error {
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.archiveLoop(ctx)
 	return (&http.Server{Handler: s.Handler()}).Serve(ln)
 }

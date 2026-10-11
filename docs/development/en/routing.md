@@ -1,28 +1,53 @@
-# Routing templates and execution
+# Routing templates
 
-[简体中文](../zh-CN/routing.md) · [Developer documentation](README.md)
+Save a complete template, then bind it to a key, team or organization. Resolution selects the first whole template in key → team → organization → platform order; it does not merge fields.
 
-model_routes and retry_policy are required. traffic-split allocations omitted inherit defaults; [] assigns weight 1; explicit rows override, unlisted deployments use 1, zero excludes. IDs must belong to the model; weights are finite/nonnegative with finite positive sum. Other strategies reject allocations. Uniform random, least-busy, latency, input-unit-cost, and observed-token-usage strategies have distinct selection bases. Resolve one complete key → team → organization → built-in template; no field merge or user/project layer. Sessions inherit only with one team; teamless keys do not inherit owner teams for routing. Preview checks models without quotas, upstream, or bills. max_attempts includes the first attempt per deployment; timeout_seconds is per attempt; failure_threshold zero disables passive cooldown; cooldown_seconds zero uses 60 seconds. Generic/context/content-policy chains reject cycles; empty tables inherit and explicit empty source targets disable. Never restart a sent stream or blindly repeat ambiguous task creation. Delete/rename cleans references atomically.
+## Example
 
-## Related references
+~~~json
+{
+  "model_routes": [{
+    "model": "chat-main", "strategy": "traffic-split",
+    "allocations": [
+      {"deployment_id": "deployment-a", "weight": 3},
+      {"deployment_id": "deployment-b", "weight": 7}
+    ]
+  }],
+  "retry_policy": {
+    "max_attempts": 2, "timeout_seconds": 60,
+    "failure_threshold": 3, "cooldown_seconds": 60
+  },
+  "routing_groups": [{
+    "group_name": "chat-pool", "models": ["chat-main", "chat-fast"],
+    "routing_strategy": "cost-based-routing"
+  }],
+  "fallbacks": [{"chat-pool": ["chat-backup"]}],
+  "context_window_fallbacks": [{"chat-main": ["chat-long"]}],
+  "content_policy_fallbacks": []
+}
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+| Field | Behavior |
+| --- | --- |
+| model_routes | Exact public model rules; strategy required |
+| allocations omitted | Inherit model default weights |
+| allocations: [] | All compatible deployments use weight 1 |
+| explicit weight 0 | Exclude the deployment |
+| max_attempts | Attempts per deployment, including the first |
+| timeout_seconds | Timeout per attempt |
+| failure_threshold: 0 | Disable passive cooldown |
+| cooldown_seconds: 0 | Use 60 seconds |
+
+All four retry_policy fields are required. Reject unknown fields, invalid references, duplicate models, negative/nonfinite weights and fallback cycles. Streaming output prevents switching providers. Ambiguous task creation must not be repeated.
+
+## Source and verification
+
+[internal/router/settings.go](../../../internal/router/settings.go)
+
+~~~bash
+go test ./internal/router -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: routing-groups](routing-groups.md)

@@ -23,7 +23,7 @@ This directory registers no direct HTTP route. Higher layers call its Go API; tr
 
 ## Dependencies
 
-[internal/logx](../../internal/logx/readme.md).
+[internal/logx](../../internal/util/logx.md).
 
 ## Verification and maintenance
 

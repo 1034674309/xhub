@@ -1,3 +1,4 @@
+import { setActiveLocale } from "@/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -109,6 +110,7 @@ async function chooseUpstream(user: ReturnType<typeof userEvent.setup>, value: s
 
 describe("ModelEditor", () => {
   beforeEach(() => {
+    setActiveLocale("zh-CN");
     vi.clearAllMocks();
     mocks.catalog = catalog;
     mocks.apiPost.mockResolvedValue({ models: [{ id: "discovered-only" }, { id: "claude-sonnet" }] });
@@ -300,6 +302,7 @@ describe("ModelEditor", () => {
 
 /** 前置带旧目录的部署及未绑定目录的新连接；验证编辑使用当前连接目录，切换时不沿用旧能力；自动卸载清理。 */
 it("does not inherit a model directory when its current connection is unscoped", async () => {
+ setActiveLocale("zh-CN");
  renderEditor({model:{model_name:"saved",litellm_params:{model:"private-a",custom_llm_provider:"openai",litellm_credential_name:"relay-a"},model_info:{catalog_id:"qiniu",transport:"bypass_openai_chat",endpoint_types:["chat"]}}});
  expect(screen.getByLabelText("供应商能力目录")).toHaveTextContent(/^$/);
  await userEvent.selectOptions(screen.getByLabelText("模型提供商 *"),"relay-b");

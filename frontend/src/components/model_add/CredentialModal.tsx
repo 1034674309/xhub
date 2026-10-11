@@ -10,7 +10,7 @@ import { MountedFormField, MountedFormProvider, projectMountedValues, useMountRe
 import { CredentialItem } from "../networking";
 import { Logo } from "@/components/molecules/logo/Logo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /** 提供商弹窗参数：open 控制显示，mode 决定新建或编辑，existingCredential 为旧数据。
  * onSubmit 返回 false 或抛错时保留草稿；成功时由调用方关闭；onCancel 负责关闭弹窗。 */
@@ -26,6 +26,7 @@ interface CredentialModalProps {
  * 参数见 CredentialModalProps；返回弹窗。新建不预选类型，新建切换清除旧认证且保留名称。
  * 编辑兼容旧 slug/枚举值并固定类型，避免后台合并留下跨协议旧字段；异步保存期间禁止重复提交，错误保留当前输入并可重试。 */
 export default function CredentialModal({ open, onCancel, onSubmit, mode, existingCredential = null }: CredentialModalProps) {
+  const t = useT();
   const isEdit = mode === "edit";
   const { data: providers, isLoading, error, refetch } = useProviderFields();
   const [saving, setSaving] = useState(false);
@@ -87,7 +88,7 @@ export default function CredentialModal({ open, onCancel, onSubmit, mode, existi
               <fieldset disabled={saving} className="min-w-0">
                 <MountedFormField label={t("Provider type")} name="custom_llm_provider" required
                   rules={{ validate: { required: requiredRule("Required") } }} className="mb-5">
-                  {control => <SearchSelect countNoun="供应商" inputId={control.id} placeholder={t("Select a provider")} options={options}
+                  {control => <SearchSelect countNoun={t("providerGuideUI.providerNoun")} inputId={control.id} placeholder={t("Select a provider")} options={options}
                     disabled={isEdit || isLoading || !!error || saving} value={selected?.provider ?? (typeof selection === "string" ? selection : null)}
                     onValueChange={value => {
                       // reset({}) 避免 RHF 把编辑时的旧默认密钥、区域和地址重新带入。
@@ -106,12 +107,12 @@ export default function CredentialModal({ open, onCancel, onSubmit, mode, existi
                     onChange={control.onChange} onBlur={control.onBlur} placeholder={t("Enter a friendly name for these credentials")}
                     disabled={isEdit || saving} />}
                 </MountedFormField>
-                <MountedFormField label="供应商目录 ID" name="catalog_id" className="mb-5"
-                  rules={{ validate: value => !value || /^[a-z][a-z0-9_-]*$/.test(String(value)) || "目录 ID 只能包含小写字母、数字、下划线或连字符" }}>
+                <MountedFormField label={t("providerGuideUI.catalogId")} name="catalog_id" className="mb-5"
+                  rules={{ validate: value => !value || /^[a-z][a-z0-9_-]*$/.test(String(value)) || t("providerGuideUI.catalogValidation") }}>
                   {control => <Input id={control.id} value={typeof control.value === "string" ? control.value : ""}
-                    onChange={control.onChange} onBlur={control.onBlur} placeholder="例如 qiniu、volcengine" />}
+                    onChange={control.onChange} onBlur={control.onBlur} placeholder={t("providerGuideUI.catalogExample")} />}
                 </MountedFormField>
-                <p className="mb-5 text-xs text-muted-foreground">供应商目录 ID 与连接名称独立，用于匹配已登记的专用型号。普通模型按连接类型默认选择协议，可在模型配置中切换；未登记的目录也可获取上游模型列表。</p>
+                <p className="mb-5 text-xs text-muted-foreground">{t("providerGuideUI.catalogHelp")}</p>
                 {selected && <section className="mb-5 rounded-lg border bg-muted/20 p-4" aria-label={t("Connection and authentication")}>
                   <div className="mb-4 flex items-center gap-2">
                     <Logo provider={selected.litellm_provider} label={selected.provider_display_name} className="size-6" />

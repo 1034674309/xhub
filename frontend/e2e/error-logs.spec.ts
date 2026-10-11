@@ -179,6 +179,8 @@ test("错误日志详情完整显示上游正文并可返回普通日志", async
     await page.getByRole("tab", { name: /^(日志|Logs)$/, exact: true }).click();
     await openLogDetails(page, successCallId);
     const successDialog = page.getByRole("dialog");
+    // 真实成功请求落库后检查技术缩写，防止日志页面重新出现学位误译；schema 由全局清理回收。
+    await expect(successDialog).not.toContainText("法学硕士");
     await verifyUpstreamCollapse(page, headers, successCallId, 200);
     await expect(successDialog).toContainText("e2e-ok");
     await expect(successDialog).toContainText(/成功|Success/);

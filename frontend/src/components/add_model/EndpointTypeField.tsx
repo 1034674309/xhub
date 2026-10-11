@@ -19,6 +19,7 @@ import {
   defaultTransport,
   compatibleEndpoint,
   protocolLabel,
+  endpointLabel,
   upstreamProtocolGroup,
   publicEndpointGroup,
   defaultEndpoints,
@@ -245,9 +246,9 @@ const EndpointTypeField: React.FC<{
             </p>
             <ul aria-label={t("Enabled endpoints")} className="space-y-3">
               {standard.map((entry) => (
-                <li key={entry.id} aria-label={entry.label} className="min-w-0 rounded-md border bg-background p-3">
+                <li key={entry.id} aria-label={endpointLabel(entry)} className="min-w-0 rounded-md border bg-background p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{entry.label}</span>
+                    <span className="text-sm font-medium">{endpointLabel(entry)}</span>
                     <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">{t("Enabled")}</span>
                   </div>
                   <div className="mt-2 space-y-1.5">
@@ -274,7 +275,7 @@ const EndpointTypeField: React.FC<{
                     <input
                       type="checkbox"
                       className="mt-0.5 size-4 shrink-0 accent-primary"
-                      aria-label={entry.label}
+                      aria-label={endpointLabel(entry)}
                       checked={entries?.includes(entry.id) ?? false}
                       onChange={(event) => {
                         const next = event.target.checked
@@ -285,7 +286,7 @@ const EndpointTypeField: React.FC<{
                       }}
                     />
                     <span className="min-w-0 flex-1 space-y-1">
-                      <span className="block font-medium">{entry.label}</span>
+                      <span className="block font-medium">{endpointLabel(entry)}</span>
                       {entry.paths?.map((path) => (
                         <code
                           key={path}

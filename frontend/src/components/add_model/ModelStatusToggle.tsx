@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,7 +10,9 @@ import { isProxyAdminRole } from "@/utils/roles";
 import { toast } from "@/lib/toast";
 import type { EditorModel } from "./modelEditorPricing";
 
+/** 展示和保存部署启用状态；参数为部署，返回本地化开关；仅管理员可写，失败保留状态并提示。 */
 export default function ModelStatusToggle({ model }: { model: EditorModel }) {
+  const t = useT();
   const { accessToken, userRole, isViewOnly } = useAuthorized();
   const client = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -25,9 +28,9 @@ export default function ModelStatusToggle({ model }: { model: EditorModel }) {
       await client.invalidateQueries({ queryKey: ["userModels"] });
       await client.invalidateQueries({ queryKey: ["modelHub"] });
       await client.invalidateQueries({ queryKey: ["selectedTeamModels"] });
-      toast.success(checked ? "模型已启用" : "模型已停用");
+      toast.success(checked ? t("providerGuideUI.enabledToast") : t("providerGuideUI.disabledToast"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "更新模型状态失败");
+      toast.error(error instanceof Error ? error.message : t("providerGuideUI.statusFailed"));
     } finally {
       setSaving(false);
     }
@@ -38,9 +41,9 @@ export default function ModelStatusToggle({ model }: { model: EditorModel }) {
         checked={enabled}
         disabled={!editable || saving}
         onCheckedChange={change}
-        aria-label={model.model_name + " 启用模型"}
+        aria-label={t("providerGuideUI.toggleLabel", { name: model.model_name })}
       />
-      <span className="text-xs text-muted-foreground">{enabled ? "已启用" : "已停用"}</span>
+      <span className="text-xs text-muted-foreground">{enabled ? t("providerGuideUI.enabled") : t("providerGuideUI.disabled")}</span>
     </div>
   );
 }

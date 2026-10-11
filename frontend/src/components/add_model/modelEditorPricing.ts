@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { BILLING_CATEGORIES, type BillingMode } from "./billing_categories";
 
 export const PRICE_FIELDS = BILLING_CATEGORIES.flatMap((category) => category.fields);
@@ -57,12 +58,12 @@ export function catalogRows(models?: unknown): Record<string, CatalogRow> {
  * 调用：模型详情和 ModelEditor。测试：modelEditorPricing.test.ts。
  */
 export function effectivePricing(model: EditorModel, rows: Record<string, CatalogRow>) {
-  if (hasPrice(model.litellm_params)) return { row: model.litellm_params, source: "部署定价" };
-  if (model.model_info.pricing_source === "manual") return { row: undefined, source: "部署定价（未设置）" };
+  if (hasPrice(model.litellm_params)) return { row: model.litellm_params, source: t("providerGuideUI.deploymentPrice") };
+  if (model.model_info.pricing_source === "manual") return { row: undefined, source: t("providerGuideUI.deploymentUnpriced") };
   const explicit = String(model.model_info.base_model ?? "");
   if (explicit) {
     const resolved = catalogModelId(rows, explicit);
-    return { row: rows[resolved], source: "价格目录 · " + (resolved || explicit) };
+    return { row: rows[resolved], source: t("providerGuideUI.catalogSource", { id: resolved || explicit }) };
   }
   const upstream = catalogModelId(
     rows,
@@ -70,7 +71,7 @@ export function effectivePricing(model: EditorModel, rows: Record<string, Catalo
     String(model.litellm_params.custom_llm_provider ?? ""),
   );
   const id = hasPrice(rows[upstream]) ? upstream : catalogModelId(rows, model.model_name) || upstream;
-  return { row: rows[id], source: "价格目录 · " + id };
+  return { row: rows[id], source: t("providerGuideUI.catalogSource", { id }) };
 }
 
 /** pricingRates 读取完整费率或把明确的单价字段转换为费率。
@@ -203,18 +204,18 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
   };
   const name = String(values.model_name ?? "").trim();
   if (!name || !params.model || !params.custom_llm_provider || !values.supplier)
-    throw new Error("请选择供应商，并填写上游模型和对外模型名称。");
+    throw new Error(t("providerGuideUI.requiredModel"));
   if (
     !values.transport ||
     !Array.isArray(values.endpoint_types) ||
     !values.endpoint_types.length
   )
-    throw new Error("请选择端点类型。");
+    throw new Error(t("providerGuideUI.requiredEndpoint"));
   // Google 接口按操作后缀解析完整模型路径；拒绝会被 URL 清理改变的空段和点段，允许 / 与 :。
   if (values.endpoint_types.some(id => ["chat", "responses", "messages", "gemini", "vertex", "bypass:openai-chat", "bypass:openai-responses", "bypass:anthropic-messages", "bypass:gemini", "bypass:vertex"].includes(String(id))) &&
     name.split("/").some(segment => !segment.trim() || segment === "." || segment === ".."))
-    throw new Error("对外模型名称的路径段不能留空或为 .、..；支持斜杠（/）和冒号（:）。");
-  if (values.supplier === "__existing__" && !original) throw new Error("请选择已配置的模型提供商。");
+    throw new Error(t("providerGuideUI.invalidName"));
+  if (values.supplier === "__existing__" && !original) throw new Error(t("providerGuideUI.requiredProvider"));
   if (values.supplier !== "__existing__") {
     params.litellm_credential_name = values.supplier;
     for (const key of Object.keys(
@@ -233,11 +234,11 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
   params.rates = null;
   if (values.pricing_source === "catalog") {
     info.base_model = values.pricing_model;
-    if (!info.base_model) throw new Error("请选择目录中的定价模型。");
+    if (!info.base_model) throw new Error(t("providerGuideUI.requiredPricing"));
   } else if (values.pricing_format === "rates") {
     info.base_model = null;
     const rates = values.manual_rates as PriceRate[];
-    if (!Array.isArray(rates) || !rates.length) throw new Error("请至少添加一个费率。");
+    if (!Array.isArray(rates) || !rates.length) throw new Error(t("providerGuideUI.requiredRate"));
     if (
       rates.some(
         (rate) =>
@@ -248,9 +249,9 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
           !["all", "offpeak", "peak"].includes(rate.window),
       )
     )
-      throw new Error("请检查费率单位、项目、时段与单价。");
+      throw new Error(t("providerGuideUI.invalidRate"));
     const keys = rates.map((rate) => [rate.measure, rate.side, rate.window, rate.variant || ""].join(":"));
-    if (new Set(keys).size !== keys.length) throw new Error("相同单位、项目、时段与规格的费率不能重复。");
+    if (new Set(keys).size !== keys.length) throw new Error(t("providerGuideUI.duplicateRate"));
     params.rates = rates;
   } else {
     info.base_model = null;
@@ -263,7 +264,7 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
       const raw = values[field.name];
       if (raw === "" || raw == null) continue;
       const value = Number(raw);
-      if (!Number.isFinite(value) || value < 0) throw new Error("价格必须是大于或等于 0 的有效数字。");
+      if (!Number.isFinite(value) || value < 0) throw new Error(t("providerGuideUI.invalidPrice"));
       params[field.name] = value / field.scale;
       filled = true;
     }
@@ -279,7 +280,7 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
       for (const field of PRICE_FIELDS) params[field.name] = original.litellm_params[field.name] ?? null;
       filled = true;
     }
-    if (!filled) throw new Error("请至少填写一个单价。免费模型请明确填写 0。");
+    if (!filled) throw new Error(t("providerGuideUI.requiredPrice"));
   }
   return { model_name: name, litellm_params: params, model_info: info };
 }

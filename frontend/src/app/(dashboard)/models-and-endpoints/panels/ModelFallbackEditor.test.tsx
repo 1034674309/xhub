@@ -1,3 +1,4 @@
+import { setActiveLocale } from "@/i18n";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
 vi.mock("@/components/networking", () => ({ apiClient: mocks }));
 /** 每例重置接口实现和调用记录；提供独立目录及成功写入，避免失败模拟泄漏到后续测试，RTL负责卸载。 */
 beforeEach(() => {
+    setActiveLocale("zh-CN");
   vi.resetAllMocks();
   mocks.get.mockResolvedValue({
     data: [{ model_name: "a" }, { model_name: "b" }, { model_name: "c" }],

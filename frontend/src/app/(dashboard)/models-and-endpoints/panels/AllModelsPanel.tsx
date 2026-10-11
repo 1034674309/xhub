@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 import { useState } from "react";
 import ModelFallbackEditor, { type FallbackPolicy } from "./ModelFallbackEditor";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,12 +27,17 @@ type ModelGroup = {
   default_weights?: { allocations?: AllocationPolicy["allocations"] | null } | null;
 };
 /** 计算实际部署的计费摘要，供聚合模型表展示，未定价时明确提示。 */
-function priceSummary(model: EditorModel, rows: Record<string, CatalogRow>) {
+function priceSummary(model: EditorModel, rows: Record<string, CatalogRow>, t: ReturnType<typeof useT>) {
   const price = effectivePricing(model, rows);
-  if (!hasPrice(price.row)) return "尚未定价";
+  if (!hasPrice(price.row)) return t("providerGuideUI.unpriced");
   const rates = pricingRates(price.row);
   const measures = new Set(rates.map((rate) => rate.measure));
-  const units: Record<string, string> = { token: "按 Token", picture: "按张", second: "按秒", query: "按次" };
+  const units: Record<string, string> = {
+    token: t("providerGuideUI.perToken"),
+    picture: t("providerGuideUI.perPicture"),
+    second: t("providerGuideUI.seconds"),
+    query: t("providerGuideUI.perQuery"),
+  };
   return Array.from(measures)
     .map((measure) => units[measure] ?? measure)
     .join(" · ");
@@ -59,6 +65,7 @@ function GroupDeployments({
   onSaved: () => void;
   openModel: (id: string) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState<AllocationPolicy | null>(null);
   const [busy, setBusy] = useState(false);
   // 单部署可能残留零权重或已删除部署的分配，隐藏会让后台筛选与页面状态不一致。
@@ -87,7 +94,7 @@ function GroupDeployments({
       });
       setDraft(null);
       onSaved();
-      toast.success("默认权重已保存");
+      toast.success(t("providerGuideUI.weightsSaved"));
     } catch (error) {
       toast.fromError(error);
     } finally {
@@ -98,21 +105,19 @@ function GroupDeployments({
     <>
       {showWeights && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            默认权重为 1，相同权重随机分配；3 和 7 约为 30% 和 70%，0 不参与。客户路由模板可覆盖。
-          </p>
+          <p className="text-sm text-muted-foreground">{t("providerGuideUI.weightHelp")}</p>
           {draft ? (
             <div className="flex gap-2">
               <Button disabled={busy || !!policyError(draft)} onClick={save}>
-                保存权重
+                {t("providerGuideUI.saveWeights")}
               </Button>
               <Button variant="ghost" disabled={busy} onClick={() => setDraft(null)}>
-                取消
+                {t("providerGuideUI.cancel")}
               </Button>
             </div>
           ) : (
             <Button size="sm" variant="outline" onClick={edit}>
-              编辑权重
+              {t("providerGuideUI.editWeights")}
             </Button>
           )}
         </div>
@@ -126,12 +131,12 @@ function GroupDeployments({
         <table className="w-full text-left text-sm">
           <thead>
             <tr>
-              <th className="p-2">提供商连接 / 上游型号</th>
-              <th className="p-2">上游协议 / 用户入口</th>
-              <th className="p-2">计价</th>
-              <th className="p-2">状态</th>
-              {showWeights && <th className="p-2">默认权重</th>}
-              <th className="p-2">操作</th>
+              <th className="p-2">{t("providerGuideUI.connectionHeading")}</th>
+              <th className="p-2">{t("providerGuideUI.protocolHeading")}</th>
+              <th className="p-2">{t("providerGuideUI.pricingHeading")}</th>
+              <th className="p-2">{t("providerGuideUI.status")}</th>
+              {showWeights && <th className="p-2">{t("providerGuideUI.weight")}</th>}
+              <th className="p-2">{t("providerGuideUI.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -140,7 +145,7 @@ function GroupDeployments({
               return (
                 <tr key={id} className="border-t">
                   <td className="p-2">
-                    <p>{String(dep.litellm_params.litellm_credential_name || "独立连接")}</p>
+                    <p>{String(dep.litellm_params.litellm_credential_name || t("providerGuideUI.standalone"))}</p>
                     <p>{String(dep.litellm_params.model)}</p>
                     <p className="text-xs text-muted-foreground">{id}</p>
                   </td>
@@ -149,11 +154,11 @@ function GroupDeployments({
                     <p className="text-xs text-muted-foreground">
                       {Array.isArray(dep.model_info.endpoint_types)
                         ? dep.model_info.endpoint_types.join(" · ")
-                        : "未开放入口"}
+                        : t("providerGuideUI.noEndpoints")}
                     </p>
                   </td>
                   <td className="p-2">
-                    <p>{priceSummary(dep, rows)}</p>
+                    <p>{priceSummary(dep, rows, t)}</p>
                     <p className="text-xs text-muted-foreground">{effectivePricing(dep, rows).source}</p>
                   </td>
                   <td className="p-2">
@@ -168,7 +173,7 @@ function GroupDeployments({
                           min={0}
                           step="any"
                           disabled={busy}
-                          aria-label={"部署 " + id + " 权重"}
+                          aria-label={t("providerGuideUI.weightLabel", { id })}
                           value={weight(id)}
                           onChange={(event) =>
                             setDraft({
@@ -186,7 +191,7 @@ function GroupDeployments({
                   )}
                   <td className="p-2">
                     <Button variant="ghost" size="sm" onClick={() => openModel(String(dep.model_info.id))}>
-                      详情
+                      {t("providerGuideUI.details")}
                     </Button>
                   </td>
                 </tr>
@@ -202,6 +207,7 @@ function GroupDeployments({
  * 无参数，返回模型管理界面；平台管理员保存后刷新接口数据，错误保留编辑状态，不调用上游。
  */
 export default function AllModelsPanel() {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -219,18 +225,18 @@ export default function AllModelsPanel() {
   const { openModel } = useModelDetailRouting();
   const rows = (costMap ?? {}) as Record<string, CatalogRow>;
   return (
-    <section className="space-y-5" aria-label="公开模型管理">
+    <section className="space-y-5" aria-label={t("providerGuideUI.management")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">公开模型 {models.data?.total_count ?? 0}</h2>
-          <p className="text-sm text-muted-foreground">
-            同名模型聚合为一个公开模型。客户未设置覆盖时使用这里的默认分配。
-          </p>
+          <h2 className="font-semibold">
+            {t("providerGuideUI.publicCount", { count: models.data?.total_count ?? 0 })}
+          </h2>
+          <p className="text-sm text-muted-foreground">{t("providerGuideUI.groupHelp")}</p>
         </div>
         <Input
           className="max-w-sm"
-          aria-label="搜索模型"
-          placeholder="搜索模型、连接或上游型号"
+          aria-label={t("providerGuideUI.search")}
+          placeholder={t("providerGuideUI.searchPlaceholder")}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
@@ -238,16 +244,17 @@ export default function AllModelsPanel() {
           }}
         />
       </div>
-      {models.isLoading && <p role="status">正在加载模型…</p>}
+      {models.isLoading && <p role="status">{t("providerGuideUI.loadingModels")}</p>}
       {models.isError && (
         <div role="alert">
-          模型加载失败。<Button onClick={() => models.refetch()}>重新加载</Button>
+          {t("providerGuideUI.modelsFailed")}
+          <Button onClick={() => models.refetch()}>{t("providerGuideUI.reload")}</Button>
         </div>
       )}
       {models.data?.data.map((group) => (
         <section
           key={group.model_name}
-          aria-label={"公开模型 " + group.model_name}
+          aria-label={t("providerGuideUI.publicGroup", { name: group.model_name })}
           className="space-y-4 rounded-xl border bg-card p-5"
         >
           {/* 回退入口紧邻公开模型名，单部署也显示；点击后在弹窗中编辑，不展开模型卡片。 */}
@@ -255,7 +262,7 @@ export default function AllModelsPanel() {
             <div className="min-w-0">
               <h3 className="text-lg font-semibold">{group.model_name}</h3>
               <p className="text-sm text-muted-foreground">
-                {group.deployments.length} 个部署 · 用户请求使用此模型名称
+                {t("providerGuideUI.deploymentCount", { count: group.deployments.length })}
               </p>
             </div>
             {accessToken && (
@@ -270,7 +277,7 @@ export default function AllModelsPanel() {
             )}
           </div>
           {new Set(group.deployments.map((dep) => String(dep.litellm_params.model))).size > 1 && (
-            <p className="text-sm text-amber-700">此公开模型下的上游型号不同，请确认其能力与价格符合预期。</p>
+            <p className="text-sm text-amber-700">{t("providerGuideUI.mixedUpstream")}</p>
           )}
           {accessToken && (
             <GroupDeployments
@@ -285,23 +292,19 @@ export default function AllModelsPanel() {
           )}
         </section>
       ))}
-      {!models.isLoading && !models.isError && !models.data?.data.length && (
-        <p>没有找到模型。请先在模型提供商中配置连接，再添加部署。</p>
-      )}
+      {!models.isLoading && !models.isError && !models.data?.data.length && <p>{t("providerGuideUI.emptyModels")}</p>}
       <div className="flex items-center justify-between">
-        <p>
-          第 {page} / {models.data?.total_pages ?? 1} 页
-        </p>
+        <p>{t("providerGuideUI.page", { page, total: models.data?.total_pages ?? 1 })}</p>
         <div className="flex gap-2">
           <Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>
-            上一页
+            {t("providerGuideUI.previous")}
           </Button>
           <Button
             variant="outline"
             disabled={page >= (models.data?.total_pages ?? 1)}
             onClick={() => setPage(page + 1)}
           >
-            下一页
+            {t("providerGuideUI.next")}
           </Button>
         </div>
       </div>

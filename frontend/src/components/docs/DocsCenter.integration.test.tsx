@@ -9,6 +9,31 @@ import { readApiMarkdown } from "./apiMarkdown";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/docs" }));
 vi.mock("@/components/networking", () => ({ getProxyBaseUrl: () => "https://gateway.example.com/prefix/v1/" }));
 
+/** 目的：供应商帮助区分页面配置与未实现音乐协议，禁止教授内联部署 YAML；前置真实双语文章，语言切换保留启动边界与代码清单，无业务写入，afterEach 清理语言。 */
+it("explains NewAPI configuration and Suno development in both languages", () => {
+  render(<I18nProvider initialLocale="zh-CN"><DocsCenter page={docPages.find((page) => page.id === "help-models")!} /></I18nProvider>);
+  expect(screen.getByRole("heading", { name: "NewAPI：连接、部署、密钥、调用" })).toBeInTheDocument();
+  expect(screen.getByRole("main")).toHaveTextContent("internal/provider/all/all.go");
+  expect(screen.getByRole("main")).toHaveTextContent("当前没有 Suno 执行器");
+  expect(screen.getByRole("main")).toHaveTextContent("model_list: []");
+  expect(screen.getByRole("main")).toHaveTextContent("store_model_in_db: true");
+  expect(screen.getByRole("main")).toHaveTextContent("不编辑 model_list");
+  expect(screen.getByRole("main")).not.toHaveTextContent("os.environ/NEWAPI_KEY");
+  expect(screen.getByRole("img", { name: "中文模型供应商连接表单" })).toHaveAttribute("src", "/assets/provider-guide/provider-form-zh.jpg");
+  expect(screen.getByRole("img", { name: "中文模型部署表单" })).toHaveAttribute("src", "/assets/provider-guide/deployment-form-zh.jpg");
+  fireEvent.click(screen.getByRole("button", { name: "English" }));
+  expect(screen.getByRole("heading", { name: "NewAPI: connection, deployment, key and call" })).toBeInTheDocument();
+  expect(screen.getByRole("main")).toHaveTextContent("There is no Suno executor");
+  expect(screen.getByRole("main")).toHaveTextContent("bypass_openai_chat");
+  expect(screen.getByRole("main")).toHaveTextContent("model_list: []");
+  expect(screen.getByRole("main")).toHaveTextContent("store_model_in_db: true");
+  expect(screen.getByRole("main")).toHaveTextContent("without editing model_list");
+  expect(screen.getByRole("img", { name: "English provider connection form" })).toHaveAttribute("src", "/assets/provider-guide/provider-form-en.jpg");
+  expect(screen.getByRole("img", { name: "English model deployment form" })).toHaveAttribute("src", "/assets/provider-guide/deployment-form-en.jpg");
+  expect(screen.queryByRole("img", { name: "中文模型供应商连接表单" })).not.toBeInTheDocument();
+  expect(screen.getByRole("main")).not.toHaveTextContent("os.environ/NEWAPI_KEY");
+});
+
 /** 目的：验证内容任务正文和 Bypass 目录没有重复标题；前置真实双语 Markdown，切换语言并搜索仍可访问总览及接口；框架清理 DOM，afterEach 清理语言存储，无业务数据。 */
 it("deduplicates protocol titles while preserving bilingual navigation", () => {
   render(

@@ -1,28 +1,33 @@
-# Runtime behavior and limits
+# Runtime boundaries
 
-[简体中文](../zh-CN/runtime.md) · [Developer documentation](README.md)
+Choose guarantees by execution path, not by the presence of a field in a form.
 
-Response cache is a process-local 8192-entry LRU with copied bytes, no TTL or replica invalidation. Only complete nonstreaming successes enter it. Keys include caller/operation/model/body and configuration/routing/session/query digests. Selected deployment/credentials/adapter version are not independent key fields. Hits add zero generation cost. Idempotency-Key replay is process-local/nonstreaming and reauthenticates. Fingerprint conflicts return 409; concurrent identical requests wait. Completed statuses below 500 retain 24h; failure/cancellation releases slots. Restart/another replica can execute again. Task pins last seven days, sessions one hour; local fallback can disappear. Ambiguous task creation returns 502 without blind retry. Official forwarding bypasses ordinary text guardrails/cache. Partial metadata support does not imply all resource operations; unsupported returns 501. Without Redis replicas lack shared rate limits. Prompt logging requires explicit access and retention policies.
+## Example
 
-## Related references
+~~~bash
+go test ./internal/dataplane/... ./internal/live -count=1
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+| Path | Guarantee / limit |
+| --- | --- |
+| Complete response cache | Non-streaming results; process-local LRU, no shared invalidation/TTL guarantee |
+| Idempotency-Key | Authenticated non-streaming coordination/replay; process-local |
+| Stream | No successful cache/stickiness update after failure; cannot restart after output |
+| Native tasks | Query using creation identity and registered task path |
+| Task settlement | Successful measured result, deduplicated PostgreSQL event |
+| Task recovery | Redis context lasts seven days; without Redis, process-local |
+| Guardrails | Pre-call text on normal Chat / Responses, not every Bypass path |
+
+There is no background task polling settlement or budget reservation. Preserve the existing task ID after an uncertain create result.
+
+## Source and verification
+
+[internal/dataplane/execution/official.go](../../../internal/dataplane/execution/official.go)
+
+~~~bash
+go test ./internal/dataplane/... -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: pricing](pricing.md)

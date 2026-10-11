@@ -14,16 +14,51 @@ export const docsHelpZhCN = {
   },
   "help-models": {
     title: "供应商与模型部署",
-    description: "接入可用模型",
-    heading1: "接入可用模型",
-    heading2: "操作步骤",
-    heading3: "检查与边界",
+    description: "NewAPI 配置接入、Suno 新协议开发与真实调用验收",
+    heading1: "先判断：页面配置还是开发新协议",
+    heading2: "NewAPI：连接、部署、密钥、调用",
+    heading3: "Suno：当前未内置，必须实现音乐任务协议",
     body1:
-      "在供应商页面选择实际使用的协议和凭证类型，填写上游地址及凭证。在模型部署页面设置公开模型名、上游模型标识和供应商。公开名是客户端填写的 model，上游标识由部署负责映射。",
+      "供应商名称不是协议。NewAPI 实际提供 OpenAI Chat 时，在 XHub 中创建 custom_openai 连接并把部署绑定到已登记的 bypass_openai_chat，无需新建 provider 目录。若只是认证头或固定路径不同，增加已知协议的 Transport；若请求、响应、任务状态都是新结构，则要开发新协议。价格、Logo 和认证表单存在不代表可调用。",
     body2:
-      "一个公开模型可以关联多个部署。给每个部署配置真实能力、计价和启用状态，再用接入诊断或调试台验证。供应商名称不能代替接口能力；图片、音频或任务接口必须由具体部署支持。",
+      "在模型供应商页面添加 company-newapi，在供应商表单填写服务地址和 NewAPI 密钥。再在模型表单填写公开名 company-chat、账户实际可用的上游型号，选择 company-newapi 和 OpenAI Chat 上游协议，确认价格并保存部署。地址和认证只在模型供应商管理，部署不重复填写。刷新核对后，创建授权 company-chat 的 XHub 虚拟密钥并调用 /v1/chat/completions；业务只持有 XHub 密钥。全部在页面完成，不编辑 model_list。",
     body3:
-      "连接测试按 model_info.id 选择服务端已保存的部署，并发送最小英文对话请求。只有受支持的对话 transport 返回合法协议正文才显示成功；媒体及其它不支持的 transport 会明确返回不支持。探测可能产生供应商费用，但不经过网关密钥额度、路由、冷却与用量记账链。",
+      "当前没有 Suno 执行器或音乐端点。先确定实际接的是官方授权 API、NewAPI 插件还是第三方中转，取得创建/查询路径、认证、任务 ID、终态和收费单位。自有音乐 JSON 不能冒充 audio/speech，也不能靠 custom_llm_provider=suno 接通。实现后必须验证创建、原身份轮询、失败、多首结果与重复查询唯一结算。",
+    detail: `## 第一步：保存模型供应商连接
+
+打开“模型供应商 → 添加提供商”。本例接入 Chat，供应商类型选择 Custom Openai，提供商名称填 company-newapi，在这里填写 API Base 和 API Key。普通 Chat 模型的“供应商目录 ID”留空；它是专用目录标识，不是连接名称。
+
+![中文模型供应商连接表单](/assets/provider-guide/provider-form-zh.jpg)
+
+图中的地址和已遮挡的密钥都是虚构演示值，不代表已验证 NewAPI 账户。请先保存自己的连接。
+
+## 第二步：添加模型部署
+
+打开“模型管理 → 添加模型”。第 1 步选择已保存的供应商后，第 2 步才可填写上游模型 ID、对外模型名称并选择上游协议；第 3 步选择价格目录或填写实际合同费率。保存后刷新核对。
+
+![中文模型部署表单](/assets/provider-guide/deployment-form-zh.jpg)
+
+图中是尚未选择供应商的初始表单。模型区域置灰表示需要先选供应商，不是让你重复填地址、密钥或编辑 model_list。
+
+## 开发新供应商的修改顺序
+
+1. internal/provider/contract/type.go：确认 Action、AuthConfig、TaskID、TaskBilling 能否表达协议。
+2. internal/provider/capability/endpoints.go：新媒体协议登记公开端点及兼容关系。
+3. internal/provider/<supplier>/：注册 Transport 的协议、鉴权和操作白名单；参考 qiniu/seedance.go。需要专用型号时用 RegisterModel 绑定目录与 TransportID。
+4. internal/provider/all/all.go：导入新包，重建并重启。只建目录不会加载。
+5. internal/dataplane/execution/official.go、transport 与 gateway：检查入口分派、原生载荷、任务归属与错误；注册不等于所有执行逻辑已具备。
+6. internal/provider/measurement、internal/catalog：成功事实与费率分开，缺失维度保留待核价；复杂音乐计价需要扩展。
+7. 模型配置、调试台和双语 API：增加参数、查询及结果展示，补单元、真实后台 regression 和浏览器 E2E。
+
+## 保存成功后还要验证什么
+
+- 目录失败可以手动填已确认型号，目录成功不等于推理成功。先非流式，再流式、工具和业务参数。
+- 上游 API 根可保留 /proxy/v1，不能填完整操作 URL。改目录路径不改变推理协议。
+- 正常部署引用模型供应商，不重复保存地址和密钥。历史数据若残留 api_base，供应商地址更新可能不生效；这是旧数据排查边界，不是推荐配置方式。
+- 连接测试可能计费，但不经过完整额度、路由和用量链；必须再用虚拟密钥请求并核对日志与价格快照。
+- 创建超时不能证明未受理，不要盲目重发收费任务。当前没有通用后台补查、预算预占或 Suno 回调接收器。
+
+完整双语页面操作、curl 调用和开发文件清单见仓库 docs/development/zh-CN/provider-catalog.md（website 的“接入与集成”目录）。`,
   },
   "help-workspace": {
     title: "组织、团队与访问管理",

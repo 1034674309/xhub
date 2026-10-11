@@ -1,28 +1,40 @@
 # Pricing and usage
 
-[简体中文](../zh-CN/pricing.md) · [Developer documentation](README.md)
+Calculate from actual usage and the rate valid at request start. Persist the applied snapshot; do not reprice old calls with today's catalog.
 
-Use a priced catalog base_model or explicit manual rates. Zero is valid; negative/nonfinite values and invalid rows fail. Units are token/picture/second/query with supported windows and usage dimensions; usd is per base unit. Cached input is an input subset. Response-cache hits add zero generation cost; provider prompt caching still calls upstream. Record request-time ownership/prices; later changes do not rewrite history. request_id deduplicates settlement. Redis Peek → commit → Ack allows delivery retry. Terminal media usage settles once. Response headers do not prove durable commit. Budgets check recorded/hot spend without reserving future cost, so concurrent overspend remains possible.
+## Example
 
-## Related references
+~~~go
+// 示例：供已有 catalog 配置的调用方计算当次费用；无价格时显式处理失败。
+charge, priced := catalog.CostAt("company-chat", catalog.Usage{
+    PromptTokens: 1500, CompletionTokens: 100,
+}, startedAt)
+if !priced {
+    return fmt.Errorf("model has no applicable price")
+}
+_ = charge.Total
+~~~
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
-- [Qiniu FAL media integration](qiniu-fal.md)
+## Contract
 
+The fragment runs inside a function importing fmt and internal/catalog; startedAt is a time.Time and company-chat must have configured rates.
+
+| Measure | Rule |
+| --- | --- |
+| Normalized rate | quantity × usd; do not divide by unit_size again |
+| Cache reads | Subset of input tokens, not additional input |
+| Media | Actual successful output, not requested duration |
+| Historical logs | Read price_snapshot |
+| Queue | Commit PostgreSQL before Redis Ack |
+
+There is no budget reservation or separate provider-cost/customer-price ledger. Response cost headers are not a durable commit receipt. Failed/missing billing evidence is not proof of free usage.
+
+## Source and verification
+
+[internal/catalog/cost_at.go](../../../internal/catalog/cost_at.go)
+
+~~~bash
+go test ./internal/catalog ./internal/iam ./internal/live -count=1
+~~~
+
+[Test prerequisites](testing.md) · [Next: runtime](runtime.md)

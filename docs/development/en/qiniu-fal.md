@@ -1,28 +1,44 @@
-# Qiniu FAL media integration
+# Qiniu FAL video integration
 
-[简体中文](../zh-CN/qiniu-fal.md) · [Developer documentation](README.md)
+Save a model provider connection first. Add a deployment with the actual upstream model, matching FAL protocol, public name and rate. Enter the address and key only in the provider form.
 
-Configure registered transport, declared capability, credentials, public/upstream model, and priced units. Validate create, caller-scoped polling, terminal success/error, logs, and settlement deduplication. Do not blindly retry ambiguous task creation. Local protocol evidence does not prove live availability, assets, latency, quality, or invoices.
+![Provider connection](../../assets/provider-guide/provider-form-en.jpg)
 
-## Related references
+![Model deployment](../../assets/provider-guide/deployment-form-en.jpg)
 
-- [Developer documentation](README.md)
-- [Architecture and request lifecycle](architecture.md)
-- [Implementation map](implementation.md)
-- [Models and endpoints](model-endpoints.md)
-- [Provider catalog and capabilities](provider-catalog.md)
-- [Provider credential forms](provider-credential-forms.md)
-- [Model marketplace and accessible models](model-marketplace.md)
-- [Permissions and visibility](permissions.md)
-- [Routing templates and execution](routing.md)
-- [Routing groups and failover](routing-groups.md)
-- [Pricing and usage](pricing.md)
-- [Guardrails and XGo scripts](guardrails.md)
-- [Configuration and persistence](configuration.md)
-- [Runtime behavior and limits](runtime.md)
-- [Deployment and operations](operations.md)
-- [Testing and evidence](testing.md)
-- [Backend regression](regression.md)
-- [Browser acceptance](e2e-regression.md)
-- [HTTP API reference](api-reference.md)
+## Create and query
 
+This creates a paid task. kling-25 must be a saved, permitted deployment.
+
+~~~bash
+curl "$XHUB_BASE_URL/queue/fal-ai/kling-video/v2.5-turbo/pro/text-to-video" \
+  -H "Authorization: Bearer $XHUB_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"kling-25","prompt":"A red apple on a white table.","duration":"5"}'
+~~~
+
+Use the same XHub identity to query rewritten status_url / response_url with request_id. Query paths belong to the shared queue, not the full creation path. model disambiguates public aliases and is stripped before upstream forwarding.
+
+| Series | Transport | Query prefix |
+| --- | --- | --- |
+| Seedance 2.0 | qiniu_fal_doubao_20 | /queue/bytedance/seedance-2.0/requests/ |
+| Dreamina 2.0 | qiniu_fal_dreamina_20 | /queue/byteplus/seedance-2.0/requests/ |
+| Kling | qiniu_fal_kling | /queue/fal-ai/kling-video/requests/ |
+
+## Extend it
+
+| Change | Source |
+| --- | --- |
+| Model / fixed create path | [fal.go](../../../internal/provider/qiniu/fal.go): falEndpoint / registerFal |
+| Queue / authentication | RegisterTransport: Actions, TaskID, Auth |
+| Measured usage / pricing variants | internal/provider/measurement |
+| Terminal settlement / task pinning | internal/dataplane/execution/official.go |
+
+Seedance uses actual completion_tokens; Kling/Veo use final video.duration. Vidu Q2 tiered rates and MiniMax composite usage cannot use an arbitrary flat rate: preserve unpriced when pricing is incomplete. Waiting/failed tasks are not settled; PostgreSQL deduplicates successful repeated queries. No background polling, budget reservation or create-time price locking exists. Do not replay ambiguous creates.
+
+~~~bash
+go test ./internal/provider/... ./internal/catalog ./internal/dataplane/... -count=1
+XHUB_REGRESSION_STRICT=1 go test ./cmd/regression -run 'Test(FalSettlement|SeedanceSettlement)' -count=1 -v
+~~~
+
+[Protocol code](provider-catalog.md) · [Task API](../../api/en/fal-kling.md) · [Test prerequisites](testing.md)

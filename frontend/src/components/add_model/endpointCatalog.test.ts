@@ -1,8 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { catalogTransports, defaultTransport, compatibleEndpoint, protocolLabel, defaultEndpoints, publicEndpointGroup, type EndpointDescriptor, type EndpointTransport } from "./endpointCatalog";
+import { catalogTransports, defaultTransport, compatibleEndpoint, protocolLabel, endpointLabel, defaultEndpoints, publicEndpointGroup, type EndpointDescriptor, type EndpointTransport } from "./endpointCatalog";
 const generation: EndpointDescriptor = {id:"image_generation", label:"创建", category:"openai", kind:"bypass", protocol:"openai-images", family:"image"};
 const transport: EndpointTransport = {id:"openai_image_generation", label:"创建", kind:"bypass", endpoint_id:"image_generation", protocol:"openai-images"};
 describe("端点与执行目录", () => {
+  /** 目的：技术协议名固定英文，其他未知目录原文不篡改；前置中文目录及空标签，验证正常与边界输入，纯函数无需清理。 */
+  it("keeps image endpoint technical names English without rewriting other catalogs", () => {
+    expect(endpointLabel(generation)).toBe("OpenAI Images · Generate Image");
+    expect(endpointLabel({ ...generation, id: "image_edit" })).toBe("OpenAI Images · Edit Image");
+    expect(endpointLabel({ ...generation, id: "bypass:openai-image-edit" })).toBe("OpenAI Images · Edit Image · Bypass");
+    expect(endpointLabel({ ...generation, protocol: "unknown", label: "User label" })).toBe("User label");
+    expect(endpointLabel({ ...generation, protocol: "unknown", label: "" })).toBe("");
+  });
   /** 前置静态目录；验证生图不能误选改图、未知或空传输；无持久数据及清理。 */
   it("按具体图片操作而非共享协议匹配", () => {
     expect(compatibleEndpoint(generation, transport)).toBe(true);
@@ -20,10 +28,10 @@ describe("端点与执行目录", () => {
   });
   /** 前置图片与未知协议；验证上游选择框区分创建/编辑并保留自定义组标签；无需清理。 */
   it("使用原厂协议标签", () => {
-    expect(protocolLabel(transport)).toBe("OpenAI Images · 创建图片");
-    expect(protocolLabel({...transport,endpoint_id:"image_edit"})).toBe("OpenAI Images · 编辑图片");
-    expect(protocolLabel({...transport,endpoint_id:"bypass:openai-images"})).toBe("OpenAI Images · 创建图片 · Bypass");
-    expect(protocolLabel({...transport,endpoint_id:"bypass:openai-image-edit"})).toBe("OpenAI Images · 编辑图片 · Bypass");
+    expect(protocolLabel(transport)).toBe("OpenAI Images · Generate Image");
+    expect(protocolLabel({...transport,endpoint_id:"image_edit"})).toBe("OpenAI Images · Edit Image");
+    expect(protocolLabel({...transport,endpoint_id:"bypass:openai-images"})).toBe("OpenAI Images · Generate Image · Bypass");
+    expect(protocolLabel({...transport,endpoint_id:"bypass:openai-image-edit"})).toBe("OpenAI Images · Edit Image · Bypass");
     expect(protocolLabel({...transport,protocol:"unknown",model_group:"供应商队列"})).toBe("供应商队列");
   });
 });

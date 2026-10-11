@@ -21,6 +21,19 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+// directorySchemaSQL 保存独立目录迁移；由 Migrate 在基础资源建表后执行，不删除既有数据。
+//
+//go:embed directory_schema.sql
+var directorySchemaSQL string
+
+//go:embed enterprise_schema.sql
+var enterpriseSchemaSQL string
+
+// archiveSchemaSQL 安装账务事务内 outbox，迁移不需要外部凭据。
+//
+//go:embed archive_schema.sql
+var archiveSchemaSQL string
+
 var (
 	ErrNotFound          = errors.New("not found")
 	ErrConflict          = errors.New("already exists")
@@ -73,6 +86,15 @@ func Open(ctx context.Context, dsn string) (*DB, error) {
 func (db *DB) Migrate(ctx context.Context) error {
 	if _, err := db.Engine.Context(ctx).Exec(schemaSQL); err != nil {
 		util.Error("iam schema apply failed: %v", err)
+		return err
+	}
+	if _, err := db.Engine.Context(ctx).Exec(directorySchemaSQL); err != nil {
+		return err
+	}
+	if _, err := db.Engine.Context(ctx).Exec(enterpriseSchemaSQL); err != nil {
+		return err
+	}
+	if _, err := db.Engine.Context(ctx).Exec(archiveSchemaSQL); err != nil {
 		return err
 	}
 	// Names and hashes that already exist on the referenced rows. TTFT and

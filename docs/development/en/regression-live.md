@@ -1,7 +1,20 @@
-# Live provider regression
+# Live-provider verification (paid)
 
-[简体中文](../zh-CN/regression-live.md) · [Developer documentation](README.md)
+This runs real model requests. Run only with provider-call authorization, valid credentials and an approved charge budget.
 
-Explicit provider credentials and expected charges are required. Keep live acceptance separate from deterministic protocols. Set only required XHUB_REGRESSION_<ID>_* variables and protect secrets. Validate authentication, streaming/tasks, usage units, and invoices. Missing credentials are declared skips.
+~~~bash
+make regression-live
+~~~
 
-See [testing](testing.md) for isolation, commands, evidence, and external boundaries.
+scripts/with-live-vendors.py selects providers from config_provider.yaml and resolves keys through key_env or explicitly configured credential sources. Never put keys in YAML or logs.
+
+| Prerequisite | Requirement |
+| --- | --- |
+| PostgreSQL | Isolated schemas and cleanup |
+| Redis | Dedicated to this runner |
+| Model | Account-authorized, with reconcilable rates |
+| Evidence | Call ID, provider, deployment, usage, snapshot and amount |
+
+Missing-credential SKIPs are not passes. Real providers cannot reliably produce exact 429/500 sequences; deterministic regression verifies retry counts.
+
+[Runner](../../../scripts/with-live-vendors.py) · [Multi-provider](multi-supplier-regression.md) · [Free verification](regression.md)

@@ -10,6 +10,7 @@ Give business applications, internal tools, and AI agents a shared model endpoin
 Manage models, access, cost, security, routing, and operations on your own infrastructure.
 
 [![Self-hosted](https://img.shields.io/badge/Self--hosted-Yes-0891B2)](docs/getting-started.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![OpenAI compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](#connect-your-applications)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
@@ -20,7 +21,7 @@ Manage models, access, cost, security, routing, and operations on your own infra
 
 </div>
 
-XHub is an **enterprise AI access and governance platform** that brings model and protocol integration, organizational permissions, cost controls, security guardrails, routing, agent sessions, and media tasks into one gateway and console. Platform teams manage shared AI resources while business teams connect applications, test models, and track usage within their assigned permissions.
+XHub is an **MIT-licensed, self-hosted AI gateway for teams using multiple model providers**. Give applications a shared endpoint and separate virtual keys, manage model access and budgets, and inspect usage through a web console. Platform teams manage shared AI resources while business teams connect applications within their assigned permissions.
 
 **Distinct XHub capabilities:** Compose enterprise pre-call checks in XGo, inherit routing templates through key/team/organization scopes, continue agent calls with Responses history, retain per-request price snapshots, and deduplicate settlement for supported asynchronous media tasks. Model catalogs, Playground, and call tracing connect these capabilities to everyday use.
 
@@ -258,6 +259,10 @@ Installation and customer guides are available in English and Chinese. Central d
 ## Project status and deployment references
 
 XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Account login and scoped roles currently exclude SSO/SCIM; this repository does not promise commercial SLAs or compliance certifications.
+
+## License
+
+XHub is licensed under the [MIT License](LICENSE), allowing commercial use, modification, and redistribution subject to retaining the copyright and permission notice. Third-party dependencies and incorporated materials retain their own licenses and notices, including [provider catalog attribution](internal/catalog/publicdata/provider_fields.LICENSE). The software is provided without warranty.
 
 ## Contributing
 

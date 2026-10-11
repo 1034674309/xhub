@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 from checklist import Checklist
 from real_dataset import Dataset, load_manifest
@@ -20,6 +22,71 @@ spec.loader.exec_module(runner)
 
 class ChecklistTests(unittest.TestCase):
     """验证成功、失败、待执行和去重的可观察结果。"""
+
+    def test_probe_http_warning_and_case_terminal_results(self):
+        """目的：真实本地 HTTP 探测与清单结果区分警告和失败；前置首候选502、后候选有效回答，验证重试/切换/通过、全部失败及清理异常不误报通过；服务器、环境及临时报告自动清理，不调用付费供应商。"""
+        requests = []
+
+        class Supplier(BaseHTTPRequestHandler):
+            """用途：提供隔离供应商 HTTP 边界；只处理测试模型，不访问外网。"""
+
+            def log_message(self, *args):
+                """用途：屏蔽服务器访问输出；参数为默认日志参数，返回无，避免干扰断言。"""
+                pass
+
+            def do_POST(self):
+                """用途：返回失败或有效回答；读取HTTP请求，无返回；记录模型序列供重试断言，响应不含真实凭据。"""
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                requests.append(body['model'])
+                good = body['model'] == 'good'
+                reply = dict(choices=[dict(message=dict(content='OK'))],
+                             usage=dict(prompt_tokens=8, completion_tokens=1)) if good else dict(error=dict(message='unavailable'))
+                self.send_response(200 if good else 502)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(reply).encode())
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Supplier)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                lines = []
+                dataset = Dataset('http://127.0.0.1:1', directory, load_manifest(), logger=lines.append)
+                provider = dataset.data['providers'][1]
+                dataset.checklist = Checklist(directory, lines.append,
+                    [('success', '候选恢复'), ('exhausted', '全部不可用'), ('cleanup', '清理失败')])
+                env = {provider['base_env']: f'http://127.0.0.1:{server.server_port}/v1',
+                       provider['key_env']: 'sk-local-test', 'NO_PROXY': '127.0.0.1', 'no_proxy': '127.0.0.1'}
+                with mock.patch.dict(os.environ, env):
+                    selected = dataset.run_case('success', dataset.select_lifecycle_model, provider, ['bad', 'good'], 2, 0)
+                    self.assertEqual(selected, 'good')
+                    self.assertEqual(requests, ['bad', 'bad', 'good'])
+                    with self.assertRaisesRegex(RuntimeError, '均未通过'):
+                        dataset.run_case('exhausted', dataset.select_lifecycle_model, provider, ['bad'], 1, 0)
+                    with self.assertRaisesRegex(RuntimeError, 'cleanup secret'):
+                        with dataset.case('cleanup'):
+                            try:
+                                pass
+                            finally:
+                                raise RuntimeError('cleanup secret')
+                output = '\n'.join(lines)
+                self.assertIn('候选探测未成功：HTTP=502', output)
+                self.assertIn('将重试当前候选', output)
+                self.assertIn('将继续下一候选', output)
+                self.assertIn('✅ 用例通过：[结果 001/003 success', output)
+                self.assertIn('❌ 用例失败：[失败 002/003 exhausted', output)
+                self.assertIn('❌ 用例失败：[失败 003/003 cleanup', output)
+                self.assertNotIn('✅ 用例通过：[结果 003/003', output)
+                self.assertNotIn('cleanup secret', output)
+                self.assertFalse(dataset.report['checks'])
+                result = json.loads((Path(directory) / 'cases.json').read_text())
+                self.assertEqual(result['counts']['passed'], 1)
+                self.assertEqual(result['counts']['failed'], 2)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_runner_import_without_pythonpath(self):
         """目的：用户原始入口无需 PYTHONPATH 即可加载；前置干净环境，验证帮助成功且无导入错误，无外部数据清理。"""
@@ -48,6 +115,10 @@ class ChecklistTests(unittest.TestCase):
             self.assertEqual(result['counts']['passed'], 1)
             self.assertNotIn('secret', (Path(directory) / 'cases.json').read_text())
             self.assertIn('[开始 001/004', '\n'.join(lines))
+            self.assertIn('✅ 用例通过：[结果 001/004 a 普通] 通过', '\n'.join(lines))
+            self.assertIn('ℹ️ 用例结果：[结果 002/004 b 复验] 检查点已复验', '\n'.join(lines))
+            self.assertIn('❌ 用例失败：[失败 003/004 c 失败] 异常类型=RuntimeError', '\n'.join(lines))
+            self.assertNotIn('secret', '\n'.join(lines))
             self.assertTrue((Path(directory) / 'cases.md').exists())
             with self.assertRaises(ValueError):
                 with checklist.case('a'):

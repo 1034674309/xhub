@@ -3,6 +3,22 @@ import { describe, it, expect } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "../../../tests/test-utils";
 import { CostBreakdownViewer, CostBreakdown } from "./CostBreakdownViewer";
+import { I18nProvider, LOCALE_COOKIE } from "@/i18n";
+
+/** 前置中文费用组件和真实翻译；验证 LLM 不被误译、汇总标签正确及金额仍可见；自动卸载，无后台写入。 */
+it("preserves the LLM acronym in the Chinese cost breakdown", async () => {
+  window.localStorage.removeItem(LOCALE_COOKIE);
+  document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0`;
+  renderWithProviders(
+    <I18nProvider initialLocale="zh-CN">
+      <CostBreakdownViewer costBreakdown={{ input_cost: 0.001, output_cost: 0.002, total_cost: 0.003, original_cost: 0.003 }} totalSpend={0.003} />
+    </I18nProvider>,
+  );
+  await userEvent.click(screen.getByText("费用明细"));
+  expect(screen.getByText("LLM 原始费用：")).toBeVisible();
+  expect(screen.getByText("最终计算费用：")).toBeVisible();
+  expect(screen.queryByText(/法学硕士/)).not.toBeInTheDocument();
+});
 
 async function expandCostBreakdown() {
   const user = userEvent.setup();
