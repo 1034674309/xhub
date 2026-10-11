@@ -1,7 +1,7 @@
 package authz
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 	"xorm.io/xorm"
 )
@@ -13,7 +13,7 @@ import (
 // 测试：无直接单测
 func (s *Scope) Apply(session *xorm.Session) *xorm.Session {
 	if s == nil {
-		logx.Error("authz scope missing; denying listing")
+		util.Error("authz scope missing; denying listing")
 		return session.Where(deny())
 	}
 	if s.All {
@@ -22,7 +22,7 @@ func (s *Scope) Apply(session *xorm.Session) *xorm.Session {
 	if s.Cond == nil || !s.Cond.IsValid() {
 		// A scope that is neither explicitly unscoped nor a real filter must
 		// deny, never fall through to an unfiltered query.
-		logx.Error("authz scope %q has no condition; denying listing", s.Kind)
+		util.Error("authz scope %q has no condition; denying listing", s.Kind)
 		return session.Where(deny())
 	}
 	return session.And(s.Cond)

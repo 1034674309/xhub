@@ -1,138 +1,80 @@
-# 模型目录、费率与用量归一化
+# 模型目录、路由分类与用量计价
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-embed.go 和 publicdata 提供内置目录；feed.go 加载外部价格源；price_write.go 管理本地覆盖；contribute.go 接收供应商模型登记。routes.json 是接口接线目录，不是每个供应商均已实现的证明。
-CostAt、rates.go 和 cost_at.go 根据模型、用量、调用时刻选择费率；holiday.go 处理中国节假日及高峰窗口。Rate.USD 已是每个基础单位的单价，不能再除一次 UnitSize。支持 token、picture、second、query 等单位，明确零价与不存在价格不同。
-usage 归一化区分字段缺失、null 和明确 0。OpenAI 嵌套缓存输入通常是总输入子集；Anthropic 顶层缓存读写需要加入总输入。计价结果携带实际费率和数量，以供历史账单快照；价格刷新不重算历史日志。远端 feed 失败与非法覆盖必须可见，不把缺失价格解释成免费承诺。
+`internal/catalog` 为网关提供路由目录、模型/供应商元数据、凭据字段描述、市场价格转换、运行时价格分层、用量归一化和费用计算。进程以内嵌资源启动，接受供应商包贡献，可用远端 feed 替换生成的市场层，也允许管理接口应用运行时模型/供应商覆盖。目录在读写锁保护下驻留内存；内嵌文件是启动输入，不会在运行时监视磁盘变化。
 
-## 子目录与协作边界
+计价支持 token、图片、秒和查询次数，可按输入/输出侧、缓存、媒体规格以及北京时间高峰/低谷选择不同费率。`Rate.USD` 是导入阶段换算后的每基础单位价格，计费时直接乘用量，不能再次除以 `UnitSize`。字段存在且为零表示真实免费，费率缺失则表示对应用量无法计价。费用快照同时保存实测量和实际应用费率，因此后续目录刷新不会改变历史账单。
 
-| 目录 | 职责 |
-| --- | --- |
-| [price_binding_test.go](price_binding_test.go) | TestExplicitSellerPriceBindingSurvivesRefreshAndRejectsOtherSource：显式卖方价格绑定在目录刷新后保留，并拒绝其他价格源覆盖。 |
-| [publicdata](publicdata/readme_cn.md) | 内置公开数据资源 |
+本包还负责 public、推理、数据面和已移除 mixed 路径的分类。`routes.json` 描述路由形状和公共响应元数据，不代表每个供应商都有可用适配器或账号；凭据元数据也只描述配置字段。
+
+## 对外接口
+
+### 路由与公共数据 API
+
+`Load() []Route` 解码内嵌 `routes.json`，非法 JSON 会记录日志并返回空路由。`AuthOf`、`IsMixedPath`、`IsPublicPath`、`IsDataPlanePath`、`IsLLMPrefix` 对规范化路径分类。`HasPrefix` 遵守路径段边界，`PathMatch` 支持单段 `{name}` 和剩余路径 `:path`/`{name:path}` 占位。`PublicBody(path)` 为受支持公共路径返回内嵌固定结构，普通目录项返回空列表。这些函数只读，不自行完成请求认证。
+
+`Raw`、`CostMap`、`Count`、`LoadedAt`、`ProviderModels`、`KnownProvider` 向模型列表、通配展开、公共模型中心和管理接口提供当前内存目录及供应商索引。`TokenRates(model)` 返回每基础 token 的输入/输出价格，没有合适目录行时 `ok=false`。`Cost(model, prompt, completion)` 是仅 token 的兼容计算器，`Format` 输出无多余尾零的小数字符串。返回映射应作为目录数据读取，修改必须走写入 API。
+
+`Providers()` 返回价格文档中的供应商行。`CredentialProviders()` 将其与独立内嵌的凭据注册表和供应商贡献合并，补充默认 API base、应用 DeepSeek 兼容字段、按 provider/slug 去重、按显示名排序，并深拷贝追加的价格供应商，避免调用方修改共享状态。该结果只描述 UI 凭据输入，不验证适配器或凭据可用性。
+
+### 计价与用量 API
+
+`NormalizeUsage(map[string]any) Usage` 把供应商不同格式归一为 token、缓存 token、图片、视频秒数和查询次数。OpenAI/Responses 的嵌套 cached token 是 prompt/input 总量子集，会从未缓存输入中扣除；Anthropic 顶层 cache read/write 与 `input_tokens` 并列，需要相加且不能重复计算。显式零优先于别名，非法或互相矛盾的数量不会变成可计费用量。
+
+`CostAt(model, usage, startedAt)` 选择当前目录行；只有至少一个上报量有兼容费率时才返回 `(Charge, true)`。未知模型或无法计价的度量返回 `ok=false`，含义是未计价而不是免费。`CostFromRates` 对调用方费率表计价；`RatesFromFlat` 和 `CostFromFlatOrRates` 转换旧平铺字段，同时保留缺失与零的差别。`DecodeRates` 接受内嵌或部署 JSON 形状。`WindowAt`/`IsPeakHour` 根据调用开始时间选择时段。`Snapshot` 保存应用费率，`SnapshotUsage` 保存异步实测量、费率和是否成功计价。
+
+### 目录修改与 feed
+
+`Contribute(Row)` 允许供应商包补充缺失模型和官方 ID 别名，但不会覆盖内嵌价格；`ContributeProvider(ProviderRow)` 补充凭据/下拉元数据。空 ID 或供应商会被忽略。`BaselineModel`、`ModelRow`、`IsBaseline`、`SetModel`、`RemoveModel` 区分生成基线与当前模型行；供应商对应入口是 `SetProvider`、`RemoveProvider`、`IsBaselineProvider`。set/remove 在全局锁内重建相关索引并修改进程内存，持久化覆盖由调用方负责。
+
+`BuildPriceDocument(raw)` 校验并把市场响应转换为 `PriceDocument`，非法输入或空模型集合会失败。`FetchMarket(ctx, url)` 按上下文发起 HTTP 请求并返回传输、状态码或解码错误。`ReloadFromMarket` 拉取后调用 `ApplyDocument`；`ApplyDocument` 原子替换生成的 live 层，拒绝空文档，重建供应商索引，并重新叠加本地供应商/模型贡献和覆盖。拉取或转换失败时当前目录保持不变。`PriceSource`、`PriceGeneratedAt`、`MarkReloaded`、`EnvForced` 暴露来源、刷新状态和仅本地目录环境开关。
+
+### 实际 HTTP 注册与调用方
+
+本包不直接挂载 handler。`internal/gateway/models/mount.go` 用它实现 `GET /v1/models`、`GET /models`、路由组/default/fallback/available/info、`GET /model/cost_map`、来源/刷新/定时刷新、`GET /price/catalog`、模型/供应商价格写入与重置，以及模型 CRUD/启用/禁用/内置模型接口。`internal/gateway/routes.go` 注册 `GET /public/v1/model_hub` 及 facet、`/public/model_hub`、`/public/model_hub/info`、`/public/endpoints`、`/model_hub` 及 facet 和 `POST /model_hub/update_useful_links`。推理和用量 handler 在 IAM 保存快照前调用归一化与计价；供应商包在注册时调用贡献 API。HTTP 校验、授权、持久覆盖、调度和状态码映射位于 gateway/store 层。
+
+## 内部核心实现
+
+### 分层目录与并发
+
+启动时解析内嵌 `pricedata.json`，按 `litellm_provider` 索引模型并记录载入时间。实现把不可变基线模型/供应商映射与可变 live 映射分开。市场文档替换生成层，操作员行和供应商包贡献再叠加；显式 seller/source 绑定防止无关 feed 来源抢占已定价行。全部读写使用 `modelCostMu`，写操作在释放锁前重建别名和供应商索引，因此读者只会看到完整旧目录或完整新目录。空文档会被拒绝，避免坏 feed 清空账务价格。
+
+模型查询按顺序生成候选键，包括请求的网关名、供应商前缀形式、官方别名和 price-model 绑定；非对象或无价格空壳会被跳过，直到找到兼容行。`KnownProvider` 决定通配展开时首段是否为供应商，避免错误剥离组织/模型名。贡献会记录官方别名与价格来源，但不会覆盖基线已有行。
+
+### Feed 转换与费率协议
+
+`feed.go` 接受市场响应的多种字段形状，归一化供应商/模型身份、模式、variant、单位大小和原始价格字段，再生成 `PriceDocument`。已知 feed key 映射为明确的 `measure`、`side`、`variant`、`window`；未知 key 走字符串推断并输出 debug 诊断。`measureOf` 映射 token、second、picture、query，`perUnit` 把按单位包报价恰好一次换算为每基础单位美元。只有元数据而无价格的模型仍可展示但保持未计价；真实数字零会保留。
+
+`Rate` 携带度量、侧、可选 variant/window、USD、来源字段和原单位元数据。费率选择先匹配度量和侧，再匹配具体用量 variant 与开始时段。无时段费率可覆盖所有时段；若费率表明确区分高低峰，缺少高峰价时不会偷偷用更便宜的低谷价。缓存读取绝不退回普通输入价。媒体规格互相矛盾时计价失败，而不是任意选档。应用费率和数量分别累计到 `Charge`。
+
+### 用量归一化与时段
+
+私有数值读取器把“是否存在”和数值分开追踪，在别名之间保留 null、缺失、显式零的差别。嵌套缓存子集会被限制到输入总量；顶层并列缓存量保持相加。图片 modality、分辨率、秒数和搜索查询进入独立 measure/variant 桶，避免不同度量串价。总实测量为零不会被视为已计价调用。
+
+高峰为 `Asia/Shanghai` 周一至周五 09:00–12:00、14:00–18:00，边界使用左闭右开。内嵌中国节假日数据强制法定假日休息、调休周末上班。时区数据不可用时初始化退化到固定 UTC+8；节假日 JSON 无法读取时记录错误并退化为仅按工作日判断。价格时段只由调用开始时间决定。
+
+### 凭据元数据、失败边界与验证
+
+`provider_fields.json` 与价格供应商分开解析。凭据合并会复制嵌套 map/slice，应用已知 API base 默认值，只在 provider/slug 不冲突时追加贡献字段，并为 DeepSeek 加入 `api_base` 兼容字段。随附 `provider_fields.LICENSE` 记录上游许可，分发时必须保留。解析失败会记录日志并返回其他仍有效来源，不会中止模型计价。
+
+测试覆盖路由授权回归、凭据供应商合并与隔离、feed 转换和空 feed 拒绝、费率/时段/缓存/媒体/查询选择、显式零和用量别名、seller 绑定、中国节假日与调休边界。只有明确执行远端拉取时才需要网络；适配器可用性、供应商凭据、操作员覆盖持久化和 IAM 账务属于本包外部集成边界。
 
 ## 源码职责与入口
 
-### classify.go
-
-公开类型：`Route`, `AuthClass`.
-
-- [`func Load() []Route`](classify.go) — Load reads the embedded routes.json. A parse failure returns nil, and the caller treats that as an empty catalog.
-- [`func AuthOf(path string) AuthClass`](classify.go) — AuthOf chooses the identity class from the path prefix. A mixed prefix wins over an inference prefix.
-- [`func IsMixedPath(path string) bool`](classify.go) — IsMixedPath reports the catalog paths that were removed from the product and are refused rather than served. /v1/skills is deliberately absent: it is a real route again, serving the organization's skills. A path leaves this list when a dedicated handler takes it over, or the refusal would answer before the handler ever ran.
-- [`func IsPublicPath(method, path string) bool`](classify.go) — IsPublicPath reports a GET or HEAD that needs no identity. Only public pages, well-known URLs, and the model-hub entry qualify.
-- [`func IsDataPlanePath(path string) bool`](classify.go) — IsDataPlanePath reports a path that enters the inference data plane, including removed mixed prefixes.
-- [`func IsLLMPrefix(path string) bool`](classify.go) — IsLLMPrefix reports a path prefix for OpenAI, Anthropic, Gemini, and compatible endpoints.
-- [`func HasPrefix(path, prefix string) bool`](classify.go) — HasPrefix compares path prefixes. A trailing slash is ignored so /v1/chat does not match /v1/chatcompletions.
-- [`func PublicBody(path string) any`](classify.go) — PublicBody is the fixed response for a public GET. The price map and create fields come from embedded JSON. Everything else is an empty list.
-- [`func PathMatch(pat, path string) bool`](classify.go) — PathMatch reports whether a catalog template covers a concrete path. {name} matches one segment. :path and {x:path} match the rest.
-- [`func Split(p string) []string`](classify.go) — Split splits a path on slashes. An empty path returns nil, not a slice containing an empty string.
-
-### contribute.go
-
-公开类型：`Row`, `ProviderField`, `ProviderRow`.
-
-- [`func Contribute(row Row)`](contribute.go) — Contribute inserts a model into the price map and the per-provider index. The official id is remembered so a bill for that id finds the same rates.
-- [`func ContributeProvider(p ProviderRow)`](contribute.go) — ContributeProvider remembers a dropdown entry. PublicBody appends it when the embedded list does not already use that provider name.
-
-### cost.go
-
-- [`func Cost(model string, prompt, completion int) (total, input, output float64, ok bool)`](cost.go) — Cost returns the dollar total, input cost, and output cost for a token count. An unknown model returns ok false so the caller does not record a free call.
-- [`func Format(v float64) string`](cost.go) — Format renders a dollar amount as a decimal string without trailing zeros.
-
-### cost_at.go
-
-公开类型：`Usage`, `Charge`, `AppliedRate`, `PriceSnapshot`.
-
-- [`func WindowAt(t time.Time) string`](cost_at.go) — WindowAt reports which billing window a call starting at t falls in. Callers that price from their own rate table need the window on its own.
-- [`func DecodeRates(raw any) ([]Rate, bool)`](cost_at.go) — DecodeRates reads a rate table from the shape it arrives in over the wire - either the embedded catalog's own structure or a deployment's JSON. One decoder for both keeps an operator-typed table and a generated one priced the same way.
-- [`func RatesFromFlat(read func(string) (float64, bool)) []Rate`](cost_at.go) — RatesFromFlat builds a rate table from the flat price fields a deployment or an older price row carries. The flat form cannot say what it does not have a field for - a picture price per resolution, an input price per modality, a second of 4K video against a second of 1080p - but the four fields it does have must be read by the same biller as everything else. Routing them through here rather than through a second arithmetic path is what keeps a peak rate, a cache read and a per-image price from being dropped on the way to the usage row. read is called once per known field and returns ok false for one the source does not carry; a field present as zero is a real price of zero.
-- [`func CostFromFlatOrRates(read func(string) (float64, bool), usage Usage, startedAt time.Time) (Charge, bool)`](cost_at.go) — CostFromFlatOrRates prices a call against flat price fields, read through the callback, or reports that the source carries no price at all. It exists so a caller holding the flat form does not have to build a table and remember to keep the two paths in step. startedAt（time.Time）：调用开始的时刻。
-- [`func NormalizeUsage(usage map[string]any) Usage`](cost_at.go) — NormalizeUsage reads the quantities the gateway bills on out of the usage object an upstream returned, resolving the field names providers spell differently into one set of counts. It exists because the providers do not agree on what "input tokens" contains, and the disagreement runs through several field names at once. OpenAI      prompt_tokens is the whole prompt; the cached part is repeated under prompt_tokens_details.cached_tokens as a subset of it. Anthropic   input_tokens is *only* the part that missed the cache, and cache_read_input_tokens is a separate count beside it. Responses   input_tokens is the whole prompt, with the cached part nested under input_tokens_details the way OpenAI spells it. So the discriminator is *where the cache count lives*, not the field name of the prompt c
-- [`func CostFromRates(rates []Rate, usage Usage, startedAt time.Time) (Charge, bool)`](cost_at.go) — CostFromRates prices a call against a rate table handed in by the caller rather than one looked up from the catalog. A deployment that typed its own rates goes through here, so both sources are billed by the same rules.
-- [`func Snapshot(c Charge) string`](cost_at.go) — Snapshot renders the rates a charge used as the JSON stored beside the usage row. A caller with no charge gets an empty string, which is how a usage row records that this call was never priced.
-- [`func SnapshotUsage(c Charge, u Usage, priced bool) string`](cost_at.go) — 保存异步任务的实际用量、适用费率和能否计价。供应商上报 token 但缺少视频费率变体时仍标记为未定价。
-- [`func CostAt(model string, usage Usage, startedAt time.Time) (Charge, bool)`](cost_at.go) — CostAt prices one call at the instant it started. The instant decides the window, and the call's own facts decide the variant. Both are needed: a cached prompt on a peak-hour call at a window-priced model is four different rates away from an uncached prompt on an offpeak one. It returns ok false when the model is unknown or when none of the quantities the call reported can be priced. A caller that gets false must record the call as unpriced - not as free - because the two are different facts. startedAt（time.Time）：调用开始的时刻。时段只由它决定，不用结束时刻。
-
-### embed.go
-
-- [`func Embedded(name string, raw []byte) []byte`](embed.go) — Embedded returns one embedded JSON document. The first valid document is logged once. A document that is not JSON is logged as an error.
-
-### feed.go
-
-- [`func BuildPriceDocument(raw []byte) (PriceDocument, error)`](feed.go) — BuildPriceDocument converts a market feed response into the price catalog document. An empty feed returns an error rather than an empty catalog, so a failed reload cannot wipe the prices in use.
-- [`func FetchMarket(ctx context.Context, url string) (PriceDocument, error)`](feed.go) — FetchMarket reads the market feed. It is the runtime counterpart of the build-time generator, and both go through BuildPriceDocument.
-- [`func ReloadFromMarket(ctx context.Context, url string) (int, error)`](feed.go) — ReloadFromMarket fetches the market feed and swaps it in as the live price catalog. A failed fetch leaves the prices in use untouched and reports why.
-
-### holiday.go
-
-- [`func IsPeakHour(t time.Time) bool`](holiday.go) — IsPeakHour reports whether t falls inside a peak billing window. Peak is defined as Mon–Fri 09:00–12:00 and 14:00–18:00 Beijing time (Asia/Shanghai), excluding Chinese public holidays and including make-up work days that fall on a weekend (调休补班). The rule mirrors DeepSeek's published pricing; any other provider with a window-aware rate table uses the same function because the window dimension is a property of the rate, not of the provider. Boundary treatment: 09:00 and 14:00 are peak; 12:00 and 18:00 are not. This matches the convention of half-open intervals [start, end).
-
-### model_cost.go
-
-- [`func Raw() any`](model_cost.go) — Raw returns the raw JSON object of the built-in price map.
-- [`func TokenRates(model string) (input, output float64, ok bool)`](model_cost.go) — TokenRates returns the per-token input and output prices for one model in the built-in price map. The name is matched as stored, and if that misses, the provider prefix before the first slash is dropped. A missing name or a row with no per-token prices returns ok false.
-- [`func CostMap() map[string]map[string]any`](model_cost.go) — CostMap turns the price map into a model-name to fields map. An entry that is not an object is dropped.
-- [`func Count() int`](model_cost.go) — Count is the number of models in the price map.
-- [`func LoadedAt() string`](model_cost.go) — LoadedAt is the UTC time, in RFC3339, when the process loaded this built-in price map.
-- [`func MarkReloaded() int`](model_cost.go) — MarkReloaded records that the price catalog was refreshed and returns the number of models now in it. The rows themselves come from ReloadFromMarket; this only stamps the time the console displays.
-- [`func EnvForced() bool`](model_cost.go) — EnvForced reports that LITELLM_LOCAL_MODEL_COST_MAP is set to true, ignoring case. When it is true the gateway uses only the built-in map and does not try a remote price source.
-- [`func ProviderModels(provider string) []string`](model_cost.go) — ProviderModels returns the model ids for one provider in the built-in map. An unknown provider returns nil.
-- [`func KnownProvider(name string) bool`](model_cost.go) — KnownProvider reports that this prefix is a supplier name rather than an organization id. While expanding a wildcard, only a known provider prefix is stripped and then joined with the caller's prefix.
-
-### price_write.go
-
-- [`func BaselineModel(id string) (map[string]any, bool)`](price_write.go) — BaselineModel returns the embedded row for an id, or ok false when the generated catalog does not contain that model.
-- [`func ModelRow(id string) (map[string]any, bool)`](price_write.go) — ModelRow returns the live row for an id, which is the baseline row or the override that replaced it. A missing id returns ok false.
-- [`func IsBaseline(id string) bool`](price_write.go) — IsBaseline reports whether this id comes from the generated catalog rather than from an operator's entry.
-- [`func SetModel(id string, row map[string]any)`](price_write.go) — SetModel writes one row into the live price map and indexes it under its provider. An existing row is replaced, so this is also how an edit lands.
-- [`func RemoveModel(id string) bool`](price_write.go) — RemoveModel drops one row from the live map and its provider index. The embedded baseline is untouched, so the row returns after a restart unless the caller also deleted the stored override.
-- [`func ApplyDocument(doc PriceDocument) (int, error)`](price_write.go) — ApplyDocument replaces the live catalog with a freshly generated one. The embedded baseline is untouched, so an operator's overrides and deletions still apply on top of it and a later restart falls back to the same rows. A document with no models is refused: a failed fetch must not empty the catalog the gateway is billing from.
-- [`func SetProvider(slug string, row map[string]any)`](price_write.go) — SetProvider writes one supplier into the add-model dropdown, replacing an entry that already uses the same slug.
-- [`func RemoveProvider(slug string) bool`](price_write.go) — RemoveProvider drops one supplier from the dropdown.
-- [`func IsBaselineProvider(slug string) bool`](price_write.go) — IsBaselineProvider reports whether this supplier comes from the generated catalog rather than from an operator's entry.
-
-### pricedata.go
-
-公开类型：`PriceDocument`.
-
-- [`func Providers() []map[string]any`](pricedata.go) — Providers 返回内嵌目录里的供应商列表，供添加模型时的下拉框使用，含凭据字段。
-- [`func PriceSource() string`](pricedata.go) — PriceSource 返回生成这份内嵌目录时用的来源地址。
-- [`func PriceGeneratedAt() string`](pricedata.go) — PriceGeneratedAt 返回这份内嵌目录的生成时间。
-
-### rates.go
-
-公开类型：`Rate`.
-
-内部实现和协议边界见 [rates.go](rates.go)。
-
-资源与持久化定义：[routes.json](routes.json).
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [price_binding_test.go](price_binding_test.go) | TestExplicitSellerPriceBindingSurvivesRefreshAndRejectsOtherSource：显式卖方价格绑定在目录刷新后保留，并拒绝其他价格源覆盖。 |
-| [classify_regression_test.go](classify_regression_test.go) | `TestProviderResourceAliasesRequireInferenceIdentity` |
-| [cost_at_test.go](cost_at_test.go) | `TestPeakCostsTwiceOffpeak`, `TestUnwindowedModelCostsTheSameAtBothInstants`, `TestPeakNeverFallsBackToTheCheapRate`, `TestCacheReadIsNotBilledAtTheInputRate`, `TestCachedVariantOfInputSideIsHonoured`, `TestCachedTokensAreNotDoubleBilled`, `TestCacheHitAbovePromptCountIsClamped`, `TestModelWithoutACacheRateBillsTheWholePromptAsInput`, `TestPerSecondModelIsBilledBySeconds`, `TestPerPictureModelIsBilledByPictures`, `TestMeasuredSidesDoNotBleedIntoEachOther`, `TestUnknownModelIsNotPriced`, `TestZeroQuantityIsNotPriced`, `TestAppliedRatesAreRecordedForTheSnapshot`, `TestUnitSizeIsAppliedOnce`, `TestRateTableIsReadFromJSONShape`, `TestRowWithoutRatesIsBilledFromItsFlatFields`, `TestFlatPeakFieldIsHonoured`, `TestFlatNonTokenMeasuresAreBilled`, `TestFlatCacheReadIsNotCountedTwice`, `TestVariantOnlySideFallsBackAndSaysSo`, `TestAnUnqualifiedRateIsNotDisplacedByTheFallback`, `TestACacheReadIsNeverBilledAtTheInputPrice`, `TestASearchPriceIsBilledAsAQuery`, `TestAQueryWithoutAPriceIsNotBillable`, `TestNormalizeUsageResolvesTheProviderShapes`, `TestNormalizeUsageReadsTheNonTokenMeasures`, `TestNormalizeUsageOfNothingIsZero`, `TestRatesFromFlatKeepsEveryMeasure`, `TestRatesFromFlatMakesOnePriceApplyEveryHour`, `TestRatesFromFlatKeepsThePeakLadder`, `TestRatesFromFlatOfNothingIsEmpty`, `TestAPrefixedNameResolvesItsCatalogAlias`, `TestAnUnpricedGatewayNameDoesNotHideTheCatalogRow`, `TestPriceKeysKeepTheirPreferenceOrder` |
-| [feed_test.go](feed_test.go) | `TestPlainTokenModelKeepsBothSides`, `TestVariantPricedVideoModelGetsABillableRate`, `TestPicturePricedInputIsNotATokenRate`, `TestVariantPricedImageModelGetsABillableRate`, `TestVariantPerOutputTokenIsBillable`, `TestPeakOffPeakVariantsStillBill`, `TestReasoningVariantsStillBill`, `TestModelWithNoPricingAtAllStaysUnpriced`, `TestGenuineZeroIsKept`, `TestPeakOffPeakRatesHaveWindowDimension`, `TestPlainModelRatesAllWindow`, `TestEmptyFeedIsRefused` |
-| [holiday_test.go](holiday_test.go) | `TestIsPeakHour_WeekdayMorning`, `TestIsPeakHour_WeekdayAfternoon`, `TestIsPeakHour_WeekdaySaturdayIsOffpeak`, `TestIsPeakHour_Noon`, `TestIsPeakHour_MorningStart`, `TestIsPeakHour_AfternoonEnd`, `TestIsPeakHour_LunchBreak`, `TestIsPeakHour_PublicHoliday`, `TestIsPeakHour_HolidayWeekday`, `TestIsPeakHour_MakeUpWorkSaturday`, `TestIsPeakHour_SpringFestivalMakeUp`, `TestIsPeakHour_NationalDayHoliday`, `TestIsPeakHour_NationalDayMakeUp`, `TestParseHolidays` |
-| [usage_regression_test.go](usage_regression_test.go) | `TestNormalizeUsagePreservesExplicitZeroOverAliases` |
-
-```bash
-go test ./internal/catalog -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- [`classify.go`](classify.go) 定义 `Route`/`AuthClass`，解析内嵌路由，分类 public/data-plane/LLM/mixed 路径，匹配路径模板并构造固定公共响应。
+- [`contribute.go`](contribute.go) 定义模型/供应商贡献结构、受锁保护的贡献与官方别名注册表、`Contribute`、`ContributeProvider`；私有辅助把贡献行和字段转换为目录 JSON。
+- [`cost.go`](cost.go) 提供仅 token 的兼容入口 `Cost` 和小数格式化 `Format`，二者使用当前目录 token 价格。
+- [`cost_at.go`](cost_at.go) 定义归一化 `Usage`、`Charge`、`AppliedRate`、`PriceSnapshot`，负责费率解码、平铺字段转换、供应商用量归一化、候选模型解析、variant/window 选择、费用计算与快照序列化。
+- [`credential_providers.go`](credential_providers.go) 解析 `provider_fields.json`，合并凭据与价格供应商元数据，深拷贝追加项，去重，补 API base/DeepSeek 默认值并返回排序后的 `CredentialProviders`。
+- [`embed.go`](embed.go) 内嵌 `routes.json`、自动路由预设、价格数据和凭据字段；`Embedded` 校验 JSON 并统一启动日志。
+- [`feed.go`](feed.go) 定义市场 wire 结构和自定义解码，把原始价格 key/单位转换为 `PriceDocument`，执行带上下文 HTTP 拉取，拒绝空文档，并导出 `BuildPriceDocument`、`FetchMarket`、`ReloadFromMarket`。
+- [`holiday.go`](holiday.go) 内嵌并解析中国节假日例外，初始化上海时区/降级时区，实现 `IsPeakHour`。
+- [`model_cost.go`](model_cost.go) 初始化目录，持有全局锁、live map、供应商索引、载入时间和已知供应商集合，并导出 raw/map/count/token/provider/来源读取 API。
+- [`price_write.go`](price_write.go) 维护基线与 live 模型/供应商层、深拷贝辅助、覆盖/贡献重放、原子文档应用及模型/供应商 set/remove/query。
+- [`pricedata.go`](pricedata.go) 定义 `PriceDocument`，解码内嵌基线和来源信息，导出供应商元数据并建立基线价格/供应商状态。
+- [`rates.go`](rates.go) 定义 `Rate` 协议和私有 feed 字段分类、measure/side/variant/window 推断、数值提取以及报价单位到基础单位换算。
+- [`routes.json`](routes.json) 是 `Load`、分类辅助和 `PublicBody` 使用的内嵌路由/公共响应目录；它描述协议路径，不描述运行时适配器是否就绪。
+- [`publicdata`](publicdata/readme_cn.md) 包含内嵌价格、中国日历例外、凭据字段及其许可、自动路由预设；子目录 README 说明每种资源的格式和消费者。

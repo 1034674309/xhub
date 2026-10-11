@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceGuard sync.Once
@@ -20,7 +19,7 @@ var logTraceOnceGuard sync.Once
 // 调用：Module 注册的两个 apply_guardrail 路径。
 // 测试：guard_test.go、external_test.go、gateway/guardrail_manage_test.go。
 func Apply(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceGuard.Do(func() { logx.Trace("enter guard.Apply") })
+	logTraceOnceGuard.Do(func() { util.Trace("enter guard.Apply") })
 
 	if s.RequireManage(w, r) == nil {
 		return
@@ -33,7 +32,7 @@ func Apply(s Host, w http.ResponseWriter, r *http.Request) {
 	var rule map[string]any
 	if inline, ok := body["guardrail"].(map[string]any); ok {
 		if err := Validate(inline); err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return
 		}
 		rule = inline
@@ -45,17 +44,17 @@ func Apply(s Host, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if rule == nil {
-			httpx.WriteError(w, 404, "not_found", "guardrail not found")
+			util.WriteError(w, 404, "not_found", "guardrail not found")
 			return
 		}
 	}
 	action, reason, metadata, err := runRuleDetailed(rule, body)
 	if err != nil {
-		httpx.WriteError(w, 400, "guardrail_execution", err.Error())
+		util.WriteError(w, 400, "guardrail_execution", err.Error())
 		return
 	}
 	out := guardrailText(body)
-	httpx.WriteJSON(w, 200, map[string]any{"metadata": metadata, "status": "success", "guardrail_name": findingName(rule), "action": action, "reason": reason, "blocked": action == "block", "response_text": out, "text": out, "output": map[string]any{"text": out}})
+	util.WriteJSON(w, 200, map[string]any{"metadata": metadata, "status": "success", "guardrail_name": findingName(rule), "action": action, "reason": reason, "blocked": action == "block", "response_text": out, "text": out, "output": map[string]any{"text": out}})
 
 }
 
@@ -241,7 +240,7 @@ func evalNamed(s Host, name, text string) (action, out string) {
 // 测试：guard_regression_test.go、engine_test.go。
 func listGuardrails(s Host) []map[string]any {
 	if s == nil || s.RecordStore() == nil {
-		logx.Debug("guardrails loading YAML only reason=no store")
+		util.Debug("guardrails loading YAML only reason=no store")
 		out := configuredRules(s)
 		effectiveDefaults(s, out)
 		sortRules(out)
@@ -251,7 +250,7 @@ func listGuardrails(s Host) []map[string]any {
 	for _, kind := range []string{"guardrails", "guardrail"} {
 		list, err := s.RecordStore().ListKV(kind)
 		if err != nil {
-			logx.Error("guardrail lookup failed kind=%s err=%v", kind, err)
+			util.Error("guardrail lookup failed kind=%s err=%v", kind, err)
 			return []map[string]any{{"name": "guardrail_store_unavailable", "default_on": true, "guardrail": "always_block"}}
 		}
 		out = append(out, list...)

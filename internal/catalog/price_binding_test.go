@@ -1,6 +1,8 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestExplicitSellerPriceBindingSurvivesRefreshAndRejectsOtherSource(t *testing.T) {
 	const official = "seller-binding-refresh-model"

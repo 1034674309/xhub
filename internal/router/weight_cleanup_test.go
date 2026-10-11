@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/sunqirui1987/xhub/internal/config"
 	"reflect"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestCleanAllocations 验证删除、改名及单部署清理，不因禁用或零权重改变仍有效的分配。

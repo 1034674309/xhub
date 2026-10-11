@@ -1,6 +1,8 @@
 package regression
 
-import "testing"
+import (
+	"testing"
+)
 
 // runBoth 把同一条回归跑成两种模式。
 //

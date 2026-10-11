@@ -3,8 +3,9 @@ package store
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOncePg sync.Once
@@ -15,7 +16,7 @@ var logTraceOncePg sync.Once
 // 调用：store/engine.go
 // 测试：无直接单测
 func quoteIdent(name string) (string, error) {
-	logTraceOncePg.Do(func() { logx.Trace("enter store.quoteIdent") })
+	logTraceOncePg.Do(func() { util.Trace("enter store.quoteIdent") })
 
 	if name == "" || len(name) > 63 {
 		return "", fmt.Errorf("invalid schema name")

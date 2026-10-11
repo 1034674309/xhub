@@ -9,6 +9,33 @@ import { readApiMarkdown } from "./apiMarkdown";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/docs" }));
 vi.mock("@/components/networking", () => ({ getProxyBaseUrl: () => "https://gateway.example.com/prefix/v1/" }));
 
+/** 目的：验证内容任务正文和 Bypass 目录没有重复标题；前置真实双语 Markdown，切换语言并搜索仍可访问总览及接口；框架清理 DOM，afterEach 清理语言存储，无业务数据。 */
+it("deduplicates protocol titles while preserving bilingual navigation", () => {
+  render(
+    <I18nProvider initialLocale="zh-CN">
+      <DocsCenter page={docPages.find((page) => page.id === "ark")!} apiMarkdown={readApiMarkdown("ark")} />
+    </I18nProvider>,
+  );
+  const main = screen.getByRole("main");
+  expect(within(main).getAllByText("内容生成任务协议", { exact: true })).toHaveLength(1);
+  const nav = screen.getByRole("navigation", { name: "文档目录" });
+  expect(within(nav).getAllByText("原厂协议 Bypass", { exact: true })).toHaveLength(1);
+  expect(within(nav).getByRole("link", { name: "协议总览" })).toHaveAttribute("href", "/docs/api/native-bypass");
+  fireEvent.click(screen.getByRole("button", { name: "English" }));
+  expect(within(main).getAllByText("Content generation task protocol", { exact: true })).toHaveLength(1);
+  expect(within(nav).getAllByText("Native protocol Bypass", { exact: true })).toHaveLength(1);
+  expect(within(nav).getByRole("link", { name: "Overview", exact: true })).toHaveAttribute(
+    "href",
+    "/docs/api/native-bypass",
+  );
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Bypass Anthropic" } });
+  expect(within(nav).getByRole("link", { name: "Bypass Anthropic Messages", exact: true })).toBeInTheDocument();
+  expect(within(nav).getAllByText("Native protocol Bypass", { exact: true })).toHaveLength(1);
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-such-protocol-xyz" } });
+  expect(screen.getByRole("status")).toHaveTextContent("0 documents found");
+  expect(within(nav).queryByRole("link")).not.toBeInTheDocument();
+});
+
 /** 目的：验证真实双语 Markdown、动态网关及不重复渲染；前置独立 API 文件，语言切换保持面板并更新目录；不调用上游，无业务数据清理。 */
 it("renders the shared Markdown API in both languages", () => {
   render(
@@ -23,13 +50,18 @@ it("renders the shared Markdown API in both languages", () => {
   expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "English" }));
   expect(screen.getByRole("heading", { name: "Request parameters" })).toBeInTheDocument();
-  expect(within(screen.getByRole("navigation", { name: "Documentation directory" })).getAllByText("POST").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("navigation", { name: "Documentation directory" })).getAllByText("POST").length,
+  ).toBeGreaterThan(0);
   expect(screen.getByRole("region", { name: "json code panel" })).toHaveTextContent("chatcmpl-example");
   expect(screen.getByRole("link", { name: "Success response" })).toHaveAttribute("href", "#doc-success-response");
 });
 
 /** 每例清理语言 cookie，防止语言切换影响下一例的前置语言，无业务数据。 */
-afterEach(() => { document.cookie = LOCALE_COOKIE + "=; Max-Age=0; path=/"; localStorage.clear(); });
+afterEach(() => {
+  document.cookie = LOCALE_COOKIE + "=; Max-Age=0; path=/";
+  localStorage.clear();
+});
 describe("documentation reader", () => {
   /** 目的：验证双语搜索空结果、动态计数和原文保留；前置真实组件树，切语言保留输入，空查询恢复目录；测试环境清理 DOM 与存储。 */
   it("keeps the search query across language changes", () => {
@@ -52,7 +84,9 @@ describe("documentation reader", () => {
     expect(screen.getByText("No matching documents. Try another keyword.")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
     expect(screen.getByRole("navigation", { name: "Documentation directory" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Documentation directory" })).queryByText("POST")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation", { name: "Documentation directory" })).queryByText("POST"),
+    ).not.toBeInTheDocument();
   });
   /** 目的：验证复制成功和拒绝后的可见降级；前置英文请求文章与剪贴板边界，复制文本保持英文并显示结果；mock 自动恢复，不写业务数据。 */
   it("reports clipboard success and failure", async () => {

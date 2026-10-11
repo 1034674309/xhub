@@ -2,9 +2,10 @@
 package estimate
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"strings"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Margin is one markup rule.
@@ -28,7 +29,7 @@ var logTraceOnceCost sync.Once
 // 调用：仅在 cost.go 内使用
 // 测试：无直接单测
 func ApplyDiscount(baseCost float64, provider string, discounts map[string]float64) (final, percent, amount float64) {
-	logTraceOnceCost.Do(func() { logx.Trace("enter estimate.ApplyDiscount") })
+	logTraceOnceCost.Do(func() { util.Trace("enter estimate.ApplyDiscount") })
 
 	if provider != "" {
 		if rate, ok := discounts[provider]; ok {

@@ -3,11 +3,11 @@ package family
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/pagination"
 	"io"
 	"net/http"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -18,7 +18,7 @@ var logTraceOnceCodec sync.Once
 // 调用：gateway/family/handlers.go。
 // 测试：无直接单测
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter family.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter family.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)
@@ -37,22 +37,6 @@ func readMap(r *http.Request) map[string]any {
 func str(v any) string {
 	s, _ := v.(string)
 	return s
-}
-
-// asInt converts a JSON number to int. A float64 is truncated. Any other type returns 0.
-// 参数 v（any）：JSON 里读出的动态值。数字、字符串和对象都要接住，类型不符时按零值而不是 panic。
-// 返回 int（int）：从 JSON 或查询参数转成的整数。类型不符或缺失时为 0，不 panic。
-// 调用：gateway/family/handlers.go。
-// 测试：无直接单测
-func asInt(v any) int {
-	switch t := v.(type) {
-	case float64:
-		return int(t)
-	case int:
-		return t
-	default:
-		return 0
-	}
 }
 
 // idsFrom reads an id list from the body. The plural key wins, and a non-empty singular field is appended.
@@ -95,6 +79,6 @@ func sliceMaps(list []map[string]any, page, size int) []map[string]any {
 		page = 1
 	}
 	// 统一边界先比较页码，避免超大页码回绕为负数导致切片崩溃。
-	start, end := pagination.Bounds(len(list), page, size)
+	start, end := util.Bounds(len(list), page, size)
 	return list[start:end]
 }

@@ -1,193 +1,84 @@
-# 身份、授权资源与事务账务
+# 身份资源、授权资源、额度与账务
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-schema.sql 定义表与约束；db.go 建库连接并协调应用、会话和数据库时区；users/teams/keys 管理身份资源；route_template 管理模板；usage/usage_read 写入和查询用量。此包不导入网关或定义 HTTP 角色策略。
-认证读取新鲜身份和成员状态。RecordUsage 以 request_id 幂等，在事务内更新事件、spend log、日汇总以及用户/密钥/团队/项目/组织五个视图。重复或并发重复结算不应新增费用；事务失败不留下部分累加。
-事件保存调用时的归属、provider、模型及价格快照，之后删除密钥、迁移成员和更新价格不能改写历史。读取必须接收 authz 生成的范围，不能先全量读取再在内存过滤。测试使用独立 schema，生产身份和框架 KV 不应混用。
+`internal/iam` 是认证、管理网关、推理准入和用量报表共用的 PostgreSQL 身份与账务域。它持有用户、组织、团队、成员关系、项目、API 密钥、路由模板绑定、审计记录、不可变用量事件、请求正文、日聚合、各层花费以及 RPM/TPM 分配。本目录只提供 Go 方法；HTTP 身份认证和角色判断由网关完成后再调用这些方法。
+
+资源层级为组织 → 团队 → 用户 → 密钥。项目用于进一步收窄团队权限，但不作为额度树中的独立父节点。一个用户最多属于一个团队，因为账单和速率准入必须得到唯一祖先路径。团队服务密钥使用无密码的内部业务账号，使其用户层额度与创建密钥的管理员相互独立。明文密码和密钥都不落库：密码使用 bcrypt，密钥只保存哈希，明文仅在创建或轮换时返回一次。
+
+用量记录采用追加和幂等模型。一个成功批次在同一事务内写入不可变事件、可选请求/响应日志、日聚合和所有适用主体的花费。事件保存调用当时的归属、供应商、模型、token 数和实际应用价格快照；之后成员关系或目录价格变化不会改写历史。异步任务走独立生命周期，只记录一次初始请求，并在任务完成时恰好结算一次成本。
+
+## 对外接口
+
+### 数据库生命周期与错误
+
+`Open(ctx, dsn) (*DB, error)` 通过 xorm/pgx 打开 PostgreSQL、执行 `schema.sql`，并对齐应用、xorm、连接会话和数据库时区。`Migrate` 可重复应用 schema，`Close` 释放连接池。数据库错误向上传递，常见约束结果会归一为 `ErrNotFound`、`ErrConflict` 或 `ErrInvalid`。`RecordAudit`、`ListAudit`、`QueryAudit` 写入或分页读取审计记录；搜索在计数和分页前执行，显示名优先使用 detail 中的不可变快照，再批量回填当前名称。
+
+### 用户、组织、团队、项目与密钥
+
+`Bootstrap`、`EnsureAdmin`、`Login`、`CreateUser`、`GetUser`、`UserByEmail`、`UpdateProfile`、`SetPassword`、`AdminUpdateUser`、`DeleteUser` 实现账号生命周期。输入会被规范化和校验，密码只保存哈希，删除或降级最后一个平台管理员会被拒绝。`ListUsersPage(UserListQuery)` 把搜索、状态、角色、团队、组织筛选与调用方提供的授权范围取交集，仅允许白名单排序字段，默认页大小 100、上限 500，返回 `(rows, total, error)`。IAM 当前不存 SSO 标识，因此指定 SSO 条件会返回空结果。
+
+组织和团队入口包括 `CreateOrg(..., rates ...RateLimits)`、`UpdateOrg`、`CreateTeam`、`UpdateTeamProfile`、`AdminUpdateTeam(..., rates ...RatePatch)`、`MoveTeam` 及相应查询、列表和删除方法。成员方法负责组织管理员和团队成员的增删改，保留至少一个团队管理员，并拒绝同一用户进入第二个团队。项目方法保证项目模型和预算不超出所属团队。变更在事务内写审计；外键、配额或速率分配失败会回滚整个变更。
+
+`CreateKey` 和 `RotateKey` 返回 `(key, plaintext, error)`，明文只暴露一次。`KeyByHash` 是认证查询入口；`ActiveKey`、`OwnedBy`、`TouchKey`、状态/删除/重置方法和筛选列表支撑网关策略。`AllowedModelsForTeam` 与 `AllowedModelsForKey` 对团队、项目、密钥模型集合取交集；某层为 nil 表示该层不限制。`ParseExpiry` 只接受支持的相对时长格式，错误格式直接失败。`ResetKeySpend` 修改当前计数，但不删除历史事件。
+
+### 配额、速率、模板与用量 API
+
+`QuotaPath(ctx, kind, id, hot)` 返回 `(teamID, organizationID, exhaustedScope, error)`。它读取完整层级，通过 `hot` 加入尚未刷库的 Redis 花费，为固定额度子节点保留未消费余额，并报告目标路径上第一个耗尽层级。父节点缺失、成员归属歧义和非法分配都会返回错误。它是调用前检查，供应商最终结算仍可能超过最后一点余额。
+
+`ValidateRates` 拒绝负数以及超出 PostgreSQL `INT` 的 RPM/TPM。`RatePlan(ctx, kind, id)` 返回 `live.RatePlan`，其中既有目标路径，也保留会占用祖先容量的兄弟及后代节点；节点缺失、父级歧义和循环会失败。IAM 负责构造有效无环的索引与路径，`live.CheckRatePlan` 和 `live.AdmitRatePlan` 会直接使用这些索引。
+
+路由模板 API 负责 JSON body 的创建、更新、列表、读取、删除，以及组织/团队/项目绑定。`Settings` 遇到存量非法 JSON 时返回空设置，避免单条坏记录阻断所有继承请求。`RouteTemplateUsage` 和 `RouteTemplateUsageCounts` 返回绑定位置；网关删除前先检查使用情况。空绑定表示恢复继承。
+
+`RecordUsage(records)` 在写库前验证整个批次，去除批次内重复 request ID，并依靠数据库 request ID 唯一约束实现跨请求和并发幂等。任一步失败都会返回错误并回滚事件、日志、聚合和主体计数。`RecordTaskUsage(record, initial, settle)` 通过 PostgreSQL advisory transaction lock 串行处理同一任务：初建只计一次请求且费用为零，轮询只更新状态和正文，首次完成结算才增加 token 与花费；归属和开始时间始终沿用初始事件。
+
+`UsageQuery` 同时携带授权范围和业务筛选。`ListUsageSessions`、`ListUsage`、`CountUsage`、`GetUsageEvent`、`GetRequestLog`、`DailyUsage` 以及模型/密钥/团队汇总，都会先把授权条件写入 SQL，再排序、计数和分页。`AuditLogRead` 记录特权请求日志读取。SQL、解码和上下文错误原样上送；集合查询无结果时返回空切片，单条查询无结果时返回 `ErrNotFound`。
+
+### 实际 HTTP 注册与调用方
+
+本目录不直接挂载 HTTP handler。`internal/gateway/identity/mount.go` 将这些 API 注册为 `/user/*`、`/organization/*`、`/team/*`、`/project/*`、`/route_template/*` 和 `GET /audit/logs`；`internal/gateway/routes.go` 的登录和 bootstrap handler 也调用 IAM。`internal/gateway/keys/mount.go` 注册密钥生成、服务密钥、列表/详情、更新、阻止/恢复、删除、批量、轮换/重置、别名和密钥健康接口。`internal/gateway/usage/mount.go` 注册花费日志与详情、会话/全局报表、日活动、模型/密钥/团队/供应商/标签汇总、成本计算和健康接口。网关中间件传入 actor 和授权范围，并把 IAM 错误映射成 HTTP 状态。推理认证会调用密钥、用户、模型检查以及 `QuotaPath`、`RatePlan`；live 花费刷写器调用 `RecordUsage`。
+
+## 内部核心实现
+
+### 事务、约束与时间
+
+`DB.tx` 绑定上下文、开启事务，在回调或提交失败时回滚，全部领域写入成功后才提交。并发分配可能冲突时，资源变更会锁定受影响的用户、组织或团队。`schema.sql` 提供 request ID 唯一约束、成员和绑定外键、检查约束、索引、聚合表与审计存储。连接串注入具名 session 时区，数据库服务器使用匹配的 POSIX 时区，使应用写入时间与 `DEFAULT now()` 保持同一时刻，避免 UTC+8 环境出现八小时偏移。
+
+### 预算与速率分配
+
+`quotaTree` 读取组织、团队、用户、成员和密钥并连接成森林。固定预算子节点向父级保留 `max(limit-spend, 0)`；共享子节点把固定后代的保留额继续上传。`validateQuota` 只校验被修改节点及其祖先，使历史存量非法树可以逐步收紧修复，而不阻断无关分支。运行时 `QuotaPath` 把 Redis 热花费同时纳入路径消费和保留额计算，并把目标子节点自身的保留额度作为 credit 加回，避免它被分配给自己的容量拦截。
+
+RPM 和 TPM 复用相同拓扑。`rateAllocated` 累加固定子节点，并让固定后代穿过共享节点；零是真实限额，nil 表示共享或未设置。`buildRatePlan` 从目标向根回溯并检测循环、缺失父级，再加入完整根分量，确保兄弟保留额参与判断。节点 ID 排序后得到稳定索引，路径按从窄到宽输出。配置变更在同一事务内校验非负值与父级分配容量。
+
+### 身份不变量与审计快照
+
+邮箱按不区分大小写方式规范化，密码使用 bcrypt，存储角色和控制台兼容角色分别转换。成员变更要求活跃用户，禁止多个团队归属路径，保留最后一个团队/平台管理员，并在归属移除时撤销受影响的个人密钥。模型和预算范围按团队、项目、密钥逐层求交集或上限。审计写入尽量捕获 actor/object 名称；读取时不会为补全名称扩大授权，因此已删除资源可能保持无名。
+
+### 用量账务与失败边界
+
+`RecordUsage` 在事务前拒绝空 ID、负数或非有限价格、非法 token 和时间，再由 `insertEvent` 判断请求是否首次出现。只有新事件才写请求日志、增加日请求数，并增加组织、团队、项目、用户和密钥花费；所有聚合使用事件捕获的归属和日期。数据库失败不会留下部分计数。Redis 队列只在数据库事务提交后确认，而 request ID 唯一约束使提交后、确认前崩溃产生的重放仍安全。
+
+任务账务甚至在记录尚不存在时也按 request ID 哈希加事务锁。重复 initial 是空操作；轮询不能增加请求数或花费；失败任务不能回到执行态；结算必须是 `completed` 且 key/user/model 与原事件一致。零费用完成也会标记为已结算。用量读取先构造授权 SQL，再叠加筛选、稳定排序、总数和分页；本地日统计按请求的分钟偏移移动时间。
+
+### 依赖与验证
+
+本包依赖 PostgreSQL/pgx/xorm、bcrypt、用于速率计划类型的 `internal/live` 和 `internal/util`。单元与回归测试覆盖时区设置、密钥过期和个人密钥、额度/速率分配、用户分页、路由模板、审计筛选/快照、用量分页/幂等和任务生命周期。数据库测试需要可用的 PostgreSQL 测试 DSN，缺失时可能跳过；Redis 行为由 `internal/live` 测试，外部身份供应商和模型供应商不在本包边界内。
 
 ## 源码职责与入口
 
-### db.go
-
-公开类型：`DB`, `Actor`, `Audit`, `AuditFilter`.
-
-- [`func Open(ctx context.Context, dsn string) (*DB, error)`](db.go) — Open connects with the pgx driver and applies the schema. The engine keeps xorm's default time zones — DatabaseTZ and TZLocation both Local — and they must agree with the session zone. xorm formats atime.Time into the database zone on the way in and re-labels the value it reads back into the application zone, while pgx returns the instant in the session zone. Pinning any one of the three to UTC while the others stayed Local made stored timestamps land eight hours off on a UTC+8 machine: created _at and updated_at disagreed with columns PostgreSQL filled in itself, because DEFAULT now() is computed by the server and never passes through this conversion. Setting all three together is what makes the round trip lossless. It matters that the session zone is named explicitly rather than left tot
-- [`func (db *DB) Migrate(ctx context.Context) error`](db.go) — Migrate creates every table and constraint; idempotent on the new schema.
-- [`func (db *DB) Close() error`](db.go) — Close releases the engine.
-- [`func (db *DB) RecordAudit(ctx context.Context, a Actor, e Audit) error`](db.go) — RecordAudit writes an audit row outside a larger transaction, e.g. when a platform administrator reads someone else's request log.
-- [`func (db *DB) ListAudit(ctx context.Context, limit, offset int) ([]AuditEntry, error)`](db.go) — ListAudit returns the newest rows first.
-- [`func (db *DB) QueryAudit(ctx context.Context, filter AuditFilter, limit, offset int) ([]AuditEntry, int64, error)`](db.go) — QueryAudit returns matching rows and their total, newest first.
-
-### audit_display.go
-
-`enrichAudit` 在已授权、已分页的审计结果上补充操作者和对象的显示名。事件详情中保存的 `actor_name`、`actor_email`、`object_name` 快照优先于当前名称，保证改名后历史记录仍显示当时的事实；缺少快照的记录才按当前页批量查询用户、组织、团队、项目、密钥和路由模板。已删除对象没有可查名称时保持空值，不扩大查询范围。`applyAuditSearch` 在计数与分页之前，对事件编号、动作、身份、对象及名称应用相同的搜索条件，并用 `strpos` 将 `%` 和 `_` 当成普通字符，避免用户输入改变匹配语义。这两个函数是 `QueryAudit` 的内部实现，不新增 HTTP 入口。
-
-### keys.go
-
-公开类型：`Key`, `APIKey`, `KeyInput`, `KeyFilter`.
-
-- [`func (APIKey) TableName() string`](keys.go) — 告诉 xorm 这个结构体对应数据库表 api_keys。
-- [`func (k *Key) ActiveKey() bool`](keys.go) — ActiveKey reports a key that may be used: not blocked, not revoked, not expired.
-- [`func (k *Key) OwnedBy(userID string) bool`](keys.go) — OwnedBy reports whether the key belongs to this person.
-- [`func HashKey(plain string) string`](keys.go) — HashKey hashes a plaintext key for storage and lookup.
-- [`func NewPlainKey() string`](keys.go) — NewPlainKey returns a new sk-... credential.
-- [`func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, string, error)`](keys.go) — CreateKey stores a key and returns it with the plaintext, which is shown once.
-- [`func (db *DB) RotateKey(ctx context.Context, by Actor, id string) (*Key, string, error)`](keys.go) — RotateKey replaces the secret and returns the new plaintext once.
-- [`func (db *DB) DeleteKey(ctx context.Context, by Actor, id string) error`](keys.go) — DeleteKey removes a key.
-- [`func (db *DB) SetKeyStatus(ctx context.Context, by Actor, id, status string) (*Key, error)`](keys.go) — SetKeyStatus blocks or unblocks a key.
-- [`func (db *DB) UpdateKey(ctx context.Context, by Actor, id string, in KeyInput) (*Key, error)`](keys.go) — UpdateKey changes the narrowing and limits of an existing key. Narrowing may never exceed what the team (and project) grants.
-- [`func (db *DB) GetKey(ctx context.Context, id string) (*Key, error)`](keys.go) — GetKey loads one key with its narrowing.
-- [`func (db *DB) KeyByHash(ctx context.Context, hash string) (*Key, error)`](keys.go) — KeyByHash loads a key by credential hash for authentication.
-- [`func (db *DB) ListKeys(ctx context.Context, f KeyFilter) ([]Key, error)`](keys.go) — ListKeys returns keys inside the filter, newest first.
-- [`func (db *DB) TouchKey(ctx context.Context, id string) error`](keys.go) — TouchKey records the last use of a key.
-- [`func (db *DB) RevokeTeamKeys(ctx context.Context, by Actor, teamID string) error`](keys.go) — RevokeTeamKeys ends every key of a team; used when a team is blocked.
-- [`func (db *DB) AllowedModelsForTeam(ctx context.Context, teamID string) ([]string, error)`](keys.go) — AllowedModelsForTeam is the team's model set, used before a key exists. A nil result means the team has no restriction of its own.
-- [`func (db *DB) AllowedModelsForKey(ctx context.Context, k *Key) ([]string, error)`](keys.go) — AllowedModelsForKey is the key's effective model set; the catalog and the inference path both call it so a listed model is always a usable model.
-- [`func KeyNameFromPlain(plain string) string`](keys.go) — KeyNameFromPlain derives a display name from a credential.
-- [`func ParseExpiry(d string) (*time.Time, error)`](keys.go) — ParseExpiry turns a relative duration such as 30s, 30m, 30h or 30d into the absolute instant it names, counted from now. An empty value is "no expiry" and returns nil. Anything else is an error, so atypo never becomes a key that never expires.
-- [`func (db *DB) ResetKeySpend(ctx context.Context, by Actor, id string, to float64) (*Key, error)`](keys.go) — ResetKeySpend sets a key's spend back to zero, or to the given value. The usage events behind the old figure stay, so history is never rewritten.
-
-### models.go
-
-公开类型：`Time`, `User`, `Organization`, `Team`, `TeamMembership`, `OrganizationMembership`, `Project`, `AuditEntry`.
-
-- [`func (User) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 users。
-- [`func (u *User) Active() bool`](models.go) — Active reports an account that may sign in and use keys.
-- [`func (u *User) Admin() bool`](models.go) — Admin reports an active platform administrator.
-- [`func (Organization) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 organizations。
-- [`func (Team) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 teams。
-- [`func (TeamMembership) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 team_members。
-- [`func (OrganizationMembership) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 organization_members。
-- [`func (Project) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 projects。
-- [`func (AuditEntry) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 audit_logs。
-- [`func (bootstrapState) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 bootstrap_state。
-
-### route_template.go
-
-公开类型：`TemplateOwner`, `RouteTemplate`, `TemplateUsage`.
-
-- [`func (RouteTemplate) TableName() string`](route_template.go) — TableName tells xorm which table these rows live in.
-- [`func (t RouteTemplate) Settings() map[string]any`](route_template.go) — Settings parses the body into a router settings document. A body that does not parse is reported as an empty document rather than failing the caller: the alternative is a single malformed row taking down every request that inherits it, and an empty document is exactly the platform behaviour.
-- [`func (db *DB) ListRouteTemplates(ctx context.Context) ([]RouteTemplate, error)`](route_template.go) — ListRouteTemplates returns every template by name.
-- [`func (db *DB) GetRouteTemplate(ctx context.Context, id string) (*RouteTemplate, error)`](route_template.go) — GetRouteTemplate loads one template by id.
-- [`func (db *DB) CreateRouteTemplate(ctx context.Context, by Actor, owner TemplateOwner, name, body string) (*RouteTemplate, error)`](route_template.go) — CreateRouteTemplate inserts a template. The name must be free.
-- [`func (db *DB) UpdateRouteTemplate(ctx context.Context, by Actor, id, name, body string) (*RouteTemplate, error)`](route_template.go) — UpdateRouteTemplate replaces a template's name and body.
-- [`func (db *DB) DeleteRouteTemplate(ctx context.Context, by Actor, id string) error`](route_template.go) — DeleteRouteTemplate removes a template. Refusing while a scope still selects it is enforced by the caller, which reads the usage list first and reports where. Doing it here as well would put a user-facing explanation inside the store.
-- [`func (db *DB) RouteTemplateUsage(ctx context.Context, id string) ([]TemplateUsage, error)`](route_template.go) — RouteTemplateUsage lists every scope currently selecting a template. It is three queries rather than one join because the three scopes live in three tables with no common parent beyond the id. Each is indexed on the column, so this is cheap even though it looks like a fan-out.
-- [`func (db *DB) RouteTemplateUsageCounts(ctx context.Context) (map[string]int, error)`](route_template.go) — RouteTemplateUsageCounts returns how many scopes select each template, keyed by template id. The list screen shows the count, and computing it here keeps that screen from running one usage query per row.
-- [`func (db *DB) SetScopeRouteTemplate(ctx context.Context, by Actor, scope, scopeID, templateID string) error`](route_template.go) — SetScopeRouteTemplate points one scope at a template, or clears it when id is empty. Clearing is what puts the scope back on inheritance. The scope is addressed as a table plus a column-safe id rather than through three separate functions, because the only difference between them is the table name and an id column that is spelled the same in all three.
-- [`func (db *DB) ScopeRouteTemplate(ctx context.Context, scope, scopeID string) (string, error)`](route_template.go) — ScopeRouteTemplate reads one scope's selected template id. An empty string means the scope selects nothing and inherits.
-
-### teams.go
-
-公开类型：`OrgUpdate`, `TeamInput`, `TeamWithRole`, `Membership`, `Member`, `ProjectInput`.
-
-- [`func (db *DB) CreateOrg(ctx context.Context, by Actor, name string, maxBudget *float64) (*Organization, error)`](teams.go) — CreateOrg inserts an organization.
-- [`func (db *DB) OrgsByIDs(ctx context.Context, ids []string) (map[string]Organization, error)`](teams.go) — OrgsByIDs loads the organizations named by ids. An empty list is an empty map, not every organization.
-- [`func (db *DB) GetOrg(ctx context.Context, id string) (*Organization, error)`](teams.go) — GetOrg loads one organization.
-- [`func (db *DB) ListOrgs(ctx context.Context, userID string) ([]Organization, error)`](teams.go) — ListOrgs returns every organization, or only those that own one of the user's teams when userID is set.
-- [`func (db *DB) UpdateOrg(ctx context.Context, by Actor, id string, in OrgUpdate) (*Organization, error)`](teams.go) — UpdateOrg applies an OrgUpdate.
-- [`func (db *DB) DeleteOrg(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteOrg refuses while teams remain (foreign key RESTRICT).
-- [`func (db *DB) CreateTeam(ctx context.Context, by Actor, in TeamInput) (*Team, error)`](teams.go) — CreateTeam inserts the team and its first team_admin in one transaction.
-- [`func (db *DB) TeamsByIDs(ctx context.Context, ids []string) (map[string]Team, error)`](teams.go) — TeamsByIDs loads the teams named by ids. An empty list is an empty map, not every team.
-- [`func (db *DB) GetTeam(ctx context.Context, id string) (*Team, error)`](teams.go) — GetTeam loads one team.
-- [`func (db *DB) ListTeams(ctx context.Context, userID, organizationID string) ([]TeamWithRole, error)`](teams.go) — ListTeams returns every team for a platform administrator (userID empty), or just the user's teams with their role.
-- [`func (db *DB) UpdateTeamProfile(ctx context.Context, by Actor, id string, name, description *string) (*Team, error)`](teams.go) — UpdateTeamProfile is what a team administrator may change.
-- [`func (db *DB) AdminUpdateTeam(ctx context.Context, by Actor, id string, status *string, maxBudget **float64, models *[]string) (*Team, error)`](teams.go) — AdminUpdateTeam changes status, budget and model set; platform administrators only. The model list sits at this level rather than at the team administrator's because it is the team's ceiling: a team administrator who could widen it would be granting their own team reach the platform did not give them.
-- [`func (db *DB) MoveTeam(ctx context.Context, by Actor, id, organizationID string) (*Team, error)`](teams.go) — MoveTeam re-parents a team. Access-group assignments from the previous organization are removed first, which cascades to project and key narrowing; a failure leaves everything untouched.
-- [`func (db *DB) DeleteTeam(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteTeam cascades to members, projects, keys and access-group assignments.
-- [`func (db *DB) MemberTeams(ctx context.Context, userID string) ([]Membership, error)`](teams.go) — MemberTeams returns the user's memberships with the team role and the team's organization. This is the only membership source the authorization layer reads: there is no mirror of members anywhere else
-- [`func (db *DB) ListOrgAdmins(ctx context.Context, orgID string) ([]Member, error)`](teams.go) — ListOrgAdmins returns the organization administrators with public account fields.
-- [`func (db *DB) AddOrgAdmin(ctx context.Context, by Actor, orgID, email string) (*Member, error)`](teams.go) — AddOrgAdmin grants organization administration to an existing active account, found by exact email. An unknown and a disabled account both return ErrNotFound. Granting it again is a no-op success.
-- [`func (db *DB) RemoveOrgAdmin(ctx context.Context, by Actor, orgID, userID string) error`](teams.go) — RemoveOrgAdmin revokes organization administration. An organization may have no administrator: a platform administrator still reaches it.
-- [`func (db *DB) ListVisibleTeams(ctx context.Context, userID, organizationID string) ([]TeamWithRole, error)`](teams.go) — ListVisibleTeams returns the teams a person may see: the ones they belong to, plus every team in an organization they administer. The role is their team role, empty when they administer the organization without joining the team.
-- [`func (db *DB) OversightTeamIDs(ctx context.Context, userID string) ([]string, error)`](teams.go) — OversightTeamIDs lists the teams whose contents this person may see in full: teams they administer, and every team in an organization they administer. Membership alone does not put a team here.
-- [`func (db *DB) TeamIDsByOrg(ctx context.Context, orgIDs []string) ([]string, error)`](teams.go) — TeamIDsByOrg lists every team that belongs to one of the organizations.
-- [`func (db *DB) AdminOrgs(ctx context.Context, userID string) ([]string, error)`](teams.go) — AdminOrgs 列出这个用户担任管理员的组织 id。没有这种组织时为空切片。
-- [`func (db *DB) SetOrgAdmin(ctx context.Context, by Actor, orgID, userID string, admin bool) error`](teams.go) — SetOrgAdmin grants or revokes organization administration for one person.
-- [`func (db *DB) OrgAdmins(ctx context.Context, orgID string) ([]string, error)`](teams.go) — OrgAdmins lists the people who administer one organization.
-- [`func (db *DB) Memberships(ctx context.Context, userID string) (map[string]string, error)`](teams.go) — Memberships returns team ID → team role, for callers that only need the role.
-- [`func (db *DB) ListMembers(ctx context.Context, teamID string) ([]Member, error)`](teams.go) — ListMembers returns the team's members with public account fields only.
-- [`func (db *DB) AddMember(ctx context.Context, by Actor, teamID, email, role string) (*Member, error)`](teams.go) — AddMember adds an existing active account by exact email. An unknown and a disabled account both return ErrNotFound, so callers cannot enumerate users.
-- [`func (db *DB) SetMemberRole(ctx context.Context, by Actor, teamID, userID, role string) error`](teams.go) — SetMemberRole changes a team role, protecting the last team_admin.
-- [`func (db *DB) RemoveMember(ctx context.Context, by Actor, teamID, userID string) error`](teams.go) — RemoveMember deletes a membership and revokes the user's personal keys bound to this team, protecting the last team_admin.
-- [`func (db *DB) GetProject(ctx context.Context, id string) (*Project, error)`](teams.go) — GetProject loads one project with its organization derived from the team.
-- [`func (db *DB) ListProjects(ctx context.Context, teamIDs []string) ([]Project, error)`](teams.go) — ListProjects returns the projects of the given teams, or of every team when teamIDs is nil (platform administrators). An empty, non-nil list returns nothing rather than everything.
-- [`func (db *DB) CreateProject(ctx context.Context, by Actor, in ProjectInput) (*Project, error)`](teams.go) — CreateProject inserts a project narrowed within its team's grants.
-- [`func (db *DB) UpdateProject(ctx context.Context, by Actor, id string, in ProjectInput) (*Project, error)`](teams.go) — UpdateProject replaces name, status, narrowing and budget.
-- [`func (db *DB) DeleteProject(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteProject cascades to the project's keys.
-
-### usage.go
-
-公开类型：`UsageEvent`, `RequestLog`, `UsageDaily`, `UsageRecord`.
-
-- [`func (UsageEvent) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 usage_events。
-- [`func (RequestLog) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 request_logs。
-- [`func (UsageDaily) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 usage_daily。
-- [`func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error`](usage.go) — RecordUsage writes the event, its stored request/response, the daily roll-up and the live spend counters in one transaction. The batch is idempotent on request_id. A retried flush, or a second gateway process replaying the same Redis entry, inserts the event once and therefore increments everything else once. The existence check and the increments share the transaction so a partial replay cannot double-count.
-
-### usage_read.go
-
-公开类型：`UsageQuery`, `DailyRow`, `DailyByModelRow`, `KeySpendRow`, `TeamSpendRow`.
-
-- [`func (db *DB) ListUsage(ctx context.Context, q UsageQuery) ([]UsageEvent, error)`](usage_read.go) — ListUsage returns usage events inside the scope, newest first. A missing limit is a page of logs. A caller that names a limit gets that many rows, capped here. Clamping an over-large limit down to a small page would make the usage screen report a sample as the whole window.
-- [`func (db *DB) CountUsage(ctx context.Context, q UsageQuery) (int64, error)`](usage_read.go) — CountUsage counts the events inside the scope, for paging.
-- [`func (db *DB) GetUsageEvent(ctx context.Context, q UsageQuery, requestID string) (*UsageEvent, error)`](usage_read.go) — GetUsageEvent loads one event inside the scope. A row outside the scope is reported as not found rather than forbidden, so a caller cannot probe which request ids exist.
-- [`func (db *DB) GetRequestLog(ctx context.Context, requestID string) (*RequestLog, error)`](usage_read.go) — GetRequestLog loads the stored bodies of one event that is already inside the scope. The caller checks the scope with GetUsageEvent first.
-- [`func (db *DB) DailyUsage(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyRow, error)`](usage_read.go) — DailyUsage totals the roll-up per day inside the scope.
-- [`func (db *DB) DailyUsageByModel(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyByModelRow, error)`](usage_read.go) — DailyUsageByModel totals the roll-up per day and model inside the scope.
-- [`func (db *DB) RollupByModel(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyByModelRow, error)`](usage_read.go) — RollupByModel totals the roll-up per model inside the scope, for the per-model table the usage page shows.
-- [`func (db *DB) RollupByKey(ctx context.Context, q UsageQuery, tzMinutes int) ([]KeySpendRow, error)`](usage_read.go) — RollupByKey totals the roll-up per key inside the scope. The display name is a correlated subquery rather than a join, so the grouped table stays the only source of rows and the scope cannot widen orduplicate them. A key that was deleted since keeps its spend: the roll-up carries the id, and the name falls back to it.
-- [`func (db *DB) RollupByTeam(ctx context.Context, q UsageQuery, tzMinutes int) ([]TeamSpendRow, error)`](usage_read.go) — RollupByTeam totals the roll-up per team inside the scope, with the same correlated-subquery shape as RollupByKey.
-- [`func (db *DB) AuditLogRead(ctx context.Context, by Actor, requestID string, e UsageEvent) error`](usage_read.go) — AuditLogRead records that an actor read a log they do not own. The caller writes this before returning the row: the access is the event, not the row.
-
-### users.go
-
-公开类型：`UserInput`, `UserUpdate`.
-
-- [`func (db *DB) Bootstrapped(ctx context.Context) (bool, error)`](users.go) — Bootstrapped reports whether the first platform administrator exists.
-- [`func (db *DB) Bootstrap(ctx context.Context, email, name, password string) (*User, error)`](users.go) — Bootstrap creates the first platform administrator exactly once.
-- [`func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error)`](users.go) — UserByEmail loads one account by its address, case-insensitively.
-- [`func (db *DB) EnsureAdmin(ctx context.Context, email, name, password string) (bool, error)`](users.go) — EnsureAdmin creates a platform administrator from configuration if no account with that address exists yet, and reports whether it created one. It deliberately never updates an existing row. The configured password is an initial password: an operator who changes the YAML after the first start expects the running account to keep the password it has, not to have it silently reset by a config file that may sit in a repository. Changing a live password is a write against the account, not a deployment side effect. An empty email or password is not an error here; it means the deployment has not configured seeding, and the caller falls back to POST /bootstrap.
-- [`func (db *DB) CreateUser(ctx context.Context, by Actor, in UserInput) (*User, error)`](users.go) — CreateUser inserts a platform account together with the memberships the caller asked for, in one transaction. The memberships are written only after the account row exists, and a failure to write anyof them rolls the whole thing back: an account that came out of a failed create would be one nobody intended to make. The budget is stored as given; nil means no ceiling rather than zero, which is the difference between "unlimited" and "cannot spend anything".
-- [`func (db *DB) UsersByIDs(ctx context.Context, ids []string) (map[string]User, error)`](users.go) — UsersByIDs loads the accounts named by ids. An empty list is an empty map, not every account. Callers use it to label rows they have already scoped.
-- [`func (db *DB) GetUser(ctx context.Context, id string) (*User, error)`](users.go) — GetUser loads one account.
-- [`func (db *DB) ListScopedUsers(ctx context.Context, self string, teamIDs []string, query string, limit, offset int) ([]User, error)`](users.go) — ListScopedUsers lists the caller and the accounts that belong to the teams they oversee. An empty team list returns only the caller.
-- [`func (db *DB) ListUsers(ctx context.Context, query string, limit, offset int) ([]User, error)`](users.go) — ListUsers is the platform administrator's directory.
-- [`func (db *DB) Login(ctx context.Context, email, password string) (*User, error)`](users.go) — Login checks a password. A disabled account and a wrong password both return ErrNotFound so callers cannot tell the cases apart. The identifier is an email, or, when it contains no @, the display name or the part of the address before @. The console's username field is free text, and the configured administrator is often typed as "admin" rather than "admin@xhub.local". A name that matches more than one account is refused, the same as a missing account, so the response still cannot enumerate users.
-- [`func ConsoleRole(role string) string`](users.go) — ConsoleRole is the role name the admin UI understands. The row stores admin or user. The console only treats proxy_admin as a platform administrator, so a session that carries the stored spelling is shown as an unknown role and every admin-only query is narrowed to that one user.
-- [`func StoreRole(role string) string`](users.go) — StoreRole maps a role the console sent back onto the stored spelling. An empty value is a normal user, which is what the account form sends when the picker is left on its default.
-- [`func (db *DB) UpdateProfile(ctx context.Context, by Actor, id, name string) (*User, error)`](users.go) — UpdateProfile changes display fields only.
-- [`func (db *DB) SetPassword(ctx context.Context, by Actor, id, password string) error`](users.go) — SetPassword replaces the password and ends existing sessions.
-- [`func (db *DB) AdminUpdateUser(ctx context.Context, by Actor, id string, in UserUpdate) (*User, error)`](users.go) — AdminUpdateUser changes role, status, email or budget in one transaction. A role or status change ends the user's sessions; disabling also revokes every personal key.
-- [`func (db *DB) DeleteUser(ctx context.Context, by Actor, id string) error`](users.go) — DeleteUser removes an account; memberships and personal keys cascade, but the delete is refused while the user is a team's last team_admin.
-
-资源与持久化定义：[schema.sql](schema.sql).
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [audit_test.go](audit_test.go) | TestQueryAuditFiltersBeforePagination、TestAuditNamesSurviveRenameAndDeletion：审计搜索先过滤再分页，历史名称在改名及删除后保留。 |
-| [db_zone_test.go](db_zone_test.go) | `TestSessionZoneIsNamedOnTheConnection`, `TestServerZoneUsesThePosixSign`, `TestSessionZoneIsAppliedByTheServer`, `TestSessionZoneSurvivesAnUnparseableDSN` |
-| [route_template_test.go](route_template_test.go) | `TestTemplateBodyRoundTripsAsRouterSettings`, `TestTemplateWithAnUnreadableBodyFallsBackToEmpty`, `TestTemplateNamesAreUnique`, `TestRenameKeepsTheTemplateUsable`, `TestScopeSelectionRoundTrips`, `TestBindingRefusesAnUnknownTemplate`, `TestBindingRefusesAnUnknownScopeName`, `TestUsageListsEveryScopeThatSelectsTheTemplate`, `TestDeletingATemplateInUseIsRefusedByTheCaller`, `TestDeletingAMissingTemplateReportsIt`, `TestListRouteTemplatesIsOrderedByName`, `TestADanglingTemplateIdIsRejectedByTheDatabase` |
-| [usage_idempotency_test.go](usage_idempotency_test.go) | `TestRecordUsageRejectsInvalidBatchBeforeWriting`, `TestRecordUsageConcurrentSettlement`, `TestRecordUsageIsIdempotentOnRequestID`, `TestRecordUsageDropsDuplicatesWithinOneBatch`, `TestRecordUsageCountsDistinctRequests`, `TestRecordUsageRollsBackTheWholeBatch` |
-| [users_test.go](users_test.go) | `TestEnsureAdminCreatesTheConfiguredAccount`, `TestConsoleRoleIsWhatTheAdminUIReads`, `TestEnsureAdminNeverRewritesAnExistingAccount`, `TestEnsureAdminIsANoOpWhenUnconfigured`, `TestEnsureAdminMarksThePlatformInitialised`, `TestEnsureAdminRejectsAShortPassword` |
-
-```bash
-go test ./internal/iam -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- [`audit_display.go`](audit_display.go) 实现审计文本提取、分页前搜索谓词，以及授权分页后的批量显示名回填，由 `QueryAudit` 调用。
+- [`db.go`](db.go) 定义 `DB`、统一领域错误、`Open`/`Migrate`/`Close`、事务/session/时区辅助、`Actor`/`Audit`/`AuditFilter`、审计写入和审计列表/查询入口。
+- [`keys.go`](keys.go) 定义密钥记录和输入、secret 生成/哈希/轮换、生命周期和筛选、模型交集、预算上限、过期解析、团队密钥撤销与花费重置；认证入口是 `KeyByHash`，管理入口是各 CRUD/状态方法。
+- [`models.go`](models.go) 定义用户、组织、团队、成员、项目、审计和 bootstrap 持久化结构，状态/角色常量、表映射、活跃/管理员判断和 UUID 生成。
+- [`quota.go`](quota.go) 构建并校验私有额度树，计算固定子级保留和速率分配，限制单团队归属，创建服务密钥业务账号，并导出 `QuotaPath`、`ErrQuotaAllocation`、`ErrMultipleTeams`。
+- [`rates.go`](rates.go) 定义 `RateLimits`、区分未提交与显式清空的 patch、数值校验、`RatePlan`，以及供 `internal/live` 使用的稳定根分量计划构造。
+- [`route_template.go`](route_template.go) 定义模板归属与存储、JSON 设置解析、CRUD、绑定校验、scope 表选择和使用位置/数量查询。
+- [`task_usage.go`](task_usage.go) 通过 `RecordTaskUsage` 实现 advisory lock 任务生命周期和 completed 恰好一次结算。
+- [`teams.go`](teams.go) 实现组织/团队 CRUD、可见范围和管理员查询、成员不变量、项目 CRUD、层级锁、模型/预算收窄、速率 patch 和事务审计。
+- [`usage.go`](usage.go) 定义事件、请求日志、日记录和 `UsageRecord`；`RecordUsage` 与私有事件/日志/日聚合/scope 辅助函数实现原子幂等账务。
+- [`usage_read.go`](usage_read.go) 定义授权 `UsageQuery`、会话和聚合结果类型、SQL scope/筛选/排序构造、事件/日志查询、日报、汇总与特权读取审计。
+- [`user_pagination.go`](user_pagination.go) 定义 `UserListQuery`、带授权的目录 SQL、排序白名单、limit/offset 规范化和 `ListUsersPage`。
+- [`users.go`](users.go) 实现 bootstrap、登录和 bcrypt、角色转换、账号 CRUD、授权/普通列表、锁、最后管理员保护以及资料/密码/管理员更新。
+- [`schema.sql`](schema.sql) 是全部 IAM 资源、约束、索引、用量聚合、请求日志、审计、路由模板绑定和 bootstrap 状态的幂等 PostgreSQL schema，由 `Open` 和 `Migrate` 执行。

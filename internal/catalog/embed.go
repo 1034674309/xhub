@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var embedOnce sync.Once
@@ -18,10 +18,10 @@ var embedOnce sync.Once
 // 测试：无直接单测
 func Embedded(name string, raw []byte) []byte {
 	if !json.Valid(raw) {
-		logx.Error("catalog embed %s is not json bytes=%d", name, len(raw))
+		util.Error("catalog embed %s is not json bytes=%d", name, len(raw))
 		return raw
 	}
-	embedOnce.Do(func() { logx.Debug("catalog embed %s bytes=%d", name, len(raw)) })
+	embedOnce.Do(func() { util.Debug("catalog embed %s bytes=%d", name, len(raw)) })
 	return raw
 }
 

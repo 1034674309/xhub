@@ -7,23 +7,22 @@ package gateway
 import (
 	"context"
 	"errors"
-	"github.com/sunqirui1987/xhub/internal/provider"
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
+	dpexecution "github.com/sunqirui1987/xhub/internal/dataplane/execution"
 	modelaccess "github.com/sunqirui1987/xhub/internal/gateway/models"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/llm"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	credentials "github.com/sunqirui1987/xhub/internal/llm/credentials"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceLimits sync.Once
@@ -34,17 +33,10 @@ var logTraceOnceLimits sync.Once
 // 测试：dial_log_test.go、guardrail_block_test.go
 // 返回：无。推理的状态码和正文由数据面写进 w，这里不再包一层。
 func (s *Server) dataPlane(w http.ResponseWriter, r *http.Request, op string) {
-	logTraceOnceLimits.Do(func() { logx.Trace("enter gateway.dataPlane") })
-	logx.Debug("process %s %s step=dataplane op=%s", r.Method, r.URL.Path, op)
-	dataplane.Serve(s, w, r, op)
+	logTraceOnceLimits.Do(func() { util.Trace("enter gateway.dataPlane") })
+	util.Debug("process %s %s step=dataplane op=%s", r.Method, r.URL.Path, op)
+	dpexecution.Serve(s, w, r, op)
 }
-
-// estimateTokens calls dataplane.EstimateTokens so budget and TPM checks have an upper bound.
-// 参数 body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项。
-// 返回 int（int）：从 JSON 或查询参数转成的整数。类型不符或缺失时为 0，不 panic。
-// 调用：仅在 limits.go 内使用
-// 测试：无直接单测
-func estimateTokens(body map[string]any) int { return dataplane.EstimateTokens(body) }
 
 // withCredential fills deployment parameters from the credential store using the deployment's credential name. With no name the deployment is returned unchanged.
 var (
@@ -68,20 +60,20 @@ func (s *Server) withCredential(dep config.ModelEntry) (config.ModelEntry, error
 		}
 		rec, err := s.Store.GetKV("credentials", name)
 		if err != nil {
-			logx.Error("credential lookup failed name=%s err=%v", name, err)
+			util.Error("credential lookup failed name=%s err=%v", name, err)
 			return dep, errCredentialUnavailable
 		} else {
 			meta, _ := rec["credential_info"].(map[string]any)
 			catalogID, _ = meta["catalog_id"].(string)
 			values, _ = rec["credential_values"].(map[string]any)
 			if values == nil {
-				logx.Error("credential invalid name=%s reason=missing credential_values", name)
+				util.Error("credential invalid name=%s reason=missing credential_values", name)
 				return dep, errCredentialInvalid
 			}
 		}
 	}
 	// 每次请求读取当前目录，防止连接编辑后沿用旧能力；元数据不进入上游参数。
-	if err := provider.ValidateCatalogBinding(catalogID, dep); err != nil {
+	if err := providerdeployment.ValidateCatalogBinding(catalogID, dep); err != nil {
 		return dep, errCredentialInvalid
 	}
 	out := dep
@@ -90,7 +82,7 @@ func (s *Server) withCredential(dep config.ModelEntry) (config.ModelEntry, error
 		out.ModelInfo = map[string]any{}
 	}
 	out.ModelInfo["catalog_id"] = catalogID
-	out.LiteLLMParams = llm.Hydrate(dep.LiteLLMParams, values)
+	out.LiteLLMParams = credentials.Hydrate(dep.LiteLLMParams, values)
 	return out, nil
 }
 
@@ -105,22 +97,22 @@ func (s *Server) withCredential(dep config.ModelEntry) (config.ModelEntry, error
 // 测试：无直接单测
 func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
 	if s.IAM == nil {
-		httpx.WriteTypedError(w, path, http.StatusServiceUnavailable, "authz_unavailable", "authorization is temporarily unavailable")
+		util.WriteTypedError(w, path, http.StatusServiceUnavailable, "authz_unavailable", "authorization is temporarily unavailable")
 		return false
 	}
 	ctx := context.Background()
 	if p.Kind == authz.KindSession {
 		user, err := s.IAM.GetUser(ctx, p.UserID)
 		if err != nil {
-			httpx.WriteTypedError(w, path, 401, "invalid_request_error", "user not found")
+			util.WriteTypedError(w, path, 401, "invalid_request_error", "user not found")
 			return false
 		}
 		if !user.Active() {
-			httpx.WriteTypedError(w, path, 401, "invalid_request_error", "user not found or blocked")
+			util.WriteTypedError(w, path, 401, "invalid_request_error", "user not found or blocked")
 			return false
 		}
 		if overBudget(user.MaxBudget, user.Spend, s.hotSpendRef("user", user.ID)) {
-			httpx.WriteTypedError(w, path, 429, "budget_exceeded", "User budget has been exceeded")
+			util.WriteTypedError(w, path, 429, "budget_exceeded", "User budget has been exceeded")
 			return false
 		}
 		// A session has no key row, so the chain that resolves a template for a
@@ -128,7 +120,7 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 		// and it would otherwise always route by the platform default no matter
 		// what its team selected.
 		if err := s.resolveSessionRouteTemplate(ctx, p); err != nil {
-			httpx.WriteTypedError(w, path, 503, "unavailable", "template binding unavailable")
+			util.WriteTypedError(w, path, 503, "unavailable", "template binding unavailable")
 			return false
 		}
 	}
@@ -167,7 +159,7 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 		}
 	}
 	if alias != "" && !modelaccess.AllowsModel(s, ctx, p, p.TeamID, alias) {
-		httpx.WriteTypedError(w, path, 401, "invalid_request_error", "model not in allowed model list")
+		util.WriteTypedError(w, path, 401, "invalid_request_error", "model not in allowed model list")
 		return false
 	}
 	return s.enforceRateLimits(w, path, p, est)
@@ -337,10 +329,10 @@ func (e errBudget) Error() string { return e.scope + " budget has been exceeded"
 func budgetRefusal(w http.ResponseWriter, path string, err error) {
 	var over errBudget
 	if errors.As(err, &over) {
-		httpx.WriteTypedError(w, path, 429, "budget_exceeded", over.Error())
+		util.WriteTypedError(w, path, 429, "budget_exceeded", over.Error())
 		return
 	}
-	httpx.WriteTypedError(w, path, 401, "invalid_request_error", err.Error())
+	util.WriteTypedError(w, path, 401, "invalid_request_error", err.Error())
 }
 
 // overBudget reports a scope that has reached its ceiling. Without a ceiling the scope is unlimited, and stored plus hot spend is what the caller has used.
@@ -350,18 +342,6 @@ func budgetRefusal(w http.ResponseWriter, path string, err error) {
 // 测试：无直接单测
 func overBudget(ceiling *float64, spent, hot float64) bool {
 	return ceiling != nil && spent+hot >= *ceiling
-}
-
-// hotSpend is spend still sitting in Redis. Without Redis it is 0 and the budget check uses PostgreSQL only.
-// 参数 id（string）：热花费使用的主键。空串表示调用方没有指定记录。
-// 返回 float64（float64）：热花费。缺失时为 0，不要把它理解成免费除非调用方另有约定。
-// 调用：仅在 limits.go 内使用
-// 测试：无直接单测
-func (s *Server) hotSpend(id string) float64 {
-	if s.Live == nil {
-		return 0
-	}
-	return s.Live.HotSpend(id)
 }
 
 // 读取这个主体还没刷进数据库的热花费。没有 Redis 时为 0。
@@ -385,7 +365,7 @@ func (s *Server) enforceRateLimits(w http.ResponseWriter, path string, p *auth.P
 	}
 	plan, err := s.IAM.RatePlan(context.Background(), kind, id)
 	if err != nil {
-		httpx.WriteTypedError(w, path, 503, "rate_limit_unavailable", "rate limiting is temporarily unavailable")
+		util.WriteTypedError(w, path, 503, "rate_limit_unavailable", "rate limiting is temporarily unavailable")
 		return false
 	}
 	var rejected string
@@ -395,11 +375,11 @@ func (s *Server) enforceRateLimits(w http.ResponseWriter, path string, p *auth.P
 		rejected = s.admitLocalRatePlan(plan, est, time.Now())
 	}
 	if err != nil {
-		httpx.WriteTypedError(w, path, 503, "rate_limit_unavailable", "rate limiting is temporarily unavailable")
+		util.WriteTypedError(w, path, 503, "rate_limit_unavailable", "rate limiting is temporarily unavailable")
 		return false
 	}
 	if rejected != "" {
-		httpx.WriteTypedError(w, path, 429, "rate_limit", rejected+" exceeded")
+		util.WriteTypedError(w, path, 429, "rate_limit", rejected+" exceeded")
 		return false
 	}
 	return true

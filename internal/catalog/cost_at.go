@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Usage is what one call reports. The field names follow the OpenAI usage
@@ -31,10 +31,10 @@ type Usage struct {
 	PricingBlocked string
 	InputSeconds   float64
 	InputImages    int
-	// CachedTokens is the prompt side that hit the cache. It selects the cached
+	// CachedTokens is the prompt side that hit the util. It selects the cached
 	// rate for the input side when the model prices one.
 	CachedTokens int
-	// CacheWriteTokens is the prompt side written into the cache.
+	// CacheWriteTokens is the prompt side written into the util.
 	CacheWriteTokens int
 	// Images is the number of pictures generated.
 	Images int
@@ -461,7 +461,7 @@ func Snapshot(c Charge) string {
 	}
 	raw, err := json.Marshal(PriceSnapshot{Window: c.Window, Applied: c.Applied})
 	if err != nil {
-		logx.Error("price snapshot is not encodable err=%v", err)
+		util.Error("price snapshot is not encodable err=%v", err)
 		return ""
 	}
 	return string(raw)
@@ -704,7 +704,7 @@ func (l rateLookup) find(measure, side, variant, window string) (Rate, bool) {
 // 调用：gateway/spend.go、gateway/usage/reports.go。
 // 测试：cost_at_test.go
 func CostAt(model string, usage Usage, startedAt time.Time) (Charge, bool) {
-	logTraceOnceCost.Do(func() { logx.Trace("enter catalog.CostAt") })
+	logTraceOnceCost.Do(func() { util.Trace("enter catalog.CostAt") })
 
 	row, found := priceRowFor(model)
 	if !found {

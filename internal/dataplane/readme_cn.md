@@ -1,81 +1,47 @@
-# 推理执行与结算数据面
+# 数据面架构
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+根包只保留目录说明。一次推理或原生任务请求的具体职责如下。
 
-## 职责与实现契约
+| 目录 | 职责 |
+|---|---|
+| [contract](contract/readme_cn.md) | 执行器能力接口和调用事实 |
+| [diagnostics](diagnostics/readme_cn.md) | 上游原始事实与安全诊断日志 |
+| [dialogue](dialogue/readme_cn.md) | 统一对话转换、续接与适配 SSE |
+| [execution](execution/readme_cn.md) | 适配与原生请求的生命周期编排 |
+| [routing](routing/readme_cn.md) | 候选筛选、模型回退与路由诊断 |
+| [runtime](runtime/readme_cn.md) | 运行时快照、冷却、延迟与用量刷新 |
+| [stream](stream/readme_cn.md) | 原始流转发与只读用量观察 |
+| [transport](transport/readme_cn.md) | 原生 HTTP、正文、路径、鉴权与响应透传 |
+| [usage](usage/readme_cn.md) | 用量归一、缺失统计估算与首字时间 |
 
-serve.go 提供 Serve，执行 Adapted 宿主的推理链；official.go 提供 ServeBypass，执行已登记官方传输；host.go 把依赖拆为 Adapted、Bypass、Runtime、SpendLog 等接口，避免导入 gateway 形成循环。
-请求依次经过身份、预算/模型/限流检查、正文和护栏、hooks/plugins、模板解析、能力过滤、排序、缓存和上游发送。每次重试重新验证身份及限制。缺失凭据跳过候选；429、5xx 和可重试发送失败进入下一次尝试，其它 4xx 终止。收到流输出后不再重试；中断不提交成功缓存或粘性。
-stream.go 与 usage.go 处理 SSE usage，log.go 保留成功与失败事件。live.go 的 Flush 从 Redis PeekLogs 读取最多 500 条，通过 IAM 事务落库，再 Ack；SpendAck 是可注入的确认边界。官方任务仅在 terminal success 且有可用正数 usage 时持久结算一次；未知创建结果不能盲目重发。
+## 请求关系与 review 顺序
 
-## 源码职责与入口
+1. gateway/ingress.go、limits.go、bypass.go：入口身份和配额。
+2. contract：消费方能力接口；execution/serve.go 或 official.go：请求生命周期。
+3. routing：候选和回退；dialogue：适配；transport：原生透传；stream：不转换的流。
+4. usage、diagnostics：记录事实；gateway/billing、requestlog：准备结算与日志；spend.go：持久化。
+5. runtime：独立维护快照、冷却、延迟和异步刷新。
 
-### doc.go
+execution 不依赖 gateway.Server；gateway 是组合入口。contract 当前复用 prefs.RouteSettings 值类型，不加载 prefs 处理器。
 
-内部实现和协议边界见 [doc.go](doc.go)。
+## 官方 SDK 与透传边界
 
-### host.go
+- [OpenAI Go](https://github.com/openai/openai-go)：github.com/openai/openai-go/v3 v3.74.0，用于 Chat Completions、Responses 类型和 SSE 解码，兼容项目 Go 1.25。升级前检查 Go 版本要求。
+- [Anthropic Go](https://github.com/anthropics/anthropic-sdk-go)：v1.80.0，用于 Messages 响应类型。
+- [Google Gen AI Go](https://github.com/googleapis/go-genai)：google.golang.org/genai v1.73.0，用于 Gemini/Vertex 响应类型。
 
-公开类型：`SpendLog`, `Adapted`, `Bypass`, `Runtime`, `Host`, `RoutePlan`, `CallNote`.
+internal/llm/dialogue 使用官方类型解析响应，dialogue/PipeDialogue 使用官方 SSE framing。SDK 可能宽松处理字段类型，适配层仍检查文本、工具与终态；错误类型和不可表达的能力必须失败。原始用量保留，以区分缺失与显式零。
 
-内部实现和协议边界见 [host.go](host.go)。
+SDK 是调用客户端，不提供完整网关 bypass、跨协议转换、配额、路由、日志和结算。transport 保留 Go 标准库 net/http 的薄转发层，以保留供应商扩展字段、原始状态与错误、multipart 和 SSE 字节。跨协议转换仍由项目承担。目前不实例化 SDK 请求客户端，避免隐式重试与网关重试叠加；原生流观察和日志重建不会用 SDK 重编码客户端响应。
 
-### live.go
+## 测试分层
 
-- [`func State(h Runtime) router.State`](live.go) — State 组装这一刻的在途请求、冷却、延迟和用量，交给路由器排序。没有 Redis 时只有在途请求。
-- [`func RecordFailure(h Runtime, id string, settings prefs.RouteSettings)`](live.go) — RecordFailure 按这一次请求生效的路由设置记一次失败。allowed_fails 小于 1 时不写 Redis。 cooldown_time 为 0 或缺失时冷却一分钟。 阈值来自 RouteSettingsFor 解析出来的那一份，而不是全局文档：一个团队把 allowed_fails 调低之后，它的失败要按它自己的阈值计数。
-- [`func RecordLatency(h Runtime, id string, ms float64)`](live.go) — RecordLatency 把这次延迟累进 Redis，供下次排序使用。没有 Redis 时直接返回。
-- [`func RecordUsage(h Runtime, id string, tokens int)`](live.go) — RecordUsage 把这次 token 数累进 Redis。没有 Redis 时直接返回。
-- [`func FlushLoop(h Runtime)`](live.go) — FlushLoop 每分钟调用一次 Flush，直到进程退出。只在配置了 Redis 时启动。
-- [`func Flush(h Runtime)`](live.go) — Flush 把 Redis 队列里的花费日志写入 PostgreSQL，成功后再从队列确认删除。
+单元测试与源码同目录；真实 HTTP/持久化契约位于 cmd/regression，浏览器到网关及本地上游流程位于 frontend/e2e。不新增只有测试的 integration 包。
 
-### log.go
+仓库根目录命令：
 
-内部实现和协议边界见 [log.go](log.go)。
+    go test ./internal/dataplane/... ./internal/gateway/... ./internal/llm/... ./internal/provider/... -count=1
+    bash scripts/regression.sh 'TestComplianceModuleContract|TestUpstreamDiagnosticsContract|TestResponsesFailedStreamCannotContinue' -v
+    bash scripts/e2e.sh e2e/playground-transport.spec.ts e2e/responses-continuation.spec.ts e2e/model-fallback.spec.ts
 
-### official.go
-
-- [`func ServeBypass(h Bypass, w http.ResponseWriter, r *http.Request, hit provider.Hit)`](official.go) — ServeBypass 转发一次已经匹配到的官方调用。正文只改模型字段，状态码和响应字节原样返回。 usage 在后续查询第一次出现时扣一次。
-
-### serve.go
-
-- [`func Serve(h Adapted, w http.ResponseWriter, r *http.Request, op string)`](serve.go) — Serve runs one inference. It picks deployments with the routing strategy, encodes the upstream request, and tries the next deployment after a failure. Serve 跑一次适配推理。预算或护栏拒绝时响应已经写好，函数直接返回。 扩展按注册顺序在缓存和上游之前运行。重试次数小于 1 时按 1 次。没有 api_base 时用供应商默认地址。没有密钥或地址的部署跳过。
-
-### stream.go
-
-内部实现和协议边界见 [stream.go](stream.go)。
-
-### usage.go
-
-- [`func EstimateTokens(body map[string]any) int`](usage.go) — EstimateTokens 用正文长度估一个 token 上界。它不是分词器，只给预算和 TPM 一个扣留数。
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/auth](../auth/readme_cn.md), [internal/cache](../cache/readme_cn.md), [internal/catalog](../catalog/readme_cn.md), [internal/config](../config/readme_cn.md), [internal/gateway/prefs](../gateway/prefs/readme_cn.md), [internal/hooks](../hooks/readme_cn.md), [internal/httpx](../httpx/readme_cn.md), [internal/iam](../iam/readme_cn.md), [internal/live](../live/readme_cn.md), [internal/llm](../llm/readme_cn.md), [internal/logx](../logx/readme_cn.md), [internal/plugin](../plugin/readme_cn.md), [internal/provider](../provider/readme_cn.md), [internal/router](../router/readme_cn.md).
-
-## 验证与维护入口
-
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [bypass_logic_test.go](bypass_logic_test.go) | `TestEndpointAndModelLogic` |
-| [cache_scope_test.go](cache_scope_test.go) | `TestCacheScopeChangesWithConfigurationSessionAndQuery` |
-| [capability_test.go](capability_test.go) | `TestCapabilitySetsStaySeparate` |
-| [disabled_test.go](disabled_test.go) | `TestDropDisabledExcludesDisabled` |
-| [failure_log_test.go](failure_log_test.go) | `TestServeLogsBuildSkipAndTerminalAuth`, `TestServeLogsMissingCredential`, `TestServeLogsUnregisteredTransport`, `TestServeLogsEmptyStreamAndUpstreamStatus`, `TestServeLogsCacheHitAndStreamMetrics` |
-| [live_test.go](live_test.go) | `TestHotDeltasIncludesProject` |
-| [official_settlement_test.go](official_settlement_test.go) | `TestOfficialConcurrentCompletedPollsIsolateMetadata`, `TestOfficialSettlementRetriesAfterPersistenceFailure`, `TestOfficialZeroAndPendingPollsKeepUniqueIDs` |
-| [official_template_test.go](official_template_test.go) | `TestOfficialModelDefaultWeightsAndCredentialPin`, `TestOfficialTemplateTrafficSplitUsesLiveModelWeights`, `TestOfficialTemplateRetriesHTTPFailure`, `TestOfficialTimeoutDoesNotReplayAmbiguousCreate`, `TestOfficialTaskScopesAndPendingUsage`, `TestOfficialForwardDoesNotLeakGatewayCredentials` |
-| [prefer_test.go](prefer_test.go) | `TestPreferDeploymentMovesThePinnedOneFirst`, `TestPreferDeploymentLeavesAnUnknownPinAlone`, `TestOutputTokensCountsStreamedTextWhenUsageIsMissing`, `TestTTFTMillisOmitsAnUnmeasuredDelay` |
-| [stream_failure_regression_test.go](stream_failure_regression_test.go) | `TestStreamFailureAfterOutputDoesNotRetryOrPin`, `TestTemplateLookupFailureDoesNotContactUpstream` |
-| [usage_stream_test.go](usage_stream_test.go) | `TestCompleteUsagePreservesReportedZeroAndCacheInput`, `TestEstimateTokensDoesNotCountOutputLimitAsInput`, `TestStreamUsageMergesAnthropicFramesAndNestedProviders`, `TestPipeStreamParsesFragmentedSSEAndReturnsBodyError` |
-
-```bash
-go test ./internal/dataplane -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+测试用真实本地 HTTP、PostgreSQL 与隔离夹具，结束清理私有 schema，不覆盖用户数据。线上付费供应商和外部护栏需单独声明凭据；离线测试验证配置、支持状态、拒绝和失败路径。

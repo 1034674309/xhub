@@ -1,6 +1,8 @@
 package hooks
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestReleaseIsIdempotentWithOtherCallsInFlight(t *testing.T) {
 	e := New()

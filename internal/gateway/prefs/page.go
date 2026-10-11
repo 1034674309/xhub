@@ -3,10 +3,9 @@ package prefs
 
 import (
 	"net/http"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOncePage sync.Once
@@ -17,13 +16,13 @@ var logTraceOncePage sync.Once
 // 调用：gateway/prefs/mount.go
 // 测试：无直接单测
 func Page(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOncePage.Do(func() { logx.Trace("enter prefs.Page") })
+	logTraceOncePage.Do(func() { util.Trace("enter prefs.Page") })
 
 	if s.RequireManage(w, r) == nil {
 		return
 	}
 	rs := MergedRouter(s)
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"num_retries":                   rs["num_retries"],
 		"timeout":                       rs["timeout"],
 		"router_settings":               rs,
@@ -31,15 +30,6 @@ func Page(s Host, w http.ResponseWriter, r *http.Request) {
 		"current_values":                rs,
 		"routing_strategy_descriptions": routingStrategyDescriptions(),
 	})
-}
-
-// PageMap returns the merged router-settings document, including routing_groups.
-// 参数 s（Host）：分页表使用的数据面宿主。
-// 返回 map[string]any（map[string]any）：分页表的字段表。缺键表示上游或库里没有这个字段。
-// 调用：仅在 page.go 内使用
-// 测试：无直接单测
-func PageMap(s Host) map[string]any {
-	return MergedRouter(s)
 }
 
 // routingStrategyDescriptions returns the help text for each known strategy name. An unknown strategy is omitted.
@@ -114,7 +104,7 @@ func Callbacks(s Host, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":                       "success",
 		"callbacks":                    cbs,
 		"success_callbacks":            cbs,
@@ -136,10 +126,10 @@ func List(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Get("config_type") == "general_settings" || r.URL.Query().Get("config_type") == "" {
-		httpx.WriteJSON(w, 200, GeneralList(s))
+		util.WriteJSON(w, 200, GeneralList(s))
 		return
 	}
-	httpx.WriteJSON(w, 200, []map[string]any{
+	util.WriteJSON(w, 200, []map[string]any{
 		{
 			"field_name": "mcp_internal_ip_ranges", "field_type": "List", "field_value": []any{},
 			"field_description": "Internal IP ranges treated as private for MCP", "stored_in_db": false,

@@ -12,14 +12,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
+	dpusage "github.com/sunqirui1987/xhub/internal/dataplane/usage"
 	"github.com/sunqirui1987/xhub/internal/gateway/guard"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceHandlers sync.Once
@@ -30,7 +29,7 @@ var logTraceOnceHandlers sync.Once
 // 调用：gateway/catalog.go
 // 测试：无直接单测
 func ServeDataPlane(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceHandlers.Do(func() { logx.Trace("enter family.ServeDataPlane") })
+	logTraceOnceHandlers.Do(func() { util.Trace("enter family.ServeDataPlane") })
 
 	p := s.RequireLLM(w, r)
 	if p == nil {
@@ -38,7 +37,7 @@ func ServeDataPlane(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", "cannot read request body")
+		util.WriteError(w, 400, "invalid_request", "cannot read request body")
 		return
 	}
 	path := r.URL.Path
@@ -58,7 +57,7 @@ func ServeDataPlane(s Host, w http.ResponseWriter, r *http.Request) {
 			if body == nil {
 				body = map[string]any{}
 			}
-			if !s.EnforceIdentityLimits(w, path, p, str(body["model"]), dataplane.EstimateTokens(body)) {
+			if !s.EnforceIdentityLimits(w, path, p, str(body["model"]), dpusage.EstimateTokens(body)) {
 				return
 			}
 			writeInferenceNative(w, op, body)
@@ -70,7 +69,7 @@ func ServeDataPlane(s Host, w http.ResponseWriter, r *http.Request) {
 		caller = "key:" + p.Hash
 	}
 	if p.Hash == "" && p.UserID == "" {
-		httpx.WriteError(w, 403, "forbidden", "resource owner required")
+		util.WriteError(w, 403, "forbidden", "resource owner required")
 		return
 	}
 	sum := sha256.Sum256([]byte(caller))
@@ -187,7 +186,7 @@ func inferenceOp(path string) string {
 // 参数 w、op、body：响应、操作及请求。返回：HTTP 501。
 // 调用：ServeDataPlane。测试：TestUnsupportedInferenceDoesNotFabricateUsage。
 func writeInferenceNative(w http.ResponseWriter, op string, body map[string]any) {
-	httpx.WriteError(w, http.StatusNotImplemented, "not_implemented", op+" requires a provider implementation")
+	util.WriteError(w, http.StatusNotImplemented, "not_implemented", op+" requires a provider implementation")
 }
 
 // resourceCRUD lists, reads, and writes a catalog resource stored as key-value JSON. files and batches return 404 when the id is missing.
@@ -201,7 +200,7 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 	namespace := "inference_resource:v2:" + owner + ":" + kind
 	var body map[string]any
 	if len(bytes.TrimSpace(raw)) > 0 && (json.Unmarshal(raw, &body) != nil || body == nil) {
-		httpx.WriteError(w, 400, "invalid_request", "JSON object required")
+		util.WriteError(w, 400, "invalid_request", "JSON object required")
 		return
 	}
 	if body == nil {
@@ -209,30 +208,30 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 	}
 	id := resourcePathID(path)
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodDelete && kind != "assistants" && kind != "threads" {
-		httpx.WriteError(w, 501, "not_implemented", kind+" requires a provider implementation")
+		util.WriteError(w, 501, "not_implemented", kind+" requires a provider implementation")
 		return
 	}
 	parts := catalog.Split(strings.TrimSuffix(path, "/"))
 	if kind == "threads" {
 		for i, part := range parts {
 			if part == "threads" && len(parts) > i+2 {
-				httpx.WriteError(w, 501, "not_implemented", "nested thread operations require a provider implementation")
+				util.WriteError(w, 501, "not_implemented", "nested thread operations require a provider implementation")
 				return
 			}
 		}
 	}
 	st := s.RecordStore()
 	if st == nil {
-		httpx.WriteError(w, 503, "unavailable", "resource store unavailable")
+		util.WriteError(w, 503, "unavailable", "resource store unavailable")
 		return
 	}
 	writeErr := func(err error) {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteError(w, 404, "not_found", singular(kind)+" not found")
+			util.WriteError(w, 404, "not_found", singular(kind)+" not found")
 			return
 		}
-		logx.Error("resource store failure kind=%s err=%v", kind, err)
-		httpx.WriteError(w, 500, "internal", "resource store failure")
+		util.Error("resource store failure kind=%s err=%v", kind, err)
+		util.WriteError(w, 500, "internal", "resource store failure")
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
@@ -243,10 +242,10 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 				return
 			}
 			if strings.HasSuffix(path, "/content") {
-				httpx.WriteError(w, 501, "not_implemented", "file content requires provider storage")
+				util.WriteError(w, 501, "not_implemented", "file content requires provider storage")
 				return
 			}
-			httpx.WriteJSON(w, 200, m)
+			util.WriteJSON(w, 200, m)
 			return
 		}
 		list, err := st.ListKV(namespace)
@@ -254,7 +253,7 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 			writeErr(err)
 			return
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"object": "list", "data": list})
+		util.WriteJSON(w, 200, map[string]any{"object": "list", "data": list})
 	case http.MethodDelete:
 		if id == "" {
 			id = str(body["id"])
@@ -267,7 +266,7 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 			writeErr(err)
 			return
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"id": id, "object": singular(kind), "deleted": true})
+		util.WriteJSON(w, 200, map[string]any{"id": id, "object": singular(kind), "deleted": true})
 	default:
 		var obj map[string]any
 		if id != "" {
@@ -291,14 +290,14 @@ func resourceCRUD(s Host, w http.ResponseWriter, r *http.Request, path string, r
 		}
 		b, err := json.Marshal(obj)
 		if err != nil {
-			httpx.WriteError(w, 400, "invalid_request", "invalid resource")
+			util.WriteError(w, 400, "invalid_request", "invalid resource")
 			return
 		}
 		if err := st.PutKV(namespace, id, string(b)); err != nil {
 			writeErr(err)
 			return
 		}
-		httpx.WriteJSON(w, 200, obj)
+		util.WriteJSON(w, 200, obj)
 	}
 }
 
@@ -392,7 +391,7 @@ func resourcePathID(path string) string {
 func nativeResource(kind string, body map[string]any) map[string]any {
 	id := str(body["id"])
 	if id == "" {
-		id = singular(kind) + "_" + httpx.CallID()[:12]
+		id = singular(kind) + "_" + util.CallID()[:12]
 	}
 	now := time.Now().UTC().Unix()
 	obj := map[string]any{"id": id, "object": singular(kind), "created_at": now}
@@ -550,8 +549,8 @@ func ServeMixed(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireMixed(w, r) == nil {
 		return
 	}
-	logx.Debug("process %s %s step=catalog class=mixed retired=true", r.Method, r.URL.Path)
-	httpx.WriteError(w, http.StatusGone, "removed", "this endpoint was removed and is not available")
+	util.Debug("process %s %s step=catalog class=mixed retired=true", r.Method, r.URL.Path)
+	util.WriteError(w, http.StatusGone, "removed", "this endpoint was removed and is not available")
 }
 
 // ServeMgmt handles management catalog paths. It requires a management identity, then reads or writes by resource kind.
@@ -577,7 +576,7 @@ func ServeMgmt(s Host, w http.ResponseWriter, r *http.Request) {
 func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body map[string]any) {
 	path := r.URL.Path
 	if _, ok := body["jsonrpc"]; ok {
-		httpx.WriteJSON(w, 200, map[string]any{
+		util.WriteJSON(w, 200, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      body["id"],
 			"result":  map[string]any{"tools": []any{}},
@@ -585,8 +584,8 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 		return
 	}
 	if (strings.Contains(path, "/oauth/token") || strings.HasSuffix(path, "/token")) && !strings.Contains(path, "count") {
-		httpx.WriteJSON(w, 200, map[string]any{
-			"access_token": "at-" + httpx.CallID()[:12],
+		util.WriteJSON(w, 200, map[string]any{
+			"access_token": "at-" + util.CallID()[:12],
 			"token_type":   "Bearer",
 			"expires_in":   3600,
 		})
@@ -609,10 +608,10 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 		for i := range list {
 			Freeze(kind, list[i])
 		}
-		httpx.WriteJSON(w, 200, catalogListBody(kind, path, redactCredentialList(kind, list, true)))
+		util.WriteJSON(w, 200, catalogListBody(kind, path, redactCredentialList(kind, list, true)))
 	case "info":
 		if id == "" {
-			httpx.WriteJSON(w, 200, map[string]any{"object": "list", "data": []any{}})
+			util.WriteJSON(w, 200, map[string]any{"object": "list", "data": []any{}})
 			return
 		}
 		m, err := s.RecordStore().GetKV(kind, id)
@@ -620,7 +619,7 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 			m = map[string]any{"id": id, idField(kind): id, "object": singular(kind)}
 		}
 		Freeze(kind, m)
-		httpx.WriteJSON(w, 200, redactCredentialObject(kind, m, true))
+		util.WriteJSON(w, 200, redactCredentialObject(kind, m, true))
 	case "delete":
 		ids := idsFrom(body, kind+"s", idField(kind))
 		if id != "" {
@@ -632,10 +631,10 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 				n++
 			}
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"deleted": n, idField(kind): id, "id": id})
+		util.WriteJSON(w, 200, map[string]any{"deleted": n, idField(kind): id, "id": id})
 	case "update":
 		if id == "" {
-			id = singular(kind) + "_" + httpx.CallID()[:12]
+			id = singular(kind) + "_" + util.CallID()[:12]
 		}
 		m, err := s.RecordStore().GetKV(kind, id)
 		if err != nil {
@@ -656,7 +655,7 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 		Freeze(kind, m)
 		b, _ := json.Marshal(m)
 		_ = s.RecordStore().PutKV(kind, id, string(b))
-		httpx.WriteJSON(w, 200, redactCredentialObject(kind, m, true))
+		util.WriteJSON(w, 200, redactCredentialObject(kind, m, true))
 	default:
 		if id == "" && kind == "memory" {
 			if k := str(body["key"]); k != "" {
@@ -664,7 +663,7 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 			}
 		}
 		if id == "" {
-			id = singular(kind) + "_" + httpx.CallID()[:12]
+			id = singular(kind) + "_" + util.CallID()[:12]
 		}
 		obj := map[string]any{}
 		for k, v := range body {
@@ -697,7 +696,7 @@ func writeCatalogPersist(s Host, w http.ResponseWriter, r *http.Request, body ma
 		Freeze(kind, obj)
 		b, _ := json.Marshal(obj)
 		_ = s.RecordStore().PutKV(kind, id, string(b))
-		httpx.WriteJSON(w, 200, redactCredentialObject(kind, obj, false))
+		util.WriteJSON(w, 200, redactCredentialObject(kind, obj, false))
 	}
 }
 
@@ -831,7 +830,7 @@ func Freeze(kind string, obj map[string]any) {
 	delete(obj, "password")
 	now := time.Now().UTC().Format(time.RFC3339)
 	if obj["id"] == nil {
-		obj["id"] = singular(kind) + "_" + httpx.CallID()[:12]
+		obj["id"] = singular(kind) + "_" + util.CallID()[:12]
 	}
 	id := str(obj["id"])
 	if obj["created_at"] == nil {
@@ -1026,7 +1025,7 @@ func Freeze(kind string, obj map[string]any) {
 		setDefault(obj, "status", "ok")
 		setDefault(obj, "exported_count", 0)
 	case "onboarding", "onboard":
-		setDefault(obj, "token", "sess-"+httpx.CallID()[:8])
+		setDefault(obj, "token", "sess-"+util.CallID()[:8])
 		setDefault(obj, "user_id", id)
 	case "utils", "utils/token_counter", "token_counter":
 		setDefault(obj, "total_tokens", 8)

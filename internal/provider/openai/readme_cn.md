@@ -1,35 +1,11 @@
-# OpenAI 供应商占位边界
+# openai
 
-[English](readme.md) · [全功能实现说明](../../../docs/development/implementation.md)
+OpenAI 原生协议注册.
 
-## 职责与实现契约
+代码入口：[native.go](native.go)
 
-chat.go 保留 OpenAI 供应商包边界，当前不通过 init 注册一组端点类型。OpenAI 的适配请求、usage 和流处理在 llm 与 dataplane，模型能力来自 provider 能力表。
-这个目录没有独立管理 API，也不能按历史说明宣称登记七种类型。chat_test 验证当前边界。若以后增加供应商登记，应明确哪些是能力、哪些是传输，并由 provider/all 装配。
-阅读聊天实现时应从 gateway ingress → dataplane Serve → llm Build/Endpoint 跟踪，而不是在这个占位目录寻找完整 HTTP 客户端。
+单元测试与源代码放在一起：[native_test.go](native_test.go), [registration_test.go](registration_test.go)
 
-## 源码职责与入口
+go test ./internal/provider/openai/...
 
-### chat.go
-
-内部实现和协议边界见 [chat.go](chat.go)。
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [chat_test.go](chat_test.go) | `TestAdaptedTypesAreNotRegistered`, `TestCapabilityTableDescribesTheAdaptedEntrypoints`, `TestRegisterTransportRejectsAnEntryWithNoActions` |
-
-```bash
-go test ./internal/provider/openai -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+真实后台回归在 cmd/regression，浏览器流程在 frontend/e2e。离线测试使用本地 HTTP 上游，不证明生产凭据或外部厂商服务可用性。

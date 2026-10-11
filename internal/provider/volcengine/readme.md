@@ -1,35 +1,25 @@
-# Volcengine Ark video-task transport
+# VolcEngine Ark Seedance registration
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../../docs/development/implementation.md)
+[简体中文](readme_cn.md)
 
-## Responsibilities and behavior
+## Overview
 
-seedance.go registers ark_contents_generation with ark.cn-beijing.volces.com. The upstream /api/v3/contents/generations/tasks path supports create, list, and get-by-ID; transport mappings define public gateway paths.
-model and id are the request/model and task ID fields, and the volcengine prefix is stripped. The unsupported USD 7/million input/output baseline was removed; configure rates for the actual Ark account. Shared Seedance billing extracts completion tokens only on successful terminal responses and selects the resolution/reference-video band. Unpriced zero cost does not mean free service.
-Dataplane owns identity, budgets, retry rules, and settlement deduplication. Changes need registration and official-task integration tests, with terminal live usage required for real billing evidence.
+This package declares VolcEngine as a supplier and registers Ark native asynchronous content generation. Administrators still provide the base URL, Bearer credential, and deployment prices. Two Seedance models are catalog conveniences.
+
+### Dependencies and tests
+
+It uses provider registration and shared Seedance billing. Tests verify supplier/model registration, prefix removal, paths, and binding without live requests.
+
+## External interfaces
+
+There is no exported API or handler. Init makes provider.Match recognize POST /api/v3/contents/generations/tasks, GET the collection for list, and GET /api/v3/contents/generations/tasks/{id}; dataplane native forwarding performs authentication, pinning, and settlement.
+
+## Core implementation
+
+ark_contents_generation uses endpoint bypass:ark-video, protocol ark, family video, Bearer auth, model field model, task field id, and strips volcengine/. Create, list, and get are separate whitelist actions. SeedanceBilling accepts only explicit successful terminal usage. Stored model IDs map to official Ark names; pricing is left to deployments.
 
 ## Source responsibilities and entry points
 
-### seedance.go
+- [seedance.go](seedance.go): supplier, transport, three actions, two model bindings, auth/prefix/task metadata, and billing.
 
-Internal implementation and protocol boundaries:  [seedance.go](seedance.go)。
-
-## External HTTP boundary
-
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
-
-## Dependencies
-
-[internal/logx](../../logx/readme.md), [internal/provider](../readme.md).
-
-## Verification and maintenance
-
-| Test file | Scenario entry points |
-| --- | --- |
-| [seedance_test.go](seedance_test.go) | `TestSeedanceModelsAndPaths` |
-
-```bash
-go test ./internal/provider/volcengine -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+Verification: go test ./internal/provider/volcengine ./internal/provider -count=1. Live account access, quota, schema, and prices remain external.

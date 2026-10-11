@@ -14,7 +14,7 @@ import (
 	"sort"
 
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Sentinel outcomes. Callers map them onto HTTP: unauthenticated is 401,
@@ -158,15 +158,6 @@ func (o Object) blocked() bool {
 		o.OrgStatus == iam.StatusBlocked
 }
 
-// inactive reports a revoked key or a disabled account.
-// 参数：无。
-// 返回 bool（bool）：密钥已吊销或账号已停用时返回真。
-// 调用：仅在 authz.go 内使用
-// 测试：无直接单测
-func (o Object) inactive() bool {
-	return o.KeyStatus == iam.StatusRevoked || o.Status == iam.StatusDisabled
-}
-
 // resolvable reports whether the object names a database row whose ownership can be read. A create carries only hints — the team it will land in, the owner it is meant for — and must not be looked up, because the row it describes does not exist yet.
 // 参数：无。
 // 返回 bool（bool）：这个对象已经有数据库行、可以读取归属时返回真。创建请求只有意向，不能拿去查库。
@@ -189,7 +180,7 @@ type Authorizer struct{ db *iam.DB }
 // New returns an Authorizer over the given store.
 // 参数 db（*iam.DB）：新使用的身份库。
 // 返回 *Authorizer（*Authorizer）：包住这个库的鉴权器。传入 nil 时库也是 nil，鉴权器本身不会是 nil。
-// 调用：authz/decide.go、cache/cache.go、dataplane/serve.go、gateway/engine.go
+// 调用：authz/decide.go、cache/util.go、dataplane/serve.go、gateway/engine.go
 // 测试：activity_http_test.go、authz_test.go、builtin_providers_test.go
 func New(db *iam.DB) *Authorizer { return &Authorizer{db: db} }
 
@@ -245,7 +236,7 @@ func (g *Guard) load(ctx context.Context) error {
 	}
 	rows, err := g.z.db.MemberTeams(ctx, g.actor.UserID)
 	if err != nil {
-		logx.Error("authz membership read failed user=%s err=%v", g.actor.UserID, err)
+		util.Error("authz membership read failed user=%s err=%v", g.actor.UserID, err)
 		return &InternalError{Err: err}
 	}
 	for _, m := range rows {
@@ -259,13 +250,13 @@ func (g *Guard) load(ctx context.Context) error {
 	// answer would be "denied" rather than "unknown".
 	adminOrgs, err := g.z.db.AdminOrgs(ctx, g.actor.UserID)
 	if err != nil {
-		logx.Error("authz org-admin read failed user=%s err=%v", g.actor.UserID, err)
+		util.Error("authz org-admin read failed user=%s err=%v", g.actor.UserID, err)
 		return &InternalError{Err: err}
 	}
 	for _, id := range adminOrgs {
 		g.adminOrgs[id] = true
 	}
-	logx.Trace("authz memberships user=%s teams=%d admin_orgs=%d",
+	util.Trace("authz memberships user=%s teams=%d admin_orgs=%d",
 		g.actor.UserID, len(g.roles), len(g.adminOrgs))
 	return nil
 }

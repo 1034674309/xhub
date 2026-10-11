@@ -1,41 +1,33 @@
-# Upstream extension registry
+# Pre-upstream extension registry
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../docs/development/implementation.md)
+## Overview
 
-## Responsibilities and behavior
+The plugin package defines an in-process extension chain that runs immediately before an inference request can use the response cache or contact an upstream provider. It separates extension implementations from the gateway process through a small named interface. It is not a dynamic loader: there is no script execution, package discovery, installation endpoint, persistence, or process isolation.
 
-registry.go defines Extension, Call, and Decision. Extensions name themselves and implement BeforeUpstream; Call carries operation/model/path, and Decision can refuse with status, code, message, and headers. Register rejects nil, empty, and duplicate names; Names returns a copy.
-Run invokes extensions in order and stops on the first refusal while preserving applicable accumulated headers. Invoke looks up an exact name. Extensions execute before upstream sending without replacing identity or budget checks.
-There is no dynamic script loader or HTTP installation endpoint. Extensions should avoid irreversible side effects and credential disclosure. Tests cover registration, ordering, header behavior, lookup failures, and first-refusal semantics.
+## External interfaces
+
+- `Call` is immutable call context supplied by the data plane: operation, public model, and request path. It carries no request body or credential.
+- `Decision` contains allow/refuse state, HTTP status, stable error code, client message, and response headers. A zero decision allows processing to continue. If `Refuse` is true, the data plane skips cache lookup and upstream dispatch and writes the protocol response.
+- `Extension` requires a stable non-empty `Name()` and `BeforeUpstream(Call) Decision`. Implementations execute synchronously and can have their own side effects; the registry cannot roll them back.
+- `New() *Registry` returns an empty registry; the zero-value Registry is also usable.
+- `Register(ext) error` rejects a nil registry, nil extension, empty name, or duplicate name. On error, order and lookup state remain unchanged. Successful registration appends to deterministic order.
+- `Names() []string` returns a copy in registration order; a nil registry returns nil.
+- `Invoke(name, call) (Decision, error)` executes exactly the named extension. Missing names, including calls on a nil registry, return an error and do not invoke another extension.
+- `Run(call) Decision` executes a snapshot in registration order. Headers merge with later values replacing earlier values. The first refusal stops iteration and returns its status/code/message plus all headers accumulated through that extension. An empty or nil registry allows the call.
+
+internal/gateway constructs and registers extensions; internal/dataplane runs them. No HTTP route is registered here.
+
+## Core implementation
+
+Registry protects the ordered extension slice, parallel name slice, and name map with one mutex. Register mutates all three while holding the lock. Names copies under lock. Invoke fetches one implementation under lock and calls it after unlocking. Run likewise snapshots the ordered slice before callbacks, so callbacks cannot deadlock by registering and registrations made during a run affect only later runs.
+
+Header accumulation uses a fresh map. A refusal preserves earlier headers and lets the refusing extension overwrite a duplicate. Non-refusing status, code, and message fields are ignored; after all extensions allow, only merged headers are returned. Extensions are responsible for thread safety, bounded latency, deterministic policy, and avoiding irreversible work or secret disclosure.
+
+### Test dependencies
+
+`registry_test.go` covers zero-value use, validation, stable ordering, copied names, exact lookup, header precedence, and first-refusal stopping. Run `go test ./internal/plugin -count=1`; no external service is required.
 
 ## Source responsibilities and entry points
 
-### registry.go
-
-Exported types: `Call`, `Decision`, `Extension`, `Registry`.
-
-- [`func New() *Registry`](registry.go) — New returns an empty registry. Run allows the call when nothing is registered.
-- [`func (r *Registry) Register(ext Extension) error`](registry.go) — Register appends an extension. An empty or duplicate name returns an error and leaves the existing order unchanged.
-- [`func (r *Registry) Names() []string`](registry.go) — Names returns a copy of the registered names in order. Changing the slice does not change the registry.
-- [`func (r *Registry) Invoke(name string, call Call) (Decision, error)`](registry.go) — Invoke runs the extension registered under name. A missing name returns an error and does not call any other extension.
-- [`func (r *Registry) Run(call Call) Decision`](registry.go) — Run calls every extension in registration order. The first refusal stops the rest and keeps headers already set. An empty registry returns a zero Decision so the data plane continues.
-
-## External HTTP boundary
-
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
-
-## Dependencies
-
-[internal/logx](../logx/readme.md).
-
-## Verification and maintenance
-
-| Test file | Scenario entry points |
-| --- | --- |
-| [registry_test.go](registry_test.go) | `TestRegistryZeroValueRegistersWithStableName`, `TestRegistryRunMergesHeadersAndStopsAtRefusal` |
-
-```bash
-go test ./internal/plugin -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+- `registry.go` contains all production contracts and synchronization: Call, Decision, Extension, Registry, New, Register, Names, Invoke, and Run.
+- `registry_test.go` supplies deterministic test extensions and verifies registry and chain behavior.

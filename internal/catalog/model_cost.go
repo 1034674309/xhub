@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // The price map and the per-provider index, parsed once at startup.
@@ -33,7 +33,7 @@ var logTraceOnceModelCost sync.Once
 // 测试：无直接单测
 // 返回：无。嵌入的价格表已载入，并记下了载入时刻。解析失败时表为空，进程仍能启动。
 func init() {
-	logTraceOnceModelCost.Do(func() { logx.Trace("enter catalog.init") })
+	logTraceOnceModelCost.Do(func() { util.Trace("enter catalog.init") })
 
 	loadPriceDocument()
 	modelCostMapLoadedAt = time.Now().UTC().Format(time.RFC3339)
@@ -113,17 +113,6 @@ var knownLLMProviders = map[string]struct{}{
 	"bedrock_mantle": {}, "gdc": {},
 	// Suppliers the embedded price catalog names.
 	"kling": {}, "vidu": {}, "byteplus": {}, "meituan": {}, "stepfun": {}, "arcee_ai": {},
-}
-
-// Raw returns the raw JSON object of the built-in price map.
-// 参数：无。
-// 调用：gateway/catalog.go
-// 测试：无直接单测
-// 返回 any（any）：any，供调用方继续使用。
-func Raw() any {
-	modelCostMu.RLock()
-	defer modelCostMu.RUnlock()
-	return modelCostMapValue
 }
 
 // TokenRates returns the per-token input and output prices for one model in the built-in price map. The name is matched as stored, and if that misses, the provider prefix before the first slash is dropped. A missing name or a row with no per-token prices returns ok false.
@@ -235,24 +224,6 @@ func LoadedAt() string {
 	modelCostMu.RLock()
 	defer modelCostMu.RUnlock()
 	return modelCostMapLoadedAt
-}
-
-// MarkReloaded records that the price catalog was refreshed and returns the
-// number of models now in it. The rows themselves come from ReloadFromMarket;
-// this only stamps the time the console displays.
-// 参数：无。
-// 调用：gateway/models/cost_reload.go
-// 测试：无直接单测
-// 返回 int（int）：价格表里的模型条数。
-func MarkReloaded() int {
-	modelCostMu.Lock()
-	defer modelCostMu.Unlock()
-	modelCostMapLoadedAt = time.Now().UTC().Format(time.RFC3339)
-	raw, ok := modelCostMapValue.(map[string]any)
-	if !ok {
-		return 0
-	}
-	return len(raw)
 }
 
 // EnvForced reports that LITELLM_LOCAL_MODEL_COST_MAP is set to true, ignoring case. When it is true the gateway uses only the built-in map and does not try a remote price source.

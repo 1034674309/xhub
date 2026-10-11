@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/cache"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/plugin"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 func TestHandlerDialFailureLogKeepsHostWithoutURL(t *testing.T) {
@@ -57,7 +57,7 @@ func TestHandlerDialFailureLogKeepsHostWithoutURL(t *testing.T) {
 			}},
 			RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 1},
 		},
-		Cache: cache.New(),
+		Cache: util.NewCache(),
 		Hooks: hooks.New(),
 		Busy:  map[string]int{},
 		Client: &http.Client{

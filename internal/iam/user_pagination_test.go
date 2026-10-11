@@ -42,6 +42,8 @@ func TestUserDirectoryPagination(t *testing.T) {
 		{UserListQuery{Self: "u0", TeamIDs: []string{"team"}}, 3},
 		{UserListQuery{Self: "u0"}, 1},
 		{UserListQuery{Self: "u0", UserIDs: []string{"u5"}}, 0},
+		{UserListQuery{Self: "u0", TeamIDs: []string{"team"}, Search: "user2@"}, 1},
+		{UserListQuery{Self: "u0", Search: "user2@"}, 0},
 		{UserListQuery{PlatformAdmin: true, OrganizationIDs: []string{"org"}}, 3},
 		{UserListQuery{PlatformAdmin: true, TeamID: "team"}, 2},
 		{UserListQuery{PlatformAdmin: true, Search: "u4"}, 1},

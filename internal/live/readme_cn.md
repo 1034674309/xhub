@@ -1,61 +1,64 @@
-# Redis 热状态与可靠用量队列
+# Redis 热状态、限流准入与持久化用量交接
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-redis.go 保存部署失败计数、冷却、延迟、RPM/TPM、热支出、粘性及待落库日志。New/运行方法在没有 Redis 时按各自降级规则处理，不能把降级解释成共享状态仍被保证。
-请求即时更新热支出用于预算判断；耐久账务仍由 PostgreSQL 事务承担。队列 Peek 与 Ack 分离：消费者只有落库成功后确认，重复交付由 IAM request_id 去重。队列满或 Redis 故障需要明确日志和失败/降级语义。
-Cooled 查询故障按空结果处理，但数据库身份读取故障不能沿用这种开放降级。冷却计数使用可区分部署的标识。测试要连接真实 Redis，核验计数、TTL、队列顺序与确认；未连接时相应用例跳过，不能算作 Redis 验收。
+`internal/live` 管理必须立即在多个网关进程间共享、但不属于 IAM 持久账本的状态：部署冷却、近期延迟和分钟用量、分层 RPM/TPM 计数、尚未落库的花费、可靠用量队列及短期字符串。PostgreSQL 仍是身份和已结算用量的事实来源；本包填补请求准入到 IAM 事务提交之间的窗口。
+
+本包不注册 HTTP 处理器。请求执行流程从 IAM 构造限流计划，调用 `AdmitRatePlan`，记录部署遥测，并用 `EnqueueSpend` 发布完成用量。刷写器先查看日志、通过 `internal/iam` 提交，再调用 `AckFlushed`。
+
+## 对外接口
+
+### 连接、遥测与计数
+
+- `Open(url) (*Client, error)` 解析 Redis URL、连接并 ping；解析、网络、认证或 ping 失败时关闭客户端并返回错误。`Close()` 对 nil 安全。
+- `RecordFailure(id, allowed, cooldown)` 计数并在阈值处设置冷却；`allowed < 1` 或 nil 客户端无副作用。`Cooled(ids)` 返回冷却中的 ID，读取失败降级为空表。`AddLatency` 保留一小时内最近 20 个样本，`Latencies` 对合法样本求平均。
+- `AddUsage`/`Usages` 维护部署 UTC 分钟 token 总量。`HitRPM`、`HitTPM` 增加单个分钟计数并返回新值，不提供两维联合准入。
+
+### 限流准入
+
+- `RateScope` 携带主体类型、ID 和可选 RPM/TPM；`RateNode` 增加父索引；`RatePlan` 包含完整分配树和当前调用者从叶到根的 `Path`。
+- `CheckRatePlan(plan, rpmUsed, tpmUsed, est) string` 是无副作用参考算法。空串表示通过，拒绝返回 `<kind> rpm_limit` 或 `<kind> tpm_limit`。调用方必须提供有效无环树、合法 path/parent 索引及与 `Nodes` 等长的用量切片；函数会直接索引。负预估按 0，显式零限额会拒绝。
+- `AdmitRates(scopes, est, now)` 把每个 scope 转成独立根节点（`Parent == -1`），并按输入顺序生成 `Path`；它不会构造父子链。`AdmitRatePlan(plan, est, now)` 对 UTC 分钟键执行一个 Redis Lua 脚本，先完整检查 RPM，再检查 TPM，全部通过后才增加整条路径。Redis/脚本错误原样返回；网关将其视为依赖故障，不能无计数放行。
+
+### 花费交接与字符串
+
+- `SpendRef(kind, id)` 生成 IAM 配额检查使用的热花费标识。`ChargeSpend`、`HotSpend`、`PeekSpend`、`AckSpend`、`TakeSpend`、`ClearSpendQueue` 提供旧聚合操作；只有查看后确认能在数据库失败时保留数据。
+- `EnqueueSpend(SpendLog)` 要求 request ID 和合法主体增量。Lua 原子追加日志并增加所有主体热花费。request ID 是永久幂等键：重试成功但不修改状态，第一次 payload 生效。`EnqueueLog` 只排入日志。
+- `PeekLogs(n)` 返回解码值和原始值但不删除，并在首个损坏项处停止。PostgreSQL 提交后，`AckFlushed(deltas, n, head)` 原子校验所见队头、扣减热花费并裁剪前缀；队头变化时不操作。`AckLogs`、`DrainLogs` 是破坏性更强的底层接口。
+- `GetString(ctx, key)` 只对存在且可读的键返回 `(value, true)`；`SetString(ctx, key, value, ttl)` 写 TTL 字符串，nil 客户端静默跳过。
+
+调用方包括推理准入和路由、用量刷写器、IAM 配额检查及部署遥测；HTTP 路由由 gateway 包注册。
+
+## 内部核心实现
+
+### 分层预留
+
+树结构用于在共享祖先上为固定子额度预留容量。算法为每个节点计算下方未使用的固定分配：固定子节点贡献 `max(limit-used, 0)`，共享子节点透传固定后代预留。检查路径节点时扣除兄弟预留，再用 `credit` 加回当前路径自己的份额，避免请求被自身额度阻挡。先检查 RPM，再以同一拓扑检查 TPM。函数假设树无环、索引合法且每节点都有对应 usage；损坏输入可能 panic 或无限递归。IAM 负责构造有效计划。
+
+`AdmitRatePlan` 把节点、父索引、限额、预估量和路径编码进 Lua 参数，每节点建立两个键。Lua 读取全部计数、完成两维判断，最后才增加路径键；TTL 为 120 秒。单脚本避免多进程竞争和祖先部分增加，`CheckRatePlan` 用相同规则提供确定性测试。
+
+### 可靠用量交接
+
+`EnqueueSpend` 先验证并序列化事件，再由脚本同时更新日志队列、去重集合、待刷集合和主体浮点计数。IAM 在 `QuotaPath` 中加入热值。刷写顺序是查看、数据库提交、确认：IAM 事务失败时 Redis 状态保留，成功后才进行队头校验确认。IAM 也按 `request_id` 去重，因此提交与确认之间崩溃后重放仍安全。
+
+遥测读取在 Redis 缺失时有意降级，若干可选方法接受 nil；原子准入和可靠排队必须有真实 Redis。入队成功不等待磁盘 fsync 或副本 quorum，Redis 持久化和保留策略是外部部署边界。
+
+### 依赖与验证
+
+本包依赖 Redis 和 `internal/util`，持久消费者是 `internal/iam`。`rate_plan_test.go` 覆盖有效分配树、共享祖先、零限额和预估；计划前置条件仍由调用方保证。`rates_test.go` 对照纯算法验证 Lua 准入和原子增加；`redis_test.go` 覆盖并发去重、非法队列输入、损坏队头、确认和过期。没有测试 Redis 时相关用例跳过。
 
 ## 源码职责与入口
 
-### redis.go
+### `rate_plan.go`
 
-公开类型：`Client`, `SpendLog`.
+定义 `RateNode`、`RatePlan`、纯函数入口 `CheckRatePlan`，以及子索引、固定后代预留和路径 credit 等私有辅助逻辑。实现直接索引节点和用量切片，因此结果契约与有效计划前置条件都必须和 Lua 一致。
 
-- [`func SpendRef(kind, id string) string`](redis.go) — SpendRef 拼出热花费计数的 Redis 键，按密钥、团队、用户、组织或项目分开。
-- [`func Open(url string) (*Client, error)`](redis.go) — Open parses the Redis URL and pings it. On failure it closes the client and returns the error.
-- [`func (c *Client) Close() error`](redis.go) — Close closes Redis. A nil client is not an error.
-- [`func (c *Client) RecordFailure(id string, allowed int, cooldown time.Duration) error`](redis.go) — RecordFailure increments the failure count. After allowed failures it writes the cooldown key. An allowed below 1 does nothing.
-- [`func (c *Client) Cooled(ids []string) map[string]bool`](redis.go) — Cooled reports which deployment ids are still cooling down. If Redis is unavailable it returns an empty map and the caller treats that as no cooldown.
-- [`func (c *Client) AddLatency(id string, ms float64) error`](redis.go) — AddLatency pushes one latency onto the left of the list, keeps the latest 20, and expires the key after one hour.
-- [`func (c *Client) Latencies(ids []string) map[string]float64`](redis.go) — Latencies returns the average of recent latencies for each deployment. An id with no sample is omitted.
-- [`func (c *Client) AddUsage(id string, tokens int) error`](redis.go) — AddUsage adds tokens to the current minute bucket.
-- [`func (c *Client) Usages(ids []string) map[string]float64`](redis.go) — Usages returns each deployment's token usage for the current minute.
-- [`func (c *Client) HitRPM(id string) (int64, error)`](redis.go) — HitRPM increments the current minute's request count and returns the new value.
-- [`func (c *Client) HitTPM(id string, tokens int) (int64, error)`](redis.go) — HitTPM adds tokens to the current minute and returns the new value.
-- [`func (c *Client) ChargeSpend(id string, usd float64) error`](redis.go) — ChargeSpend adds a dollar delta to hot spend and puts the id in the set waiting to be flushed.
-- [`func (c *Client) HotSpend(id string) float64`](redis.go) — HotSpend is the spend delta not yet flushed to PostgreSQL. A missing id returns 0.
-- [`func (c *Client) PeekSpend() map[string]float64`](redis.go) — PeekSpend reads hot spend with GET and does not subtract or delete it. After a failed flush the same deltas can still be read.
-- [`func (c *Client) AckSpend(deltas map[string]float64) error`](redis.go) — AckSpend subtracts a delta only after PostgreSQL has committed it. It decrements the Redis counters for the map it is given and does not read the database itself.
-- [`func (c *Client) ClearSpendQueue() error`](redis.go) — ClearSpendQueue drops spend waiting to be flushed. Use it only from a test or an explicit reset.
-- [`func (c *Client) TakeSpend() map[string]float64`](redis.go) — TakeSpend reads and clears spend waiting to be flushed. Unlike Peek, a later failure no longer finds the delta in Redis.
-- [`func (c *Client) EnqueueSpend(row SpendLog) error`](redis.go) — EnqueueSpend publishes a log and its hot budget deltas atomically. RequestID must identify one immutable event globally (including the tenant namespace). Replays are successful no-ops, even after AckFlushed; the first payload wins. Dedup identities have no TTL. Redis persistence/retention is required until PostgreSQL commits; this method does not wait for an fsync or replica quorum.
-- [`func (c *Client) EnqueueLog(row SpendLog) error`](redis.go) — 把一条花费日志放进 Redis 队列，等刷写进 PostgreSQL。客户端为空时直接返回。
-- [`func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string)`](redis.go) — PeekLogs 查看花费队列头部的若干条，不删除。客户端为空或没有日志时两个返回值都是 nil。
-- [`func (c *Client) AckFlushed(deltas map[string]float64, n int, head string) error`](redis.go) — AckFlushed acknowledges spend deltas and the written log prefix together after the database transaction succeeds. AckFlushed subtracts hot spend and trims the log prefix in one Redis script. If the queue head is no longer the batch that was peeked, it does nothing, so a retry cannot subtract twice after a successful ack and cannot drop the logs first.
-- [`func (c *Client) AckLogs(n int) error`](redis.go) — AckLogs 从花费队列头部丢掉已经刷进数据库的 n 条。
-- [`func (c *Client) DrainLogs(n int) []SpendLog`](redis.go) — DrainLogs 从队列头部弹出最多 n 条花费日志。弹出后队列里不再保留它们。
-- [`func (c *Client) GetString(ctx context.Context, key string) (string, bool)`](redis.go) — GetString reads one Redis string. A missing key returns ok false.
-- [`func (c *Client) SetString(ctx context.Context, key, value string, ttl time.Duration)`](redis.go) — SetString stores one Redis string with a TTL. A nil client does nothing.
+### `rates.go`
 
-## 对外 HTTP 边界
+定义 `RateScope`、`rateAdmission` Lua、`AdmitRates`、`AdmitRatePlan`。不校验索引，直接序列化调用方计划，构造 UTC 分钟键和参数、设置两秒 Redis 超时、把脚本节点/维度索引映射为拒绝原因，并返回 Redis 错误。
 
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
+### `redis.go`
 
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [redis_test.go](redis_test.go) | `TestEnqueueSpendConcurrentDedupAndAck`, `TestEnqueueSpendRequiresIdentity`, `TestEnqueueSpendRejectsInvalidStateWithoutPartialWrites`, `TestPeekLogsStopsAtCorruptEvent`, `TestConcurrentTokenCounterHasExpiry` |
-
-```bash
-go test ./internal/live -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+定义 `Client`、`SpendLog`、键规则、连接生命周期、冷却/延迟/分钟遥测、旧花费计数、可靠队列操作和 TTL 字符串。脚本保证入队幂等与确认原子性；私有解析可忽略损坏遥测值，但绝不越过损坏的可靠队列项。

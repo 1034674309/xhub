@@ -41,7 +41,7 @@ async function updateSearch() {
       await loading;
     }
     if (revision !== searchRevision) return;
-    const matches = searchDocuments(documents, input.value);
+    const matches = searchDocuments(documents.filter((entry) => entry.lang === lang), input.value);
     status.textContent = matches.length ? `${matches.length} ${lang === "zh" ? "条结果" : "results"}` : t.noResults;
     for (const match of matches) {
       const link = document.createElement("a");

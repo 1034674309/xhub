@@ -10,10 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 // Key 是虚拟密钥；个人密钥属于用户且可选绑定团队，服务密钥必须属于团队或其项目。
@@ -455,7 +454,7 @@ func (db *DB) RevokeTeamKeys(ctx context.Context, by Actor, teamID string) error
 		if err != nil {
 			return err
 		}
-		logx.Info("iam revoked %d key(s) of team %s", n, teamID)
+		util.Info("iam revoked %d key(s) of team %s", n, teamID)
 		return writeAudit(s, by, Audit{Action: "key.revoke_team", ObjectType: "team", ObjectID: teamID, TeamID: teamID})
 	})
 }
@@ -660,18 +659,6 @@ func sortStrings(s []string) {
 			s[j], s[j-1] = s[j-1], s[j]
 		}
 	}
-}
-
-// KeyNameFromPlain derives a display name from a credential.
-// 参数 plain（string）：明文口令或明文密钥。只在创建和轮换时出现，不会写入日志。
-// 返回 string（string）：从明文密钥推导出的展示名。
-// 调用：仅在 keys.go 内使用
-// 测试：无直接单测
-func KeyNameFromPlain(plain string) string {
-	if len(plain) > 7 {
-		return plain[:7] + "…"
-	}
-	return strings.TrimSpace(plain)
 }
 
 // ParseExpiry 将正整数秒、分、小时或天转换为从当前时刻起算的绝对过期时间。

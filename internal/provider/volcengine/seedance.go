@@ -2,8 +2,10 @@
 package volcengine
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
+	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // 进程启动时登记这个目录的供应商、端点类型和模型价格。添加模型时就能选到它们。
@@ -12,31 +14,31 @@ import (
 // 调用：Go 在载入这个包时自动执行。
 // 测试：无直接单测
 func init() {
-	logx.Debug("provider volcengine loading its registered transport and models")
-	provider.RegisterSupplier(provider.Supplier{
+	util.Debug("provider volcengine loading its registered transport and models")
+	providerregistry.RegisterSupplier(providerregistry.Supplier{
 		Name: "VolcEngine", Slug: "volcengine", Display: "VolcEngine",
 	})
-	provider.RegisterTransport(provider.Transport{
+	providerregistry.RegisterTransport(providercontract.Transport{
 		CatalogID:  "volcengine",
 		EndpointID: "bypass:ark-video", Protocol: "ark", Family: "video", ModelGroup: "Seedance",
-		Auth: provider.AuthConfig{Header: "Authorization", Prefix: "Bearer"},
-		ID:   "ark_contents_generation", Kind: provider.KindBypass,
+		Auth: providercontract.AuthConfig{Header: "Authorization", Prefix: "Bearer"},
+		ID:   "ark_contents_generation", Kind: providercontract.KindBypass,
 		Label:     "Bypass - 方舟内容生成 /api/v3/contents/generations/tasks",
 		Providers: []string{"volcengine"}, ModelField: "model", TaskID: "id", StripPrefix: "volcengine",
-		Billing: provider.SeedanceBilling(),
-		Actions: []provider.Action{
+		Billing: providermeasurement.SeedanceBilling(),
+		Actions: []providercontract.Action{
 			{Name: "create", Method: "POST", PublicPath: "/api/v3/contents/generations/tasks", UpstreamPath: "/api/v3/contents/generations/tasks"},
 			{Name: "get", Method: "GET", PublicPath: "/api/v3/contents/generations/tasks/{id}", UpstreamPath: "/api/v3/contents/generations/tasks/{id}"},
 			{Name: "list", Method: "GET", PublicPath: "/api/v3/contents/generations/tasks", UpstreamPath: "/api/v3/contents/generations/tasks"},
 		},
 	})
 	// Configure actual Ark account prices on the deployment.
-	provider.RegisterModel(provider.Model{
+	providerregistry.RegisterModel(providerregistry.Model{
 		ID: "volcengine/doubao-seedance-2-0-260128", Provider: "volcengine",
 		Official: "doubao-seedance-2-0-260128", TransportID: "ark_contents_generation",
 		Source: "https://www.volcengine.com/docs/82379/1544106",
 	})
-	provider.RegisterModel(provider.Model{
+	providerregistry.RegisterModel(providerregistry.Model{
 		ID: "volcengine/doubao-seedance-2-0-fast-260128", Provider: "volcengine",
 		Official: "doubao-seedance-2-0-fast-260128", TransportID: "ark_contents_generation",
 		Source: "https://www.volcengine.com/docs/82379/1520757",

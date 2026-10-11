@@ -8,37 +8,40 @@ package gateway
 import (
 	"fmt"
 	"net/http"
+	"sync"
 
+	"github.com/sunqirui1987/xhub/internal/gateway/compliance"
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
 	"github.com/sunqirui1987/xhub/internal/gateway/guard"
+	"github.com/sunqirui1987/xhub/internal/gateway/health"
 	"github.com/sunqirui1987/xhub/internal/gateway/identity"
 	"github.com/sunqirui1987/xhub/internal/gateway/keys"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
+	"github.com/sunqirui1987/xhub/internal/gateway/publichub"
+	"github.com/sunqirui1987/xhub/internal/gateway/tokens"
 	"github.com/sunqirui1987/xhub/internal/gateway/usage"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceRoutes sync.Once
 
-// Handle implements httpx.Registrar. pattern is "METHOD /path". A pattern already mounted is not replaced by a later module.
+// Handle implements util.Registrar. pattern is "METHOD /path". A pattern already mounted is not replaced by a later module.
 // 参数 pattern（string）：要匹配的路径模板或正则；h（http.HandlerFunc）：要挂上的 HTTP 处理函数。
 // 返回：无。这条 METHOD /path 已登记。已经挂过的模式不会被后到的模块替换。
 // 调用：gateway/family/mount.go、gateway/guard/mount.go、gateway/identity/mount.go、gateway/ingress.go
 // 测试：access_log_test.go、console_split_test.go、dial_log_test.go
 func (s *Server) Handle(pattern string, h http.HandlerFunc) {
-	logTraceOnceRoutes.Do(func() { logx.Trace("enter gateway.Handle") })
+	logTraceOnceRoutes.Do(func() { util.Trace("enter gateway.Handle") })
 	s.handle(pattern, h)
 }
 
 // Use mounts a module by name. Mounting the same name again fails, and paths already mounted stay as they are. If the process is already serving, the new module is mounted immediately. During New it isrecorded and mounted later with the others.
-// 参数 m（httpx.Module）：正在累加或展示的可挂到网关的模块。
+// 参数 m（util.Module）：正在累加或展示的可挂到网关的模块。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：仅在 routes.go 内使用
 // 测试：无直接单测
-func (s *Server) Use(m httpx.Module) error {
+func (s *Server) Use(m util.Module) error {
 	if m == nil || m.Name() == "" {
 		return fmt.Errorf("module name is required")
 	}
@@ -73,19 +76,20 @@ func (s *Server) ModuleNames() []string {
 // 测试：无直接单测
 // 返回：无。进程自带的模块已挂上。新功能应走 Use，不要改这份名单。
 func (s *Server) installModules() {
-	builtins := []httpx.Module{
-		healthModule(s),
+	builtins := []util.Module{
+		health.Module(s.Store.DB, Version),
 		sessionModule(s),
+		publichub.Module(s, s.Store),
 		keys.Module(s),
 		models.Module(s),
-		tokensModule(s),
+		tokens.Module(s, s.Store),
 		ingressModule(s),
 		accessModule(s),
 		identity.Module(s),
 		usage.Module(s),
 		prefs.Module(s),
 		guard.Module(s),
-		complianceModule(s),
+		compliance.Module(s),
 		family.Module(s),
 	}
 	for _, m := range builtins {
@@ -107,31 +111,14 @@ func (s *Server) mountModules() {
 	s.modulesReady = true
 }
 
-// healthModule serves liveness, readiness, and the dashboard startup config.
-// 参数 s（*Server）：healthModule使用的网关进程。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
-// 调用：仅在 routes.go 内使用
-// 测试：无直接单测
-func healthModule(s *Server) httpx.Module {
-	return httpx.Bind("health", func(reg httpx.Registrar) {
-		reg.Handle("GET /health/liveliness", s.healthLive)
-		reg.Handle("GET /health/liveness", s.healthLive)
-		reg.Handle("GET /health/readiness", s.healthReady)
-		reg.Handle("GET /health/readiness/details", s.healthDetails)
-		reg.Handle("GET /health", s.healthReady)
-		reg.Handle("GET /.well-known/litellm-ui-config", s.uiConfig)
-		reg.Handle("GET /litellm/.well-known/litellm-ui-config", s.uiConfig)
-	})
-}
-
 // sessionModule serves username-password login, logout, and the identity the console builds its pages from. The SSO code exchange is gone: it minted an administrator session from an unauthenticated code
 // .
 // 参数 s（*Server）：会话Module使用的网关进程。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：仅在 routes.go 内使用
 // 测试：无直接单测
-func sessionModule(s *Server) httpx.Module {
-	return httpx.Bind("session", func(reg httpx.Registrar) {
+func sessionModule(s *Server) util.Module {
+	return util.Bind("session", func(reg util.Registrar) {
 		reg.Handle("POST /login", s.login)
 		reg.Handle("POST /v2/login", s.login)
 		reg.Handle("POST /v3/login", s.login)
@@ -147,37 +134,16 @@ func sessionModule(s *Server) httpx.Module {
 		reg.Handle("GET /authorize/flow", s.authorizeFlow)
 		reg.Handle("POST /authorize/complete", s.authorizeComplete)
 		reg.Handle("POST /v1/mcp/server/oauth/{server_id}/token", s.mcpOAuthToken)
-		reg.Handle("GET /public/v1/model_hub", s.publicModelHub)
-		reg.Handle("GET /public/v1/model_hub/{facet}", s.publicModelHubFacet)
-		reg.Handle("GET /public/model_hub", s.publicModelHub)
-		reg.Handle("GET /public/model_hub/info", s.publicModelHubInfo)
-		reg.Handle("GET /public/endpoints", s.publicEndpoints)
-		reg.Handle("GET /model_hub", s.publicModelHub)
-		reg.Handle("GET /model_hub/{facet}", s.publicModelHubFacet)
-		reg.Handle("POST /model_hub/update_useful_links", s.updateUsefulLinks)
-	})
-}
-
-// tokensModule serves the local token counter and the supported-parameter list.
-// 参数 s（*Server）：令牌Module使用的网关进程。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
-// 调用：仅在 routes.go 内使用
-// 测试：无直接单测
-func tokensModule(s *Server) httpx.Module {
-	return httpx.Bind("tokens", func(reg httpx.Registrar) {
-		reg.Handle("POST /utils/token_counter", s.tokenCounter)
-		reg.Handle("GET /utils/supported_openai_params", s.supportedOpenAIParams)
-		reg.Handle("POST /utils/transform_request", s.transformRequest)
 	})
 }
 
 // ingressModule is the entry for chat, embeddings, completions, messages, and audio translation.
 // 参数 s（*Server）：ingressModule使用的网关进程。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：仅在 routes.go 内使用
 // 测试：无直接单测
-func ingressModule(s *Server) httpx.Module {
-	return httpx.Bind("ingress", func(reg httpx.Registrar) {
+func ingressModule(s *Server) util.Module {
+	return util.Bind("ingress", func(reg util.Registrar) {
 		reg.Handle("POST /v1/chat/completions", s.chat)
 		reg.Handle("POST /chat/completions", s.chat)
 		reg.Handle("POST /v1/embeddings", s.embeddings)
@@ -192,11 +158,11 @@ func ingressModule(s *Server) httpx.Module {
 
 // accessModule serves cache probes and customers. Email events, IP allow-lists, and SCIM are gone.
 // 参数 s（*Server）：accessModule使用的网关进程。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：仅在 routes.go 内使用
 // 测试：无直接单测
-func accessModule(s *Server) httpx.Module {
-	return httpx.Bind("access", func(reg httpx.Registrar) {
+func accessModule(s *Server) util.Module {
+	return util.Bind("access", func(reg util.Registrar) {
 		reg.Handle("POST /route_template/preview", s.routePreview)
 		reg.Handle("POST /flushall", s.flushCache)
 		reg.Handle("GET /cache/settings", s.cacheSettings)

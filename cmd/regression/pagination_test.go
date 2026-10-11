@@ -142,6 +142,11 @@ func TestDirectoryPaginationContract(t *testing.T) {
 	if firstFloat(self.json(), "total") != 1 || firstString(rowsOf(self, "users")[0], "user_id") != ids[0] {
 		t.Fatalf("用户目录范围扩大: %v", self)
 	}
+	// 旧范围查询删除后，统一分页查询仍须先限制可见用户，再应用客户端搜索。
+	filtered := h.ok("GET", "/user/list?search=directory-05", memberSession, nil)
+	if firstFloat(filtered.json(), "total") != 0 || len(rowsOf(filtered, "users")) != 0 {
+		t.Fatalf("搜索不得扩大普通用户的目录范围: %v", filtered)
+	}
 	if got := h.do("GET", "/user/list?page=2", "", nil); got.status != 401 {
 		t.Fatalf("用户目录未鉴权错误: %s", got.describe())
 	}

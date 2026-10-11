@@ -3,9 +3,10 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/iam"
 	"net/http"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/iam"
 )
 
 func TestTemplateVisibilityOrdinaryWrites(t *testing.T) {

@@ -1,11 +1,5 @@
 # OpenAI 视频任务
 
-## 接口概述
-
-OpenAI 视频任务
-
-### OpenAI 视频任务
-
 ## 接口行为
 创建后 GET /v1/videos/{id}，完成后 GET /v1/videos/{id}/content 下载。使用相同调用身份退避查询，不提供通用取消接口。
 

@@ -1,6 +1,6 @@
 # 真实供应商测试配置解析
 
-[English](readme.md) · [回归测试方案](../../../docs/development/regression.md) · [多供应商场景](../../../docs/development/multi-supplier-regression.md)
+[English](readme.md) · [回归测试方案](../../../docs/development/zh-CN/regression.md) · [多供应商场景](../../../docs/development/zh-CN/multi-supplier-regression.md)
 
 ## 职责与数据边界
 

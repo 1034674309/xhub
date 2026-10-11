@@ -5,15 +5,14 @@ package identity
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/pagination"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/iam"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -24,7 +23,7 @@ var logTraceOnceCodec sync.Once
 // 调用：gateway/identity/handlers.go、gateway/identity/members.go。
 // 测试：无直接单测
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter identity.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter identity.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)
@@ -73,23 +72,6 @@ func floatPtr(v any) *float64 {
 			return nil
 		}
 		return &f
-	default:
-		return nil
-	}
-}
-
-// intPtr reads an optional integer. A float64 is truncated; any other type stays unset.
-// 参数 v（any）：JSON 里读出的动态值。数字、字符串和对象都要接住，类型不符时按零值而不是 panic。
-// 返回 *int（*int）：从 JSON 数字截出的整数。float64 会丢掉小数。其他类型为 nil。
-// 调用：仅在 codec.go 内使用
-// 测试：无直接单测
-func intPtr(v any) *int {
-	switch t := v.(type) {
-	case float64:
-		n := int(t)
-		return &n
-	case int:
-		return &t
 	default:
 		return nil
 	}
@@ -188,30 +170,7 @@ func queryInt(r *http.Request, key string, fallback int) int {
 // 调用：gateway/identity/handlers.go。
 // 测试：无直接单测
 func pageOffset(r *http.Request, limit int) int {
-	return pagination.Offset(queryInt(r, "page", 1), limit)
-}
-
-// idsFrom reads an id list from the body. The plural key wins, and a non-empty singular field is appended.
-// 参数 body（map[string]any）：已解析或原始的 JSON；plural（string）：标识列表来源使用的plural。空串表示调用方没有提供这项；singular（string）：标识列表来源使用的singular。空串表示调用方没有提供这项。
-// 返回 []string（[]string）：标识列表来源。没有匹配时为空切片。
-// 调用：仅在 codec.go 内使用。
-// 测试：无直接单测
-func idsFrom(body map[string]any, plural, singular string) []string {
-	var out []string
-	switch v := body[plural].(type) {
-	case []any:
-		for _, x := range v {
-			if s, ok := x.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-	case []string:
-		out = append(out, v...)
-	}
-	if s := str(body[singular]); s != "" {
-		out = append(out, s)
-	}
-	return out
+	return util.Offset(queryInt(r, "page", 1), limit)
 }
 
 // nonNilStrings keeps the JSON list shape stable: a record with no narrowing emits an empty list rather than null.
@@ -256,18 +215,6 @@ func deref(s *string) string {
 // 调用：gateway/identity/handlers.go。
 // 测试：无直接单测
 func floatJSON(v *float64) any {
-	if v == nil {
-		return nil
-	}
-	return *v
-}
-
-// intJSON turns an optional integer into a JSON number or null.
-// 参数 v（*int）：整数JSON使用的int。
-// 返回 any（any）：整数JSON。没有合格值时为 nil。
-// 调用：仅在 codec.go 内使用。
-// 测试：无直接单测
-func intJSON(v *int) any {
 	if v == nil {
 		return nil
 	}

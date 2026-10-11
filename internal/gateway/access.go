@@ -9,8 +9,7 @@ import (
 	"net/http"
 
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // The SSO code generator and its exchange are gone. The pair minted an
@@ -26,11 +25,11 @@ import (
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) flushCache(w http.ResponseWriter, r *http.Request) {
 	if s.requireManage(w, r) == nil {
-		logx.Debug("access denied method=%s path=%s operation=cache_flush", r.Method, r.URL.Path)
+		util.Debug("access denied method=%s path=%s operation=cache_flush", r.Method, r.URL.Path)
 		return
 	}
 	s.Cache.Flush()
-	httpx.WriteJSON(w, 200, map[string]any{"status": "ok", "message": "cache flushed"})
+	util.WriteJSON(w, 200, map[string]any{"status": "ok", "message": "cache flushed"})
 }
 
 // cacheSettings reads or stores cache settings. It does not return cached bodies.
@@ -50,18 +49,18 @@ func (s *Server) cacheSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		raw, _ := json.Marshal(body)
 		if err := s.Store.PutKV("cache", "settings", string(raw)); err != nil {
-			httpx.WriteError(w, 500, "internal", err.Error())
+			util.WriteError(w, 500, "internal", err.Error())
 			return
 		}
-		httpx.WriteJSON(w, 200, body)
+		util.WriteJSON(w, 200, body)
 		return
 	}
 	saved, err := s.Store.GetKV("cache", "settings")
 	if err != nil {
-		httpx.WriteJSON(w, 200, map[string]any{"enabled": false})
+		util.WriteJSON(w, 200, map[string]any{"enabled": false})
 		return
 	}
-	httpx.WriteJSON(w, 200, saved)
+	util.WriteJSON(w, 200, saved)
 }
 
 // customerList lists customers. With no data it returns an empty list instead of 404.
@@ -88,7 +87,7 @@ func (s *Server) customerList(w http.ResponseWriter, r *http.Request) {
 			"max_budget": row["max_budget"],
 		})
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"object": "list", "data": out, "customers": out, "end_users": out})
+	util.WriteJSON(w, 200, map[string]any{"object": "list", "data": out, "customers": out, "end_users": out})
 }
 
 // cachePing checks whether the cache is usable.
@@ -100,7 +99,7 @@ func (s *Server) cachePing(w http.ResponseWriter, r *http.Request) {
 	if s.requireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":     "healthy",
 		"healthy":    true,
 		"cache_type": "memory",

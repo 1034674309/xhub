@@ -2,7 +2,6 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/provider"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-
+	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // catalogConnection 描述已保存凭据的目录连接，不包含隐式供应商或环境密钥。
@@ -220,19 +219,6 @@ func ModelsURL(provider, base string) string {
 // builtinClient is the HTTP client that fetches provider model lists. Tests replace it.
 var builtinClient = http.DefaultClient
 
-// SetBuiltinClient replaces the client used to fetch builtin model lists.
-// 参数 c（*http.Client）：写入内置客户端使用的客户端。
-// 返回：无。拉取内置模型目录用的客户端已换成传入的值。传入 nil 时恢复成 http.DefaultClient。
-// 调用：仅在 builtin.go 内使用
-// 测试：builtin_providers_test.go
-func SetBuiltinClient(c *http.Client) {
-	if c == nil {
-		builtinClient = http.DefaultClient
-		return
-	}
-	builtinClient = c
-}
-
 // RefreshBuiltin reloads the catalog. It does not add or delete models.
 // 参数 s（Host）：Refresh内置使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
@@ -259,7 +245,7 @@ func ListBuiltin(s Host, w http.ResponseWriter, r *http.Request) {
 	if source.discover {
 		items, err = fetchCatalog(r.Context(), ModelsURL("", source.spec.Base), source.key)
 	}
-	items = mergeCatalogModels(items, provider.CatalogModels()[source.catalogID])
+	items = mergeCatalogModels(items, providerregistry.CatalogModels()[source.catalogID])
 	if err != nil {
 		fetchErr = err.Error()
 	}
@@ -283,7 +269,7 @@ func ListBuiltin(s Host, w http.ResponseWriter, r *http.Request) {
 	if fetchErr != "" {
 		out["error"] = fetchErr
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // mergeCatalogModels 合并供应商完整模型列表与本地专用型号，供 ListBuiltin 使用。
@@ -317,7 +303,7 @@ func AddBuiltinModels(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteError(w, http.StatusGone, "gone", "catalog deployment import moved to /price/model followed by /model/new")
+	util.WriteError(w, http.StatusGone, "gone", "catalog deployment import moved to /price/model followed by /model/new")
 }
 
 type catalogSource struct {
@@ -341,17 +327,17 @@ func openCatalog(s Host, w http.ResponseWriter, r *http.Request) (catalogSource,
 	body := readBody(r)
 	rows, err := s.RecordStore().ListProxyModels()
 	if err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return catalogSource{}, false
 	}
 	name := strings.TrimSpace(str(body["credential_name"]))
 	if name == "" {
-		httpx.WriteError(w, 400, "invalid_request", "credential_name is required for generic model discovery")
+		util.WriteError(w, 400, "invalid_request", "credential_name is required for generic model discovery")
 		return catalogSource{}, false
 	}
 	record, lookupErr := s.RecordStore().GetKV("credentials", name)
 	if lookupErr != nil || record == nil {
-		httpx.WriteError(w, 400, "invalid_request", "model provider is not configured")
+		util.WriteError(w, 400, "invalid_request", "model provider is not configured")
 		return catalogSource{}, false
 	}
 	info, _ := record["credential_info"].(map[string]any)
@@ -362,7 +348,7 @@ func openCatalog(s Host, w http.ResponseWriter, r *http.Request) (catalogSource,
 	}
 	discover := protocol == "" || openAICompatibleProtocol(protocol)
 	catalogID := credentialText(info, "catalog_id")
-	_, knownCatalog := provider.CatalogModels()[catalogID]
+	_, knownCatalog := providerregistry.CatalogModels()[catalogID]
 	if !knownCatalog {
 		// 未注册目录走真实 /models，仍须校验兼容协议，不能把错误连接当成 OpenAI 请求。
 		var ok bool
@@ -391,7 +377,7 @@ func openCatalog(s Host, w http.ResponseWriter, r *http.Request) (catalogSource,
 func openAICompatibleCredential(s Host, w http.ResponseWriter, name string) (map[string]any, bool) {
 	record, err := s.RecordStore().GetKV("credentials", name)
 	if err != nil || record == nil {
-		httpx.WriteError(w, 400, "invalid_request", "model provider is not configured")
+		util.WriteError(w, 400, "invalid_request", "model provider is not configured")
 		return nil, false
 	}
 	info, _ := record["credential_info"].(map[string]any)
@@ -401,7 +387,7 @@ func openAICompatibleCredential(s Host, w http.ResponseWriter, name string) (map
 		protocol = credentialText(values, "custom_llm_provider")
 	}
 	if protocol != "" && !openAICompatibleProtocol(protocol) {
-		httpx.WriteError(w, 400, "invalid_request", "credential protocol is not compatible with OpenAI model discovery")
+		util.WriteError(w, 400, "invalid_request", "credential protocol is not compatible with OpenAI model discovery")
 		return nil, false
 	}
 	return record, true
@@ -502,21 +488,6 @@ func perMillion(value any) *float64 {
 	return &scaled
 }
 
-// 把目录模型收成返回给控制台的对象。
-// 参数 item（CatalogModel）：目录JSON使用的目录中的模型。
-// 返回 map[string]any（map[string]any）：给响应或报表用的 JSON 对象。键是前端已经约定的字段，缺键表示这项没有数据。
-// 调用：仅在 builtin.go 内使用
-// 测试：无直接单测
-func catalogJSON(item CatalogModel) map[string]any {
-	return map[string]any{
-		"id":           item.ID,
-		"category":     item.Category,
-		"input_price":  item.InputPrice,
-		"output_price": item.OutputPrice,
-		"added":        item.Added,
-	}
-}
-
 type errString string
 
 // 实现 error 接口，返回写进日志或 HTTP 错误体的文本。
@@ -525,26 +496,3 @@ type errString string
 // 调用：拉取目录失败时返回它，经 error 接口读取。
 // 测试：无直接单测
 func (e errString) Error() string { return string(e) }
-
-// savedNames reports catalog ids already stored for this credential, including older builtin rows.
-// 参数 rows（[]store.ProxyModel）：从用量或目录读出的ProxyModel；provider（string）：供应商标识，例如 openai 或 volcengine。
-// 返回 map[string]bool（map[string]bool）：saved名称。没有该键表示假，不要当成缺省 JSON。
-// 调用：仅在 builtin.go 内使用
-// 测试：无直接单测
-func savedNames(rows []store.ProxyModel, provider string) map[string]bool {
-	out := map[string]bool{}
-	for _, row := range rows {
-		if str(row.Info["role"]) == "provider" {
-			continue
-		}
-		if str(row.Params["litellm_credential_name"]) == provider && row.ModelName != "" {
-			out[row.ModelName] = true
-		}
-		if str(row.Info["builtin"]) == provider {
-			if id := str(row.Info["upstream_id"]); id != "" {
-				out[id] = true
-			}
-		}
-	}
-	return out
-}

@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/store"
-	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 )
 
 type resourceHost struct {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceRouteSettings sync.Once
@@ -59,7 +59,7 @@ func BuiltinSettings() RouteSettings {
 
 // Resolve 按密钥、团队、组织的顺序选择第一份完整模板；均未绑定时使用模型管理默认分配。
 func Resolve(lookup ScopeLookup, chain ...ScopeRef) RouteSettings {
-	logTraceOnceRouteSettings.Do(func() { logx.Trace("enter prefs.Resolve") })
+	logTraceOnceRouteSettings.Do(func() { util.Trace("enter prefs.Resolve") })
 	if lookup != nil {
 		for _, scope := range chain {
 			if scope.ID == "" {

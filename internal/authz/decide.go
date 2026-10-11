@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 )
 
@@ -135,7 +135,7 @@ func (g *Guard) authorize(ctx context.Context, action Action, obj Object) error 
 		}); err != nil {
 			// The read was authorized but could not be recorded; refusing it is
 			// the only way a privileged read is never unattributable.
-			logx.Error("authz log-content audit write failed key_owner=%s err=%v", obj.OwnerUserID, err)
+			util.Error("authz log-content audit write failed key_owner=%s err=%v", obj.OwnerUserID, err)
 			return &InternalError{Err: err}
 		}
 	}
@@ -152,7 +152,7 @@ func (g *Guard) masterOnly(action Action, obj Object) error {
 	case ActionUserRead, ActionAuditRead:
 		return nil
 	default:
-		logx.Error("authz master denied action=%s", action)
+		util.Error("authz master denied action=%s", action)
 		return ErrForbidden
 	}
 }
@@ -189,7 +189,7 @@ func (g *Guard) keyOnly(ctx context.Context, action Action, obj Object) error {
 		// Scoped by the key in the query filter, never by a caller-supplied id.
 		return nil
 	default:
-		logx.Error("authz key denied action=%s key=%s", action, a.KeyID)
+		util.Error("authz key denied action=%s key=%s", action, a.KeyID)
 		return ErrForbidden
 	}
 }
@@ -393,7 +393,7 @@ func (g *Guard) lookup(ctx context.Context, obj Object) (Object, error) {
 	default:
 		// An object type this layer does not know is not an object. Refusing it
 		// here keeps a typo in a handler from falling through to a default allow.
-		logx.Error("authz unknown object type=%s", obj.Type)
+		util.Error("authz unknown object type=%s", obj.Type)
 		return Object{}, ErrNotFound
 	}
 }
@@ -441,7 +441,7 @@ func notFoundOrInternal(err error) error {
 	if err == iam.ErrNotFound {
 		return ErrNotFound
 	}
-	logx.Error("authz ownership read failed err=%v", err)
+	util.Error("authz ownership read failed err=%v", err)
 	return &InternalError{Err: err}
 }
 
@@ -603,7 +603,7 @@ func (g *Guard) decide(ctx context.Context, action Action, obj Object) error {
 	case ActionInfer:
 		return g.decideInfer(obj)
 	}
-	logx.Error("authz unknown action=%s", action)
+	util.Error("authz unknown action=%s", action)
 	return ErrForbidden
 }
 

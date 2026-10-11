@@ -1,11 +1,5 @@
 # Anthropic Messages
 
-## 接口概述
-
-Anthropic Messages
-
-### Anthropic Messages
-
 ## 接口行为
 使用 Messages 部署。原生客户端发送 anthropic-version: 2023-06-01，XHub 也接受 x-api-key 携带密钥。工具调用与结果是内容块。
 

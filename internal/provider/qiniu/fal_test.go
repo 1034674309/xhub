@@ -7,15 +7,16 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 )
 
 // falHit 查找测试所需的具体 Fal 创建路径；缺少登记时立即终止当前测试。
 // 参数 t：测试上下文；path：不含 /queue/ 的具体模型路径。返回 provider.Hit：已登记操作。
 // 调用：本文件的计量和计价测试；只查询本地注册表。
-func falHit(t *testing.T, path string) provider.Hit {
+func falHit(t *testing.T, path string) providercontract.Hit {
 	t.Helper()
-	h, ok := provider.Match("POST", "/queue/"+path, nil)
+	h, ok := providerregistry.Match("POST", "/queue/"+path)
 	if !ok {
 		t.Fatal("missing Fal model", path)
 	}
@@ -28,7 +29,7 @@ func falHit(t *testing.T, path string) provider.Hit {
 func TestFalRegistrationAndConcreteRoutes(t *testing.T) {
 	families := map[string]int{}
 	count := 0
-	for _, tr := range provider.Transports() {
+	for _, tr := range providerregistry.Transports() {
 		if !tr.QueueURLs {
 			continue
 		}
@@ -43,7 +44,7 @@ func TestFalRegistrationAndConcreteRoutes(t *testing.T) {
 			count++
 			families[tr.ID]++
 			h := falHit(t, a.Model)
-			if h.Transport.ID != tr.ID || h.Action.UpstreamPath != a.PublicPath || provider.ModelEndpoints()["qiniu/"+a.Model] != tr.ID {
+			if h.Transport.ID != tr.ID || h.Action.UpstreamPath != a.PublicPath || providerregistry.ModelEndpoints()["qiniu/"+a.Model] != tr.ID {
 				t.Fatal(a)
 			}
 			if a.PublicPath != "/queue/"+a.Model {
@@ -53,8 +54,8 @@ func TestFalRegistrationAndConcreteRoutes(t *testing.T) {
 				if follow.Name == "create" {
 					continue
 				}
-				path := provider.Expand(follow.PublicPath, map[string]string{"request_id": "task-1"})
-				h, ok := provider.Match("GET", path, nil)
+				path := providercontract.Expand(follow.PublicPath, map[string]string{"request_id": "task-1"})
+				h, ok := providerregistry.Match("GET", path)
 				if !ok || h.Transport.ID != tr.ID || h.Names["request_id"] != "task-1" {
 					t.Fatal(path)
 				}
@@ -66,7 +67,7 @@ func TestFalRegistrationAndConcreteRoutes(t *testing.T) {
 	}
 	t.Logf("registered %d concrete create endpoints across %d queue families", count, len(families))
 	for _, path := range []string{"fal-ai/kling-video/v2.5-turbo/standard/text-to-video", "fal-ai/kling-video/v2.6/standard/image-to-video", "fal-ai/kling-video/o1/4k/text-to-video", "unknown/video", "fal-ai/veo3.1/requests/id"} {
-		if _, ok := provider.Match("POST", "/queue/"+path, nil); ok {
+		if _, ok := providerregistry.Match("POST", "/queue/"+path); ok {
 			t.Fatal("unregistered path accepted", path)
 		}
 	}
@@ -148,7 +149,7 @@ func TestFalRejectsFailureAndUnmeasuredTime(t *testing.T) {
 			t.Fatal("billed failure or guessed duration", u)
 		}
 	}
-	u := catalog.NormalizeUsage(b.Usage(result, provider.TaskContext{}))
+	u := catalog.NormalizeUsage(b.Usage(result, providercontract.TaskContext{}))
 	if u.Seconds != 5 || u.OutputVariant != "unknown" {
 		t.Fatal(u)
 	}
@@ -195,7 +196,7 @@ func TestFalSeedanceMissingContextRetainsTokensWithoutSecondsPricing(t *testing.
 		"video": map[string]any{"url": "https://example.org/video.mp4", "duration": 4.},
 		"usage": map[string]any{"completion_tokens": 40594., "output_seconds": 4.},
 	}
-	u := catalog.NormalizeUsage(b.Usage(result, provider.TaskContext{}))
+	u := catalog.NormalizeUsage(b.Usage(result, providercontract.TaskContext{}))
 	if u.CompletionTokens != 40594 || u.Seconds != 0 || u.OutputVariant != "unknown" {
 		t.Fatal("missing context changed the billing unit", u)
 	}

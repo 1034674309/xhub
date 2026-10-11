@@ -3,11 +3,10 @@ package usage
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/gateway/identity"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // mountHost serves both usage queries and paged spend logs. Paging is implemented in identity. This alias only requires those methods.
@@ -20,14 +19,14 @@ var logTraceOnceMount sync.Once
 
 // Module is spend reports, activity summaries, and health probes.
 // 参数 h（mountHost）：实现这一步所需能力的mountHost。聊天、直通和刷写各自只依赖自己的方法。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：gateway/family/mount.go、gateway/guard/mount.go、gateway/identity/mount.go、gateway/keys/mount.go
 // 测试：无直接单测
-func Module(h mountHost) httpx.Module {
-	logTraceOnceMount.Do(func() { logx.Trace("enter usage.Module") })
+func Module(h mountHost) util.Module {
+	logTraceOnceMount.Do(func() { util.Trace("enter usage.Module") })
 
 	traceModule("usage")
-	return httpx.Bind("usage", func(reg httpx.Registrar) {
+	return util.Bind("usage", func(reg util.Registrar) {
 		reg.Handle("GET /global/spend/teams", func(w http.ResponseWriter, r *http.Request) { SpendTeams(h, w, r) })
 		reg.Handle("GET /guardrails/usage/overview", func(w http.ResponseWriter, r *http.Request) { GuardrailOverview(h, w, r) })
 		reg.Handle("GET /guardrails/usage/detail/{guardrail_id}", func(w http.ResponseWriter, r *http.Request) { GuardrailDetail(h, w, r) })

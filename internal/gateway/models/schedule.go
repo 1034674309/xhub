@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var reloadLoops sync.Map
@@ -90,7 +90,7 @@ func scheduledReloadLoop(s Host) {
 		if err != nil {
 			// A failed reload leaves the prices in use and the plan armed, so the
 			// next cycle tries again. Pushing next_run out would hide the failure.
-			logx.Error("scheduled price reload failed: %v", err)
+			util.Error("scheduled price reload failed: %v", err)
 			continue
 		}
 		stamp := time.Now().UTC().Format(time.RFC3339)
@@ -100,10 +100,10 @@ func scheduledReloadLoop(s Host) {
 			plan.NextRun = &next
 		}
 		if err := saveCostReload(s, plan); err != nil {
-			logx.Error("scheduled price reload could not save its plan: %v", err)
+			util.Error("scheduled price reload could not save its plan: %v", err)
 			continue
 		}
-		logx.Info("scheduled price reload applied %d models", n)
+		util.Info("scheduled price reload applied %d models", n)
 	}
 }
 

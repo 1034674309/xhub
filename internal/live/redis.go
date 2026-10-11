@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Client is the hot-path Redis client. A request only updates it. Spend logs are written to PostgreSQL by the timed flush.
@@ -42,7 +42,7 @@ var logTraceOnceRedis sync.Once
 // 调用：gateway/server.go、iam/db.go、store/engine.go、store/store.go
 // 测试：authz_test.go、builtin_providers_test.go、chains_test.go
 func Open(url string) (*Client, error) {
-	logTraceOnceRedis.Do(func() { logx.Trace("enter live.Open") })
+	logTraceOnceRedis.Do(func() { util.Trace("enter live.Open") })
 
 	opt, err := redis.ParseURL(url)
 	if err != nil {
@@ -542,7 +542,7 @@ func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string) {
 		if json.Unmarshal([]byte(item), &row) != nil || row.RequestID == "" {
 			// Never acknowledge an undecodable event. Return only the valid
 			// prefix; a corrupt head blocks flushing until explicitly repaired.
-			logx.Error("spend queue contains an invalid event at offset %d", i)
+			util.Error("spend queue contains an invalid event at offset %d", i)
 			return out, vals[:i]
 		}
 		out = append(out, row)

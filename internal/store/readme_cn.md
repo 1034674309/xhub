@@ -1,71 +1,74 @@
-# 框架配置与模型存储
+# 框架 PostgreSQL 存储
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-store.go/engine.go/pg.go 创建 PostgreSQL xorm 存储，beans.go 定义模型、配置和 KV 行，crud.go 提供通用操作，models.go/keys.go 提供对应读写辅助。数据库只支持 PostgreSQL，缓存是框架读缓存，不是身份权限缓存。
-这里保存模型部署、general/router 配置和框架资源；账号、成员关系、虚拟密钥与真实用量归 IAM。gateway 调用 Store 前已经执行授权，但读取失败仍必须明确处理。
-通用 KV 成功不表示某兼容 API 有真实业务实现。避免把未实现功能挂到通用 KV 然后宣称完成。没有直接单测文件，模型和设置 HTTP 回归覆盖部分集成行为；连接、CRUD 错误及并发缓存的全部分支仍需专门验证。
+`internal/store` 持久化 IAM 之外的网关框架记录：通用 JSON 文档、控制台管理的模型部署和带命名空间的配置。只接受 `postgres://` 或 `postgresql://`；空串、SQLite、file 和未知协议都在启动时失败。身份、密钥、成员关系、审计和用量由 `internal/iam` 管理。
+
+Store 在 xorm 上配置 10,000 项内存 LRU。写入后同时清理带 schema 和不带 schema 的缓存项。安全敏感的 `GetKV` 绕过缓存，使其他进程刚撤销的会话或凭据立即可见。SQL 可能含密钥哈希和凭据，因此 xorm SQL 日志始终关闭。
+
+## 对外接口
+
+### 打开与通用文档
+
+- `Open(databaseURL) (*Store, error)` 验证 PostgreSQL，可选创建安全的 `search_path` schema，执行 ping，并同步 `kv`、`proxy_models`、`proxy_config`。连接、建 schema、同步失败会关闭半成品引擎并返回错误；主要调用方是网关启动。
+- `PutKV(kind, id, body)` 更新或插入原始 JSON 文本并清缓存。`GetKV` 返回对象，缺少 `id` 时补入；损坏 JSON 以 `body` 保留；nil store 或缺行返回 `sql.ErrNoRows`。`DeleteKV` 对缺行也返回 `sql.ErrNoRows`。`ListKV(kind)` 解码同类全部行，nil store 视为空。会话、凭据、邀请、护栏/配置文档和 UI 设置使用这些接口。
+
+### 模型与命名空间配置
+
+- `ProxyModel` 是公开模型记录。`UpsertProxyModel`、`ListProxyModels`、`DeleteProxyModel` 编解码 params/info 并清模型缓存；损坏 JSON 读为空 map。网关组装目录时数据库行覆盖同名 YAML 部署。
+- `PutConfig(namespace, key, value)` JSON 编码并 upsert。`ListConfig(namespace)` 解码全部值，损坏 JSON 回退原始字符串；nil store 返回空 map，使 YAML 保持权威。`DeleteConfig` 删除一行。模型价格刷新、路由默认值/组和偏好设置是直接调用方。
+- `SaveModelDirectory(entry, deletedID, directory)` 在一个事务中增删部署，并清理模型默认值、路由组及 IAM 路由模板中的失效引用。两个变更参数可分别为空；都为空时仅修复历史数据。序列化、损坏 JSON、查询、锁或提交任一失败都回滚；提交后清缓存，不修改内存目录。
+
+### 实际 HTTP 边界
+
+本包不注册路由。`gateway/models` 通过 `POST /model/new`、`/model/update`、`/model/delete`、启停及内置模型路由，`PUT /model/default`、`PUT /model/fallback`，以及 `GET|POST|PUT|DELETE /routing/groups` 暴露其效果。`gateway/prefs` 使用配置行实现 `GET /config/list`、`POST /config/update`、`POST /config/field/update`、`POST /config/field/delete`。handler 负责鉴权、校验、发布内存状态和 HTTP 错误映射。
+
+## 内部核心实现
+
+### 引擎与缓存一致性
+
+`ensureSchema` 读取 `search_path`，经 `quoteIdent` 拒绝空、含符号或超过 63 字节的名称，用管理连接创建 schema，再由 `dsnWithSearchPath` 写入 PostgreSQL `options=-c search_path=...`。xorm 映射私有行结构并同步表，不追加约束。`quietLog` 实现全部 xorm logger 方法但不输出 SQL。`bust` 在修改后清理两种表名的 ID 与 bean 缓存；`GetKV.NoCache()` 是保证跨进程撤销的例外。
+
+### 模型目录原子清理
+
+`SaveModelDirectory` 使用一个 xorm 事务。先写部署，再扫描 `model_defaults`：剩余部署为零或一时删除默认权重，多部署时清理分配；随后通过 router 清理每个 `routing_groups`。若 IAM 模板表存在，则用 PostgreSQL `FOR UPDATE` 锁定全部 `route_templates` 并重写权重。损坏的历史 JSON 是硬错误，避免部署删除已提交而引用只清了一部分。
+
+### 依赖与验证
+
+本包依赖 PostgreSQL/pgx、xorm、`internal/config`、`internal/router`、`internal/iam`、`internal/util`。`model_weights_test.go` 是直接单元/回归测试，覆盖事务清理、损坏 JSON 回滚、默认值/路由组/模板及缓存可见结果；更高层 gateway 测试覆盖 KV、模型和偏好调用。数据库用例需要测试 PostgreSQL，并通过事务或隔离 schema 清理数据。
 
 ## 源码职责与入口
 
-### beans.go
+### `store.go`
 
-- [`func (kvRow) TableName() string`](beans.go) — TableName returns the key-value table name.
-- [`func (proxyModelRow) TableName() string`](beans.go) — TableName returns the proxy-model table name.
-- [`func (configRow) TableName() string`](beans.go) — TableName returns the proxy-config table name.
+定义 `Store` 和 `Open`，执行 PostgreSQL-only 配置检查并委托创建完整引擎。
 
-### crud.go
+### `engine.go`
 
-- [`func (s *Store) PutKV(kind, id, body string) error`](crud.go) — PutKV writes one key-value row. An existing row is updated and a missing row is inserted.
-- [`func (s *Store) GetKV(kind, id string) (map[string]any, error)`](crud.go) — GetKV reads one key-value row by kind and id.  The read bypasses the query cache. A session or credential revoked by another gateway process must be observed here, and local cache invalidation cannot provide that guarantee.
-- [`func (s *Store) DeleteKV(kind, id string) error`](crud.go) — DeleteKV deletes one key-value row and clears the cache. A missing row returns a no-rows error.
-- [`func (s *Store) ListKV(kind string) ([]map[string]any, error)`](crud.go) — ListKV lists every key-value row of one kind.
+实现 `quietLog`、`openEngine`、schema 创建、search-path DSN 改写、ping、LRU 安装及表同步；错误路径关闭已打开资源。
 
-### engine.go
+### `pg.go`
 
-内部实现和协议边界见 [engine.go](engine.go)。
+提供私有 `quoteIdent`，在动态 `CREATE SCHEMA` 前严格校验 PostgreSQL 标识符。
 
-### keys.go
+### `beans.go`
 
-- [`func (s *Store) UpsertProxyModel(m ProxyModel) error`](keys.go) — UpsertProxyModel updates a proxy model by id, or inserts it when the row is missing.
-- [`func (s *Store) ListProxyModels() ([]ProxyModel, error)`](keys.go) — ListProxyModels lists every proxy model. A nil store has no models, which is the same answer as an empty table.
-- [`func (s *Store) DeleteProxyModel(id string) error`](keys.go) — DeleteProxyModel deletes a proxy model by id and clears the cache.
-- [`func (s *Store) PutConfig(namespace, key string, value any) error`](keys.go) — PutConfig writes one namespaced configuration row. An existing row is updated and a missing row is inserted.
-- [`func (s *Store) DeleteConfig(namespace, key string) error`](keys.go) — DeleteConfig deletes one namespaced configuration row and clears the cache.
-- [`func (s *Store) ListConfig(namespace string) (map[string]any, error)`](keys.go) — ListConfig reads every configuration row in one namespace. A nil store has no configuration, so a caller that overlays it keeps the YAML baseline instead of crashing on a deployment that runs without framework records.
+定义 `kv`、`proxy_models`、`proxy_config` 的私有 xorm 行和表映射，包括复合主键顺序及 JSON/text 列。
 
-### models.go
+### `crud.go`
 
-公开类型：`ProxyModel`.
+实现通用 KV 增改查删、复合 ID、缺行归一化、JSON 回退和缓存失效。
 
-内部实现和协议边界见 [models.go](models.go)。
+### `models.go`
 
-### pg.go
+定义公开 `ProxyModel` 和读取控制台部署时的 trace 入口，持久层行结构保持私有。
 
-内部实现和协议边界见 [pg.go](pg.go)。
+### `keys.go`
 
-### store.go
+实现模型与命名空间配置 CRUD、JSON 转换、nil-store 降级、时间戳及缓存失效。
 
-公开类型：`Store`.
+### `model_weights.go`
 
-- [`func Open(databaseURL string) (*Store, error)`](store.go) — Open opens storage. sqlite, file:, and an empty URL are rejected. Only postgres:// and postgresql:// are accepted.
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-当前目录没有直接测试文件；上层集成测试仅证明被执行的链路，不代表所有内部失败分支均已覆盖。
-
-```bash
-go test ./internal/store -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+实现 `SaveModelDirectory`：跨 store 与可选 IAM 表的事务式部署修改和引用清理、PostgreSQL 显式行锁、回滚边界及提交后清缓存。

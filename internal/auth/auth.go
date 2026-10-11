@@ -18,7 +18,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Failure codes reported to the client.
@@ -228,7 +228,7 @@ func Resolve(ctx context.Context, cfg *config.Config, db *iam.DB, r *http.Reques
 		return nil, fail(CodeInvalidKey, authz.ErrUnauthenticated)
 	}
 	if master := cfg.GeneralSettings.MasterKey; master != "" && plain == master {
-		logx.Debug("auth master credential used path=%s", r.URL.Path)
+		util.Debug("auth master credential used path=%s", r.URL.Path)
 		return &Principal{Kind: authz.KindMaster}, nil
 	}
 	if db == nil {
@@ -238,17 +238,17 @@ func Resolve(ctx context.Context, cfg *config.Config, db *iam.DB, r *http.Reques
 	k, err := db.KeyByHash(ctx, hash)
 	if err != nil {
 		if errors.Is(err, iam.ErrNotFound) {
-			logx.Debug("auth unknown key path=%s", r.URL.Path)
+			util.Debug("auth unknown key path=%s", r.URL.Path)
 			return nil, fail(CodeInvalidKey, authz.ErrUnauthenticated)
 		}
-		logx.Error("auth key lookup failed path=%s err=%v", r.URL.Path, err)
+		util.Error("auth key lookup failed path=%s err=%v", r.URL.Path, err)
 		return nil, &authz.InternalError{Err: err}
 	}
 	if code := unusable(k); code != "" {
-		logx.Debug("auth rejected key id=%s code=%s", k.ID, code)
+		util.Debug("auth rejected key id=%s code=%s", k.ID, code)
 		return nil, fail(code, authz.ErrForbidden)
 	}
-	logx.Debug("auth key accepted id=%s owner=%s", k.ID, k.OwnerType)
+	util.Debug("auth key accepted id=%s owner=%s", k.ID, k.OwnerType)
 	return keyPrincipal(k, hash), nil
 }
 
@@ -301,10 +301,10 @@ func SessionPrincipal(u *iam.User, version int, session string) (*Principal, err
 		return nil, fail(CodeInvalidKey, authz.ErrUnauthenticated)
 	}
 	if u.SessionVersion != version {
-		logx.Debug("auth session stale user=%s want=%d got=%d", u.ID, u.SessionVersion, version)
+		util.Debug("auth session stale user=%s want=%d got=%d", u.ID, u.SessionVersion, version)
 		return nil, fail(CodeInvalidKey, authz.ErrUnauthenticated)
 	}
-	logx.Debug("auth session accepted user=%s role=%s", u.ID, u.Role)
+	util.Debug("auth session accepted user=%s role=%s", u.ID, u.Role)
 	return &Principal{Kind: authz.KindSession, UserID: u.ID, Role: u.Role, Session: session, Version: version}, nil
 }
 

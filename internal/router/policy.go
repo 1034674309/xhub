@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"math"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // Allocation 表示一个稳定部署 ID 的目标权重，仅用于 traffic-split。

@@ -2,7 +2,7 @@
 # 真实供应商全量回归。终端按用例实时打印 RUN / PASS / FAIL / SKIP。
 #
 # 密钥只从环境读取，不写入仓库、YAML 或这条脚本。用法见
-# docs/development/regression-live.md。
+# docs/development/zh-CN/regression-live.md。
 #
 # 用法：
 #   export FENNO_AI_API_KEY=... QINIU_API_KEY=...

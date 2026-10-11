@@ -4,9 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 // teamRow reads one team together with the caller's role, if any.
@@ -534,7 +533,7 @@ func keepTeamAdmin(_ context.Context, s *xorm.Session, teamID, excluding string)
 		return mapErr(err)
 	}
 	if n == 0 {
-		logx.Error("iam refusing to leave team %s without an active team_admin", teamID)
+		util.Error("iam refusing to leave team %s without an active team_admin", teamID)
 		return ErrLastAdmin
 	}
 	return nil
@@ -719,30 +718,6 @@ func (db *DB) OversightTeamIDs(ctx context.Context, userID string) ([]string, er
 	return out, nil
 }
 
-// TeamIDsByOrg lists every team that belongs to one of the organizations.
-// 参数 ctx（context.Context）：上下文，取消时停止；orgIDs（[]string）：组织标识列表列表。空切片表示没有可处理的项。
-// 返回 []string（[]string）：团队标识列表按组织。没有匹配时为 nil 或空切片，调用方按长度判断；error（error）：失败原因。nil 表示这一步成功。
-// 调用：仅在 teams.go 内使用
-// 测试：无直接单测
-func (db *DB) TeamIDsByOrg(ctx context.Context, orgIDs []string) ([]string, error) {
-	if len(orgIDs) == 0 {
-		return nil, nil
-	}
-	s := db.session(ctx)
-	defer s.Close()
-	var rows []struct {
-		ID string `xorm:"'id'"`
-	}
-	if err := s.Table("teams").In("organization_id", orgIDs).Cols("id").Asc("id").Find(&rows); err != nil {
-		return nil, mapErr(err)
-	}
-	out := make([]string, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, r.ID)
-	}
-	return out, nil
-}
-
 // AdminOrgs 列出这个用户担任管理员的组织 id。没有这种组织时为空切片。
 // 参数 ctx（context.Context）：上下文，取消或超时时停止后续工作；userID（string）：用户 id。空串表示没有指定用户。
 // 返回 []string（[]string）：管理员Orgs。没有匹配时为 nil 或空切片，调用方按长度判断；error（error）：失败原因。nil 表示这一步成功。
@@ -788,24 +763,6 @@ func (db *DB) SetOrgAdmin(ctx context.Context, by Actor, orgID, userID string, a
 		return writeAudit(s, by, Audit{Action: "org.member_set", ObjectType: "organization", ObjectID: orgID,
 			Detail: map[string]any{"user_id": userID, "role": role}})
 	})
-}
-
-// OrgAdmins lists the people who administer one organization.
-// 参数 ctx（context.Context）：上下文，取消或超时时停止后续工作；orgID（string）：组织 id。空串表示不按组织过滤。
-// 返回 []string（[]string）：组织Admins。没有匹配时为 nil 或空切片，调用方按长度判断；error（error）：失败原因。nil 表示这一步成功。
-// 调用：仅在 teams.go 内使用
-// 测试：无直接单测
-func (db *DB) OrgAdmins(ctx context.Context, orgID string) ([]string, error) {
-	s := db.session(ctx)
-	defer s.Close()
-	var out []string
-	err := s.Table("organization_members").Cols("user_id").
-		Where("organization_id = ?", orgID).And("role = ?", OrgAdmin).
-		Asc("user_id").Find(&out)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return out, nil
 }
 
 // Memberships returns team ID → team role, for callers that only need the role.

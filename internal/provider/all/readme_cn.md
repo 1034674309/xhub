@@ -1,30 +1,11 @@
-# 内置供应商装配
+# all
 
-[English](readme.md) · [全功能实现说明](../../../docs/development/implementation.md)
+启动时装配全部供应商.
 
-## 职责与实现契约
+代码入口：[all.go](all.go)
 
-新增供应商实现后还要加入这里并核对启动方导入。测试分别落在供应商和 provider 注册用例；聚合包本身没有直接测试，不应把导入成功理解为真实供应商认证成功。
+单元测试与源代码放在一起：
 
-## 源码职责与入口
+go test ./internal/provider/all/...
 
-### all.go
-
-内部实现和协议边界见 [all.go](all.go)。
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-
-## 验证与维护入口
-
-当前目录没有直接测试文件；上层集成测试仅证明被执行的链路，不代表所有内部失败分支均已覆盖。
-
-```bash
-go test ./internal/provider/all -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+真实后台回归在 cmd/regression，浏览器流程在 frontend/e2e。离线测试使用本地 HTTP 上游，不证明生产凭据或外部厂商服务可用性。

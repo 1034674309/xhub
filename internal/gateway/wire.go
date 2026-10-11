@@ -9,24 +9,24 @@ package gateway
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/cache"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
+	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
+	dpruntime "github.com/sunqirui1987/xhub/internal/dataplane/runtime"
 	"github.com/sunqirui1987/xhub/internal/gateway/guard"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/plugin"
 	"github.com/sunqirui1987/xhub/internal/router"
 	"github.com/sunqirui1987/xhub/internal/store"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceWire sync.Once
@@ -34,10 +34,10 @@ var logTraceOnceWire sync.Once
 // RequireLLMPrincipal resolves an identity that may call inference. On failure it has already written the response and returns nil.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
 // 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) RequireLLMPrincipal(w http.ResponseWriter, r *http.Request) *auth.Principal {
-	logTraceOnceWire.Do(func() { logx.Trace("enter gateway.RequireLLMPrincipal") })
+	logTraceOnceWire.Do(func() { util.Trace("enter gateway.RequireLLMPrincipal") })
 
 	return s.requireLLMPrincipal(w, r)
 }
@@ -45,7 +45,7 @@ func (s *Server) RequireLLMPrincipal(w http.ResponseWriter, r *http.Request) *au
 // ResolveRequest resolves the request identity again so a retry can confirm the key is still valid.
 // 参数 r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
 // 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥；error（error）：失败原因，nil 表示这一步成功。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) ResolveRequest(r *http.Request) (*auth.Principal, error) {
 	return s.resolve(r)
@@ -59,35 +59,35 @@ func (s *Server) GatewayConfig() *config.Config { return s.Cfg }
 
 // HTTPClient returns the HTTP client used for upstream calls. The timeout comes from the router settings.
 // 参数：无。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 // 返回 *http.Client（*http.Client）：访问上游的 HTTP 客户端，超时来自路由设置。
 func (s *Server) HTTPClient() *http.Client { return s.Client }
 
 // ResponseCache returns the in-process cache for non-streaming responses.
 // 参数：无。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
-// 返回 *cache.DualCache（*cache.DualCache）：响应缓存。未命中时 Get 返回空。
-func (s *Server) ResponseCache() *cache.DualCache { return s.Cache }
+// 返回 *util.DualCache（*util.DualCache）：响应缓存。未命中时 Get 返回空。
+func (s *Server) ResponseCache() *util.DualCache { return s.Cache }
 
 // HookEngine returns the budget and concurrency gate.
 // 参数：无。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 // 返回 *hooks.Engine（*hooks.Engine）：并发钩子。Begin 占用一个名额，返回的函数在请求结束时释放。
 func (s *Server) HookEngine() *hooks.Engine { return s.Hooks }
 
 // Extensions is the empty extension registry created at process start. Tests and startup code register implementations here, and the data plane calls them in registration order.
 // 参数：无。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 // 返回 *plugin.Registry（*plugin.Registry）：推理前扩展。没有注册项时不会拒绝调用。
 func (s *Server) Extensions() *plugin.Registry { return s.extensions }
 
 // RouteState returns concurrency, cooldown, latency, and usage for the router. Without Redis only in-process Busy is present.
 // 参数：无。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 // 返回 router.State（router.State）：这一刻的冷却、延迟、用量和并发，交给路由器排序。
 func (s *Server) RouteState() router.State { return s.routerState() }
@@ -95,14 +95,14 @@ func (s *Server) RouteState() router.State { return s.routerState() }
 // RouterDocument returns the merged router settings. A database key overrides YAML.
 // 参数：无。
 // 返回 map[string]any（map[string]any）：路由文档的字段表。缺键表示上游或库里没有这个字段。
-// 调用：dataplane/host.go、dataplane/live.go
+// 调用：dataplane/contract/host.go、dataplane/runtime/live.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) RouterDocument() map[string]any { return prefs.MergedRouter(s) }
 
 // GuardrailBlocks runs guardrails before a chat request is sent. When blocked is true, msg is the reason shown to the caller. The findings are kept against callID until the spend row is written.
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项。
 // 返回 bool（bool）：护栏拦截了这次聊天时返回真。未拦截时返回假；string（string）：给调用方看的拦截说明。未拦截时为空串。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) GuardrailBlocks(callID string, body map[string]any) (bool, string) {
 	blocked, message, findings := guard.Evaluate(s, body)
@@ -126,21 +126,21 @@ func (s *Server) AttachCredential(dep config.ModelEntry) (config.ModelEntry, err
 // IncBusy increments the in-process concurrency count for a deployment.
 // 参数 id（string）：部署 id，形状是 api_base|model。空串时计数没有对应的部署。
 // 返回：无。该部署的进程内在途数加一。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) IncBusy(id string) { s.incBusy(id) }
 
 // DecBusy decrements the in-process concurrency count for a deployment. The caller must pair it with IncBusy so the count is not driven below what that caller added.
 // 参数 id（string）：部署 id，形状是 api_base|model。必须和 IncBusy 用同一个 id。
 // 返回：无。该部署的进程内在途数减一。必须和 IncBusy 成对，否则计数会少减。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) DecBusy(id string) { s.decBusy(id) }
 
 // NoteFailure records a deployment failure. An allowed_fails below 1 does not write Redis.
 // 参数 id（string）：记下失败使用的主键。空串表示调用方没有指定记录。
 // 返回：无。这个部署的一次失败已记下。allowed_fails 小于 1 时不写 Redis。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) NoteFailure(id string, settings prefs.RouteSettings) {
 	s.noteFailure(id, settings)
@@ -149,14 +149,14 @@ func (s *Server) NoteFailure(id string, settings prefs.RouteSettings) {
 // NoteLatency records the milliseconds of one successful call. Zero is recorded too, and it means the call finished.
 // 参数 id（string）：记下延迟使用的主键。空串表示调用方没有指定记录；ms（float64）：记下延迟使用的小数。0 表示没有费用或尚未计价。
 // 返回：无。这次成功调用的毫秒数已记下。0 也会记，表示调用已经结束。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) NoteLatency(id string, ms float64) { s.noteLatency(id, ms) }
 
 // SetChatHeaders writes response headers such as the model name, spend, and call ID.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；alias（string）：对外模型名；apiBase（string）：上游根地址，末尾斜杠会被去掉再拼路径。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) SetChatHeaders(w http.ResponseWriter, p *auth.Principal, alias, apiBase string) {
 	s.setChatHeaders(w, p, alias, apiBase)
@@ -165,7 +165,7 @@ func (s *Server) SetChatHeaders(w http.ResponseWriter, p *auth.Principal, alias,
 // RecordSpend records this call's tokens on the hot path and, when Redis is configured, queues the log instead of writing PostgreSQL immediately.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；alias（string）：对外模型名；op（string）：操作名，例如 chat；usage（map[string]any）：用量对象。字段可能是 prompt_tokens，也可能是 input_tokens；start（time.Time）：时间范围的起点。零值表示不限制开始；cacheHit（bool）：为真时走缓存命中这一支。为假时保持原来的路径；status（int）：HTTP 状态码；depID（string）：部署 id。空串表示当前没有钉住的部署。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) RecordSpend(w http.ResponseWriter, p *auth.Principal, callID, alias, op string, usage map[string]any, start time.Time, cacheHit bool, status int, depID string) {
 	s.recordSpend(w, p, callID, alias, op, usage, start, cacheHit, status, depID)
@@ -174,25 +174,16 @@ func (s *Server) RecordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 // RememberExchange holds the request and response until this call's spend row is written.
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文；reqBody（[]byte）：Remember交换要读的原始字节；respBody（[]byte）：Remember交换要读的原始字节。
 // 返回：无。请求和响应已留到这条花费写入时再用。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) RememberExchange(callID string, r *http.Request, reqBody, respBody []byte) {
 	s.rememberExchange(callID, r, reqBody, respBody)
 }
 
-// 按聊天响应 id 取回钉住的部署。这是对话粘滞，不是官方任务钉。
-// 参数 taskID（string）：官方任务 id。后续查询和计费靠它找回创建时的部署。
-// 返回 string（string）：读到的字符串。键不存在时为空串，调用方要把空串当成没有钉住。
-// 调用：仅在 wire.go 内使用
-// 测试：bypass_logic_test.go、failure_log_test.go
-func (s *Server) PinnedDeployment(taskID string) string {
-	return s.affinityGet("deployment_affinity:v1:response:" + taskID)
-}
-
 // 按部署 id 在当前模型表里查找。找不到时 ok 为假。
 // 参数 id（string）：部署、模型或凭据 id。空串表示没有选定。
 // 返回：模型行，以及是否在当前模型表里。没有时查询官方任务会得到 404。
-// 调用：dataplane/host.go、dataplane/official.go、gateway/spend.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、gateway/spend.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) FindDeployment(id string) (config.ModelEntry, bool) {
 	for _, m := range s.Models() {
@@ -206,16 +197,16 @@ func (s *Server) FindDeployment(id string) (config.ModelEntry, bool) {
 // 记下这次调用的首字时间、供应商、缓存、部署和原始上游诊断，等记用量时取走。
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；note（dataplane.CallNote）：这一次调用的附注，含首字时间、供应商、缓存和部署。
 // 返回：无。业务附注保留已有诊断，重试新诊断替换旧响应；callID 为空时不记。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
-func (s *Server) AnnotateCall(callID string, note dataplane.CallNote) {
+func (s *Server) AnnotateCall(callID string, note dpcontract.CallNote) {
 	if s == nil || callID == "" {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.callNotes == nil {
-		s.callNotes = map[string]dataplane.CallNote{}
+		s.callNotes = map[string]dpcontract.CallNote{}
 	}
 	// 业务附注不得覆盖传输诊断；重试的非空诊断替换旧响应。
 	if note.Upstream == nil {
@@ -229,7 +220,7 @@ func (s *Server) AnnotateCall(callID string, note dataplane.CallNote) {
 // 返回 CallNote（dataplane.CallNote）：取出并删除这次调用的附注。
 // 调用：gateway/spend.go
 // 测试：无直接单测
-func (s *Server) takeNote(callID string) dataplane.CallNote {
+func (s *Server) takeNote(callID string) dpcontract.CallNote {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	note := s.callNotes[callID]
@@ -273,7 +264,7 @@ func (s *Server) takeGuardrail(callID string) string {
 // WriteCacheHit writes a cached body back and records a cache-hit spend row with a zero delta.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；alias（string）：对外模型名；ck（string）：写入缓存命中使用的ck。空串表示调用方没有提供这项；op（string）：操作名，例如 chat；hit（[]byte）：缓存命中的响应正文；start（time.Time）：时间范围的起点。零值表示不限制开始。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) WriteCacheHit(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op string, hit []byte, start time.Time) {
 	s.writeCacheHit(w, p, callID, alias, ck, op, hit, start)
@@ -282,7 +273,7 @@ func (s *Server) WriteCacheHit(w http.ResponseWriter, p *auth.Principal, callID,
 // WriteChatJSON writes the upstream JSON to the caller and records spend. A non-success status is not cached as a successful body.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；alias（string）：对外模型名；ck（string）：写入对话JSON使用的ck。空串表示调用方没有提供这项；op（string）：操作名，例如 chat；provider（string）：供应商标识，例如 openai 或 volcengine；respBody（[]byte）：写入对话JSON要读的原始字节；status（int）：HTTP 状态码；start（time.Time）：时间范围的起点。零值表示不限制开始；depID（string）：部署 id。空串表示当前没有钉住的部署。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/host.go、dataplane/serve.go
+// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string) {
 	s.writeChatJSON(w, p, callID, alias, ck, op, provider, respBody, status, start, depID)
@@ -291,7 +282,7 @@ func (s *Server) WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID,
 // EnforceIdentityLimits checks the model allow-list, budget, and RPM or TPM. On rejection it has already written the response.
 // 参数 w（http.ResponseWriter）：拒绝时把 403 或 429 写在这里；path（string）：决定错误包络的 URL 路径；p（*auth.Principal）：已经解析的调用方；alias（string）：要调用的对外模型名；est（int）：预估 token，用来扣 TPM。
 // 返回 bool（bool）：模型允许名单、预算和 RPM 或 TPM 都通过时返回真。拒绝时响应已经写好。
-// 调用：dataplane/host.go、dataplane/official.go、dataplane/serve.go、gateway/family/handlers.go
+// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go、gateway/family/handlers.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) EnforceIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
 	return s.enforceIdentityLimits(w, path, p, alias, est)
@@ -323,7 +314,7 @@ func (s *Server) BusyMap() map[string]int { return s.Busy }
 // 调用：仅在 wire.go 内使用
 // 测试：无直接单测
 // 返回 router.State（router.State）：这一刻的冷却、延迟、用量和并发，交给路由器排序。
-func (s *Server) routerState() router.State { return dataplane.State(s) }
+func (s *Server) routerState() router.State { return dpruntime.State(s) }
 
 // noteFailure records a deployment failure and may start cooldown.
 // 参数 id（string）：记下失败使用的主键。空串表示调用方没有指定记录；settings（prefs.RouteSettings）：这次请求生效的路由设置，冷却阈值从它来。
@@ -331,7 +322,7 @@ func (s *Server) routerState() router.State { return dataplane.State(s) }
 // 调用：仅在 wire.go 内使用
 // 测试：无直接单测
 func (s *Server) noteFailure(id string, settings prefs.RouteSettings) {
-	dataplane.RecordFailure(s, id, settings)
+	dpruntime.RecordFailure(s, id, settings)
 }
 
 // noteLatency records the latency of a successful call.
@@ -339,28 +330,28 @@ func (s *Server) noteFailure(id string, settings prefs.RouteSettings) {
 // 返回：无。这次成功调用的延迟已记下。
 // 调用：仅在 wire.go 内使用
 // 测试：无直接单测
-func (s *Server) noteLatency(id string, ms float64) { dataplane.RecordLatency(s, id, ms) }
+func (s *Server) noteLatency(id string, ms float64) { dpruntime.RecordLatency(s, id, ms) }
 
 // noteUsage adds tokens to the deployment usage.
 // 参数 id（string）：记下用量使用的主键。空串表示调用方没有指定记录；tokens（int）：记下用量使用的整数。零表示没有这项或尚未计数。
 // 返回：无。这些 token 已加进该部署的用量。
 // 调用：gateway/spend.go
 // 测试：无直接单测
-func (s *Server) noteUsage(id string, tokens int) { dataplane.RecordUsage(s, id, tokens) }
+func (s *Server) noteUsage(id string, tokens int) { dpruntime.RecordUsage(s, id, tokens) }
 
 // flushLoop flushes the spend queue every 60 seconds.
 // 参数：无。
 // 调用：gateway/server.go
 // 测试：无直接单测
 // 返回：无。每 60 秒把花费队列刷进库的循环已启动。
-func (s *Server) flushLoop() { dataplane.FlushLoop(s) }
+func (s *Server) flushLoop() { dpruntime.FlushLoop(s) }
 
 // FlushSpend writes spend and logs that are still in Redis into PostgreSQL.
 // 参数：无。
 // 调用：仅在 wire.go 内使用
 // 测试：无直接单测
 // 返回：无。还在 Redis 里的花费和日志已写入 PostgreSQL。
-func (s *Server) FlushSpend() { dataplane.Flush(s) }
+func (s *Server) FlushSpend() { dpruntime.Flush(s) }
 
 // RequireUser accepts any signed-in session or virtual key. On failure it has already written 401.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
@@ -454,7 +445,7 @@ func (s *Server) RequireMixed(w http.ResponseWriter, r *http.Request) *auth.Prin
 // Identity returns the identity store. A handler reads its rows from here, but only after Authorize has permitted the action that reads them.
 // 参数：无。
 // 返回 *iam.DB（*iam.DB）：身份与用量共用的库。没有 PostgreSQL 时为 nil：管理接口不能读用户和密钥，Flush 也不会把热花费落库。
-// 调用：dataplane/host.go、dataplane/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
+// 调用：dataplane/contract/host.go、dataplane/runtime/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 func (s *Server) Identity() *iam.DB { return s.IAM }
 

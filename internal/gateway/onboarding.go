@@ -15,10 +15,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceOnboarding sync.Once
@@ -29,7 +28,7 @@ var logTraceOnceOnboarding sync.Once
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) authorizeFlow(w http.ResponseWriter, r *http.Request) {
-	logTraceOnceOnboarding.Do(func() { logx.Trace("enter gateway.authorizeFlow") })
+	logTraceOnceOnboarding.Do(func() { util.Trace("enter gateway.authorizeFlow") })
 
 	flow := r.URL.Query().Get("flow")
 	body := map[string]any{
@@ -48,7 +47,7 @@ func (s *Server) authorizeFlow(w http.ResponseWriter, r *http.Request) {
 		body["server_name"] = "e2e-server"
 		body["connected"] = true
 	}
-	httpx.WriteJSON(w, 200, body)
+	util.WriteJSON(w, 200, body)
 }
 
 // authorizeComplete accepts the connect form and returns a fixed local result.
@@ -76,7 +75,7 @@ func (s *Server) authorizeComplete(w http.ResponseWriter, r *http.Request) {
 	if flow == "" {
 		flow = "local"
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":   "ok",
 		"decision": decision,
 		"flow":     flow,
@@ -89,8 +88,8 @@ func (s *Server) authorizeComplete(w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) mcpOAuthToken(w http.ResponseWriter, r *http.Request) {
-	httpx.WriteJSON(w, 200, map[string]any{
-		"access_token": "at-" + httpx.CallID()[:12],
+	util.WriteJSON(w, 200, map[string]any{
+		"access_token": "at-" + util.CallID()[:12],
 		"token_type":   "Bearer",
 		"expires_in":   3600,
 	})

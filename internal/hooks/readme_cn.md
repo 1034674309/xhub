@@ -1,38 +1,27 @@
-# 请求在途计数
+# 请求在途钩子
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+## 说明
 
-## 职责与实现契约
+hooks 按虚拟密钥 ID 跟踪单个网关进程内正在执行的推理调用。网关启动时创建 Engine，数据面在开始执行时调用 Begin，并让返回的释放函数覆盖正常完成、超时、发送失败和流中断。这个计数是短暂并发状态，不授予权限，不执行集群级限制，不持久化账务，也不协调多个网关副本。
 
-hooks.go 的 Engine 为 least-busy 等策略提供进程内在途计数。New 创建引擎，Begin(keyID) 增加计数并返回释放函数。释放使用 sync.Once，调用多次不会重复减；空标识是无操作。
-网关必须在请求生命周期结束时 defer 释放，包括发送错误、超时和流中断。计数是运行态提示，不是身份授权、限流或账务计数，也不存储请求正文。
-此包没有外部 HTTP 接口或数据库。多进程的计数不会自动汇总；跨实例负载选择依赖其它共享状态。验证应覆盖并发 Begin、双重释放、空标识以及结束后计数恢复。
+## 对外接口
+
+- `New() *Engine` 返回计数映射已初始化且为空的 Engine，主要由网关服务组装阶段调用。
+- `(*Engine).Begin(keyID string) func()` 为非空密钥预留一个本地在途槽位，并返回释放闭包。空 ID 返回安全的空操作闭包，不创建映射状态。闭包不返回错误且具有幂等性：第一次调用会减少 Begin 时捕获的同一密钥计数，归零时删除条目；以后再调用不产生变化。
+
+本包不提供读取计数的方法，也不登记路由。internal/dataplane 使用生命周期钩子，internal/gateway 持有 Engine。调用方必须始终执行返回闭包，通常使用 defer。
+
+## 内部核心实现
+
+Engine 包含一个互斥锁和“密钥 ID 到整数计数”的映射。Begin 只在加一时持锁，然后创建带独立 sync.Once 的闭包。第一次释放通过 Once 进入另一个短临界区，减少同一映射项，并在计数小于等于零时删除。删除操作避免不再活跃的密钥 ID 长期积累。每个闭包独立的 Once 很关键：没有它，重复清理路径可能错误减少另一个调用的槽位，或在仍有调用运行时删掉密钥。
+
+互斥锁保证一个进程内并发调用的更新一致。本实现没有条件变量、接纳判定或公开读取者；该结构为本地路由和并发集成保留准确生命周期状态。它也没有超时清扫器。若调用方遗漏释放，只有请求拥有者知道的结束事件不会再传入，因此计数会保持偏高直到进程重启。不支持 nil Engine 接收者。
+
+### 测试依赖
+
+`hooks_test.go` 为同一密钥启动两个调用，重复释放其中一个，并验证另一个在自身释放前仍保持计数。运行 `go test ./internal/hooks -count=1`；不涉及外部依赖。
 
 ## 源码职责与入口
 
-### hooks.go
-
-公开类型：`Engine`.
-
-- [`func New() *Engine`](hooks.go) — New returns an empty gate. In-flight calls are counted by key id.
-- [`func (e *Engine) Begin(keyID string) func()`](hooks.go) — Begin reserves one in-flight slot and returns the release function. An empty key id is not counted, so a caller without a key still gets a release.
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [hooks_test.go](hooks_test.go) | `TestReleaseIsIdempotentWithOtherCallsInFlight` |
-
-```bash
-go test ./internal/hooks -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- `hooks.go` 是全部生产实现，定义 `Engine`、互斥锁与计数映射、一次性跟踪日志、`New`，以及包含空 ID 处理、同步增减、每调用 `sync.Once` 和归零删除的 `Begin`。
+- `hooks_test.go` 验证释放幂等性不会干扰同一密钥的并发工作。

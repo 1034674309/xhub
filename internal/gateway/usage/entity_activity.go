@@ -8,9 +8,8 @@ import (
 	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // entityDim is the breakdown.entities key the usage page groups by.
@@ -49,7 +48,7 @@ func UnsupportedDailyActivity(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireUser(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, http.StatusNotImplemented, map[string]any{
+	util.WriteJSON(w, http.StatusNotImplemented, map[string]any{
 		"error": map[string]any{"message": "Tag and customer usage attribution is not recorded", "type": "unsupported_usage_dimension"},
 	})
 }
@@ -60,7 +59,7 @@ func UnsupportedDailyActivity(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/usage/mount.go
 // 测试：无直接单测
 func TeamDailyActivity(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceEntity.Do(func() { logx.Trace("enter usage.TeamDailyActivity") })
+	logTraceOnceEntity.Do(func() { util.Trace("enter usage.TeamDailyActivity") })
 	writeDailyActivity(s, w, r, entityTeam, false)
 }
 
@@ -96,7 +95,7 @@ func writeDailyActivity(s Host, w http.ResponseWriter, r *http.Request, dim enti
 	if !aggregated {
 		page = pageFromQuery(r)
 	}
-	httpx.WriteJSON(w, 200, activityBody(rows, page, aggregated, dim, labels))
+	util.WriteJSON(w, 200, activityBody(rows, page, aggregated, dim, labels))
 }
 
 // TeamSpendByUser is GET /team/spend/by_user. Each row is one user inside one team, still inside the caller's usage scope.
@@ -117,7 +116,7 @@ func TeamSpendByUser(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	labels.users = users.users
-	httpx.WriteJSON(w, 200, teamSpendByUserBody(r, rows, labels))
+	util.WriteJSON(w, 200, teamSpendByUserBody(r, rows, labels))
 }
 
 // loadScopedActivity reads the events the caller may see. A team_id keeps the single-team check UsageScope already performs. A team_ids or organization_ids list is intersected with what the caller can see; asking only for things they cannot see is a 404, not an unfiltered read.

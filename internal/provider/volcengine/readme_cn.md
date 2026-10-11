@@ -1,35 +1,25 @@
-# 火山方舟官方视频任务传输
+# 火山引擎方舟 Seedance 注册
 
-[English](readme.md) · [全功能实现说明](../../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-seedance.go 登记 ark_contents_generation，默认 ark.cn-beijing.volces.com。上游路径 /api/v3/contents/generations/tasks 支持创建、列表和按 ID 查询；公共入口由 transport 的路径映射决定。
-模型字段与任务 ID 为 model/id，去掉 volcengine 前缀再发送。移除不对应火山账户的输入/输出各 7 USD/百万 token 硬编码价，需要配置实际账户价格。共享 Seedance 提取器只结算成功终态 completion_tokens，并按参考视频和分辨率选档；不能把未定价费用零解释为免费。
-供应商注册与模型登记不承担调用身份、预算、错误重试或去重结算；这些在数据面。修改路径、模型前缀或 usage 字段后要跑 seedance_test 与官方任务集成测试；实际费用还需要真实任务终态 usage 证据。
+本包声明 VolcEngine supplier 并登记方舟原生异步内容生成。管理员仍需提供 base URL、Bearer 凭据和部署价格；两个 Seedance 模型是目录快捷项。
+
+### 依赖与测试
+
+本包使用 provider 注册表与共享 Seedance 计量。测试验证 supplier/模型、前缀、路径和绑定，不发真实请求。
+
+## 对外接口
+
+本包无导出 API 或 handler。init 使 provider.Match 识别 POST /api/v3/contents/generations/tasks、GET 同路径列表、GET /api/v3/contents/generations/tasks/{id}；原生 dataplane 负责鉴权、固定与结算。
+
+## 内部核心实现
+
+ark_contents_generation 使用 bypass:ark-video、ark 协议、video family、Bearer、model 字段、id 任务字段，并去掉 volcengine/。创建、列表、查询是独立白名单 action。SeedanceBilling 只接受明确成功终态 usage。存储模型 ID 映射到方舟官方名称，价格由部署配置。
 
 ## 源码职责与入口
 
-### seedance.go
+- [seedance.go](seedance.go)：supplier、transport、三个 action、两个模型绑定、鉴权/前缀/任务元数据和计量。
 
-内部实现和协议边界见 [seedance.go](seedance.go)。
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../../logx/readme_cn.md), [internal/provider](../readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [seedance_test.go](seedance_test.go) | `TestSeedanceModelsAndPaths` |
-
-```bash
-go test ./internal/provider/volcengine -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+验证命令：go test ./internal/provider/volcengine ./internal/provider -count=1。真实账号、额度、字段和价格属于外部边界。

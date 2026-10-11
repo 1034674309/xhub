@@ -14,9 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 //go:embed schema.sql
@@ -73,7 +72,7 @@ func Open(ctx context.Context, dsn string) (*DB, error) {
 // 测试：无直接单测
 func (db *DB) Migrate(ctx context.Context) error {
 	if _, err := db.Engine.Context(ctx).Exec(schemaSQL); err != nil {
-		logx.Error("iam schema apply failed: %v", err)
+		util.Error("iam schema apply failed: %v", err)
 		return err
 	}
 	// Names and hashes that already exist on the referenced rows. TTFT and
@@ -263,7 +262,7 @@ func writeAudit(s *xorm.Session, a Actor, e Audit) error {
 	if _, err := s.Insert(&row); err != nil {
 		return err
 	}
-	logx.Info("audit %s %s %s by %s:%s", e.Action, e.ObjectType, e.ObjectID, kind, a.ID)
+	util.Info("audit %s %s %s by %s:%s", e.Action, e.ObjectType, e.ObjectID, kind, a.ID)
 	return nil
 }
 
@@ -292,7 +291,7 @@ func (db *DB) ListAudit(ctx context.Context, limit, offset int) ([]AuditEntry, e
 	return out, err
 }
 
-// AuditFilter narrows the audit trail before pagination.
+// AuditFilter narrows the audit trail before util.
 type AuditFilter struct {
 	Search, ObjectID, ActorID, ActorKey, TeamID, KeyID, Action, ObjectType string
 }

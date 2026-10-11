@@ -25,7 +25,7 @@
 package gateway
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // init 记一次包载入。这个文件只放包文档，没有别的可记的事。
@@ -38,4 +38,4 @@ import (
 // 返回：无。只写一行进程日志。
 // 调用：Go 在载入这个包时自动执行。
 // 测试：无直接单测
-func init() { logx.Trace("enter gateway") }
+func init() { util.Trace("enter gateway") }

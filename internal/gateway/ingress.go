@@ -16,12 +16,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/llm"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/gateway/upstreamurl"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceIngress sync.Once
@@ -32,7 +31,7 @@ var logTraceOnceIngress sync.Once
 // 调用：gateway/routes.go
 // 测试：无直接单测
 func (s *Server) handle(pattern string, h http.HandlerFunc) {
-	logTraceOnceIngress.Do(func() { logx.Trace("enter gateway.handle") })
+	logTraceOnceIngress.Do(func() { util.Trace("enter gateway.handle") })
 
 	method, path, ok := strings.Cut(pattern, " ")
 	if !ok || h == nil || removedColumnRoute(path) {
@@ -54,7 +53,7 @@ func (s *Server) handle(pattern string, h http.HandlerFunc) {
 				c.Request.SetPathValue(name, v)
 			}
 		}
-		logx.Debug("process %s %s step=route pattern=%s", c.Request.Method, c.Request.URL.Path, pattern)
+		util.Debug("process %s %s step=route pattern=%s", c.Request.Method, c.Request.URL.Path, pattern)
 		h(c.Writer, c.Request)
 	})
 }
@@ -273,17 +272,17 @@ func (s *Server) realtimeContract(w http.ResponseWriter, r *http.Request) {
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		w.Header().Set("Connection", "Upgrade")
 		w.Header().Set("Upgrade", "websocket")
-		httpx.WriteError(w, http.StatusUpgradeRequired, "upgrade_required", "realtime requires websocket")
+		util.WriteError(w, http.StatusUpgradeRequired, "upgrade_required", "realtime requires websocket")
 		return
 	}
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		httpx.WriteError(w, http.StatusUpgradeRequired, "upgrade_required", "websocket upgrade is not available on this writer")
+		util.WriteError(w, http.StatusUpgradeRequired, "upgrade_required", "websocket upgrade is not available on this writer")
 		return
 	}
 	conn, buf, err := hj.Hijack()
 	if err != nil {
-		httpx.WriteError(w, http.StatusInternalServerError, "upgrade_failed", err.Error())
+		util.WriteError(w, http.StatusInternalServerError, "upgrade_failed", err.Error())
 		return
 	}
 	defer conn.Close()
@@ -312,9 +311,9 @@ func (s *Server) passthroughContract(w http.ResponseWriter, r *http.Request) {
 	base := passthroughAPIBase(provider)
 	upstream := ""
 	if base != "" {
-		upstream = llm.PassthroughURL(base, endpoint, provider)
+		upstream = upstreamurl.PassthroughURL(base, endpoint, provider)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+	util.WriteJSON(w, http.StatusOK, map[string]any{
 		"object":       "passthrough",
 		"provider":     provider,
 		"path":         r.URL.Path,
@@ -349,7 +348,7 @@ func passthroughAPIBase(provider string) string {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
-	logx.Debug("process %s %s step=gateway op=chat", r.Method, r.URL.Path)
+	util.Debug("process %s %s step=gateway op=chat", r.Method, r.URL.Path)
 	s.dataPlane(w, r, "chat")
 }
 
@@ -359,7 +358,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
-	logx.Debug("process %s %s step=gateway op=embeddings", r.Method, r.URL.Path)
+	util.Debug("process %s %s step=gateway op=embeddings", r.Method, r.URL.Path)
 	s.dataPlane(w, r, "embeddings")
 }
 
@@ -369,7 +368,7 @@ func (s *Server) embeddings(w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) completions(w http.ResponseWriter, r *http.Request) {
-	logx.Debug("process %s %s step=gateway op=completions", r.Method, r.URL.Path)
+	util.Debug("process %s %s step=gateway op=completions", r.Method, r.URL.Path)
 	s.dataPlane(w, r, "completions")
 }
 
@@ -379,7 +378,7 @@ func (s *Server) completions(w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
-	logx.Debug("process %s %s step=gateway op=messages", r.Method, r.URL.Path)
+	util.Debug("process %s %s step=gateway op=messages", r.Method, r.URL.Path)
 	s.dataPlane(w, r, "messages")
 }
 

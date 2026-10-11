@@ -7,8 +7,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Host is what create, update, and list ask the process for.
@@ -29,7 +29,7 @@ type Host interface {
 	// Identity owns every identity question: which models a team or a key may reach. The model list and the inference path both read it, so a listed model is always a usable model.
 	// 参数：无。
 	// 返回 *iam.DB（*iam.DB）：用来判断团队或密钥能否使用某个模型的身份库。没有数据库时为 nil。
-	// 调用：dataplane/host.go、dataplane/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
+	// 调用：dataplane/contract/host.go、dataplane/runtime/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	Identity() *iam.DB
 	// LockModels and UnlockModels are a pair. Lock before changing the model table on a request path.
@@ -70,5 +70,5 @@ type Host interface {
 // 调用：models 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

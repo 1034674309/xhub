@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/gateway/health"
 )
 
 func TestGatewayDoesNotHostTheConsole(t *testing.T) {
@@ -15,8 +17,7 @@ func TestGatewayDoesNotHostTheConsole(t *testing.T) {
 		registered: map[string]struct{}{},
 		idem:       map[string]*idemRec{},
 	}
-	s.Handle("GET /health/liveliness", s.healthLive)
-	s.Handle("GET /litellm/.well-known/litellm-ui-config", s.uiConfig)
+	health.Module(testPinger{}, Version).Mount(s)
 
 	pages := []string{"/ui", "/ui/", "/ui/login/", "/login", "/login/", "/", "/_next/static/app.js", "/assets/logo.svg", "/favicon.ico"}
 	for _, path := range pages {
@@ -56,7 +57,7 @@ func TestGatewayDoesNotHostTheConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 	base, _ := doc["proxy_base_url"].(string)
-	if base != LocalGatewayOrigin || strings.Contains(base, "/ui") {
+	if base != health.LocalGatewayOrigin || strings.Contains(base, "/ui") {
 		t.Fatalf("proxy_base_url = %q", base)
 	}
 }
@@ -69,7 +70,7 @@ func TestPublicOriginOverride(t *testing.T) {
 		registered: map[string]struct{}{},
 		idem:       map[string]*idemRec{},
 	}
-	s.Handle("GET /litellm/.well-known/litellm-ui-config", s.uiConfig)
+	health.Module(testPinger{}, Version).Mount(s)
 	req := httptest.NewRequest(http.MethodGet, "/litellm/.well-known/litellm-ui-config", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -82,3 +83,9 @@ func TestPublicOriginOverride(t *testing.T) {
 		t.Fatalf("proxy_base_url = %q", base)
 	}
 }
+
+// testPinger 为路由组装测试提供无副作用探测。
+type testPinger struct{}
+
+// Ping 返回就绪状态；无参数，无数据库副作用，由 health.Module 调用。
+func (testPinger) Ping() error { return nil }

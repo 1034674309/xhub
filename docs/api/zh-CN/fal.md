@@ -1,11 +1,5 @@
 # Fal 队列任务
 
-## 接口概述
-
-Fal 队列任务
-
-### Fal 队列任务
-
 ## 接口行为
 仅支持登记的 Fal 视频路径：Seedance、Kling、Vidu、Veo、MiniMax。创建返回 status_url 和 response_url，客户端相对于网关根地址解析，使用创建时同一 XHub 密钥查询。不能在创建路径后直接拼接 /requests/。
 

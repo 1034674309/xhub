@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // checkFallbackRemoval 在删除或改名最后一个公开部署之前检查回退引用。
@@ -57,7 +57,7 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.PlatformAdmin() {
-		httpx.WriteError(w, 403, "forbidden", "platform administrator required")
+		util.WriteError(w, 403, "forbidden", "platform administrator required")
 		return
 	}
 	var input struct {
@@ -67,17 +67,17 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&input); err != nil || input.Model == "" {
-		httpx.WriteError(w, 400, "invalid_request", "model_name and policy required")
+		util.WriteError(w, 400, "invalid_request", "model_name and policy required")
 		return
 	}
 	var trailing any
 	if dec.Decode(&trailing) != io.EOF {
-		httpx.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
+		util.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
 		return
 	}
 	policy, err := router.ParseFallbackPolicy(input.Policy)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	s.LockModels()
@@ -89,12 +89,12 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !exists {
-		httpx.WriteError(w, 404, "not_found", "public model not found")
+		util.WriteError(w, 404, "not_found", "public model not found")
 		return
 	}
 	raw, err := s.RecordStore().ListConfig("model_fallbacks")
 	if err != nil {
-		httpx.WriteError(w, 503, "unavailable", "model fallbacks unavailable")
+		util.WriteError(w, 503, "unavailable", "model fallbacks unavailable")
 		return
 	}
 	policies := map[string]router.FallbackPolicy{}
@@ -104,7 +104,7 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 		parsed, e := router.ParseFallbackPolicy(value)
 		if e != nil {
-			httpx.WriteError(w, 503, "unavailable", "invalid stored fallback policy")
+			util.WriteError(w, 503, "unavailable", "invalid stored fallback policy")
 			return
 		}
 		policies[name] = parsed
@@ -117,11 +117,11 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err = router.ValidateFallbackGraph(policies, models); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if s.RecordStore() == nil {
-		httpx.WriteError(w, 503, "unavailable", "model fallback store unavailable")
+		util.WriteError(w, 503, "unavailable", "model fallback store unavailable")
 		return
 	}
 	if len(policy.Fallbacks)+len(policy.ContextWindow)+len(policy.ContentPolicy) == 0 {
@@ -130,8 +130,8 @@ func SetFallback(s Host, w http.ResponseWriter, r *http.Request) {
 		err = s.RecordStore().PutConfig("model_fallbacks", input.Model, policy)
 	}
 	if err != nil {
-		httpx.WriteError(w, 503, "unavailable", err.Error())
+		util.WriteError(w, 503, "unavailable", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "fallback_policy": policy})
+	util.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "fallback_policy": policy})
 }

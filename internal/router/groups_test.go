@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/sunqirui1987/xhub/internal/config"
 	"strings"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestGroupContract 验证严格字段、名称边界、成员占用和部署归属；纯内存目录，无外部数据清理。

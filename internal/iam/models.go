@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Time is an alias used by the join-projection structs below.
@@ -225,7 +225,7 @@ func (bootstrapState) TableName() string { return "bootstrap_state" }
 func newID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		logx.Error("iam id generation failed: %v", err)
+		util.Error("iam id generation failed: %v", err)
 		panic(err)
 	}
 	return hex.EncodeToString(b[:])

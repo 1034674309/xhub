@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/store"
-	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 )
 
 // priceHost is the process surface the price handlers need: a real store, plus

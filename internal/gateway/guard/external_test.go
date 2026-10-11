@@ -3,11 +3,12 @@ package guard
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestExternalAdapters 验证 OpenAI、Lakera、Azure、远端 LiteLLM 的请求协议和拦截判定。

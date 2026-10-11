@@ -1,11 +1,5 @@
 # Content generation task protocol
 
-## Overview
-
-Content generation task protocol
-
-### Content generation task protocol
-
 ## Protocol and applicability
 This page describes a content-generation task protocol; vendors are deployment implementations. The standard /api/v3 variant supports POST/GET collection and GET /api/v3/contents/generations/tasks/{id}. The /v3 deployment variant supports POST /v3/contents/generations/tasks and GET /v3/contents/generations/tasks/{id}. Routing context is retained seven days. No generic callback or cancellation. Terminal success with measured usage settles once.
 

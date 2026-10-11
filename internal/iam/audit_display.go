@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
 )
 
@@ -54,7 +54,7 @@ func (db *DB) enrichAudit(ctx context.Context, rows []AuditEntry) error {
 		err := s.In("id", actorIDs).Cols("id", "name", "email").Find(&users)
 		s.Close()
 		if err != nil {
-			logx.Error("audit actor name lookup failed: %v", err)
+			util.Error("audit actor name lookup failed: %v", err)
 			return err
 		}
 		byID := make(map[string]User, len(users))
@@ -104,7 +104,7 @@ func (db *DB) enrichAudit(ctx context.Context, rows []AuditEntry) error {
 		err := s.Table(source.table).In("id", ids).Select("id, name").Find(&names)
 		s.Close()
 		if err != nil {
-			logx.Error("audit object name lookup failed for %s: %v", source.table, err)
+			util.Error("audit object name lookup failed for %s: %v", source.table, err)
 			return err
 		}
 		byID := make(map[string]string, len(names))
@@ -124,7 +124,7 @@ func (db *DB) enrichAudit(ctx context.Context, rows []AuditEntry) error {
 	return nil
 }
 
-// Search the visible identities and event codes before counting/pagination.
+// Search the visible identities and event codes before counting/util.
 // strpos treats %, _ and other characters literally rather than as wildcards.
 // 参数 query（*xorm.Session）、search（string）：授权查询与搜索词。
 // 返回：无；在查询上追加可见字段条件。

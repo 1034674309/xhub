@@ -2,10 +2,11 @@ package regression
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/catalog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/catalog"
 )
 
 // TestProviderFormsContract 验证真实公开目录和供应商凭据 CRUD 契约。

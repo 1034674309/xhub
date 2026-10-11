@@ -138,11 +138,11 @@ The client URL points to the **gateway**, not the console.
 - Use `os.environ/VARIABLE_NAME` in configuration to read secrets from the environment. For Docker, update `configs/config.docker.yaml`, pass the corresponding environment variables to the gateway service, and rebuild its image.
 - The optional `master_key` is for bootstrap and emergency access. It is not a console login or a regular application key.
 
-See [permissions](development/permissions.md) for platform, organization, team, and member scopes. This implementation reference is in Chinese.
+See [permissions](development/zh-CN/permissions.md) for platform, organization, team, and member scopes. This implementation reference is in Chinese.
 
 ## Development and Verification
 
-Start with the [developer and coding-agent guide](development/README.md), then choose checks from the [testing guide](development/testing.md) for the affected code. Basic Go checks and fake-provider regression:
+Start with the [developer and coding-agent guide](development/zh-CN/README.md), then choose checks from the [testing guide](development/zh-CN/testing.md) for the affected code. Basic Go checks and fake-provider regression:
 
 ```bash
 make test
@@ -155,7 +155,7 @@ For browser tests, install Chromium once with `cd frontend && npx playwright ins
 
 ## Documentation Boundaries
 
-The [user guide](user-guide.md) covers customer workflows; [development references](development/README.md) document current implementation. Package-level `readme.md` / `readme_cn.md` files explain modules in both languages. Temporary plans and execution records are not product promises.
+The [user guide](user-guide.md) covers customer workflows; [development references](development/zh-CN/README.md) document current implementation. Package-level `readme.md` / `readme_cn.md` files explain modules in both languages. Temporary plans and execution records are not product promises.
 
 
 Administrators explicitly create providers by selecting a type and entering its authentication fields. Price refresh requires XHUB_PRICE_FEED_URL; without it, the current bundled prices and manual overrides remain in use.

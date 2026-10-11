@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
 	"xorm.io/xorm/caches"
 	"xorm.io/xorm/log"
@@ -105,7 +105,7 @@ var logTraceOnceEngine sync.Once
 // 调用：store/store.go
 // 测试：无直接单测
 func openEngine(databaseURL string) (*xorm.Engine, *sql.DB, *int64, error) {
-	logTraceOnceEngine.Do(func() { logx.Trace("enter store.openEngine") })
+	logTraceOnceEngine.Do(func() { util.Trace("enter store.openEngine") })
 
 	schema, err := ensureSchema(databaseURL)
 	if err != nil {
@@ -128,7 +128,7 @@ func openEngine(databaseURL string) (*xorm.Engine, *sql.DB, *int64, error) {
 		engine.SetSchema(schema)
 	}
 	// The query cache covers framework reads only. Identity and session reads go
-	// through internal/iam, which deliberately installs no cache.
+	// through internal/iam, which deliberately installs no util.
 	engine.SetDefaultCacher(caches.NewLRUCacher(caches.NewMemoryStore(), 10000))
 	if err := engine.Ping(); err != nil {
 		engine.Close()

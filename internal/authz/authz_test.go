@@ -10,7 +10,7 @@ import (
 	"xorm.io/builder"
 )
 
-// fixture exercises the role boundaries documented in docs/development/permissions.md:
+// fixture exercises the role boundaries documented in docs/development/zh-CN/permissions.md:
 // two organizations, two teams each, two projects each, and five accounts.
 //
 //	orgA: teamA1 (alice admin, plain member)    teamA2 (dave admin)
@@ -621,14 +621,6 @@ func TestMasterIsNarrow(t *testing.T) {
 	if v := f.guard(t, session(f.admin)).VisibleTeamIDs(); v != nil {
 		t.Fatalf("a platform administrator must see every team as nil, got %#v", v)
 	}
-}
-
-func mustScope(t *testing.T, s *Scope, err error) *Scope {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("scope: %v", err)
-	}
-	return s
 }
 
 // TestScopeFailsClosed is the regression test for the dangerous xorm behaviour

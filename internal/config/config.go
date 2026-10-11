@@ -6,10 +6,10 @@ import (
 	"net/url"
 	"os"
 	"strings"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"gopkg.in/yaml.v3"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
+	"gopkg.in/yaml.v3"
 )
 
 // Config is the loaded process configuration. RouterRaw and GeneralRaw keep YAML keys the typed structs do not name, so a database overlay can compare by key.
@@ -89,7 +89,7 @@ var logTraceOnceConfig sync.Once
 // 测试：activity_http_test.go、builtin_providers_test.go、chains_test.go
 // 返回：解析后的进程配置。读文件、YAML 或数据库 URL 协议校验失败时返回错误。
 func Load(path string) (*Config, error) {
-	logTraceOnceConfig.Do(func() { logx.Trace("enter config.Load") })
+	logTraceOnceConfig.Do(func() { util.Trace("enter config.Load") })
 
 	raw, err := os.ReadFile(path)
 	if err != nil {

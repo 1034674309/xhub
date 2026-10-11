@@ -3,24 +3,23 @@ package keys
 
 import (
 	"net/http"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceMount sync.Once
 
 // Module creates, lists, updates, and rotates virtual keys.
 // 参数 h（Host）：实现这一步所需能力的数据面宿主。聊天、直通和刷写各自只依赖自己的方法。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：gateway/family/mount.go、gateway/guard/mount.go、gateway/identity/mount.go、gateway/models/mount.go
 // 测试：无直接单测
-func Module(h Host) httpx.Module {
-	logTraceOnceMount.Do(func() { logx.Trace("enter keys.Module") })
+func Module(h Host) util.Module {
+	logTraceOnceMount.Do(func() { util.Trace("enter keys.Module") })
 
 	traceModule("keys")
-	return httpx.Bind("keys", func(reg httpx.Registrar) {
+	return util.Bind("keys", func(reg util.Registrar) {
 		reg.Handle("POST /key/generate", func(w http.ResponseWriter, r *http.Request) { Generate(h, w, r) })
 		reg.Handle("POST /key/service-account/generate", func(w http.ResponseWriter, r *http.Request) { ServiceAccount(h, w, r) })
 		reg.Handle("GET /key/list", func(w http.ResponseWriter, r *http.Request) { List(h, w, r) })

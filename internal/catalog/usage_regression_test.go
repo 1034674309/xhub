@@ -1,6 +1,8 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestNormalizeUsagePreservesExplicitZeroOverAliases(t *testing.T) {
 	tests := []struct {

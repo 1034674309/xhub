@@ -40,7 +40,8 @@ test("team usage displays recorded calls without requesting the removed Agent en
     key = (await minted.json()).key;
     const completion = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "team usage regression" }] } });
     expect(completion.status(), await completion.text()).toBe(200);
-    expect((await completion.json()).choices[0].message.content).toBe("e2e-ok");
+    const completionBody = await completion.json();
+    expect(completionBody.choices[0].message.content).toBe("e2e-ok");
     const callID = completion.headers()["x-litellm-call-id"];
     expect(callID).toBeTruthy();
     await expect.poll(async () => {
@@ -49,7 +50,10 @@ test("team usage displays recorded calls without requesting the removed Agent en
     }, { message: "数据面调用必须持久化账单" }).toBe("gpt-4o-mini");
     const activity = await page.request.get(GATEWAY + "/team/daily/activity/aggregated?team_ids=" + encodeURIComponent(teamID), { headers });
     expect(activity.status(), await activity.text()).toBe(200);
-    expect((await activity.json()).metadata.total_api_requests).toBe(1);
+    const activityBody = await activity.json();
+    expect(activityBody.metadata.total_api_requests).toBe(1);
+    // 删除未使用的按日模型查询后，现行用量接口仍须与真实数据面响应的 token 总量一致。
+    expect(activityBody.metadata.total_tokens, "团队聚合必须保留真实推理用量").toBe(completionBody.usage.total_tokens);
     for (let visit = 0; visit < 2; visit++) {
       await stableGoto(page, "/usage");
       await expect(page.getByRole("tab", { name: t("pages.usage.customer"), exact: true })).toHaveCount(0);

@@ -6,9 +6,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Available serves model cards for the signed-in caller. It exposes only display metadata. A view-only session may read the models granted to it. Calling a model stays on AllowLLM.
@@ -17,10 +16,10 @@ import (
 // 调用：gateway/models/mount.go
 // 测试：无直接单测
 func Available(s Host, w http.ResponseWriter, r *http.Request) {
-	logx.Trace("enter models.Available")
+	util.Trace("enter models.Available")
 	p, err := s.Resolve(r)
 	if err != nil || p == nil {
-		httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
+		util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
 		return
 	}
 	s.LockModels()
@@ -35,9 +34,9 @@ func Available(s Host, w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if index, ok := seen[entry.ModelName]; ok {
-			data[index]["endpoints"] = provider.MergeEndpoints(data[index]["endpoints"].([]provider.EndpointBinding), provider.DeploymentEndpoints(entry))
+			data[index]["endpoints"] = providerdeployment.MergeEndpoints(data[index]["endpoints"].([]providerdeployment.EndpointBinding), providerdeployment.DeploymentEndpoints(entry))
 			// 同名部署只要存在有效绑定就可调用，不能被另一条无效部署的错误覆盖。
-			if len(data[index]["endpoints"].([]provider.EndpointBinding)) > 0 {
+			if len(data[index]["endpoints"].([]providerdeployment.EndpointBinding)) > 0 {
 				delete(data[index], "unavailable_reason")
 			}
 			continue
@@ -45,7 +44,7 @@ func Available(s Host, w http.ResponseWriter, r *http.Request) {
 		seen[entry.ModelName] = len(data)
 		data = append(data, availableCard(entry))
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"object": "list", "data": data})
+	util.WriteJSON(w, 200, map[string]any{"object": "list", "data": data})
 }
 
 // 把一条部署收成可选模型卡片，价格优先用部署覆盖。
@@ -57,7 +56,7 @@ func availableCard(entry config.ModelEntry) map[string]any {
 	info := entry.ModelInfo
 	row := availableCostRow(entry.ModelName)
 	card := map[string]any{
-		"endpoints":         provider.DeploymentEndpoints(entry),
+		"endpoints":         providerdeployment.DeploymentEndpoints(entry),
 		"id":                entry.ModelName,
 		"provider":          firstString(info, row, "litellm_provider", "provider"),
 		"category":          availableCategory(entry, row),
@@ -69,7 +68,7 @@ func availableCard(entry config.ModelEntry) map[string]any {
 		"cache_read_price":  firstPrice(info, row, "cache_read_price", "cache_read_input_token_cost"),
 		"cache_write_price": firstPrice(info, row, "cache_write_price", "cache_creation_input_token_cost"),
 	}
-	if err := provider.ValidateDeployment(entry); err != nil {
+	if err := providerdeployment.ValidateDeployment(entry); err != nil {
 		card["unavailable_reason"] = err.Error()
 	}
 	if card["provider"] == "" {
@@ -96,10 +95,10 @@ func availableCategory(entry config.ModelEntry, row map[string]any) string {
 	if category := firstString(entry.ModelInfo, nil, "category"); category != "" {
 		return category
 	}
-	if provider.ValidateDeployment(entry) != nil {
+	if providerdeployment.ValidateDeployment(entry) != nil {
 		return "other"
 	}
-	for _, t := range provider.BoundTransports(entry) {
+	for _, t := range providerdeployment.BoundTransports(entry) {
 		return t.Family
 	}
 	return "other"

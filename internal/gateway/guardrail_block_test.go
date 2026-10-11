@@ -11,12 +11,12 @@ import (
 
 	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/cache"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/plugin"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks is the data-plane
@@ -100,7 +100,7 @@ func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 			}},
 			RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 0},
 		},
-		Cache:  cache.New(),
+		Cache:  util.NewCache(),
 		Hooks:  hooks.New(),
 		Busy:   map[string]int{},
 		Client: upstream.Client(),

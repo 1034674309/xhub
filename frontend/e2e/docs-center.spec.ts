@@ -281,12 +281,14 @@ test("API navigation separates images and video queue protocols", async ({ page 
   ).toBeVisible();
 });
 
-/** 目的：验证原厂总览、独立接口、弹窗和双语目录；前置真实网关，无凭据请求返回真实认证错误，搜索不自动填充，无业务数据写入。 */
+/** 目的：验证原厂总览入口、独立接口、弹窗和双语目录去重，以及内容任务正文标题唯一；前置真实网关，无凭据请求返回真实认证错误，搜索不自动填充，无业务数据写入，隔离 schema 随套件清理。 */
 test("native protocol endpoints have dedicated guides and runners", async ({ page }) => {
   await page.goto("/docs/api/native-bypass");
   await expect(page.getByRole("button", { name: "在线运行", exact: true })).toHaveCount(0);
   const nav = page.getByRole("navigation", { name: "文档目录" });
   await expect(nav.getByRole("heading", { name: "原厂协议 Bypass", exact: true })).toBeVisible();
+  await expect(nav.getByText("原厂协议 Bypass", { exact: true })).toHaveCount(1);
+  await expect(nav.getByRole("link", { name: "协议总览", exact: true })).toHaveAttribute("aria-current", "page");
   const bypassSection = nav
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "原厂协议 Bypass", exact: true }) });
@@ -305,4 +307,15 @@ test("native protocol endpoints have dedicated guides and runners", async ({ pag
   await expect(page.getByRole("heading", { name: "Native protocol Bypass", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bypass Vertex generateContent", level: 1 })).toBeVisible();
   await expect(page.getByRole("main")).toContainText("Administrators configure the Vertex project");
+  const englishNav = page.getByRole("navigation", { name: "Documentation directory" });
+  await expect(englishNav.getByText("Native protocol Bypass", { exact: true })).toHaveCount(1);
+  await englishNav.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/\/docs\/api\/native-bypass$/);
+  await expect(englishNav.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.goto("/docs/api/ark");
+  await expect(page.getByRole("main").getByText("Content generation task protocol", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Protocol and applicability", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await expect(page.getByRole("main").getByText("内容生成任务协议", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "协议与适用范围", exact: true })).toBeVisible();
 });

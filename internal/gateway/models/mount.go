@@ -3,24 +3,23 @@ package models
 
 import (
 	"net/http"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceMount sync.Once
 
 // Module is the model list and the management writes. The process implements Host.
 // 参数 h（Host）：实现这一步所需能力的数据面宿主。聊天、直通和刷写各自只依赖自己的方法。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：gateway/family/mount.go、gateway/guard/mount.go、gateway/identity/mount.go、gateway/keys/mount.go
 // 测试：无直接单测
-func Module(h Host) httpx.Module {
-	logTraceOnceMount.Do(func() { logx.Trace("enter models.Module") })
+func Module(h Host) util.Module {
+	logTraceOnceMount.Do(func() { util.Trace("enter models.Module") })
 
 	traceModule("models")
-	return httpx.Bind("models", func(reg httpx.Registrar) {
+	return util.Bind("models", func(reg util.Registrar) {
 		reg.Handle("GET /v1/models", func(w http.ResponseWriter, r *http.Request) { List(h, w, r) })
 		reg.Handle("GET /models", func(w http.ResponseWriter, r *http.Request) { List(h, w, r) })
 		for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {

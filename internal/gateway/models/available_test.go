@@ -1,9 +1,10 @@
 package models
 
 import (
-	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/provider"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 )
 
 // TestAvailableCardEndpoints 验证有效声明公开精确路径，缺失或旧声明返回原因且没有猜测绑定。
@@ -22,7 +23,7 @@ func TestAvailableCardEndpoints(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			entry := config.ModelEntry{ModelName: tc.name, LiteLLMParams: map[string]any{"model": "real", "custom_llm_provider": "custom"}, ModelInfo: map[string]any{"transport": tc.transport, "endpoint_types": []string{tc.endpoint}}}
 			card := availableCard(entry)
-			bindings := card["endpoints"].([]provider.EndpointBinding)
+			bindings := card["endpoints"].([]providerdeployment.EndpointBinding)
 			if (len(bindings) > 0) != tc.valid {
 				t.Fatalf("模型端点状态错误: %+v", card)
 			}

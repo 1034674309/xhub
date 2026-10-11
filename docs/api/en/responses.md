@@ -1,11 +1,5 @@
 # Responses
 
-## Overview
-
-Responses
-
-### Responses
-
 ## Behavior
 POST /responses is an alias. Read output[].content. output_text is an SDK convenience, not a guaranteed raw field. Creation does not guarantee retrieval or cancellation routes.
 

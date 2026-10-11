@@ -2,9 +2,10 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"strings"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestGroupedModelWeights 验证按精确公开名称聚合、供应商搜索返回完整组、规范部署 ID 和凭据脱敏。

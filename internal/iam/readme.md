@@ -1,193 +1,84 @@
-# Identity resources and transactional accounting
+# Identity, authorization resources, quotas, and accounting
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../docs/development/implementation.md)
+[简体中文](readme_cn.md)
 
-## Responsibilities and behavior
+## Overview
 
-schema.sql defines persistence constraints. DB initialization coordinates application, session, and database timezone. Resource files manage users, memberships, keys, and templates; usage writers/readers handle accounting. HTTP role policy stays outside this package.
-Authentication uses fresh identity state. RecordUsage deduplicates request_id and transactionally writes events, logs, daily totals, and five scope views. Duplicate/concurrent settlement cannot charge again; failures cannot leave partial totals.
-Events preserve call-time ownership, provider, model, and pricing snapshots. Later membership, credential, or catalog changes do not rewrite history. Readers receive authorized query scopes. Test schemas isolate fixtures from live resources.
+`internal/iam` is the PostgreSQL-backed identity and accounting domain used by authentication, the management gateway, inference admission, and usage reporting. It owns users, organizations, teams, memberships, projects, API keys, route-template bindings, audit records, immutable usage events, request bodies, daily aggregates, budget spend, and RPM/TPM assignments. The package exposes Go methods only; HTTP authentication and role checks live in the gateway before these methods are called.
+
+The resource hierarchy is organization → team → user → key. Projects narrow team permissions but are not a separate parent in the quota tree. A person may belong to at most one team because billing and rate admission require one unambiguous ancestor path. Team service keys use a passwordless internal business owner so their user-level allocation is independent of the administrator who created the key. Plaintext passwords and keys are never persisted: passwords use bcrypt and keys are stored by hash, with plaintext returned only when a key is created or rotated.
+
+Usage is append-oriented and idempotent. A successful batch writes the immutable event, optional request/response log, daily aggregates, and spend on all applicable scopes in one transaction. The event stores ownership, provider/model, token counts, and the applied price snapshot from the time of the call; later membership or catalog changes do not rewrite history. Asynchronous jobs use a separate lifecycle that records one initial request and settles cost exactly once when the job completes.
+
+## External interfaces
+
+### Database lifecycle and errors
+
+`Open(ctx, dsn) (*DB, error)` opens pgx through xorm, applies `schema.sql`, and aligns application, xorm, connection-session, and PostgreSQL time zones. `Migrate` reapplies the idempotent schema and `Close` releases the pool. Database failures propagate; common constraint outcomes are normalized to `ErrNotFound`, `ErrConflict`, or `ErrInvalid`. `RecordAudit`, `ListAudit`, and `QueryAudit` write or page audit records. Search is applied before count and pagination, and display enrichment prefers immutable names captured in the audit detail before batch-loading current names.
+
+### Users, organizations, teams, projects, and keys
+
+`Bootstrap`, `EnsureAdmin`, `Login`, `CreateUser`, `GetUser`, `UserByEmail`, `UpdateProfile`, `SetPassword`, `AdminUpdateUser`, and `DeleteUser` implement account lifecycle. Inputs are normalized and validated; passwords are hashed; operations that would remove the last platform administrator are rejected. `ListUsersPage(UserListQuery)` intersects search/status/role/team/organization filters with the caller-supplied authorization scope, uses a whitelist for sort fields, clamps limit to 100 by default and 500 maximum, and returns `(rows, total, error)`. SSO filtering currently returns no rows because IAM stores no SSO identifier.
+
+Organization and team entry points include `CreateOrg(..., rates ...RateLimits)`, `UpdateOrg`, `CreateTeam`, `UpdateTeamProfile`, `AdminUpdateTeam(..., rates ...RatePatch)`, `MoveTeam`, and delete/list/get methods. Membership methods add, update, or remove organization administrators and team members while keeping at least one team administrator and rejecting a second team for the same person. Project methods enforce that project models and budget stay within the parent team. Mutations write audit records in their transaction; foreign-key or allocation failures roll the whole mutation back.
+
+`CreateKey` and `RotateKey` return `(key, plaintext, error)` and expose the secret once. `KeyByHash` is the authentication lookup; `ActiveKey`, `OwnedBy`, `TouchKey`, status/delete/reset methods, and filtered listing support gateway policy. `AllowedModelsForTeam` and `AllowedModelsForKey` intersect team, project, and key model sets; nil means no restriction at that level. `ParseExpiry` accepts the supported relative duration syntax and rejects malformed values. `ResetKeySpend` changes the live counter without deleting historical events.
+
+### Quota, rate, template, and usage APIs
+
+`QuotaPath(ctx, kind, id, hot)` returns `(teamID, organizationID, exhaustedScope, error)`. It reads the complete hierarchy, adds unflushed Redis spend through `hot`, reserves unused fixed child allocations, and reports the first exhausted scope on the target path. Missing parents, ambiguous memberships, and invalid allocations return errors. This is a pre-call admission check; a supplier's final charge can still exceed the last available balance.
+
+`ValidateRates` rejects negative or PostgreSQL-`INT`-overflowing RPM/TPM values. `RatePlan(ctx, kind, id)` returns a `live.RatePlan` containing the target path plus siblings and descendants whose fixed allocations reserve ancestor capacity. Missing nodes, ambiguous parents, and cycles fail. IAM is responsible for producing the valid acyclic indexes and path consumed directly by `live.CheckRatePlan` and `live.AdmitRatePlan`.
+
+Route-template APIs create, update, list, read, and delete JSON bodies and bind organization/team/project scopes. `Settings` turns malformed stored JSON into an empty settings document so one bad row cannot stop request routing. `RouteTemplateUsage` and `RouteTemplateUsageCounts` identify bindings; gateway handlers check usage before deletion. An empty binding restores inheritance.
+
+`RecordUsage(records)` validates the complete batch before writing, removes duplicate request IDs within the batch, and relies on the unique database request ID for cross-request/concurrent idempotency. It returns an error and rolls back every event, log, aggregate, and scope counter if any write fails. `RecordTaskUsage(record, initial, settle)` serializes one task with a PostgreSQL advisory transaction lock: initial creation counts one request with zero cost, polling updates status/body only, and the first completed settlement adds tokens and spend. Ownership and start time always come from the original event.
+
+`UsageQuery` carries both authorization scope and filters. `ListUsageSessions`, `ListUsage`, `CountUsage`, `GetUsageEvent`, `GetRequestLog`, `DailyUsage`, and model/key/team rollups put the authorization predicate into SQL before ordering, count, and pagination. `AuditLogRead` records privileged request-log access. SQL, decoding, and context errors propagate; empty result sets are returned as empty slices, while single-record lookups return `ErrNotFound`.
+
+### Actual HTTP registration and callers
+
+This directory does not mount HTTP handlers. `internal/gateway/identity/mount.go` maps the APIs to `/user/*`, `/organization/*`, `/team/*`, `/project/*`, `/route_template/*`, and `GET /audit/logs`; login/bootstrap handlers in `internal/gateway/routes.go` also call IAM. `internal/gateway/keys/mount.go` registers key generation, service-key creation, list/info, update, block/unblock, delete, bulk, rotate/reset, aliases, and key health endpoints. `internal/gateway/usage/mount.go` registers spend logs and detail, session/global reports, daily activity, model/key/team/provider/tag rollups, cost calculation, and health endpoints. Gateway middleware supplies the actor and authorized scope and maps IAM errors to HTTP status codes. Inference authentication calls key/user/model checks, `QuotaPath`, and `RatePlan`; the live spend flusher calls `RecordUsage`.
+
+## Core implementation
+
+### Transactions, constraints, and time
+
+`DB.tx` binds context, begins a transaction, rolls back on callback or commit failure, and commits only after every domain write succeeds. Resource mutations lock the affected user, organization, or team where concurrent allocation changes matter. `schema.sql` supplies unique request IDs, membership and binding foreign keys, checks, indexes, aggregate tables, and audit storage. The connection string receives a named session zone and the server receives the matching POSIX zone so application-created timestamps and `DEFAULT now()` round-trip to the same instant, including UTC+8 deployments.
+
+### Budget and rate allocation
+
+`quotaTree` loads organizations, teams, users, memberships, and keys and links them into one forest. Fixed budget children reserve `max(limit-spend, 0)`; shared children pass the sum of fixed descendant reservations upward. `validateQuota` checks only the changed node and its ancestors, which permits an already-invalid legacy tree to be repaired incrementally without blocking unrelated branches. At admission time `QuotaPath` applies hot Redis spend to both the path and reservation calculations and credits the target child's own reservation so it is not blocked by capacity allocated to itself.
+
+RPM and TPM use the same topology. `rateAllocated` sums fixed children and passes fixed descendants through shared nodes; zero is a real limit and nil means shared/unset. `buildRatePlan` walks the target to its root with cycle and parent validation, then includes the complete rooted component so sibling reservations remain visible. It sorts node IDs for stable indexes and emits the target path from narrowest to broadest. Configuration updates validate nonnegative values and parent allocation inside the same transaction.
+
+### Identity invariants and audit snapshots
+
+Email normalization is case-insensitive, passwords use bcrypt, and role conversion keeps storage roles separate from console compatibility names. Membership writes require active users, prevent multiple team ownership paths, preserve the last team/platform administrator, and revoke affected personal keys when ownership is removed. Model and budget narrowing computes intersections/ceilings across team, project, and key. Audit writes capture actor/object identity where available; reads never widen authorization to enrich a name, and deleted resources can therefore remain unnamed.
+
+### Usage accounting and failure boundaries
+
+`RecordUsage` first rejects missing IDs, negative/non-finite prices, invalid token counts, and malformed timestamps before opening the transaction. `insertEvent` determines whether a request is new; only new events create logs, increment daily request counts, and add spend to organization, team, project, user, and key. All aggregates use the event's captured ownership and day. A database error leaves no partial counters. Redis queue acknowledgement happens only after this transaction commits, while database request-ID uniqueness makes replay after a crash safe.
+
+Task accounting locks on a hash of request ID even before a row exists. Repeated initial calls are no-ops; polling cannot add request count or spend; failed tasks cannot return to an executing state; settlement requires `completed` and a matching key/user/model. A zero-cost completed result is still marked settled. Usage readers construct authorized SQL first, then add caller filters, deterministic ordering, totals, and page limits; local-day reports shift timestamps by the requested minute offset.
+
+### Dependencies and verification
+
+The package depends on PostgreSQL/pgx/xorm, bcrypt, `internal/live` for rate-plan types, and `internal/util`. Unit and regression tests cover time-zone setup, key expiry and personal keys, quota/rate allocation, user pagination, route templates, audit filtering/snapshots, usage pagination/idempotency, and task lifecycle. Database tests need an available PostgreSQL test DSN and may skip when it is absent; Redis behavior is tested in `internal/live`, and external identity providers and model suppliers are outside this package.
 
 ## Source responsibilities and entry points
 
-### db.go
-
-Exported types: `DB`, `Actor`, `Audit`, `AuditFilter`.
-
-- [`func Open(ctx context.Context, dsn string) (*DB, error)`](db.go) — Open connects with the pgx driver and applies the schema. The engine keeps xorm's default time zones — DatabaseTZ and TZLocation both Local — and they must agree with the session zone. xorm formats atime.Time into the database zone on the way in and re-labels the value it reads back into the application zone, while pgx returns the instant in the session zone. Pinning any one of the three to UTC while the others stayed Local made stored timestamps land eight hours off on a UTC+8 machine: created _at and updated_at disagreed with columns PostgreSQL filled in itself, because DEFAULT now() is computed by the server and never passes through this conversion. Setting all three together is what makes the round trip lossless. It matters that the session zone is named explicitly rather than left tot
-- [`func (db *DB) Migrate(ctx context.Context) error`](db.go) — Migrate creates every table and constraint; idempotent on the new schema.
-- [`func (db *DB) Close() error`](db.go) — Close releases the engine.
-- [`func (db *DB) RecordAudit(ctx context.Context, a Actor, e Audit) error`](db.go) — RecordAudit writes an audit row outside a larger transaction, e.g. when a platform administrator reads someone else's request log.
-- [`func (db *DB) ListAudit(ctx context.Context, limit, offset int) ([]AuditEntry, error)`](db.go) — ListAudit returns the newest rows first.
-- [`func (db *DB) QueryAudit(ctx context.Context, filter AuditFilter, limit, offset int) ([]AuditEntry, int64, error)`](db.go) — QueryAudit returns matching rows and their total, newest first.
-
-### audit_display.go
-
-`enrichAudit` fills actor and object display names only after authorization and pagination. Immutable `actor_name`, `actor_email`, and `object_name` snapshots in the audit detail take precedence over current names; rows without snapshots use batched lookups for the current page across users, organizations, teams, projects, keys, and route templates. Deleted objects can remain unnamed rather than broadening scope. `applyAuditSearch` applies the same identity, event, and name predicates before counting and pagination. Its `strpos` predicates treat `%` and `_` literally. These functions implement `QueryAudit` and do not add an HTTP endpoint.
-
-### keys.go
-
-Exported types: `Key`, `APIKey`, `KeyInput`, `KeyFilter`.
-
-- [`func (APIKey) TableName() string`](keys.go) — 告诉 xorm 这个结构体对应数据库表 api_keys。
-- [`func (k *Key) ActiveKey() bool`](keys.go) — ActiveKey reports a key that may be used: not blocked, not revoked, not expired.
-- [`func (k *Key) OwnedBy(userID string) bool`](keys.go) — OwnedBy reports whether the key belongs to this person.
-- [`func HashKey(plain string) string`](keys.go) — HashKey hashes a plaintext key for storage and lookup.
-- [`func NewPlainKey() string`](keys.go) — NewPlainKey returns a new sk-... credential.
-- [`func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, string, error)`](keys.go) — CreateKey stores a key and returns it with the plaintext, which is shown once.
-- [`func (db *DB) RotateKey(ctx context.Context, by Actor, id string) (*Key, string, error)`](keys.go) — RotateKey replaces the secret and returns the new plaintext once.
-- [`func (db *DB) DeleteKey(ctx context.Context, by Actor, id string) error`](keys.go) — DeleteKey removes a key.
-- [`func (db *DB) SetKeyStatus(ctx context.Context, by Actor, id, status string) (*Key, error)`](keys.go) — SetKeyStatus blocks or unblocks a key.
-- [`func (db *DB) UpdateKey(ctx context.Context, by Actor, id string, in KeyInput) (*Key, error)`](keys.go) — UpdateKey changes the narrowing and limits of an existing key. Narrowing may never exceed what the team (and project) grants.
-- [`func (db *DB) GetKey(ctx context.Context, id string) (*Key, error)`](keys.go) — GetKey loads one key with its narrowing.
-- [`func (db *DB) KeyByHash(ctx context.Context, hash string) (*Key, error)`](keys.go) — KeyByHash loads a key by credential hash for authentication.
-- [`func (db *DB) ListKeys(ctx context.Context, f KeyFilter) ([]Key, error)`](keys.go) — ListKeys returns keys inside the filter, newest first.
-- [`func (db *DB) TouchKey(ctx context.Context, id string) error`](keys.go) — TouchKey records the last use of a key.
-- [`func (db *DB) RevokeTeamKeys(ctx context.Context, by Actor, teamID string) error`](keys.go) — RevokeTeamKeys ends every key of a team; used when a team is blocked.
-- [`func (db *DB) AllowedModelsForTeam(ctx context.Context, teamID string) ([]string, error)`](keys.go) — AllowedModelsForTeam is the team's model set, used before a key exists. A nil result means the team has no restriction of its own.
-- [`func (db *DB) AllowedModelsForKey(ctx context.Context, k *Key) ([]string, error)`](keys.go) — AllowedModelsForKey is the key's effective model set; the catalog and the inference path both call it so a listed model is always a usable model.
-- [`func KeyNameFromPlain(plain string) string`](keys.go) — KeyNameFromPlain derives a display name from a credential.
-- [`func ParseExpiry(d string) (*time.Time, error)`](keys.go) — ParseExpiry turns a relative duration such as 30s, 30m, 30h or 30d into the absolute instant it names, counted from now. An empty value is "no expiry" and returns nil. Anything else is an error, so atypo never becomes a key that never expires.
-- [`func (db *DB) ResetKeySpend(ctx context.Context, by Actor, id string, to float64) (*Key, error)`](keys.go) — ResetKeySpend sets a key's spend back to zero, or to the given value. The usage events behind the old figure stay, so history is never rewritten.
-
-### models.go
-
-Exported types: `Time`, `User`, `Organization`, `Team`, `TeamMembership`, `OrganizationMembership`, `Project`, `AuditEntry`.
-
-- [`func (User) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 users。
-- [`func (u *User) Active() bool`](models.go) — Active reports an account that may sign in and use keys.
-- [`func (u *User) Admin() bool`](models.go) — Admin reports an active platform administrator.
-- [`func (Organization) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 organizations。
-- [`func (Team) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 teams。
-- [`func (TeamMembership) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 team_members。
-- [`func (OrganizationMembership) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 organization_members。
-- [`func (Project) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 projects。
-- [`func (AuditEntry) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 audit_logs。
-- [`func (bootstrapState) TableName() string`](models.go) — 告诉 xorm 这个结构体对应数据库表 bootstrap_state。
-
-### route_template.go
-
-Exported types: `TemplateOwner`, `RouteTemplate`, `TemplateUsage`.
-
-- [`func (RouteTemplate) TableName() string`](route_template.go) — TableName tells xorm which table these rows live in.
-- [`func (t RouteTemplate) Settings() map[string]any`](route_template.go) — Settings parses the body into a router settings document. A body that does not parse is reported as an empty document rather than failing the caller: the alternative is a single malformed row taking down every request that inherits it, and an empty document is exactly the platform behaviour.
-- [`func (db *DB) ListRouteTemplates(ctx context.Context) ([]RouteTemplate, error)`](route_template.go) — ListRouteTemplates returns every template by name.
-- [`func (db *DB) GetRouteTemplate(ctx context.Context, id string) (*RouteTemplate, error)`](route_template.go) — GetRouteTemplate loads one template by id.
-- [`func (db *DB) CreateRouteTemplate(ctx context.Context, by Actor, owner TemplateOwner, name, body string) (*RouteTemplate, error)`](route_template.go) — CreateRouteTemplate inserts a template. The name must be free.
-- [`func (db *DB) UpdateRouteTemplate(ctx context.Context, by Actor, id, name, body string) (*RouteTemplate, error)`](route_template.go) — UpdateRouteTemplate replaces a template's name and body.
-- [`func (db *DB) DeleteRouteTemplate(ctx context.Context, by Actor, id string) error`](route_template.go) — DeleteRouteTemplate removes a template. Refusing while a scope still selects it is enforced by the caller, which reads the usage list first and reports where. Doing it here as well would put a user-facing explanation inside the store.
-- [`func (db *DB) RouteTemplateUsage(ctx context.Context, id string) ([]TemplateUsage, error)`](route_template.go) — RouteTemplateUsage lists every scope currently selecting a template. It is three queries rather than one join because the three scopes live in three tables with no common parent beyond the id. Each is indexed on the column, so this is cheap even though it looks like a fan-out.
-- [`func (db *DB) RouteTemplateUsageCounts(ctx context.Context) (map[string]int, error)`](route_template.go) — RouteTemplateUsageCounts returns how many scopes select each template, keyed by template id. The list screen shows the count, and computing it here keeps that screen from running one usage query per row.
-- [`func (db *DB) SetScopeRouteTemplate(ctx context.Context, by Actor, scope, scopeID, templateID string) error`](route_template.go) — SetScopeRouteTemplate points one scope at a template, or clears it when id is empty. Clearing is what puts the scope back on inheritance. The scope is addressed as a table plus a column-safe id rather than through three separate functions, because the only difference between them is the table name and an id column that is spelled the same in all three.
-- [`func (db *DB) ScopeRouteTemplate(ctx context.Context, scope, scopeID string) (string, error)`](route_template.go) — ScopeRouteTemplate reads one scope's selected template id. An empty string means the scope selects nothing and inherits.
-
-### teams.go
-
-Exported types: `OrgUpdate`, `TeamInput`, `TeamWithRole`, `Membership`, `Member`, `ProjectInput`.
-
-- [`func (db *DB) CreateOrg(ctx context.Context, by Actor, name string, maxBudget *float64) (*Organization, error)`](teams.go) — CreateOrg inserts an organization.
-- [`func (db *DB) OrgsByIDs(ctx context.Context, ids []string) (map[string]Organization, error)`](teams.go) — OrgsByIDs loads the organizations named by ids. An empty list is an empty map, not every organization.
-- [`func (db *DB) GetOrg(ctx context.Context, id string) (*Organization, error)`](teams.go) — GetOrg loads one organization.
-- [`func (db *DB) ListOrgs(ctx context.Context, userID string) ([]Organization, error)`](teams.go) — ListOrgs returns every organization, or only those that own one of the user's teams when userID is set.
-- [`func (db *DB) UpdateOrg(ctx context.Context, by Actor, id string, in OrgUpdate) (*Organization, error)`](teams.go) — UpdateOrg applies an OrgUpdate.
-- [`func (db *DB) DeleteOrg(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteOrg refuses while teams remain (foreign key RESTRICT).
-- [`func (db *DB) CreateTeam(ctx context.Context, by Actor, in TeamInput) (*Team, error)`](teams.go) — CreateTeam inserts the team and its first team_admin in one transaction.
-- [`func (db *DB) TeamsByIDs(ctx context.Context, ids []string) (map[string]Team, error)`](teams.go) — TeamsByIDs loads the teams named by ids. An empty list is an empty map, not every team.
-- [`func (db *DB) GetTeam(ctx context.Context, id string) (*Team, error)`](teams.go) — GetTeam loads one team.
-- [`func (db *DB) ListTeams(ctx context.Context, userID, organizationID string) ([]TeamWithRole, error)`](teams.go) — ListTeams returns every team for a platform administrator (userID empty), or just the user's teams with their role.
-- [`func (db *DB) UpdateTeamProfile(ctx context.Context, by Actor, id string, name, description *string) (*Team, error)`](teams.go) — UpdateTeamProfile is what a team administrator may change.
-- [`func (db *DB) AdminUpdateTeam(ctx context.Context, by Actor, id string, status *string, maxBudget **float64, models *[]string) (*Team, error)`](teams.go) — AdminUpdateTeam changes status, budget and model set; platform administrators only. The model list sits at this level rather than at the team administrator's because it is the team's ceiling: a team administrator who could widen it would be granting their own team reach the platform did not give them.
-- [`func (db *DB) MoveTeam(ctx context.Context, by Actor, id, organizationID string) (*Team, error)`](teams.go) — MoveTeam re-parents a team. Access-group assignments from the previous organization are removed first, which cascades to project and key narrowing; a failure leaves everything untouched.
-- [`func (db *DB) DeleteTeam(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteTeam cascades to members, projects, keys and access-group assignments.
-- [`func (db *DB) MemberTeams(ctx context.Context, userID string) ([]Membership, error)`](teams.go) — MemberTeams returns the user's memberships with the team role and the team's organization. This is the only membership source the authorization layer reads: there is no mirror of members anywhere else
-- [`func (db *DB) ListOrgAdmins(ctx context.Context, orgID string) ([]Member, error)`](teams.go) — ListOrgAdmins returns the organization administrators with public account fields.
-- [`func (db *DB) AddOrgAdmin(ctx context.Context, by Actor, orgID, email string) (*Member, error)`](teams.go) — AddOrgAdmin grants organization administration to an existing active account, found by exact email. An unknown and a disabled account both return ErrNotFound. Granting it again is a no-op success.
-- [`func (db *DB) RemoveOrgAdmin(ctx context.Context, by Actor, orgID, userID string) error`](teams.go) — RemoveOrgAdmin revokes organization administration. An organization may have no administrator: a platform administrator still reaches it.
-- [`func (db *DB) ListVisibleTeams(ctx context.Context, userID, organizationID string) ([]TeamWithRole, error)`](teams.go) — ListVisibleTeams returns the teams a person may see: the ones they belong to, plus every team in an organization they administer. The role is their team role, empty when they administer the organization without joining the team.
-- [`func (db *DB) OversightTeamIDs(ctx context.Context, userID string) ([]string, error)`](teams.go) — OversightTeamIDs lists the teams whose contents this person may see in full: teams they administer, and every team in an organization they administer. Membership alone does not put a team here.
-- [`func (db *DB) TeamIDsByOrg(ctx context.Context, orgIDs []string) ([]string, error)`](teams.go) — TeamIDsByOrg lists every team that belongs to one of the organizations.
-- [`func (db *DB) AdminOrgs(ctx context.Context, userID string) ([]string, error)`](teams.go) — AdminOrgs 列出这个用户担任管理员的组织 id。没有这种组织时为空切片。
-- [`func (db *DB) SetOrgAdmin(ctx context.Context, by Actor, orgID, userID string, admin bool) error`](teams.go) — SetOrgAdmin grants or revokes organization administration for one person.
-- [`func (db *DB) OrgAdmins(ctx context.Context, orgID string) ([]string, error)`](teams.go) — OrgAdmins lists the people who administer one organization.
-- [`func (db *DB) Memberships(ctx context.Context, userID string) (map[string]string, error)`](teams.go) — Memberships returns team ID → team role, for callers that only need the role.
-- [`func (db *DB) ListMembers(ctx context.Context, teamID string) ([]Member, error)`](teams.go) — ListMembers returns the team's members with public account fields only.
-- [`func (db *DB) AddMember(ctx context.Context, by Actor, teamID, email, role string) (*Member, error)`](teams.go) — AddMember adds an existing active account by exact email. An unknown and a disabled account both return ErrNotFound, so callers cannot enumerate users.
-- [`func (db *DB) SetMemberRole(ctx context.Context, by Actor, teamID, userID, role string) error`](teams.go) — SetMemberRole changes a team role, protecting the last team_admin.
-- [`func (db *DB) RemoveMember(ctx context.Context, by Actor, teamID, userID string) error`](teams.go) — RemoveMember deletes a membership and revokes the user's personal keys bound to this team, protecting the last team_admin.
-- [`func (db *DB) GetProject(ctx context.Context, id string) (*Project, error)`](teams.go) — GetProject loads one project with its organization derived from the team.
-- [`func (db *DB) ListProjects(ctx context.Context, teamIDs []string) ([]Project, error)`](teams.go) — ListProjects returns the projects of the given teams, or of every team when teamIDs is nil (platform administrators). An empty, non-nil list returns nothing rather than everything.
-- [`func (db *DB) CreateProject(ctx context.Context, by Actor, in ProjectInput) (*Project, error)`](teams.go) — CreateProject inserts a project narrowed within its team's grants.
-- [`func (db *DB) UpdateProject(ctx context.Context, by Actor, id string, in ProjectInput) (*Project, error)`](teams.go) — UpdateProject replaces name, status, narrowing and budget.
-- [`func (db *DB) DeleteProject(ctx context.Context, by Actor, id string) error`](teams.go) — DeleteProject cascades to the project's keys.
-
-### usage.go
-
-Exported types: `UsageEvent`, `RequestLog`, `UsageDaily`, `UsageRecord`.
-
-- [`func (UsageEvent) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 usage_events。
-- [`func (RequestLog) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 request_logs。
-- [`func (UsageDaily) TableName() string`](usage.go) — 告诉 xorm 这个结构体对应数据库表 usage_daily。
-- [`func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error`](usage.go) — RecordUsage writes the event, its stored request/response, the daily roll-up and the live spend counters in one transaction. The batch is idempotent on request_id. A retried flush, or a second gateway process replaying the same Redis entry, inserts the event once and therefore increments everything else once. The existence check and the increments share the transaction so a partial replay cannot double-count.
-
-### usage_read.go
-
-Exported types: `UsageQuery`, `DailyRow`, `DailyByModelRow`, `KeySpendRow`, `TeamSpendRow`.
-
-- [`func (db *DB) ListUsage(ctx context.Context, q UsageQuery) ([]UsageEvent, error)`](usage_read.go) — ListUsage returns usage events inside the scope, newest first. A missing limit is a page of logs. A caller that names a limit gets that many rows, capped here. Clamping an over-large limit down to a small page would make the usage screen report a sample as the whole window.
-- [`func (db *DB) CountUsage(ctx context.Context, q UsageQuery) (int64, error)`](usage_read.go) — CountUsage counts the events inside the scope, for paging.
-- [`func (db *DB) GetUsageEvent(ctx context.Context, q UsageQuery, requestID string) (*UsageEvent, error)`](usage_read.go) — GetUsageEvent loads one event inside the scope. A row outside the scope is reported as not found rather than forbidden, so a caller cannot probe which request ids exist.
-- [`func (db *DB) GetRequestLog(ctx context.Context, requestID string) (*RequestLog, error)`](usage_read.go) — GetRequestLog loads the stored bodies of one event that is already inside the scope. The caller checks the scope with GetUsageEvent first.
-- [`func (db *DB) DailyUsage(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyRow, error)`](usage_read.go) — DailyUsage totals the roll-up per day inside the scope.
-- [`func (db *DB) DailyUsageByModel(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyByModelRow, error)`](usage_read.go) — DailyUsageByModel totals the roll-up per day and model inside the scope.
-- [`func (db *DB) RollupByModel(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyByModelRow, error)`](usage_read.go) — RollupByModel totals the roll-up per model inside the scope, for the per-model table the usage page shows.
-- [`func (db *DB) RollupByKey(ctx context.Context, q UsageQuery, tzMinutes int) ([]KeySpendRow, error)`](usage_read.go) — RollupByKey totals the roll-up per key inside the scope. The display name is a correlated subquery rather than a join, so the grouped table stays the only source of rows and the scope cannot widen orduplicate them. A key that was deleted since keeps its spend: the roll-up carries the id, and the name falls back to it.
-- [`func (db *DB) RollupByTeam(ctx context.Context, q UsageQuery, tzMinutes int) ([]TeamSpendRow, error)`](usage_read.go) — RollupByTeam totals the roll-up per team inside the scope, with the same correlated-subquery shape as RollupByKey.
-- [`func (db *DB) AuditLogRead(ctx context.Context, by Actor, requestID string, e UsageEvent) error`](usage_read.go) — AuditLogRead records that an actor read a log they do not own. The caller writes this before returning the row: the access is the event, not the row.
-
-### users.go
-
-Exported types: `UserInput`, `UserUpdate`.
-
-- [`func (db *DB) Bootstrapped(ctx context.Context) (bool, error)`](users.go) — Bootstrapped reports whether the first platform administrator exists.
-- [`func (db *DB) Bootstrap(ctx context.Context, email, name, password string) (*User, error)`](users.go) — Bootstrap creates the first platform administrator exactly once.
-- [`func (db *DB) UserByEmail(ctx context.Context, email string) (*User, error)`](users.go) — UserByEmail loads one account by its address, case-insensitively.
-- [`func (db *DB) EnsureAdmin(ctx context.Context, email, name, password string) (bool, error)`](users.go) — EnsureAdmin creates a platform administrator from configuration if no account with that address exists yet, and reports whether it created one. It deliberately never updates an existing row. The configured password is an initial password: an operator who changes the YAML after the first start expects the running account to keep the password it has, not to have it silently reset by a config file that may sit in a repository. Changing a live password is a write against the account, not a deployment side effect. An empty email or password is not an error here; it means the deployment has not configured seeding, and the caller falls back to POST /bootstrap.
-- [`func (db *DB) CreateUser(ctx context.Context, by Actor, in UserInput) (*User, error)`](users.go) — CreateUser inserts a platform account together with the memberships the caller asked for, in one transaction. The memberships are written only after the account row exists, and a failure to write anyof them rolls the whole thing back: an account that came out of a failed create would be one nobody intended to make. The budget is stored as given; nil means no ceiling rather than zero, which is the difference between "unlimited" and "cannot spend anything".
-- [`func (db *DB) UsersByIDs(ctx context.Context, ids []string) (map[string]User, error)`](users.go) — UsersByIDs loads the accounts named by ids. An empty list is an empty map, not every account. Callers use it to label rows they have already scoped.
-- [`func (db *DB) GetUser(ctx context.Context, id string) (*User, error)`](users.go) — GetUser loads one account.
-- [`func (db *DB) ListScopedUsers(ctx context.Context, self string, teamIDs []string, query string, limit, offset int) ([]User, error)`](users.go) — ListScopedUsers lists the caller and the accounts that belong to the teams they oversee. An empty team list returns only the caller.
-- [`func (db *DB) ListUsers(ctx context.Context, query string, limit, offset int) ([]User, error)`](users.go) — ListUsers is the platform administrator's directory.
-- [`func (db *DB) Login(ctx context.Context, email, password string) (*User, error)`](users.go) — Login checks a password. A disabled account and a wrong password both return ErrNotFound so callers cannot tell the cases apart. The identifier is an email, or, when it contains no @, the display name or the part of the address before @. The console's username field is free text, and the configured administrator is often typed as "admin" rather than "admin@xhub.local". A name that matches more than one account is refused, the same as a missing account, so the response still cannot enumerate users.
-- [`func ConsoleRole(role string) string`](users.go) — ConsoleRole is the role name the admin UI understands. The row stores admin or user. The console only treats proxy_admin as a platform administrator, so a session that carries the stored spelling is shown as an unknown role and every admin-only query is narrowed to that one user.
-- [`func StoreRole(role string) string`](users.go) — StoreRole maps a role the console sent back onto the stored spelling. An empty value is a normal user, which is what the account form sends when the picker is left on its default.
-- [`func (db *DB) UpdateProfile(ctx context.Context, by Actor, id, name string) (*User, error)`](users.go) — UpdateProfile changes display fields only.
-- [`func (db *DB) SetPassword(ctx context.Context, by Actor, id, password string) error`](users.go) — SetPassword replaces the password and ends existing sessions.
-- [`func (db *DB) AdminUpdateUser(ctx context.Context, by Actor, id string, in UserUpdate) (*User, error)`](users.go) — AdminUpdateUser changes role, status, email or budget in one transaction. A role or status change ends the user's sessions; disabling also revokes every personal key.
-- [`func (db *DB) DeleteUser(ctx context.Context, by Actor, id string) error`](users.go) — DeleteUser removes an account; memberships and personal keys cascade, but the delete is refused while the user is a team's last team_admin.
-
-Resources and persistence definitions: [schema.sql](schema.sql).
-
-## External HTTP boundary
-
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
-
-## Dependencies
-
-[internal/logx](../logx/readme.md).
-
-## Verification and maintenance
-
-
-| Test file | Scenario entry points |
-| --- | --- |
-| [audit_test.go](audit_test.go) | TestQueryAuditFiltersBeforePagination, TestAuditNamesSurviveRenameAndDeletion: filtering before pagination and historical names after changes. |
-| [db_zone_test.go](db_zone_test.go) | `TestSessionZoneIsNamedOnTheConnection`, `TestServerZoneUsesThePosixSign`, `TestSessionZoneIsAppliedByTheServer`, `TestSessionZoneSurvivesAnUnparseableDSN` |
-| [route_template_test.go](route_template_test.go) | `TestTemplateBodyRoundTripsAsRouterSettings`, `TestTemplateWithAnUnreadableBodyFallsBackToEmpty`, `TestTemplateNamesAreUnique`, `TestRenameKeepsTheTemplateUsable`, `TestScopeSelectionRoundTrips`, `TestBindingRefusesAnUnknownTemplate`, `TestBindingRefusesAnUnknownScopeName`, `TestUsageListsEveryScopeThatSelectsTheTemplate`, `TestDeletingATemplateInUseIsRefusedByTheCaller`, `TestDeletingAMissingTemplateReportsIt`, `TestListRouteTemplatesIsOrderedByName`, `TestADanglingTemplateIdIsRejectedByTheDatabase` |
-| [usage_idempotency_test.go](usage_idempotency_test.go) | `TestRecordUsageRejectsInvalidBatchBeforeWriting`, `TestRecordUsageConcurrentSettlement`, `TestRecordUsageIsIdempotentOnRequestID`, `TestRecordUsageDropsDuplicatesWithinOneBatch`, `TestRecordUsageCountsDistinctRequests`, `TestRecordUsageRollsBackTheWholeBatch` |
-| [users_test.go](users_test.go) | `TestEnsureAdminCreatesTheConfiguredAccount`, `TestConsoleRoleIsWhatTheAdminUIReads`, `TestEnsureAdminNeverRewritesAnExistingAccount`, `TestEnsureAdminIsANoOpWhenUnconfigured`, `TestEnsureAdminMarksThePlatformInitialised`, `TestEnsureAdminRejectsAShortPassword` |
-
-```bash
-go test ./internal/iam -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+- [`audit_display.go`](audit_display.go) implements private audit text extraction, pre-pagination search predicates, and post-authorization batched display-name enrichment used by `QueryAudit`.
+- [`db.go`](db.go) defines `DB`, normalized domain errors, `Open`/`Migrate`/`Close`, transaction/session and time-zone helpers, `Actor`/`Audit`/`AuditFilter`, audit writes, and audit list/query entry points.
+- [`keys.go`](keys.go) defines key records and inputs, secret generation/hash/rotation, lifecycle and filters, model intersections, budget ceilings, expiry parsing, team-key revocation, and spend reset. Authentication enters through `KeyByHash`; management enters through create/update/list/status/delete methods.
+- [`models.go`](models.go) defines persisted user, organization, team, membership, project, audit, and bootstrap records, status/role constants, table mappings, active/admin predicates, and UUID generation.
+- [`quota.go`](quota.go) builds and validates the private quota tree, computes fixed-child reservations and rate allocation, enforces one-team ownership, creates service-key business owners, and exposes `QuotaPath`, `ErrQuotaAllocation`, and `ErrMultipleTeams`.
+- [`rates.go`](rates.go) defines `RateLimits`, patch semantics that distinguish omitted from explicit clear, numeric validation, `RatePlan`, and the private stable rooted-plan builder consumed by `internal/live`.
+- [`route_template.go`](route_template.go) defines template ownership/storage, JSON settings decoding, CRUD, binding validation, scope-table selection, and usage listing/counting.
+- [`task_usage.go`](task_usage.go) implements the advisory-lock task lifecycle and exactly-once completed settlement through `RecordTaskUsage`.
+- [`teams.go`](teams.go) implements organization/team CRUD, visibility and administrator queries, membership invariants, project CRUD, hierarchy locks, model/budget narrowing, rate patches, and transactional audit writes.
+- [`usage.go`](usage.go) defines events, request logs, daily rows, and `UsageRecord`; `RecordUsage` and private insert/log/daily/scope helpers implement atomic idempotent accounting.
+- [`usage_read.go`](usage_read.go) defines authorized `UsageQuery`, sessions and aggregate result types, SQL scope/filter/order builders, event/log lookup, daily reports, rollups, and privileged-read auditing.
+- [`user_pagination.go`](user_pagination.go) defines `UserListQuery`, authorization-aware directory SQL, sort whitelist, limit/offset normalization, and `ListUsersPage`.
+- [`users.go`](users.go) implements bootstrap, login and bcrypt handling, role conversion, account CRUD, scoped/simple lists, locking, last-admin protection, and profile/password/admin updates.
+- [`schema.sql`](schema.sql) is the idempotent PostgreSQL schema for all IAM resources, constraints, indexes, usage aggregates, request logs, audit records, route-template bindings, and bootstrap state; `Open` and `Migrate` execute it.

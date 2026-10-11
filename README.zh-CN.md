@@ -82,7 +82,7 @@ XHub 面向企业建设统一的 **AI 接入与治理平台**，将多模型与�
 
 对适用的 Chat/Responses 文本执行关键词、RE2 正则、密钥特征检测与 XGo 自定义脚本。规则可以默认启用或按需调用，按优先级执行拦截、脱敏、修改或非阻断标记，并记录实际执行结果。
 
-XGo 护栏可使用 HTTP、JSON 和 LLM 调用组合业务检查。已有适配器可连接 OpenAI Moderation、Lakera、Azure、Bedrock、Presidio，以及远端 LiteLLM 护栏。控制台支持草稿调试、配置校验与规则管理；当前执行阶段为调用前检查，覆盖范围见[护栏指南](docs/development/guardrails.md)。
+XGo 护栏可使用 HTTP、JSON 和 LLM 调用组合业务检查。已有适配器可连接 OpenAI Moderation、Lakera、Azure、Bedrock、Presidio，以及远端 LiteLLM 护栏。控制台支持草稿调试、配置校验与规则管理；当前执行阶段为调用前检查，覆盖范围见[护栏指南](docs/development/zh-CN/guardrails.md)。
 
 ### Agent 与会话：管理连续调用的上下文与费用
 
@@ -94,7 +94,7 @@ Playground 支持流式与非流式调用、会话续接和完整 curl 示例，
 
 按部署声明和实现能力接入图片生成/编辑、语音生成/转写、Embedding、Rerank 等操作；视频任务提供火山方舟、七牛 Seedance 与已登记 Fal 队列传输。具体协议、模型和计价支持范围以部署为准。
 
-支持的异步任务可创建并查询状态，关联原始请求、终态结果与用量；日志可展示执行中、完成或失败状态，重复完成查询执行结算去重。各供应商的任务操作与计价边界见[运行参考](docs/development/runtime.md)及[七牛 Fal 扩展](docs/development/qiniu-fal.md)。
+支持的异步任务可创建并查询状态，关联原始请求、终态结果与用量；日志可展示执行中、完成或失败状态，重复完成查询执行结算去重。各供应商的任务操作与计价边界见[运行参考](docs/development/zh-CN/runtime.md)及[七牛 Fal 扩展](docs/development/zh-CN/qiniu-fal.md)。
 
 ### 运行管理：从接入验证到问题定位
 
@@ -247,21 +247,21 @@ SDK 连接 **4000 端口的网关**；3000 端口提供 Web 控制台。集成�
 | --- | --- |
 | [安装与运行指南](docs/getting-started.zh-CN.md) | Docker、源码运行、首次调用与部署配置 |
 | [客户使用与管理手册](docs/user-guide.zh-CN.md) | 模型接入、成员与密钥、路由、费用及排障 |
-| [权限规则](docs/development/permissions.md) | 平台、组织、团队和成员的权限与可见范围 |
-| [运行行为与限制](docs/development/runtime.md) | 预算、协议、缓存、幂等与多实例部署边界 |
+| [权限规则](docs/development/zh-CN/permissions.md) | 平台、组织、团队和成员的权限与可见范围 |
+| [运行行为与限制](docs/development/zh-CN/runtime.md) | 预算、协议、缓存、幂等与多实例部署边界 |
 | [文档索引](docs/README.zh-CN.md) | 使用指南与实现参考 |
-| [开发与 AI 编程指南](docs/development/README.md) | 代码导航、关键约束及修改验证 |
-| [测试指南](docs/development/testing.md) | 单元测试、后台回归与浏览器 E2E |
+| [开发与 AI 编程指南](docs/development/zh-CN/README.md) | 代码导航、关键约束及修改验证 |
+| [测试指南](docs/development/zh-CN/testing.md) | 单元测试、后台回归与浏览器 E2E |
 
 安装和客户手册提供中英文版本。集中开发参考使用中文，各模块的 `readme.md` / `readme_cn.md` 提供双语代码说明。
 
 ## 项目状态与部署参考
 
-XHub 正在持续迭代。生产选型请结合[运行行为参考](docs/development/runtime.md)、[权限规则](docs/development/permissions.md)与[护栏指南](docs/development/guardrails.md)核对所需能力。预算没有请求费用预占，多实例的共享限额、缓存与幂等存在实现边界；实际费用需与供应商账单核对。当前账号登录与分级权限不包含 SSO/SCIM，本仓库不承诺商业 SLA 或合规认证。
+XHub 正在持续迭代。生产选型请结合[运行行为参考](docs/development/zh-CN/runtime.md)、[权限规则](docs/development/zh-CN/permissions.md)与[护栏指南](docs/development/zh-CN/guardrails.md)核对所需能力。预算没有请求费用预占，多实例的共享限额、缓存与幂等存在实现边界；实际费用需与供应商账单核对。当前账号登录与分级权限不包含 SSO/SCIM，本仓库不承诺商业 SLA 或合规认证。
 
 ## 参与贡献
 
-XHub 正在持续迭代。欢迎带着企业使用场景[提交 Issue](https://github.com/sunqirui1987/xhub/issues)、改进文档或发起 Pull Request。修改代码前，请参考[开发指南](docs/development/README.md)与对应模块的验证要求。
+XHub 正在持续迭代。欢迎带着企业使用场景[提交 Issue](https://github.com/sunqirui1987/xhub/issues)、改进文档或发起 Pull Request。修改代码前，请参考[开发指南](docs/development/zh-CN/README.md)与对应模块的验证要求。
 
 ### 逐级额度管理
 
@@ -270,4 +270,4 @@ XHub 正在持续迭代。欢迎带着企业使用场景[提交 Issue](https://g
 RPM、TPM 也逐级分配：团队分配之和不超过组织，个人之和不超过团队，Key 之和不超过个人。数字保留每分钟容量，留空共享未保留剩余，0 禁止调用；共享层透传固定后代的分配。两种限额分别保存校验，超配回滚；请求沿唯一归属链原子计数，拒绝不扣量。TPM 使用入站 Token 估算，分钟窗口为 UTC 自然分钟，多实例需共享 Redis。
 
 完整示例、管理员权限、人员调整、历史消费和最终结算的边界见 [额度管理帮助](docs/quota-management.md)。
-开发维护、分配不变量、准入与结算链路、分层测试命令见 [额度链路实现与验证](docs/development/quota-chain.md)。
+开发维护、分配不变量、准入与结算链路、分层测试命令见 [额度链路实现与验证](docs/development/zh-CN/quota-chain.md)。

@@ -1,6 +1,8 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestProviderResourceAliasesRequireInferenceIdentity(t *testing.T) {
 	for _, collection := range []string{"assistants", "threads", "fine_tuning", "containers", "videos", "vector_stores"} {

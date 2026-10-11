@@ -7,10 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 var logTraceOnceRead sync.Once
@@ -209,7 +208,7 @@ func (db *DB) ListUsageSessions(ctx context.Context, q UsageQuery) ([]UsageSessi
 // 调用：gateway/usage/activity.go、gateway/usage/reports.go
 // 测试：guardrail_block_test.go
 func (db *DB) ListUsage(ctx context.Context, q UsageQuery) ([]UsageEvent, error) {
-	logTraceOnceRead.Do(func() { logx.Trace("enter iam.ListUsage") })
+	logTraceOnceRead.Do(func() { util.Trace("enter iam.ListUsage") })
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 100
@@ -341,23 +340,6 @@ func (db *DB) DailyUsage(ctx context.Context, q UsageQuery, tzMinutes int) ([]Da
 		Select(dayExpr(tzMinutes) + ", SUM(requests) AS requests, SUM(prompt_tokens) AS prompt_tokens, " +
 			"SUM(completion_tokens) AS completion_tokens, SUM(cost) AS cost").
 		GroupBy("day").Asc("day").Find(&out)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return out, nil
-}
-
-// DailyUsageByModel totals the roll-up per day and model inside the scope.
-// 参数 ctx（context.Context）：上下文，取消时停止；q（UsageQuery）：用量查询条件，含时间范围、团队和分页；tzMinutes（int）：调用方时区相对 UTC 的分钟偏移，用来把日期切到本地日。
-// 返回 []DailyByModelRow（[]DailyByModelRow）：范围内按天和模型汇总的请求数、token 和费用。没有行时为空切片；error（error）：查询失败。nil 表示成功。
-// 调用：仅在 usage_read.go 内使用
-// 测试：无直接单测
-func (db *DB) DailyUsageByModel(ctx context.Context, q UsageQuery, tzMinutes int) ([]DailyByModelRow, error) {
-	var out []DailyByModelRow
-	err := q.dailyScope(db, ctx, tzMinutes).
-		Select(dayExpr(tzMinutes) + ", model, SUM(requests) AS requests, SUM(prompt_tokens) AS prompt_tokens, " +
-			"SUM(completion_tokens) AS completion_tokens, SUM(cost) AS cost").
-		GroupBy("day, model").Asc("day").Find(&out)
 	if err != nil {
 		return nil, mapErr(err)
 	}

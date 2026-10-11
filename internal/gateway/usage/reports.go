@@ -25,12 +25,12 @@ import (
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
-	"github.com/sunqirui1987/xhub/internal/httpx"
+	dpdialogue "github.com/sunqirui1987/xhub/internal/dataplane/dialogue"
+	dpusage "github.com/sunqirui1987/xhub/internal/dataplane/usage"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/pagination"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceReports sync.Once
@@ -46,7 +46,7 @@ const logPageSize = 50
 // 调用：gateway/usage/mount.go
 // 测试：无直接单测
 func LogsV2(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceReports.Do(func() { logx.Trace("enter usage.LogsV2") })
+	logTraceOnceReports.Do(func() { util.Trace("enter usage.LogsV2") })
 
 	p := s.RequireUser(w, r)
 	if p == nil {
@@ -67,11 +67,11 @@ func LogsV2(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	q := logQuery(r, sc)
 	q.Limit = pageSize
-	q.Offset = pagination.Offset(page, pageSize)
+	q.Offset = util.Offset(page, pageSize)
 
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, logPageResponse(nil, 0, page, pageSize))
+		util.WriteJSON(w, 200, logPageResponse(nil, 0, page, pageSize))
 		return
 	}
 	var rows []map[string]any
@@ -108,7 +108,7 @@ func LogsV2(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 		rows = eventRows(events)
 	}
-	httpx.WriteJSON(w, 200, logPageResponse(rows, total, page, pageSize))
+	util.WriteJSON(w, 200, logPageResponse(rows, total, page, pageSize))
 }
 
 // SessionLogs lists every call in one caller's session. The list route folds a
@@ -121,7 +121,7 @@ func LogsV2(s Host, w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 func SessionLogs(s Host, w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(r.URL.Query().Get("session_id")) == "" {
-		httpx.WriteJSON(w, 200, logPageResponse(nil, 0, 1, logPageSize))
+		util.WriteJSON(w, 200, logPageResponse(nil, 0, 1, logPageSize))
 		return
 	}
 	q := r.URL.Query()
@@ -456,7 +456,7 @@ func parsePriceSnapshot(raw string) *catalog.PriceSnapshot {
 	}
 	var snap catalog.PriceSnapshot
 	if err := json.Unmarshal([]byte(trimmed), &snap); err != nil {
-		logx.Error("price snapshot on a usage row is not readable err=%v", err)
+		util.Error("price snapshot on a usage row is not readable err=%v", err)
 		return nil
 	}
 	if len(snap.Applied) == 0 && snap.PricingStatus != "unpriced" {
@@ -558,12 +558,12 @@ func LogByID(s Host, w http.ResponseWriter, r *http.Request) {
 		id = r.URL.Query().Get("request_id")
 	}
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "request_id required")
+		util.WriteError(w, 400, "invalid_request", "request_id required")
 		return
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteError(w, 404, "not_found", "log not found")
+		util.WriteError(w, 404, "not_found", "log not found")
 		return
 	}
 	q := logQuery(r, sc)
@@ -596,7 +596,7 @@ func LogByID(s Host, w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(body.ProxyRequest) != "" {
 		row["proxy_server_request"] = jsonOrEmpty(body.ProxyRequest)
 	}
-	httpx.WriteJSON(w, 200, row)
+	util.WriteJSON(w, 200, row)
 }
 
 // jsonOrEmpty decodes a stored body for display. A body that is not JSON, or is empty, is returned as an empty document rather than as a parse error.
@@ -656,7 +656,7 @@ func Activity(s Host, w http.ResponseWriter, r *http.Request) {
 		sumReq += d.Requests
 		sumTok += d.PromptTokens + d.CompletionTokens
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"daily_data":       daily,
 		"sum_api_requests": sumReq,
 		"sum_total_tokens": sumTok,
@@ -675,7 +675,7 @@ func ActivityModel(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, []any{})
+		util.WriteJSON(w, 200, []any{})
 		return
 	}
 	rows, err := db.RollupByModel(r.Context(), globalQuery(r, sc), 0)
@@ -693,7 +693,7 @@ func ActivityModel(s Host, w http.ResponseWriter, r *http.Request) {
 			"spend":            m.Cost,
 		})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // ActivityCacheHits returns the global cache-hit summary. Cache hits are not a stored dimension of the roll-up, so the counters are reported as zero rather than guessed from a field that does not exist.
@@ -718,7 +718,7 @@ func ActivityCacheHits(s Host, w http.ResponseWriter, r *http.Request) {
 			reqs += d.Requests
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"groups":          []any{},
 		"error_breakdown": []any{},
 		"filter_options":  map[string]any{"key_aliases": []any{}, "models": []any{}},
@@ -751,7 +751,7 @@ func SpendLogs(s Host, w http.ResponseWriter, r *http.Request) {
 	for _, d := range rows {
 		out = append(out, map[string]any{"date": d.Day, "spend": d.Cost})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // SpendKeys totals spend by key. Platform administrators only.
@@ -766,7 +766,7 @@ func SpendKeys(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, []any{})
+		util.WriteJSON(w, 200, []any{})
 		return
 	}
 	rows, err := db.RollupByKey(r.Context(), globalQuery(r, sc), 0)
@@ -780,7 +780,7 @@ func SpendKeys(s Host, w http.ResponseWriter, r *http.Request) {
 			"api_key": k.KeyID, "key_alias": k.Name, "total_spend": k.Cost, "spend": k.Cost,
 		})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // SpendModels totals spend by model. Platform administrators only.
@@ -795,7 +795,7 @@ func SpendModels(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, []any{})
+		util.WriteJSON(w, 200, []any{})
 		return
 	}
 	rows, err := db.RollupByModel(r.Context(), globalQuery(r, sc), 0)
@@ -807,7 +807,7 @@ func SpendModels(s Host, w http.ResponseWriter, r *http.Request) {
 	for _, m := range rows {
 		out = append(out, map[string]any{"model": m.Model, "total_spend": m.Cost, "spend": m.Cost})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // SpendProvider totals spend by provider. The provider is derived from the model name, which is the only provider evidence a usage row carries.
@@ -822,7 +822,7 @@ func SpendProvider(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, []any{})
+		util.WriteJSON(w, 200, []any{})
 		return
 	}
 	rows, err := db.RollupByModel(r.Context(), globalQuery(r, sc), 0)
@@ -843,7 +843,7 @@ func SpendProvider(s Host, w http.ResponseWriter, r *http.Request) {
 	for _, p := range names {
 		out = append(out, map[string]any{"provider": p, "spend": byProv[p]})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // SpendTeams totals spend by team. Platform administrators only.
@@ -858,7 +858,7 @@ func SpendTeams(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, map[string]any{"daily_spend": []any{}, "teams": []any{}, "total_spend_per_team": []any{}})
+		util.WriteJSON(w, 200, map[string]any{"daily_spend": []any{}, "teams": []any{}, "total_spend_per_team": []any{}})
 		return
 	}
 	rows, err := db.RollupByTeam(r.Context(), globalQuery(r, sc), 0)
@@ -876,7 +876,7 @@ func SpendTeams(s Host, w http.ResponseWriter, r *http.Request) {
 		teamIDs = append(teamIDs, alias)
 		perTeam = append(perTeam, map[string]any{"team_id": alias, "total_spend": t.Cost})
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"daily_spend":          []any{},
 		"teams":                teamIDs,
 		"total_spend_per_team": perTeam,
@@ -892,7 +892,7 @@ func SpendTags(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"spend_per_tag": []any{}})
+	util.WriteJSON(w, 200, map[string]any{"spend_per_tag": []any{}})
 }
 
 // SpendTagNames returns tag names that have appeared.
@@ -904,7 +904,7 @@ func SpendTagNames(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"tag_names": []any{}})
+	util.WriteJSON(w, 200, map[string]any{"tag_names": []any{}})
 }
 
 // SpendEndUsers totals spend by end user. An end user is a LiteLLM concept the new ownership model does not carry, so the answer is empty.
@@ -916,7 +916,7 @@ func SpendEndUsers(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, []any{})
+	util.WriteJSON(w, 200, []any{})
 }
 
 // Keys returns the same totals as SpendKeys, for the console's older route.
@@ -939,7 +939,7 @@ func Users(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Identity()
 	if db == nil {
-		httpx.WriteJSON(w, 200, []any{})
+		util.WriteJSON(w, 200, []any{})
 		return
 	}
 	users, err := db.ListUsers(r.Context(), "", 500, 0)
@@ -951,7 +951,7 @@ func Users(s Host, w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		out = append(out, map[string]any{"user_id": u.ID, "user_email": u.Email, "spend": u.Spend})
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // TagList returns the tag catalog read by the usage filter and the key form. Tags are not part of the new model, so the catalog is empty rather than a key-value namespace that nothing writes.
@@ -963,7 +963,7 @@ func TagList(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{})
+	util.WriteJSON(w, 200, map[string]any{})
 }
 
 // Tags totals spend by tag.
@@ -975,7 +975,7 @@ func Tags(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"spend_per_tag": []any{}})
+	util.WriteJSON(w, 200, map[string]any{"spend_per_tag": []any{}})
 }
 
 // Calculate estimates spend from a model and token counts and does not write the database. An unknown model returns 0 rather than an error, because the caller is showing an estimate and a missing priceis not a failed request.
@@ -989,7 +989,7 @@ func Calculate(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	body := readMap(r)
 	model := str(body["model"])
-	prompt, completion := dataplane.EstimateTokens(body), 0
+	prompt, completion := dpusage.EstimateTokens(body), 0
 	if cr, ok := body["completion_response"].(map[string]any); ok {
 		if model == "" {
 			model = str(cr["model"])
@@ -1011,7 +1011,7 @@ func Calculate(s Host, w http.ResponseWriter, r *http.Request) {
 	if ok {
 		total = charge.Total
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"cost": total})
+	util.WriteJSON(w, 200, map[string]any{"cost": total})
 }
 
 // HealthTestConnection 使用服务端模型表和已保存凭据，对指定对话部署发起一次最小真实请求。
@@ -1038,7 +1038,7 @@ func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 	info, _ := body["model_info"].(map[string]any)
 	id := strings.TrimSpace(str(info["id"]))
 	if id == "" {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_request", "model_info.id is required")
+		util.WriteError(w, http.StatusBadRequest, "invalid_request", "model_info.id is required")
 		return
 	}
 	var selected config.ModelEntry
@@ -1050,7 +1050,7 @@ func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		httpx.WriteError(w, http.StatusNotFound, "not_found", "model deployment not found")
+		util.WriteError(w, http.StatusNotFound, "not_found", "model deployment not found")
 		return
 	}
 	if model == "" {
@@ -1066,13 +1066,13 @@ func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 		writeConnectionFailure(w, model, mode, "credential_unavailable", "Stored credentials could not be loaded.")
 		return
 	}
-	err = dataplane.ProbeDialogue(r.Context(), s.HTTPClient(), attached)
+	err = dpdialogue.ProbeDialogue(r.Context(), s.HTTPClient(), attached)
 	if err != nil {
 		code, message := connectionProbeDiagnostic(err)
 		writeConnectionFailure(w, model, mode, code, message)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+	util.WriteJSON(w, http.StatusOK, map[string]any{
 		"status": "success", "healthy": true, "error": nil, "model": model, "mode": mode,
 	})
 }
@@ -1080,8 +1080,8 @@ func HealthTestConnection(s Host, w http.ResponseWriter, r *http.Request) {
 // supportsDialogueConnectionMode 校验页面模式与服务端部署的对话 transport 是否一致。
 // 参数 dep 来自服务端模型表，mode 来自页面；媒体协议、未知模式和跨 transport 模式返回 false。
 func supportsDialogueConnectionMode(dep config.ModelEntry, mode string) bool {
-	transport, ok := provider.Execution(dep)
-	if !ok || !provider.DialogueProtocol(transport.Protocol) {
+	transport, ok := providerdeployment.Execution(dep)
+	if !ok || !providercapability.DialogueProtocol(transport.Protocol) {
 		return false
 	}
 	mode = strings.TrimSpace(mode)
@@ -1092,20 +1092,20 @@ func supportsDialogueConnectionMode(dep config.ModelEntry, mode string) bool {
 // connectionProbeDiagnostic 把内部探测错误映射为固定外部诊断。
 // 返回稳定错误码与安全英文文案，只允许附带 HTTP 状态码，不传播 URL、密钥、供应商正文或底层错误。
 func connectionProbeDiagnostic(err error) (string, string) {
-	var probeErr *dataplane.DialogueProbeError
+	var probeErr *dpdialogue.DialogueProbeError
 	if !errors.As(err, &probeErr) {
 		return "request_failed", "The upstream connection test failed."
 	}
 	switch probeErr.Kind {
-	case dataplane.DialogueProbeUnsupported:
+	case dpdialogue.DialogueProbeUnsupported:
 		return "unsupported_mode", "Connection testing is not supported for this mode."
-	case dataplane.DialogueProbeConfiguration:
+	case dpdialogue.DialogueProbeConfiguration:
 		return "invalid_configuration", "The stored deployment configuration is incomplete or invalid."
-	case dataplane.DialogueProbeHTTP:
+	case dpdialogue.DialogueProbeHTTP:
 		return "upstream_http_error", fmt.Sprintf("The upstream service returned HTTP %d.", probeErr.HTTPStatus)
-	case dataplane.DialogueProbeProtocol:
+	case dpdialogue.DialogueProbeProtocol:
 		return "protocol_mismatch", "The upstream response did not match the configured protocol."
-	case dataplane.DialogueProbeOversize:
+	case dpdialogue.DialogueProbeOversize:
 		return "response_too_large", "The upstream response exceeded the connection test limit."
 	default:
 		return "request_failed", "The upstream service could not be reached."
@@ -1115,7 +1115,7 @@ func connectionProbeDiagnostic(err error) (string, string) {
 // writeConnectionFailure 写入模型详情页可直接消费的失败结构；参数必须是已脱敏固定值。
 // 始终写 HTTP 200；message 和 result.error 让现有页面与 API 调用方都能观察诊断。
 func writeConnectionFailure(w http.ResponseWriter, model, mode, code, message string) {
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+	util.WriteJSON(w, http.StatusOK, map[string]any{
 		"status": "error", "healthy": false, "error": code, "message": message,
 		"result": map[string]any{"error": message}, "model": model, "mode": mode,
 	})
@@ -1132,10 +1132,10 @@ func HealthServices(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("service"))) {
 	case "email", "ms_teams", "msteams", "slack":
-		httpx.WriteError(w, 400, "invalid_request", "alerts are not supported")
+		util.WriteError(w, 400, "invalid_request", "alerts are not supported")
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"healthy_services":   []any{},
 		"unhealthy_services": []any{},
 		"status":             "healthy",
@@ -1148,8 +1148,8 @@ func HealthServices(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/usage/mount.go
 // 测试：无直接单测
 func HealthTest(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
-	httpx.WriteJSON(w, 200, map[string]any{"status": "ok", "message": "LiteLLM Proxy is running"})
+	util.SetCallID(w, util.CallID())
+	util.WriteJSON(w, 200, map[string]any{"status": "ok", "message": "LiteLLM Proxy is running"})
 }
 
 // openGlobal requires a platform administrator and returns the unscoped usage scope. The global spend family is a platform-wide view by definition, so it takes the administrator scope rather than a narrowed one.
@@ -1201,24 +1201,4 @@ func globalDaily(s Host, r *http.Request, sc *authz.Scope) ([]iam.DailyRow, erro
 		return nil, nil
 	}
 	return db.DailyUsage(r.Context(), globalQuery(r, sc), 0)
-}
-
-// spendDay takes the date from a timestamp for day filters.
-// 参数 ts（string）：用量事件上的时间戳。空串表示用今天的 UTC 日期。
-// 返回 string（string）：用于按日筛选的日历日期，格式 YYYY-MM-DD。解析不了时取前 10 个字符。
-// 调用：仅在 reports.go 内使用
-// 测试：无直接单测
-func spendDay(ts string) string {
-	if ts == "" {
-		return time.Now().UTC().Format("2006-01-02")
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
-		if t, err := time.Parse(layout, ts); err == nil {
-			return t.UTC().Format("2006-01-02")
-		}
-	}
-	if len(ts) >= 10 {
-		return ts[:10]
-	}
-	return ts
 }

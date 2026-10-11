@@ -1,11 +1,5 @@
 # Text completions
 
-## Overview
-
-Text completions
-
-### Text completions
-
 ## Behavior
 Requires a completion deployment, not messages.
 

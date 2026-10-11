@@ -12,9 +12,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceGenerate sync.Once
@@ -25,16 +24,16 @@ var logTraceOnceGenerate sync.Once
 // 调用：gateway/keys/mount.go
 // 测试：key_input_test.go、regression/personal_keys_test.go。
 func Generate(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceGenerate.Do(func() { logx.Trace("enter keys.Generate") })
+	logTraceOnceGenerate.Do(func() { util.Trace("enter keys.Generate") })
 
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		httpx.WriteError(w, 400, "invalid_request", "invalid json")
+		util.WriteError(w, 400, "invalid_request", "invalid json")
 		return
 	}
 	if body == nil {
@@ -42,7 +41,7 @@ func Generate(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	in, err := keyInputFrom(body, p.UserID)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	obj := authz.Object{Type: authz.ObjectKey, TeamID: in.TeamID, ProjectID: in.ProjectID,
@@ -60,7 +59,7 @@ func Generate(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, Response(*k, plain, true))
+	util.WriteJSON(w, 200, Response(*k, plain, true))
 }
 
 // List 列出授权范围内的密钥；scope=personal 时仅查询登录用户本人名下的个人密钥，管理员也不例外。
@@ -69,7 +68,7 @@ func Generate(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go、gateway/models/list.go、gateway/models/mount.go、gateway/prefs/mount.go
 // 测试：personal_test.go、regression/personal_keys_test.go、regression/pagination_test.go。查询先按权限在 SQL 收窄，再应用客户端筛选和分页，不返回明文。
 func List(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -92,7 +91,7 @@ func List(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	rows, total, page, size, pages, err := personalPage(rows, r.URL.Query())
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -104,7 +103,7 @@ func List(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, item)
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"keys":         out,
 		"total_count":  total,
 		"current_page": page,
@@ -116,10 +115,10 @@ func List(s Host, w http.ResponseWriter, r *http.Request) {
 // Info 读取单个虚拟密钥；个人页面的 scope=personal 额外验证归属，拒绝其他用户及服务密钥。
 // 参数 s（Host）：信息使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/log.go、dataplane/serve.go、gateway/engine.go、gateway/keys/mount.go
+// 调用：dataplane/diagnostics/log.go、dataplane/execution/serve.go、gateway/engine.go、gateway/keys/mount.go
 // 测试：personal_test.go、regression/personal_keys_test.go；越界详情返回 404，不泄露密钥存在性。
 func Info(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -133,7 +132,7 @@ func Info(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if token == "" {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return
 	}
 	k, err := lookupKey(s, r, token)
@@ -151,7 +150,7 @@ func Info(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteAuthz(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"info": Response(*k, "", false)})
+	util.WriteJSON(w, 200, map[string]any{"info": Response(*k, "", false)})
 }
 
 // Delete removes virtual keys. The plaintext can no longer call inference.
@@ -160,7 +159,7 @@ func Info(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go、gateway/models/admin.go、gateway/models/mount.go、iam/keys.go
 // 测试：无直接单测
 func Delete(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -177,7 +176,7 @@ func Delete(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 		n++
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"deleted": n})
+	util.WriteJSON(w, 200, map[string]any{"deleted": n})
 }
 
 // Block marks a virtual key blocked.
@@ -204,7 +203,7 @@ func Unblock(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：仅在 generate.go 内使用。
 // 测试：无直接单测
 func setBlocked(s Host, w http.ResponseWriter, r *http.Request, blocked bool) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -214,7 +213,7 @@ func setBlocked(s Host, w http.ResponseWriter, r *http.Request, blocked bool) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.Key == "" {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return
 	}
 	k, err := lookupKey(s, r, body.Key)
@@ -234,7 +233,7 @@ func setBlocked(s Host, w http.ResponseWriter, r *http.Request, blocked bool) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"blocked": blocked})
+	util.WriteJSON(w, 200, map[string]any{"blocked": blocked})
 }
 
 // Update changes a virtual key's name, narrowing, and limits. The plaintext stays the same, and a field the caller left out keeps its value.
@@ -243,7 +242,7 @@ func setBlocked(s Host, w http.ResponseWriter, r *http.Request, blocked bool) {
 // 调用：gateway/keys/mount.go、gateway/models/admin.go、gateway/models/mount.go、gateway/prefs/mount.go
 // 测试：无直接单测
 func Update(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -251,17 +250,17 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	// 更新与创建使用相同的输入边界；错误输入必须保留原固定额度。
-	if err := httpx.ValidateRateFields(body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateRateFields(body); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget"); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateBudgetFields(body, "max_budget"); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	token := str(body["key"])
 	if token == "" {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return
 	}
 	k, err := lookupKey(s, r, token)
@@ -279,7 +278,7 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	patch, err := patchFrom(k, body)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	out, err := s.Identity().UpdateKey(r.Context(), actorOf(p), k.ID, patch)
@@ -287,7 +286,7 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, Response(*out, "", false))
+	util.WriteJSON(w, 200, Response(*out, "", false))
 }
 
 // Response is the public JSON for a virtual key. The plaintext is omitted when includePlain is false; the stored hash never appears, because the hash is what authentication compares and publishing it would leak the credential.
@@ -366,7 +365,7 @@ func authorizedKeys(s Host, w http.ResponseWriter, r *http.Request, p *auth.Prin
 		tokens = append(tokens, body.Key)
 	}
 	if len(tokens) == 0 {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return nil, false
 	}
 	ids := make([]string, 0, len(tokens))
@@ -428,10 +427,10 @@ func keyFilter(sc *authz.Scope) iam.KeyFilter {
 // 调用：Generate、gateway/keys/admin.go；不产生持久化副作用，非法归属或期限返回错误。
 // 测试：key_input_test.go。
 func keyInputFrom(body map[string]any, defaultUserID string) (iam.KeyInput, error) {
-	if err := httpx.ValidateRateFields(body); err != nil {
+	if err := util.ValidateRateFields(body); err != nil {
 		return iam.KeyInput{}, err
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget"); err != nil {
+	if err := util.ValidateBudgetFields(body, "max_budget"); err != nil {
 		return iam.KeyInput{}, err
 	}
 	in := iam.KeyInput{
@@ -442,8 +441,8 @@ func keyInputFrom(body map[string]any, defaultUserID string) (iam.KeyInput, erro
 		Name:      str(body["key_alias"]),
 		Models:    keyModels(body["models"]),
 		MaxBudget: parseFloat(body["max_budget"]),
-		TPMLimit:  httpx.Rate(body, "tpm_limit"),
-		RPMLimit:  httpx.Rate(body, "rpm_limit"),
+		TPMLimit:  util.Rate(body, "tpm_limit"),
+		RPMLimit:  util.Rate(body, "rpm_limit"),
 		// The selection must be read here as well as on update. It was only on
 		// update, so a key created with a template silently got none and the
 		// first request through it routed by the team's settings instead -
@@ -511,10 +510,10 @@ func patchFrom(cur *iam.Key, body map[string]any) (iam.KeyInput, error) {
 		in.MaxBudget = parseFloat(body["max_budget"])
 	}
 	if _, ok := body["tpm_limit"]; ok {
-		in.TPMLimit = httpx.Rate(body, "tpm_limit")
+		in.TPMLimit = util.Rate(body, "tpm_limit")
 	}
 	if _, ok := body["rpm_limit"]; ok {
-		in.RPMLimit = httpx.Rate(body, "rpm_limit")
+		in.RPMLimit = util.Rate(body, "rpm_limit")
 	}
 	if _, ok := body["duration"]; ok {
 		exp, err := iam.ParseExpiry(str(body["duration"]))

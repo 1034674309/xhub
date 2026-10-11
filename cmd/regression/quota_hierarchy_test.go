@@ -2,9 +2,10 @@ package regression
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/iam"
 	"net/http"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/iam"
 )
 
 // TestQuotaHierarchyHTTP 验证真实管理接口和数据面额度链；前置隔离 schema 与本地供应商，无外部凭据。

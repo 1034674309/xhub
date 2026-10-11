@@ -6,10 +6,10 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 	"xorm.io/xorm/schemas"
 )
@@ -60,7 +60,7 @@ func rowsAffected(n int64, err error) error {
 // 调用：gateway/access.go、gateway/config_overrides.go、gateway/family/handlers.go、gateway/models/builtin.go
 // 测试：guard_test.go、guardrail_block_test.go
 func (s *Store) PutKV(kind, id, body string) error {
-	logTraceOnceCrud.Do(func() { logx.Trace("enter store.PutKV") })
+	logTraceOnceCrud.Do(func() { util.Trace("enter store.PutKV") })
 
 	row := kvRow{Kind: kind, ID: id, Body: body, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
 	n, err := s.Engine.ID(coreIDs(kind, id)).Cols("body", "created_at").Update(&row)
@@ -83,7 +83,7 @@ func coreIDs(kind, id string) schemas.PK {
 	return schemas.PK{kind, id}
 }
 
-// GetKV reads one key-value row by kind and id.  The read bypasses the query cache. A session or credential revoked by another gateway process must be observed here, and local cache invalidation cannot provide that guarantee.
+// GetKV reads one key-value row by kind and id.  The read bypasses the query util. A session or credential revoked by another gateway process must be observed here, and local cache invalidation cannot provide that guarantee.
 // 参数 kind（string）：行类型。id（string）：该类型下的主键。
 // 返回：这一行 JSON 解出的对象。没有这一行时 error 为 sql.ErrNoRows，对象为 nil。读走 NoCache，能看见别的进程刚删掉的会话。
 // 调用：gateway 读会话、凭证和配置覆盖。
@@ -110,7 +110,7 @@ func (s *Store) GetKV(kind, id string) (map[string]any, error) {
 	return m, nil
 }
 
-// DeleteKV deletes one key-value row and clears the cache. A missing row returns a no-rows error.
+// DeleteKV deletes one key-value row and clears the util. A missing row returns a no-rows error.
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/access.go、gateway/config_overrides.go、gateway/family/handlers.go、gateway/session.go
 // 测试：无直接单测

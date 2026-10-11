@@ -3,10 +3,9 @@ package prefs
 
 import (
 	"net/http"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceSettings sync.Once
@@ -26,7 +25,7 @@ func (e invalidPreferenceError) Error() string { return e.message }
 // 调用：仅在 settings.go 内使用
 // 测试：无直接单测
 func Base(s Host) map[string]any {
-	logTraceOnceSettings.Do(func() { logx.Trace("enter prefs.Base") })
+	logTraceOnceSettings.Do(func() { util.Trace("enter prefs.Base") })
 
 	rs := map[string]any{"num_retries": s.Config().RouterSettings.NumRetries, "timeout": s.Config().RouterSettings.Timeout, "allowed_fails": 3, "cooldown_time": 0}
 	for _, key := range []string{"num_retries", "timeout", "allowed_fails", "cooldown_time"} {
@@ -177,19 +176,19 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if ns == "general_settings" && enablesDroppedAlert(patch["alerting"]) {
-			httpx.WriteError(w, 400, "invalid_request", "alerts are not supported")
+			util.WriteError(w, 400, "invalid_request", "alerts are not supported")
 			return
 		}
 		if err := saveNamespacePatch(s, ns, patch); err != nil {
 			if _, ok := err.(invalidPreferenceError); ok {
-				httpx.WriteError(w, 400, "invalid_request", err.Error())
+				util.WriteError(w, 400, "invalid_request", err.Error())
 				return
 			}
-			httpx.WriteError(w, 500, "internal", err.Error())
+			util.WriteError(w, 500, "internal", err.Error())
 			return
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":          "success",
 		"router_settings": MergedRouter(s),
 	})
@@ -273,11 +272,11 @@ func FieldUpdate(s Host, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	name := str(body["field_name"])
 	if name == "" {
-		httpx.WriteError(w, 400, "invalid_request", "field_name required")
+		util.WriteError(w, 400, "invalid_request", "field_name required")
 		return
 	}
 	if name == "alerting" && enablesDroppedAlert(body["field_value"]) {
-		httpx.WriteError(w, 400, "invalid_request", "alerts are not supported")
+		util.WriteError(w, 400, "invalid_request", "alerts are not supported")
 		return
 	}
 	ns := str(body["config_type"])
@@ -286,13 +285,13 @@ func FieldUpdate(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	if err := saveNamespacePatch(s, ns, map[string]any{name: body["field_value"]}); err != nil {
 		if _, ok := err.(invalidPreferenceError); ok {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return
 		}
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "field_name": name})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "field_name": name})
 }
 
 // FieldDelete deletes one general-settings field. After deletion the YAML baseline applies again.
@@ -307,7 +306,7 @@ func FieldDelete(s Host, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	name := str(body["field_name"])
 	if name == "" {
-		httpx.WriteError(w, 400, "invalid_request", "field_name required")
+		util.WriteError(w, 400, "invalid_request", "field_name required")
 		return
 	}
 	ns := str(body["config_type"])
@@ -315,8 +314,8 @@ func FieldDelete(s Host, w http.ResponseWriter, r *http.Request) {
 		ns = "general_settings"
 	}
 	if err := s.RecordStore().DeleteConfig(ns, name); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "field_name": name})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "field_name": name})
 }

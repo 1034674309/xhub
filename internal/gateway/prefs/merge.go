@@ -2,8 +2,9 @@
 package prefs
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceMerge sync.Once
@@ -14,7 +15,7 @@ var logTraceOnceMerge sync.Once
 // 调用：gateway/prefs/settings.go
 // 测试：无直接单测
 func Overlay(base, db map[string]any) map[string]any {
-	logTraceOnceMerge.Do(func() { logx.Trace("enter prefs.Overlay") })
+	logTraceOnceMerge.Do(func() { util.Trace("enter prefs.Overlay") })
 
 	out := map[string]any{}
 	for k, v := range base {

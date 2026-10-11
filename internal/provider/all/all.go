@@ -3,11 +3,12 @@
 package all
 
 import (
+	_ "github.com/sunqirui1987/xhub/internal/provider/anthropic"
+	_ "github.com/sunqirui1987/xhub/internal/provider/google"
 	_ "github.com/sunqirui1987/xhub/internal/provider/openai"
 	_ "github.com/sunqirui1987/xhub/internal/provider/qiniu"
 	_ "github.com/sunqirui1987/xhub/internal/provider/volcengine"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // init 记一次供应商目录的载入。这个包本身只是导入清单，载入这件事值得留一行。
@@ -16,4 +17,4 @@ import (
 // 返回：无。只写一行进程日志。
 // 调用：Go 在载入这个包时自动执行。
 // 测试：无直接单测
-func init() { logx.Debug("provider directories imported") }
+func init() { util.Debug("provider directories imported") }

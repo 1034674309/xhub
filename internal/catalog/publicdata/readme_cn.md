@@ -1,29 +1,56 @@
-# 内置公开数据资源
+# 内嵌公共目录资源
 
-[English](readme.md) · [全功能实现说明](../../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-本目录有 pricedata.json、cn_holidays.json、autorouter_presets.json，由父包 embed.go 嵌入到可执行文件。pricedata 是默认价格目录；cn_holidays 为时段价格计算提供日历；autorouter_presets 是保留的数据资源，不代表已移除的自动路由功能重新生效。
-资源没有自己的 Go 包或 HTTP handler。读取、校验、覆盖和公开展示由 catalog 与 gateway/models 完成。修改 JSON 后必须校验语法、模型标识、计价单位和明确零价；价格单价的展示尺度与后端基础单位要一致。
-文件内容进入构建产物，编辑源文件不会自动改变已经运行的二进制。运行时覆盖和价格源刷新是另一条链路。日历改变需验证边界日期；价格改变需验证 CostAt 和历史快照隔离。
+`internal/catalog/publicdata` 保存父级 `catalog` 包使用的构建期数据。本目录没有 Go package、可变状态或 HTTP handler。资源包括基础价格/供应商目录、北京时间计费日历、供应商凭据字段快照及许可证，以及保留的自动路由预设。`go:embed` 把字节编入二进制，修改文件不会改变运行中的进程；运行时市场刷新和运营覆盖是独立层。
+
+## 对外接口
+
+本目录不导出 Go 符号，父包消费者构成实际接口：
+
+- `pricedata.json` 在 catalog 初始化时解码为 `PriceDocument`；`CostAt`、`CostMap`、`Providers`、模型/供应商修改及 gateway 模型价格接口消费其内存结果。
+- `cn_holidays.json` 由 `holiday.go` 解析给 `IsPeakHour`，影响峰谷计费快照。
+- `provider_fields.json` 由 `CredentialProviders` 解析，再通过 model-hub/供应商表单使用的 catalog 公共响应返回。
+- `autorouter_presets.json` 为兼容保留；文件存在不表示已退役的自动路由被启用。
+
+实际 HTTP 消费者在上层注册：公共模型目录包括 `GET /public/v1/model_hub`、`/public/v1/model_hub/{facet}`、`/public/model_hub`、`/public/model_hub/info`、`/public/endpoints`、`/model_hub`、`/model_hub/{facet}`；管理价格和供应商修改位于 `/price/catalog`、`/price/model`、`/price/provider`。解析或格式错误通过父包初始化/刷新行为暴露，本目录自身不能返回错误。
+
+## 内部核心实现
+
+### 资源契约
+
+`pricedata.json` 是含来源元数据、生成时间、供应商行和模型行的 JSON 文档。模型 ID 是稳定查找键。费率行保留计量单位、输入输出侧、变体、时段、单位大小、来源键及每基础单位 USD；显式零价是真实价格，不能当成缺失。父包复制内嵌基线后再叠加 provider contribution、市场 feed 替换和运营覆盖。
+
+`cn_holidays.json` 区分法定节假日与周末调休工作日。`holiday.go` 先按 Asia/Shanghai 时区和半开区间 09:00–12:00、14:00–18:00 判断，再应用例外。更新日历需重建后才影响未来计算，也不会重写历史价格快照。
+
+`provider_fields.json` 是供应商描述及凭据字段数组，字段包含 key、label、类型、必填、默认值和 placeholder 等。`CredentialProviders` 将其与本地供应商合并，补已知默认 API base，规范 DeepSeek，按 provider/slug 去重，深拷贝新增行并按显示名排序。这些表单只描述配置方式，不保证适配器或外部账户可用。
+
+`provider_fields.LICENSE` 记录凭据字段快照的许可证和来源义务，更新派生数据时必须一并保留。`autorouter_presets.json` 仅为兼容保留。所有 JSON 必须有效；损坏的内嵌资源可能导致进程启动时目录为空或进入回退/错误路径。
+
+### 验证
+
+资源目录没有直接测试。`internal/catalog` 测试覆盖 feed 解码、凭据供应商合并与隔离、节假日/时段边界、费率选择、显式零价、别名及图片/视频变体。运行 `go test ./internal/catalog -count=1`；修改内嵌字节后必须重新构建验证。外部供应商可用性和市场源新鲜度不在这些 fixture 的保证范围。
 
 ## 源码职责与入口
 
-此目录由资源、子包或测试文件组成，没有独立生产 Go 实现。
+### `pricedata.json`
 
-资源与持久化定义：[autorouter_presets.json](autorouter_presets.json), [cn_holidays.json](cn_holidays.json), [pricedata.json](pricedata.json).
+生成的基础价格目录，含元数据、供应商下拉行、模型属性、别名、兼容平铺字段和标准费率表。由 `pricedata.go`/`model_cost.go` 嵌入解码，由 `cost_at.go` 计费，并经 gateway 模型 handler 展示和修改。
 
-## 对外 HTTP 边界
+### `cn_holidays.json`
 
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
+中国节假日与调休工作日数据，由 `holiday.go` 用于判断北京时间峰值窗口；它是日历数据，不是调度器。
 
-## 验证与维护入口
+### `provider_fields.json`
 
-当前目录没有直接测试文件；上层集成测试仅证明被执行的链路，不代表所有内部失败分支均已覆盖。
+凭据表单快照，由 `credential_providers.go` 消费；在合并本地供应商和默认 API base 前提供显示元数据与字段 schema。
 
-```bash
-go test ./internal/catalog -count=1
-```
+### `provider_fields.LICENSE`
 
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+`provider_fields.json` 的许可证声明。运行时不解析，但重新分发和更新时必须与数据一起保留。
+
+### `autorouter_presets.json`
+
+catalog 资源包内嵌的保留预设 JSON；仅有此文件不会启用任何当前路由选择入口。

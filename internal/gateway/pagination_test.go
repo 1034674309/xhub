@@ -1,6 +1,8 @@
 package gateway
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestSliceMapsPagination 验证正常、末页、空列表、非法条数和极大页码安全切片；纯内存夹具无需清理。
 func TestSliceMapsPagination(t *testing.T) {

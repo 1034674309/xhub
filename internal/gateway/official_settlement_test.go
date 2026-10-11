@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
+	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
 	"github.com/sunqirui1987/xhub/internal/live"
 )
 
@@ -55,7 +55,7 @@ func TestOfficialSettlementSkipsRouteTPMAndConsumesOwnMetadata(t *testing.T) {
 	for i := 0; i < polls; i++ {
 		id := fmt.Sprintf("poll-%d", i)
 		s.exchanges[id] = promptExchange{messages: id, response: id, proxy: id}
-		s.AnnotateCall(id, dataplane.CallNote{SettlementID: settlement, SkipRouteUsage: true, Provider: id})
+		s.AnnotateCall(id, dpcontract.CallNote{SettlementID: settlement, SkipRouteUsage: true, Provider: id})
 	}
 	var wg sync.WaitGroup
 	for i := 0; i < polls; i++ {

@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
 )
 
 var logTraceOnceUsage sync.Once
@@ -163,7 +162,7 @@ type UsageRecord struct {
 // 调用：dataplane/live.go、gateway/spend.go、gateway/wire.go
 // 测试：activity_http_test.go、prompt_log_test.go、usage_idempotency_test.go
 func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
-	logTraceOnceUsage.Do(func() { logx.Trace("enter iam.RecordUsage") })
+	logTraceOnceUsage.Do(func() { util.Trace("enter iam.RecordUsage") })
 
 	if len(records) == 0 {
 		return nil

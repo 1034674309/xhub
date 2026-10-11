@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceThemeSettings sync.Once
@@ -19,14 +18,14 @@ var logTraceOnceThemeSettings sync.Once
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) uiTheme(w http.ResponseWriter, r *http.Request) {
-	logTraceOnceThemeSettings.Do(func() { logx.Trace("enter gateway.uiTheme") })
+	logTraceOnceThemeSettings.Do(func() { util.Trace("enter gateway.uiTheme") })
 
 	if s.requireManage(w, r) == nil {
 		return
 	}
 	current := s.loadTheme()
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		httpx.WriteJSON(w, 200, current)
+		util.WriteJSON(w, 200, current)
 		return
 	}
 	body := readMap(r)
@@ -45,10 +44,10 @@ func (s *Server) uiTheme(w http.ResponseWriter, r *http.Request) {
 		"logo_url":      current["logo_url"],
 	})
 	if err := s.Store.PutKV("ui_theme", "settings", string(raw)); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, s.loadTheme())
+	util.WriteJSON(w, 200, s.loadTheme())
 }
 
 // loadTheme returns the saved theme, or empty color and logo fields when nothing is stored yet.
@@ -86,7 +85,7 @@ func (s *Server) promptTest(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		message = "prompt test failed: prompt_id required"
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"prompt_id":  id,
 		"version":    1,
 		"created_at": time.Now().UTC().Format(time.RFC3339),
@@ -113,7 +112,7 @@ func (s *Server) searchToolTest(w http.ResponseWriter, r *http.Request) {
 	if name == "" && id == "" {
 		message = "search tool connection failed: search_tool_name required"
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"search_tool_id":   id,
 		"search_tool_name": name,
 		"message":          message,

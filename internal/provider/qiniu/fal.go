@@ -3,14 +3,16 @@ package qiniu
 import (
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
+	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 )
 
 // falEndpoint 保存一个明确的 Fal 创建路径、目录定价 ID、文档来源与计价事实。
 // 每个队列模型组拥有自己的查询路径和任务作用域；白名单防止任意路径转发。
 type falEndpoint struct {
 	path, price, doc string
-	billing          provider.FalModel
+	billing          providermeasurement.FalModel
 }
 
 // registerFal 注册一个可由 Custom 或 OpenAI 兼容连接显式选择的七牛 Fal 模型组及创建、状态、结果操作。
@@ -18,27 +20,27 @@ type falEndpoint struct {
 // 返回：无。模型目录与传输注册表同时更新，URL 模型 ID 与定价 ID 分别保存。
 // 调用：本包 init。测试：fal_test.go、billing_test.go。
 func registerFal(id, label, queue string, endpoints []falEndpoint) {
-	specs := make(map[string]provider.FalModel, len(endpoints))
-	actions := []provider.Action{
+	specs := make(map[string]providermeasurement.FalModel, len(endpoints))
+	actions := []providercontract.Action{
 		{Name: "get", Method: "GET", PublicPath: "/queue/" + queue + "/requests/{request_id}", UpstreamPath: "/queue/" + queue + "/requests/{request_id}"},
 		{Name: "status", Method: "GET", PublicPath: "/queue/" + queue + "/requests/{request_id}/status", UpstreamPath: "/queue/" + queue + "/requests/{request_id}/status"},
 	}
 	for _, e := range endpoints {
 		specs[e.path] = e.billing
-		actions = append(actions, provider.Action{Name: "create", Method: "POST", PublicPath: "/queue/" + e.path, UpstreamPath: "/queue/" + e.path, Model: e.path})
-		provider.RegisterModel(provider.Model{
+		actions = append(actions, providercontract.Action{Name: "create", Method: "POST", PublicPath: "/queue/" + e.path, UpstreamPath: "/queue/" + e.path, Model: e.path})
+		providerregistry.RegisterModel(providerregistry.Model{
 			ID: "qiniu/" + e.path, Provider: "qiniu", Official: e.path, Mode: "video", TransportID: id,
 			Source:     "https://docs.modelink.ai/api/video-fal-" + e.doc,
 			PriceModel: e.price, PriceSource: "https://api.modelink.ai/v1/market/models",
 		})
 	}
-	provider.RegisterTransport(provider.Transport{
+	providerregistry.RegisterTransport(providercontract.Transport{
 		CatalogID:  "qiniu",
 		EndpointID: "fal:queue", Protocol: "fal", Family: "video", ModelGroup: label,
 		// 连接类型只提供地址和密钥；Fal 的 Key 鉴权由执行器决定，OpenAI 兼容连接也可显式选择。
-		ID: id, Label: "Bypass - 七牛 Fal " + label, Kind: provider.KindBypass, Providers: []string{"custom", "custom_openai", "openai"},
-		StripPrefix: "qiniu", Auth: provider.AuthConfig{Header: "Authorization", Prefix: "Key"}, TaskID: "request_id", QueueURLs: true,
-		Billing: provider.FalBilling(specs), Actions: actions,
+		ID: id, Label: "Bypass - 七牛 Fal " + label, Kind: providercontract.KindBypass, Providers: []string{"custom", "custom_openai", "openai"},
+		StripPrefix: "qiniu", Auth: providercontract.AuthConfig{Header: "Authorization", Prefix: "Key"}, TaskID: "request_id", QueueURLs: true,
+		Billing: providermeasurement.FalBilling(specs), Actions: actions,
 	})
 }
 
@@ -61,7 +63,7 @@ func init() {
 			}
 			for _, v := range variants {
 				for _, op := range []string{"text-to-video", "image-to-video", "reference-to-video"} {
-					endpoints = append(endpoints, falEndpoint{queue + v.path + "/" + op, brand.market + "-seedance-" + v.market, brand.doc + "-seedance-" + version.doc + v.doc, provider.FalModel{Seedance: true, Resolution: "720p"}})
+					endpoints = append(endpoints, falEndpoint{queue + v.path + "/" + op, brand.market + "-seedance-" + v.market, brand.doc + "-seedance-" + version.doc + v.doc, providermeasurement.FalModel{Seedance: true, Resolution: "720p"}})
 				}
 			}
 			registerFal("qiniu_fal_"+brand.doc+"_"+version.doc, brand.label+" "+version.path, queue, endpoints)
@@ -74,7 +76,7 @@ func init() {
 			if mode == "standard" {
 				band = "std"
 			}
-			kling = append(kling, falEndpoint{"fal-ai/kling-video/" + version + "/" + mode + "/" + op, price, doc, provider.FalModel{Variant: strings.ReplaceAll(variant, "{mode}", band), AudioDefault: audio}})
+			kling = append(kling, falEndpoint{"fal-ai/kling-video/" + version + "/" + mode + "/" + op, price, doc, providermeasurement.FalModel{Variant: strings.ReplaceAll(variant, "{mode}", band), AudioDefault: audio}})
 		}
 	}
 	addKling("v2.5-turbo", "kling-v2-5-turbo", "kling-v25-turbo", "text-to-video", []string{"pro"}, false, "{mode}_norefv_v_duration")
@@ -102,7 +104,7 @@ func init() {
 			if mode == "pro" {
 				resolution = "1080p"
 			}
-			kling = append(kling, falEndpoint{"fal-ai/kling-video/v3/turbo/" + mode + "/" + op, "kling-video/kling-3.0-turbo", "kling-30-turbo", provider.FalModel{Variant: resolution + "_av_duration"}})
+			kling = append(kling, falEndpoint{"fal-ai/kling-video/v3/turbo/" + mode + "/" + op, "kling-video/kling-3.0-turbo", "kling-30-turbo", providermeasurement.FalModel{Variant: resolution + "_av_duration"}})
 		}
 	}
 	registerFal("qiniu_fal_kling", "Kling", "fal-ai/kling-video", kling)
@@ -127,7 +129,7 @@ func init() {
 			if op == "reference-to-video" {
 				mode = "r2v"
 			}
-			spec := provider.FalModel{Resolution: "720p", Variant: "{resolution}_" + mode + "_duration"}
+			spec := providermeasurement.FalModel{Resolution: "720p", Variant: "{resolution}_" + mode + "_duration"}
 			if v.version == "q1" {
 				spec.Resolution = "1080p"
 			}
@@ -141,14 +143,14 @@ func init() {
 	var veo []falEndpoint
 	for _, variant := range []struct{ suffix, price, doc string }{{"", "veo-3.1-generate-001", "veo-31"}, {"/fast", "veo-3.1-fast-generate-001", "veo-31-fast"}} {
 		for _, op := range []string{"", "/image-to-video", "/first-last-frame-to-video"} {
-			veo = append(veo, falEndpoint{"fal-ai/veo3.1" + variant.suffix + op, variant.price, variant.doc, provider.FalModel{Resolution: "720p", Variant: "{audio}", AudioDefault: true}})
+			veo = append(veo, falEndpoint{"fal-ai/veo3.1" + variant.suffix + op, variant.price, variant.doc, providermeasurement.FalModel{Resolution: "720p", Variant: "{audio}", AudioDefault: true}})
 		}
 	}
 	registerFal("qiniu_fal_veo31", "Veo 3.1", "fal-ai/veo3.1", veo)
 	for _, model := range []string{"h3", "h3-max"} {
 		var endpoints []falEndpoint
 		for _, op := range []string{"text-to-video", "image-to-video", "reference-to-video"} {
-			spec := provider.FalModel{Resolution: "2k", Variant: "{resolution}_v_duration", PricingBlocked: "minimax_composite_usage"}
+			spec := providermeasurement.FalModel{Resolution: "2k", Variant: "{resolution}_v_duration", PricingBlocked: "minimax_composite_usage"}
 			if model == "h3-max" {
 				spec.Resolution = "768p"
 				if op != "reference-to-video" {

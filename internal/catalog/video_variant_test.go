@@ -1,6 +1,8 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestMeasuredVideoVariantRequiresItsOutputRate(t *testing.T) {
 	u := Usage{Seconds: 5.5, OutputVariant: "1080p_av"}

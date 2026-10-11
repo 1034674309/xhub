@@ -1,6 +1,6 @@
 # Isolated database fixtures
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../../docs/development/implementation.md)
+[简体中文](readme_cn.md) · [Feature implementation reference](../../../docs/development/zh-CN/implementation.md)
 
 ## Responsibilities and behavior
 

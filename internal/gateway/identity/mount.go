@@ -3,24 +3,23 @@ package identity
 
 import (
 	"net/http"
-
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceMount sync.Once
 
 // Module is users, organizations, teams, members, projects, access groups and the audit trail. The process implements Gate. This package does not import gateway. The paths are the LiteLLM-compatible ones the console already calls, mounted over the new authorization. The routes whose subject does not exist in the new model are gone rather than stubbed: there is no budget object to create, no organization member, no account role beyond the two the matrix has, and no bulk role assignment.
 // 参数 h（Gate）：带当前操作者的鉴权守卫。允许时返回 nil，拒绝时返回禁止或未找到。
-// 返回 httpx.Module（httpx.Module）：可挂到网关上的模块。
+// 返回 util.Module（util.Module）：可挂到网关上的模块。
 // 调用：gateway/family/mount.go、gateway/guard/mount.go、gateway/keys/mount.go、gateway/models/mount.go
 // 测试：无直接单测
-func Module(h Gate) httpx.Module {
-	logTraceOnceMount.Do(func() { logx.Trace("enter identity.Module") })
+func Module(h Gate) util.Module {
+	logTraceOnceMount.Do(func() { util.Trace("enter identity.Module") })
 
 	traceModule("identity")
-	return httpx.Bind("identity", func(reg httpx.Registrar) {
+	return util.Bind("identity", func(reg util.Registrar) {
 		// Accounts. Only a platform administrator reaches the store; a member
 		// reads other people through a team's member list.
 		reg.Handle("POST /user/new", func(w http.ResponseWriter, r *http.Request) { UserNew(h, w, r) })

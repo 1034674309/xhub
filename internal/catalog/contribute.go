@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Row is one model a provider package adds to the price map the console already
@@ -57,7 +57,7 @@ func Contribute(row Row) {
 	row.ID = strings.TrimSpace(row.ID)
 	row.Provider = strings.TrimSpace(row.Provider)
 	if row.ID == "" || row.Provider == "" {
-		logx.Debug("catalog contribution skipped reason=missing id or provider")
+		util.Debug("catalog contribution skipped reason=missing id or provider")
 		return
 	}
 	modelCostMu.Lock()
@@ -160,17 +160,6 @@ func ContributeProvider(p ProviderRow) {
 	modelCostMu.Unlock()
 }
 
-// aliasKey resolves an official model id to the price-map key, when one was registered.
-// 参数 model（string）：对外模型名，用来选部署和记用量。
-// 返回 string（string）：价格表使用的模型键。没有登记别名时退回原始 id；bool（bool）：这个官方模型 id 在价格表里登记过别名时返回真。
-// 调用：仅在 contribute.go 内使用。
-// 测试：无直接单测
-func aliasKey(model string) (string, bool) {
-	modelCostMu.RLock()
-	defer modelCostMu.RUnlock()
-	return aliasKeyLocked(model)
-}
-
 // aliasKeyLocked is aliasKey for a caller that already holds the read lock.
 // 参数 model（string）：对外模型名，用来选部署和记用量。
 // 返回 string（string）：价格表使用的模型键；bool（bool）：登记过别名时为真。
@@ -193,36 +182,6 @@ func appendUnique(ids []string, id string) []string {
 		}
 	}
 	return append(ids, id)
-}
-
-// mergeProviders appends provider packages that the embedded dropdown does not already name.
-// 参数 base（any）：合并Providers接到的动态值。类型在函数体内收窄。
-// 返回 any（any）：合并Providers的结果。具体类型由调用方断言。
-// 调用：catalog/classify.go
-// 测试：无直接单测
-func mergeProviders(base any) any {
-	list, ok := base.([]any)
-	if !ok {
-		return base
-	}
-	seen := map[string]bool{}
-	for _, item := range list {
-		row, _ := item.(map[string]any)
-		name, _ := row["provider"].(string)
-		if name != "" {
-			seen[name] = true
-		}
-	}
-	for _, item := range extraProviderMaps() {
-		row, _ := item.(map[string]any)
-		name, _ := row["provider"].(string)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-		list = append(list, item)
-	}
-	return list
 }
 
 // 把额外登记的供应商字段收成价目表要的结构。

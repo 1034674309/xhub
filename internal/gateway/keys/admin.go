@@ -8,9 +8,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceAdmin sync.Once
@@ -21,28 +20,28 @@ var logTraceOnceAdmin sync.Once
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func ServiceAccount(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceAdmin.Do(func() { logx.Trace("enter keys.ServiceAccount") })
+	logTraceOnceAdmin.Do(func() { util.Trace("enter keys.ServiceAccount") })
 
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
 	body := readMap(r)
 	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
-	if err := httpx.ValidateRateFields(body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateRateFields(body); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	body["owner_type"] = iam.OwnerService
 	body["user_id"] = ""
 	in, err := keyInputFrom(body, p.UserID)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	obj := authz.Object{Type: authz.ObjectKey, TeamID: in.TeamID, ProjectID: in.ProjectID,
@@ -60,7 +59,7 @@ func ServiceAccount(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, Response(*k, plain, true))
+	util.WriteJSON(w, 200, Response(*k, plain, true))
 }
 
 // Regenerate rotates the key plaintext. The old plaintext stops working immediately, and the key's own limits and narrowing are untouched.
@@ -69,19 +68,19 @@ func ServiceAccount(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
 	body := readMap(r)
 	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
-	if err := httpx.ValidateRateFields(body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateRateFields(body); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	token := r.PathValue("key")
@@ -89,7 +88,7 @@ func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 		token = str(body["key"])
 	}
 	if token == "" {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return
 	}
 	k, err := lookupKey(s, r, token)
@@ -106,7 +105,7 @@ func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, Response(*out, plain, true))
+	util.WriteJSON(w, 200, Response(*out, plain, true))
 }
 
 // ResetSpend sets the key spend back to zero, or to reset_to when the body carries one. Historical usage rows are not deleted, so the figures that produced the old total remain.
@@ -115,19 +114,19 @@ func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func ResetSpend(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
 	body := readMap(r)
 	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
-	if err := httpx.ValidateRateFields(body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateRateFields(body); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	token := r.PathValue("key")
@@ -135,7 +134,7 @@ func ResetSpend(s Host, w http.ResponseWriter, r *http.Request) {
 		token = str(body["key"])
 	}
 	if token == "" {
-		httpx.WriteError(w, 400, "invalid_request", "key required")
+		util.WriteError(w, 400, "invalid_request", "key required")
 		return
 	}
 	k, err := lookupKey(s, r, token)
@@ -156,7 +155,7 @@ func ResetSpend(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, Response(*out, "", false))
+	util.WriteJSON(w, 200, Response(*out, "", false))
 }
 
 // Aliases lists the key names the caller may see, for the dashboard pickers.
@@ -165,7 +164,7 @@ func ResetSpend(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func Aliases(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
@@ -193,7 +192,7 @@ func Aliases(s Host, w http.ResponseWriter, r *http.Request) {
 		seen[k.Name] = true
 		aliases = append(aliases, k.Name)
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"aliases":      aliases,
 		"total_count":  len(aliases),
 		"current_page": 1,
@@ -208,11 +207,11 @@ func Aliases(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func Health(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	if s.RequireMixed(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"key":               "healthy",
 		"logging_callbacks": nil,
 	})
@@ -224,24 +223,24 @@ func Health(s Host, w http.ResponseWriter, r *http.Request) {
 // 调用：gateway/keys/mount.go
 // 测试：无直接单测
 func BulkUpdate(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
 	body := readMap(r)
 	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
-	if err := httpx.ValidateRateFields(body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateRateFields(body); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if err := httpx.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+	if err := util.ValidateBudgetFields(body, "max_budget", "reset_to"); err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	tokens := idsFrom(body, "keys", "key")
 	if _, err := patchFrom(&iam.Key{}, body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if err := templateauth.Selection(s, r, p, str(body["route_template_id"])); err != nil {
@@ -269,7 +268,7 @@ func BulkUpdate(s Host, w http.ResponseWriter, r *http.Request) {
 		n++
 		out = append(out, Response(*updated, "", false))
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"updated": n, "keys": out})
+	util.WriteJSON(w, 200, map[string]any{"updated": n, "keys": out})
 }
 
 // hashKeyToken is the stored hash of a plaintext key. A value that is already a hash or an id is passed through, so one lookup serves both client styles.

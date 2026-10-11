@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // ProxyVersion is written into the catalog config resource and returned as litellm_version by the process health details.
@@ -58,5 +58,5 @@ type Host interface {
 // 调用：family 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

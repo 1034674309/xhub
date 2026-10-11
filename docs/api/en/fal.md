@@ -1,11 +1,5 @@
 # Fal queue tasks
 
-## Overview
-
-Fal queue tasks
-
-### Fal queue tasks
-
 ## Behavior
 Only registered Fal video paths are supported: Seedance, Kling, Vidu, Veo and MiniMax. Resolve returned status_url and response_url against the gateway root and query with the same XHub key used to create the task. Do not append /requests/ to the creation path.
 

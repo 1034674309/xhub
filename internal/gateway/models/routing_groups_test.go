@@ -2,9 +2,10 @@ package models
 
 import (
 	"bytes"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestRoutingGroupsStrictBody 验证非法正文、未知字段、多对象、缺失记录及503；内存宿主，目录不变，无外部清理。

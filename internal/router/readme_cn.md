@@ -1,49 +1,43 @@
-# 部署过滤、排序与加权分流
+# 路由模板编译与部署调度
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md) · [路由契约](../../docs/development/routing.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-router 按公开模型名或路由组匹配部署，过滤禁用和冷却候选，再生成尝试顺序；它不授予模型访问权限。`simple-shuffle` 与 `random` 均匀随机且忽略权重。`traffic-split` 每次按正权重的相对比例独立随机抽样，不是平滑加权轮询，有限样本不保证精确比例。
+本包把持久化路由配置和当前模型目录编译成不可变的单请求 RouteSettings 快照，再生成有序部署尝试列表。它负责模型匹配、显式组、相对流量权重、重试时间值、三类回退、身份范围继承、冷却过滤、粘性优先和策略算法；不注册 HTTP、不鉴权、不调用供应商、不记录指标，也不持久化配置。
 
-显式分配只使用 `deployment_id`。明细未列出的部署权重为 `1`；空 `allocations` 使所有匹配部署权重为 `1`。权重必须是有限非负数且至少有一个正值。`traffic-split` 排除零权重、冷却、禁用和非法权重部署；其他策略排除冷却部署，候选全不可用时返回空。会话固定部署只有在仍兼容、未冷却且满足权重条件时才能置顶。
+精确公开模型先于通配模式。通配规则按具体程度排序，并用捕获值改写上游模型。禁用部署会被排除。除非调用方自行保存，函数只返回新切片、映射、文档或只读结果。
 
-`cost-based-routing` 比较当前时段的输入 token 单价，未定价候选排在最后。冷却和指标隔离身份优先使用 `pricing_id`，其次 `deployment_id`，最后 `model_info.id`。部署公开身份只使用 `litellm_params.deployment_id`，其次 `model_info.id`，不把 `pricing_id` 当作部署 ID。
+### 依赖与测试
+
+本包使用 config 模型、catalog 价格解析、IAM 路由模板、llm 通配辅助和日志。测试覆盖权重、通配、组、回退图、模板编译/校验、清理、范围解析、策略、粘性、冷却身份及当前时段价格。
+
+## 对外接口
+
+本包不注册 handler。gateway identity 在 /route_template/... 提供模板管理，在 /routing/groups 提供组，在 /router/settings 提供设置；这些 handler 调用本包 API。dataplane 使用编译后的 RouteSettings 与 Schedule。
+
+Compile(selected, store, models) 读取 model_defaults；模板缺少 routing_groups 时读取旧全局组；读取 model_fallbacks；只覆盖模板明确出现的回退类别；校验引用和合并图；错误写入 RouteSettings.Err，不执行写入。Resolve 按 key、team、organization 选择；已绑定 ID 但模板丢失时停止继承并回到 builtin。RequestChain 构造顺序。Builtin 默认一次尝试、60 秒、阈值三、无冷却及模型默认分流。
+
+解析/校验 API 覆盖 FallbackPolicy、Group、Policy、默认权重、模板、目录、策略和部署归属。RouteSettings.ForModel 按模型规则、组、旧模板默认、模型默认解析；Candidates 只展开显式组名；Schedule 应用权重和可选 pin。Retries、TimeoutSeconds、AllowedFails、CooldownSeconds 返回已校验值。All、Available、Order、Pick、DeploymentID、CooldownID 执行调度。CleanAllocations 与 CleanTemplateWeights 深度清理悬空引用。
+
+## 内部核心实现
+
+匹配先找精确 alias；不存在时按字面长度与复杂度排序通配模式，编译安全正则，并把捕获值替换到上游模型。组保留成员真实模型身份，供鉴权和计费。DeploymentID 依次取 deployment_id、model_info.id。CooldownID 组合 api_base、模型和稳定身份，稳定身份依次取 pricing_id、deployment_id、model_info.id，并加入 credential name 隔离账号。
+
+traffic-split 按正的有限相对权重独立抽样；未列部署默认权重一，明确零和冷却项排除。random 与 simple-shuffle 均匀随机。least-busy、cost-based-routing、latency-based-routing、usage-based-routing、tag-based-routing 比较运行状态或配置后备值。成本策略优先当前有效费率表，再用平价；未定价或非法值视为正无穷。pin 只有仍匹配、健康且权重为正才置顶。
+
+模板解析拒绝未知字段、重复模型规则/组、非法重试数、非分流策略权重、组重叠、悬空部署 ID、未知回退节点、过长/重复目标，以及跨三类回退的环。Compile 同时校验局部和合并全局图。清理逻辑深拷贝 JSON，删除悬空分配；零或单部署不保留权重；完整剩余配置若全零则恢复默认均等行为。
 
 ## 源码职责与入口
 
-- [`router.go`](router.go)：匹配候选、校验策略、过滤禁用部署并排序或选择。
-- [`schedule.go`](schedule.go)：组合匹配、健康与权重过滤、会话粘性，生成请求尝试列表。
-- [`policy.go`](policy.go)：解析和校验分配策略。
-- [`settings.go`](settings.go)：读取模板契约及重试策略默认值。
-- [`compile.go`](compile.go)：合并模型规则、平台默认值和回退设置。
-- [`groups.go`](groups.go)：校验并展开路由组。
-- [`fallback.go`](fallback.go)：校验回退图。
-- [`template.go`](template.go)：校验模板引用及回退配置。
-- [`weight_cleanup.go`](weight_cleanup.go)：模型目录变化时清理失效分配行。
+- [compile.go](compile.go)：ConfigReader，合并并校验默认、组和回退。
+- [fallback.go](fallback.go)：FallbackPolicy 严格解析、分类目标和跨类别图校验。
+- [groups.go](groups.go)：Group/GroupArgs、名称/成员/权重校验和候选展开。
+- [policy.go](policy.go)：Allocation、Policy、DefaultWeights、严格解析、份额与部署归属。
+- [router.go](router.go)：State、精确/通配匹配、全部策略、加权抽样、运行身份、价格比较和策略校验。
+- [schedule.go](schedule.go)：健康/权重过滤和兼容粘性置顶。
+- [settings.go](settings.go)：RouteSettings、范围解析、builtin、模型优先级、重试值和模板字段校验。
+- [template.go](template.go)：组与三类回退提取及实时目录校验。
+- [weight_cleanup.go](weight_cleanup.go)：悬空分配清理和深拷贝模板修复。
 
-本目录导出供 gateway 和 dataplane 调用的调度 API，但不直接注册 HTTP 路由。
-
-## 模板契约
-
-新模板使用 `model_routes` 和完整的 `retry_policy`。模型规则包含 `model`、`strategy` 及可选 `allocations`；只有 `traffic-split` 可配置分配，分配项为 `deployment_id` 与 `weight`。`max_attempts`、`timeout_seconds`、`failure_threshold`、`cooldown_seconds` 从 `retry_policy` 读取。路由组以及通用、上下文窗口、内容策略回退会经过校验并由请求链执行。
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [`allocation_test.go`](allocation_test.go) | `TestRandomAndTrafficIntervals`、`TestStickySchedulingDoesNotDraw`、`TestAllocationPolicyValidation`、`TestRelativeDefaultWeights`、`TestSimpleShuffleIsUniformRandom` |
-| [`compile_test.go`](compile_test.go) | `TestCompileOverrides`、`TestCompileFailures`、`TestCompileGroupIsolation`、`TestCompileModelWeights` |
-| [`compile_fallback_test.go`](compile_fallback_test.go) | `TestCompileFallbackPrecedence`、`TestCompileFallbackFailures` |
-| [`groups_test.go`](groups_test.go) | `TestGroupContract`、`TestGroupScheduleIdentity` |
-| [`fallback_test.go`](fallback_test.go) | `TestFallbackPolicy`、`TestFallbackGraph` |
-| [`fallback_boundary_test.go`](fallback_boundary_test.go) | `TestFallbackPolicyCategoryBoundaries`、`TestFallbackGraphSharedAndDisconnected` |
-| [`cost_regression_test.go`](cost_regression_test.go) | `TestCostRoutingUsesSettlementRatePrecedenceAndWindow`、`TestCostRoutingAcceptsValidNumericRates` |
-| [`disabled_test.go`](disabled_test.go) | `TestAllExcludesDisabledExactAndWildcardDeployments` |
-| [`weight_cleanup_test.go`](weight_cleanup_test.go) | `TestCleanAllocations`、`TestCleanTemplateWeights` |
-
-实现变更时运行 router 包的定向测试；数据库、Redis 和真实供应商覆盖需要对应环境，不能由本包测试默认推断。
-
-## 依赖关系
-
-[internal/catalog](../catalog/readme_cn.md)、[internal/config](../config/readme_cn.md)、[internal/llm](../llm/readme_cn.md)、[internal/logx](../logx/readme_cn.md)。
+验证命令：go test ./internal/router -count=1。Redis 新鲜度、实时并发、供应商健康和真实价格源正确性属于外部边界。

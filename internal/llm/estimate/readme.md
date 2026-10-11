@@ -1,45 +1,30 @@
-# Token and cost estimation
+# Local token and cost estimation helpers
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../../docs/development/implementation.md)
+[简体中文](readme_cn.md)
 
-## Responsibilities and behavior
+## Overview
 
-tokencount.go estimates input tokens using tokenizers; cost.go provides TokenCost and related helpers for rates, margins, discounts, and service tiers. Estimates support checks and quotes, not authoritative settlement.
-Tokenizer mismatch, multimodal input, hidden reasoning, and cache behavior limit precision. Billing uses actual upstream quantities and catalog prices when available.
-There are no direct HTTP routes; gateway token and quote handlers call these helpers. Document supported inputs, unknown models, and units when extending estimation. Direct tests cover deterministic estimation contracts; integration checks cover their externally visible use.
+This package provides deterministic helpers for previewing token counts, token-based cost, discounts, margins, and service tiers. Rates are dollars per token. Results support admission, UI estimates, and LiteLLM-compatible token-count responses; they are not authoritative provider settlement evidence.
+
+### Dependencies and tests
+
+It uses the configured tokenizer library and logging. Tests cover discount/margin precedence, fixed additions, token arithmetic, tier mapping, and invalid boundaries. No network is used.
+
+## External interfaces
+
+There is no HTTP registration. Gateway token-count and pricing code calls these functions. ApplyDiscount returns final cost, percent, and amount; provider-specific entries override global and invalid/missing values leave cost unchanged. ApplyMargin returns final, percent, fixed, and total margin with the same precedence. TokenCost returns input and output components and clamps negative token counts to zero.
+
+MapTrafficType maps Gemini traffic classes to billing tiers and reports whether the value is known/standard. NormalizeServiceTier accepts valid settled tiers and rejects missing/non-string/auto as a final tier. CountTokens(model, prompt, messages) returns count, tokenizer model, and error. OpenAISupportedParams returns a fresh supported-key list, varying response_format and user by model/catalog context. ModelUsedForCount removes one provider prefix from the deployment model.
+
+## Core implementation
+
+Discounts apply a bounded percentage to base cost. Margins combine percentage and fixed components after choosing provider-specific then global configuration. Token cost multiplies normalized counts by per-token rates without rounding away components. Traffic normalization keeps unknown values distinguishable from standard billing and prevents auto from being recorded as a settled tier.
+
+CountTokens follows LiteLLM/OpenAI chat accounting: encode prompt or message fields, add per-message framing, include names and structured content through stable text conversion, then add assistant priming. It chooses a compatible tokenizer and returns an error when encoding cannot be established. It cannot observe hidden reasoning, provider retokenization, binary media, or future tokenizer changes.
 
 ## Source responsibilities and entry points
 
-### cost.go
+- [cost.go](cost.go): Margin, discount/margin selection and arithmetic, TokenCost, Gemini traffic mapping, and service-tier normalization.
+- [tokencount.go](tokencount.go): CountTokens chat accounting, OpenAISupportedParams, and ModelUsedForCount provider-prefix normalization.
 
-Exported types: `Margin`.
-
-- [`func ApplyDiscount(baseCost float64, provider string, discounts map[string]float64) (final, percent, amount float64)`](cost.go) — ApplyDiscount looks up a rate for the provider in the discount map and subtracts it from the base cost. Discount-map keys are custom_llm_provider. The value is a fraction: 0.05 means subtract 5 percent. A missing provider, or an empty provider name, leaves the cost unchanged. The results are the discounted cost, the discount fraction, and the discount amount.
-- [`func ApplyMargin(baseCost float64, provider string, margins map[string]Margin) (final, percent, fixed, total float64)`](cost.go) — ApplyMargin adds a markup after the discount. A provider's own rule wins over the global rule stored under the key global. The results are the marked-up cost, the percent, the fixed amount, and the markup total. With no rule the last three values are 0 and the cost is unchanged.
-- [`func TokenCost(promptTokens, completionTokens int, inputRate, outputRate float64) (float64, float64)`](cost.go) — TokenCost is the cost of a text completion when cache tokens are not billed separately. Prompt tokens multiply the input rate and completion tokens multiply the output rate. Rates are dollars per token.
-- [`func MapTrafficType(trafficType string) (tier string, known, standard bool)`](cost.go) — MapTrafficType folds a Gemini usageMetadata.trafficType into a billing tier. ON_DEMAND_PRIORITY uses the priority rate. FLEX, BATCH, and ON_DEMAND_FLEX use the flex rate. ON_DEMAND is the standard price. The tier is empty, but known and standard are both true. An empty string or an unknown value sets known to false, and the caller should fall back to the standard price.
-- [`func NormalizeServiceTier(serviceTier string, isString bool) (string, bool)`](cost.go) — NormalizeServiceTier reports whether service_tier can be used to look up a price. "auto" is only a routing preference, not a billing tier. A non-string is not one either. Both return ok false, so a later lookup does not call lower on an empty string and mis-read the standard price.
-
-### tokencount.go
-
-- [`func CountTokens(model, prompt string, messages []map[string]any) (int, string, error)`](tokencount.go) — CountTokens matches the local LiteLLM token_counter for OpenAI chat models. A prompt is counted as plain text. Each message adds tokens_per_message, then the role and content, and the total adds 3 reply-priming tokens. The returned tokenizer type is the openai_tokenizer selected by LiteLLM.
-- [`func OpenAISupportedParams(model string, catalog bool) []string`](tokencount.go) — OpenAISupportedParams matches OpenAIGPTConfig.get_supported_openai_params. gpt-4 and gpt-3.5-turbo-1 6k omit response_format. OpenAI models listed in the catalog also include user.
-- [`func ModelUsedForCount(requestModel, deploymentModel string) string`](tokencount.go) — ModelUsedForCount drops the provider prefix from a deployment model, matching LiteLLM token_counter.
-
-## External HTTP boundary
-
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
-
-## Dependencies
-
-[internal/logx](../../logx/readme.md).
-
-## Verification and maintenance
-
-[cost_test.go](cost_test.go) checks discount/markup precedence, cost breakdown, token-price units and billing tiers. [tokencount_test.go](tokencount_test.go) checks text/message estimates, unknown-model fallback, supported parameters and model-prefix handling. [Pricing regression](../../../cmd/regression/pricing_test.go) and [pricing browser E2E](../../../frontend/e2e/price-model-selects.spec.ts) cover the corresponding service and user contracts; tokenizer internals and image/audio estimates remain outside this proof.
-
-```bash
-go test ./internal/llm/estimate -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+Verification: go test ./internal/llm/estimate -count=1. Live provider tokenization, multimodal units, hidden tokens, and final invoices remain external.

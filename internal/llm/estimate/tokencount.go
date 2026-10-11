@@ -3,10 +3,10 @@ package estimate
 
 import (
 	"strings"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/tiktoken-go/tokenizer"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
+	"github.com/tiktoken-go/tokenizer"
 )
 
 var logTraceOnceTokencount sync.Once
@@ -17,7 +17,7 @@ var logTraceOnceTokencount sync.Once
 // 调用：gateway/tokens.go
 // 测试：无直接单测
 func CountTokens(model, prompt string, messages []map[string]any) (int, string, error) {
-	logTraceOnceTokencount.Do(func() { logx.Trace("enter estimate.CountTokens") })
+	logTraceOnceTokencount.Do(func() { util.Trace("enter estimate.CountTokens") })
 
 	codec, err := tokenizer.ForModel(tokenizer.Model(model))
 	if err != nil {

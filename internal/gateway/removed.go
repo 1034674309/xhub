@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceRemoved sync.Once
@@ -20,7 +20,7 @@ var logTraceOnceRemoved sync.Once
 // 调用：仅在 removed.go 内使用
 // 测试：catalog_reads_test.go、removed_test.go
 func IsRemovedColumn(path string) bool {
-	logTraceOnceRemoved.Do(func() { logx.Trace("enter gateway.IsRemovedColumn") })
+	logTraceOnceRemoved.Do(func() { util.Trace("enter gateway.IsRemovedColumn") })
 	return removedColumnRoute(path)
 }
 

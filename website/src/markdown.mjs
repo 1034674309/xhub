@@ -3,6 +3,7 @@ import { Marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { documentPath, escapeHTML as e, headingSlug } from "./core.mjs";
 import { repository } from "./content.mjs";
+import { documentLanguage } from "./localization.mjs";
 
 /** 重写仓库相对链接为站内文档或源码地址；参数含源文件、页面路径与文档映射，返回安全地址，未知路径保留源码链接。 */
 export function rewriteLink(href, source, output, mappings) {
@@ -58,7 +59,7 @@ export function renderMarkdown(markdown, source, websiteSource, mappings) {
     },
     code({ text, lang }) {
       if (lang === "mermaid") return `<pre class="mermaid">${e(text)}</pre>`;
-      return `<div class="doc-code"><button class="copy-code" aria-label="${/zh-CN|_cn|development/.test(source) ? "复制代码" : "Copy code"}">${/zh-CN|_cn|development/.test(source) ? "复制代码" : "Copy code"}</button><pre><code class="language-${e((lang || "text").split(" ")[0])}">${e(text)}</code></pre></div>`;
+      return `<div class="doc-code"><button class="copy-code" aria-label="${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}">${documentLanguage(source) === "zh" ? "复制代码" : "Copy code"}</button><pre><code class="language-${e((lang || "text").split(" ")[0])}">${e(text)}</code></pre></div>`;
     },
   } });
   const html = sanitizeHtml(parser.parse(markdown), {

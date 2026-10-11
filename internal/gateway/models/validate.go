@@ -8,8 +8,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceValidate sync.Once
@@ -20,7 +20,7 @@ var logTraceOnceValidate sync.Once
 // 调用：New、Update。
 // 测试：admin_test.go。
 func validateDeployment(s Host, name string, params, info map[string]any) error {
-	logTraceOnceValidate.Do(func() { logx.Trace("enter models.validateDeployment") })
+	logTraceOnceValidate.Do(func() { util.Trace("enter models.validateDeployment") })
 	if _, exists := params["weight"]; exists {
 		return fmt.Errorf("deployment weight is obsolete; configure default weights in model management or customer overrides in route templates")
 	}
@@ -43,7 +43,7 @@ func validateDeployment(s Host, name string, params, info map[string]any) error 
 		meta, _ := record["credential_info"].(map[string]any)
 		info["catalog_id"] = credentialText(meta, "catalog_id")
 	}
-	if err := provider.ValidateDeployment(config.ModelEntry{ModelName: name, LiteLLMParams: params, ModelInfo: info}); err != nil {
+	if err := providerdeployment.ValidateDeployment(config.ModelEntry{ModelName: name, LiteLLMParams: params, ModelInfo: info}); err != nil {
 		return err
 	}
 	for _, field := range rateFields {

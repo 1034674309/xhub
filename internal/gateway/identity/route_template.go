@@ -10,9 +10,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Router templates are named bundles of router settings that an organization, a
@@ -90,7 +89,7 @@ func RouteTemplateList(g Gate, w http.ResponseWriter, r *http.Request) {
 			TeamID:    deref(row.TeamID),
 		})
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"data": out})
+	util.WriteJSON(w, 200, map[string]any{"data": out})
 }
 
 // RouteTemplateGet returns one template.
@@ -109,10 +108,10 @@ func RouteTemplateGet(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil {
-		httpx.WriteError(w, 404, "not_found", "route template not found")
+		util.WriteError(w, 404, "not_found", "route template not found")
 		return
 	}
-	httpx.WriteJSON(w, 200, templateView{
+	util.WriteJSON(w, 200, templateView{
 		ID:        row.ID,
 		Name:      row.Name,
 		Body:      row.Settings(),
@@ -133,7 +132,7 @@ func RouteTemplateCreate(g Gate, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	name := strings.TrimSpace(str(body["name"]))
 	if name == "" {
-		httpx.WriteError(w, 400, "invalid_request", "name required")
+		util.WriteError(w, 400, "invalid_request", "name required")
 		return
 	}
 	// A new template starts as a complete document seeded from the platform
@@ -145,11 +144,11 @@ func RouteTemplateCreate(g Gate, w http.ResponseWriter, r *http.Request) {
 	// one attempt can still delete the line.
 	encoded, err := encodeTemplateBody(seedFromBuiltin(body["body"]))
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if err := validateTemplateModelRouting(encoded); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	// Who this template belongs to. An absent pair means a platform template,
@@ -161,7 +160,7 @@ func RouteTemplateCreate(g Gate, w http.ResponseWriter, r *http.Request) {
 		// A team template with no organization is unreachable by every rule that
 		// reads the organization first, and the database refuses it too. Answering
 		// here gives the caller a reason instead of a 500.
-		httpx.WriteError(w, 400, "invalid_request", "organization_id is required when team_id is given")
+		util.WriteError(w, 400, "invalid_request", "organization_id is required when team_id is given")
 		return
 	}
 	if err := g.Authorize(r, p, authz.ActionRouteTemplateWrite, authz.Object{
@@ -172,7 +171,7 @@ func RouteTemplateCreate(g Gate, w http.ResponseWriter, r *http.Request) {
 	}
 	if catalog, ok := g.(interface{ ValidateRoutingTemplate(string) error }); ok {
 		if err := catalog.ValidateRoutingTemplate(encoded); err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return
 		}
 	}
@@ -181,7 +180,7 @@ func RouteTemplateCreate(g Gate, w http.ResponseWriter, r *http.Request) {
 		g.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"id": row.ID, "name": row.Name, "status": "success"})
+	util.WriteJSON(w, 200, map[string]any{"id": row.ID, "name": row.Name, "status": "success"})
 }
 
 // RouteTemplateUpdate replaces a template's name and body.
@@ -201,7 +200,7 @@ func RouteTemplateUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		httpx.WriteError(w, 404, "not_found", "route template not found")
+		util.WriteError(w, 404, "not_found", "route template not found")
 		return
 	}
 	// Editing is the owner's alone. A sibling team's template is readable and
@@ -216,16 +215,16 @@ func RouteTemplateUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	encoded, err := encodeTemplateBody(body["body"])
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if err := validateTemplateModelRouting(encoded); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if catalog, ok := g.(interface{ ValidateRoutingTemplate(string) error }); ok {
 		if err := catalog.ValidateRoutingTemplate(encoded); err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return
 		}
 	}
@@ -235,10 +234,10 @@ func RouteTemplateUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil {
-		httpx.WriteError(w, 404, "not_found", "route template not found")
+		util.WriteError(w, 404, "not_found", "route template not found")
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"id": row.ID, "name": row.Name, "status": "success"})
+	util.WriteJSON(w, 200, map[string]any{"id": row.ID, "name": row.Name, "status": "success"})
 }
 
 // RouteTemplateDelete removes a template, refusing while any scope still
@@ -265,7 +264,7 @@ func RouteTemplateDelete(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		httpx.WriteError(w, 404, "not_found", "route template not found")
+		util.WriteError(w, 404, "not_found", "route template not found")
 		return
 	}
 	if err := g.Authorize(r, p, authz.ActionRouteTemplateWrite, authz.Object{
@@ -281,7 +280,7 @@ func RouteTemplateDelete(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(usage) > 0 {
-		httpx.WriteJSON(w, 409, map[string]any{
+		util.WriteJSON(w, 409, map[string]any{
 			"error": map[string]any{
 				"code":    "template_in_use",
 				"message": "this template is still selected by an organization, a team or a key",
@@ -294,7 +293,7 @@ func RouteTemplateDelete(g Gate, w http.ResponseWriter, r *http.Request) {
 		g.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success"})
+	util.WriteJSON(w, 200, map[string]any{"status": "success"})
 }
 
 // RouteTemplateUsage lists the scopes selecting one template. It is the same list
@@ -312,7 +311,7 @@ func RouteTemplateUsage(g Gate, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"data": usage})
+	util.WriteJSON(w, 200, map[string]any{"data": usage})
 }
 
 // RouteTemplateBinding reads or writes which template one scope selects.
@@ -346,7 +345,7 @@ func RouteTemplateBinding(g Gate, w http.ResponseWriter, r *http.Request) {
 	}
 	action, obj, ok := bindingTarget(scope, scopeID)
 	if !ok {
-		httpx.WriteError(w, 400, "invalid_request", "scope must be organization, team or key and scope_id is required")
+		util.WriteError(w, 400, "invalid_request", "scope must be organization, team or key and scope_id is required")
 		return
 	}
 	if err := g.Authorize(r, p, action, obj); err != nil {
@@ -397,7 +396,7 @@ func RouteTemplateBinding(g Gate, w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		httpx.WriteJSON(w, 200, map[string]any{
+		util.WriteJSON(w, 200, map[string]any{
 			"scope": scope, "scope_id": scopeID,
 			// selected is what this scope chose; effective is what it will
 			// actually route by, which differs when it chose nothing and
@@ -413,13 +412,13 @@ func RouteTemplateBinding(g Gate, w http.ResponseWriter, r *http.Request) {
 		g.WriteIAMError(w, r, err)
 		return
 	}
-	logx.Info("route template bound scope=%s id=%s template=%s", scope, scopeID, templateID)
+	util.Info("route template bound scope=%s id=%s template=%s", scope, scopeID, templateID)
 	resolved, err := resolveRouteTemplate(g, r, scope, scopeID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status": "success", "scope": scope, "scope_id": scopeID,
 		// The effective template is what the scope will actually route by, which
 		// is not the same as what it selected: a scope that selects nothing

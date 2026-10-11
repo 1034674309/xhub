@@ -1,11 +1,5 @@
 # Image generation
 
-## Overview
-
-Image generation
-
-### Image generation
-
 ## Behavior
 Image URLs may expire. Preserve results according to upstream retention rules. Billing may use pictures or tokens depending on rates.
 

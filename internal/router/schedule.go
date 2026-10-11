@@ -1,6 +1,8 @@
 package router
 
-import "github.com/sunqirui1987/xhub/internal/config"
+import (
+	"github.com/sunqirui1987/xhub/internal/config"
+)
 
 // Schedule 为适配与官方数据面生成本次请求的部署尝试顺序。
 // 参数 list 是完整部署目录，alias 是公开模型或路由组名，strategy 是已校验策略，

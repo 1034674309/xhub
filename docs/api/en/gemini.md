@@ -1,11 +1,5 @@
 # Gemini / Vertex
 
-## Overview
-
-Gemini / Vertex
-
-### Gemini / Vertex
-
 ## Behavior
 URL-encode the public model name in the path. Also supports :streamGenerateContent and :countTokens. Vertex uses /vertex/v1/models/{model} with the same operation suffixes. Provider OAuth credentials stay in deployment settings.
 

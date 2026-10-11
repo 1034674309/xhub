@@ -3,10 +3,11 @@ package catalog
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Route is one method and path from routes.json. The path may contain {param}.
@@ -23,7 +24,7 @@ var logTraceOnceClassify sync.Once
 // 测试：activity_http_test.go、builtin_providers_test.go、chains_test.go
 // 返回 []Route（[]Route）：目录里的路由表。
 func Load() []Route {
-	logTraceOnceClassify.Do(func() { logx.Trace("enter catalog.Load") })
+	logTraceOnceClassify.Do(func() { util.Trace("enter catalog.Load") })
 
 	var r []Route
 	_ = json.Unmarshal(Embedded("routes", routesJSON), &r)

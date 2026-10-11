@@ -1,6 +1,8 @@
 package guard
 
-import "regexp"
+import (
+	"regexp"
+)
 
 // secretPatterns 是可解释的确定性规则子集，覆盖常见密钥、JWT 和私钥。
 // 不实现 detect-secrets 的所有插件、熵检测或远端有效性校验。

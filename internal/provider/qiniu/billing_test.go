@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
 	_ "github.com/sunqirui1987/xhub/internal/provider/qiniu"
 )
 
@@ -14,7 +15,7 @@ import (
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
 func TestSeedanceMeasuredBands(t *testing.T) {
-	b := provider.SeedanceBilling()
+	b := providermeasurement.SeedanceBilling()
 	for _, tc := range []struct {
 		model, resolution string
 		video             bool
@@ -51,7 +52,7 @@ func TestSeedanceMeasuredBands(t *testing.T) {
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
 func TestSeedanceOnlySettlesExplicitSuccess(t *testing.T) {
-	b := provider.SeedanceBilling()
+	b := providermeasurement.SeedanceBilling()
 	c := b.Context(map[string]any{"model": "m"})
 	for _, status := range []string{"", "queued", "creating_assets", "running", "cancelled", "failed", "expired", "unknown"} {
 		if u := b.Usage(map[string]any{"status": status, "usage": map[string]any{"completion_tokens": 100}}, c); u != nil {
@@ -62,7 +63,7 @@ func TestSeedanceOnlySettlesExplicitSuccess(t *testing.T) {
 		t.Fatal("settled business error")
 	}
 	doc := map[string]any{"status": "succeeded", "usage": map[string]any{"completion_tokens": 100}, "tool_usage": map[string]any{"web_search": 2}}
-	u := catalog.NormalizeUsage(b.Usage(doc, provider.TaskContext{}))
+	u := catalog.NormalizeUsage(b.Usage(doc, providercontract.TaskContext{}))
 	if u.Searches != 2 || u.OutputVariant != "unknown" {
 		t.Fatal(u)
 	}
@@ -75,7 +76,7 @@ func TestSeedanceOnlySettlesExplicitSuccess(t *testing.T) {
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
 func TestSeedanceSearchWithoutRateIsUnpriced(t *testing.T) {
-	b := provider.SeedanceBilling()
+	b := providermeasurement.SeedanceBilling()
 	facts := b.Context(map[string]any{"model": "bytedance/doubao-seedance-2-0-mini-260615"})
 	u := catalog.NormalizeUsage(b.Usage(map[string]any{"status": "succeeded", "usage": map[string]any{"completion_tokens": 1000}, "tool_usage": map[string]any{"web_search": 2}}, facts))
 	if _, ok := catalog.CostAt("qiniu/"+facts.Model, u, time.Now()); ok {

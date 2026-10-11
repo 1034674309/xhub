@@ -1,40 +1,29 @@
 # 启动配置与模型定义
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+## 说明
 
-## 职责与实现契约
+config 把网关 YAML 启动文件加载为有类型的进程配置，同时保留路由和通用设置中未声明的键，供后续数据库覆盖按键合并。它定义模型部署、路由默认值、数据库与 Redis 地址、初始管理员、可选应急主密钥和花费日志开关。加载只读取文件和环境变量，不连接外部服务，也不改写配置文件。
 
-config.go 定义 Config、ModelEntry，加载 YAML 并解析 os.environ/NAME 引用。未知 router_settings 和 general_settings 字段保留，便于配置往返，但保存不意味着数据面一定执行。数据库地址只支持 PostgreSQL URL。
-Load 的平台默认策略是 simple-shuffle，重试预填 2，超时 60 秒；这些启动默认与 RouteSettings 对缺失字段的运行时读取规则要分开说明。ModelEntry.Disabled 从 model_info.disabled 的布尔值判断暂停，模型发现和运行时选路均排除暂停部署。
-管理员初始密码只用于创建尚不存在的账号；后续修改配置不覆盖已持久化密码。master 可选且不是登录凭据。命名凭据和内联历史凭据需按协议解析；环境变量不应写入响应、README 或日志。
+## 对外接口
+
+- `Load(path string) (*Config, error)` 读取 YAML，展开受支持的环境引用，校验数据库 URL，补默认值，并解析部署中的字符串参数。文件和 YAML 错误原样返回；数据库地址缺失或协议不是 postgres/postgresql 时返回校验错误。进程启动在组装网关、路由、IAM 和数据面前调用。
+- `ModelEntry.Disabled() bool` 仅在 `model_info.disabled` 实际为布尔 true 时返回真；字段缺失或类型错误时仍视为启用。模型发现和路由挑选部署时使用。
+- `ModelEntry.ParamString(key, fallback string) string` 从 `litellm_params` 读取非空字符串，否则返回 fallback，供路由和供应商选择避免不安全类型断言。
+- `Config` 提供模型、路由、LiteLLM、护栏和通用设置。`RouterRaw` 与 `GeneralRaw` 保留 YAML 映射，让数据库覆盖逐键处理；保留某个键不表示运行时一定实现其语义。
+
+本包没有 HTTP 边界。命令与测试负责加载，gateway、router、provider 等包消费返回值。
+
+## 内部核心实现
+
+Load 对 YAML 解码两次：第一次填充有类型结构，第二次捕获原始映射。环境引用格式为 `os.environ/NAME`，只在主密钥、数据库与 Redis 地址、初始管理员字段以及各部署 `litellm_params` 的字符串值中展开；变量未设置时结果为空。随后强制使用 PostgreSQL，并在字段为零值时设置默认值：路由策略 random、重试两次、超时 60 秒。因此这些字段无法区分“显式零”和“省略”。
+
+管理员凭据只由网关启动流程在账号不存在时用于播种，以后修改 YAML 不会重写已保存密码。`disable_env_credential_login` 关闭播种。主密钥可以缺省，它是应急 API 凭据而非控制台登录。解析后的秘密保存在内存中，调用方不得写入日志。
+
+### 测试依赖
+
+`config_test.go` 覆盖默认值、原始映射、环境展开、管理员字段、可选主密钥和禁用部署；`url_test.go` 覆盖数据库协议。运行 `go test ./internal/config -count=1`；测试使用临时文件和环境变量，不连接真实数据库。
 
 ## 源码职责与入口
 
-### config.go
-
-公开类型：`Config`, `ModelEntry`, `RouterSettings`, `GeneralSettings`.
-
-- [`func (m ModelEntry) Disabled() bool`](config.go) — Disabled reports whether this deployment is excluded from model discovery and runtime routing.
-- [`func Load(path string) (*Config, error)`](config.go) — Load reads YAML and requires a postgres:// or postgresql:// database URL.
-- [`func (e ModelEntry) ParamString(key, fallback string) string`](config.go) — ParamString 从一条部署的 litellm_params 里按名字读字符串。缺键或类型不对时返回 fallback。
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [config_test.go](config_test.go) | `TestLoadReadsTheConfiguredAdministrator`, `TestLoadResolvesTheAdministratorPasswordFromTheEnvironment`, `TestLoadDoesNotRequireAMasterKey`, `TestLoadWithoutAnAdministratorStillSucceeds`, `TestLoadReadsDisableEnvCredentialLogin` |
-| [url_test.go](url_test.go) | `TestDatabaseURLRequiresPostgresScheme` |
-
-```bash
-go test ./internal/config -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- `config.go` 包含全部生产类型与操作：Config、ModelEntry、RouterSettings、GeneralSettings、Load、环境解析、禁用部署判定和字符串参数读取。
+- `config_test.go` 验证解析和默认值；`url_test.go` 专门验证 URL 校验。

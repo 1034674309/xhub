@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -19,7 +19,7 @@ var logTraceOnceCodec sync.Once
 // 调用：gateway/keys/admin.go。
 // 测试：无直接单测
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter keys.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter keys.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)
@@ -151,23 +151,6 @@ func parseFloat(v any) *float64 {
 			return nil
 		}
 		return &f
-	default:
-		return nil
-	}
-}
-
-// parseInt converts a JSON number into an optional integer. A float64 is truncated. Any other type stays unset.
-// 参数 v（any）：JSON 里读出的动态值。数字、字符串和对象都要接住，类型不符时按零值而不是 panic。
-// 返回 *int（*int）：从 JSON 数字截出的整数。float64 会丢掉小数。其他类型为 nil。
-// 调用：gateway/keys/generate.go
-// 测试：无直接单测
-func parseInt(v any) *int {
-	switch t := v.(type) {
-	case float64:
-		n := int(t)
-		return &n
-	case int:
-		return &t
 	default:
 		return nil
 	}

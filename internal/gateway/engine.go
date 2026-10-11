@@ -26,8 +26,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/catalog"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // newEngine creates the Gin engine. An unregistered path returns a JSON 404 instead of Gin's plain text.
@@ -39,8 +39,8 @@ func newEngine() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	e := gin.New()
 	e.NoRoute(gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
-		logx.Debug("process %s %s step=noroute", r.Method, r.URL.Path)
-		httpx.WriteError(w, http.StatusNotFound, "not_found", "Not Found")
+		util.Debug("process %s %s step=noroute", r.Method, r.URL.Path)
+		util.WriteError(w, http.StatusNotFound, "not_found", "Not Found")
 	}))
 	return e
 }
@@ -92,10 +92,10 @@ func (s *Server) Handler() http.Handler {
 		var raw []byte
 		var body map[string]any
 		lw := &statusRecorder{ResponseWriter: w, code: http.StatusOK}
-		logx.Trace("process %s %s step=enter", r.Method, r.URL.Path)
+		util.Trace("process %s %s step=enter", r.Method, r.URL.Path)
 		defer func() {
 			if rec := recover(); rec != nil {
-				logx.Error("panic %s %s %v", r.Method, r.URL.Path, rec)
+				util.Error("panic %s %s %v", r.Method, r.URL.Path, rec)
 				if !lw.set {
 					lw.code = http.StatusInternalServerError
 					lw.set = true
@@ -103,30 +103,30 @@ func (s *Server) Handler() http.Handler {
 				}
 			}
 			// Method, path, status, and elapsed time only. Headers and bodies stay off this line.
-			logx.Info("%s %s %d %s", r.Method, r.URL.Path, lw.code, time.Since(start))
+			util.Info("%s %s %d %s", r.Method, r.URL.Path, lw.code, time.Since(start))
 			if lw.code >= 400 {
 				s.recordEarlyError(lw, r, raw, body, start)
 				note := lw.note
 				if note == "" {
 					note = "request failed"
 				}
-				logx.Error("%s %s %d %s", r.Method, r.URL.Path, lw.code, note)
+				util.Error("%s %s %d %s", r.Method, r.URL.Path, lw.code, note)
 			}
 		}()
 		w = lw
-		callID := httpx.CallID()
-		httpx.SetCallID(w, callID)
+		callID := util.CallID()
+		util.SetCallID(w, callID)
 		w.Header().Set("x-litellm-version", Version)
 		setCORS(w, r)
 		if r.Method == http.MethodOptions {
-			logx.Debug("process %s %s step=options", r.Method, r.URL.Path)
+			util.Debug("process %s %s step=options", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		var readErr error
 		raw, readErr = io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
 		if readErr != nil {
-			httpx.WriteTypedError(w, r.URL.Path, http.StatusRequestEntityTooLarge, "invalid_request", "request body exceeds limit or cannot be read")
+			util.WriteTypedError(w, r.URL.Path, http.StatusRequestEntityTooLarge, "invalid_request", "request body exceeds limit or cannot be read")
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(raw))
@@ -159,11 +159,11 @@ func (s *Server) Handler() http.Handler {
 			var conflict bool
 			lease, hit, conflict = s.beginIdempotency(r, idemKey, raw)
 			if conflict {
-				httpx.WriteTypedError(w, r.URL.Path, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request payload")
+				util.WriteTypedError(w, r.URL.Path, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used with a different request payload")
 				return
 			}
 			if hit != nil {
-				logx.Debug("process %s %s step=idempotency hit=true", r.Method, r.URL.Path)
+				util.Debug("process %s %s step=idempotency hit=true", r.Method, r.URL.Path)
 				s.writeIdempotentResponse(w, lw, hit)
 				return
 			}
@@ -175,11 +175,11 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		if stream || strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-			logx.Debug("process %s %s step=dispatch mode=stream", r.Method, r.URL.Path)
+			util.Debug("process %s %s step=dispatch mode=stream", r.Method, r.URL.Path)
 			s.engine.ServeHTTP(w, r)
 			return
 		}
-		logx.Debug("process %s %s step=dispatch mode=buffered", r.Method, r.URL.Path)
+		util.Debug("process %s %s step=dispatch mode=buffered", r.Method, r.URL.Path)
 		hw := &holdWriter{ResponseWriter: w, code: 200}
 		if !s.serveBypass(hw, r) {
 			s.engine.ServeHTTP(hw, r)
@@ -187,7 +187,7 @@ func (s *Server) Handler() http.Handler {
 		if w.Header().Get("Content-Type") == "" {
 			w.Header().Set("Content-Type", "application/json")
 		}
-		if isDataPlanePath(r.URL.Path) {
+		if catalog.IsDataPlanePath(r.URL.Path) {
 			w.Header().Set("x-litellm-response-duration-ms", strconv.FormatInt(time.Since(start).Milliseconds(), 10))
 			if w.Header().Get("x-litellm-model-api-base") == "" {
 				if p, err := s.resolve(r); err == nil && p != nil && p.Key != nil {
@@ -448,7 +448,7 @@ func (s *statusRecorder) Write(p []byte) (int, error) {
 // 返回：无。已删除或退役接口仅保留进程访问日志；已有 RecordSpend 行依赖 request_id 幂等去重；鉴权失败无法认领身份时仅管理员可见。
 // 调用：Handler 的失败 defer，覆盖鉴权、限流、未认领模型和路由配置错误；测试见 early_error_log_test.go。
 func (s *Server) recordEarlyError(lw *statusRecorder, r *http.Request, raw []byte, body map[string]any, start time.Time) {
-	if s == nil || lw == nil || lw.code < 400 || !isDataPlanePath(r.URL.Path) {
+	if s == nil || lw == nil || lw.code < 400 || !catalog.IsDataPlanePath(r.URL.Path) {
 		return
 	}
 	// 兼容路由仍会返回 410，已删除路由会返回 404；它们不再提供模型服务，

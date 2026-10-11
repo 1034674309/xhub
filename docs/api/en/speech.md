@@ -1,11 +1,5 @@
 # Speech generation
 
-## Overview
-
-Speech generation
-
-### Speech generation
-
 ## Behavior
 The actual response is binary audio, not this JSON illustration. Save it and inspect Content-Type.
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Host is what settings reads and writes ask the process for. *gateway.Server implements it. This package does not import gateway.
@@ -39,5 +39,5 @@ type Host interface {
 // 调用：prefs 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

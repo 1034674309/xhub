@@ -5,10 +5,9 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"golang.org/x/crypto/bcrypt"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 // 去掉邮箱首尾空白并转成小写，作为查找和存储的统一形式。
@@ -98,7 +97,7 @@ func (db *DB) EnsureAdmin(ctx context.Context, email, name, password string) (bo
 		return false, err
 	}
 	if existing != nil {
-		logx.Info("configured administrator already exists user=%s role=%s", existing.ID, existing.Role)
+		util.Info("configured administrator already exists user=%s role=%s", existing.ID, existing.Role)
 		return false, nil
 	}
 	hash, err := hashPassword(password)
@@ -128,7 +127,7 @@ func (db *DB) EnsureAdmin(ctx context.Context, email, name, password string) (bo
 	if err != nil {
 		return false, err
 	}
-	logx.Info("configured administrator created user=%s email=%s", u.ID, u.Email)
+	util.Info("configured administrator created user=%s email=%s", u.ID, u.Email)
 	return true, nil
 }
 
@@ -279,46 +278,6 @@ func getUser(_ context.Context, s *xorm.Session, id string) (*User, error) {
 	return &u, nil
 }
 
-// userQuery builds a session that reads exactly one user.
-// 参数 ctx（context.Context）：上下文，取消或超时时停止后续工作；id（string）：用户查询使用的主键。空串表示调用方没有指定记录。
-// 返回 *xorm.Session（*xorm.Session）：带当前过滤条件的数据库会话，调用方负责关闭。
-// 调用：仅在 users.go 内使用
-// 测试：无直接单测
-func (db *DB) userQuery(ctx context.Context, id string) *xorm.Session {
-	return db.Engine.NewSession().Context(ctx).Where("id = ?", id)
-}
-
-// ListScopedUsers lists the caller and the accounts that belong to the teams they oversee. An empty team list returns only the caller.
-// 参数 ctx（context.Context）：上下文，取消时停止；self（string）：列出ScopedUsers使用的自己。空串表示调用方没有提供这项；teamIDs（[]string）：团队标识列表列表。空切片表示没有可处理的项；query（string）：URL 查询串或查询文本；limit（int）：最多返回的条数；offset（int）：跳过的条数。
-// 返回 []User（[]User）：符合条件的用户；error（error）：失败原因，nil 表示成功。
-// 调用：gateway/identity/handlers.go
-// 测试：无直接单测
-func (db *DB) ListScopedUsers(ctx context.Context, self string, teamIDs []string, query string, limit, offset int) ([]User, error) {
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
-	s := db.session(ctx)
-	defer s.Close()
-	args := []any{self}
-	where := "id = ?"
-	if len(teamIDs) > 0 {
-		ph := make([]string, len(teamIDs))
-		for i, id := range teamIDs {
-			ph[i] = "?"
-			args = append(args, id)
-		}
-		where += " OR id IN (SELECT user_id FROM team_members WHERE team_id IN (" + strings.Join(ph, ",") + "))"
-	}
-	if query != "" {
-		like := "%" + query + "%"
-		where = "(" + where + ") AND (email ILIKE ? OR name ILIKE ?)"
-		args = append(args, like, like)
-	}
-	var out []User
-	err := s.Where(where, args...).Asc("created_at", "id").Limit(limit, offset).Find(&out)
-	return out, err
-}
-
 // ListUsers is the platform administrator's directory.
 // 参数 ctx（context.Context）：上下文，取消时停止；query（string）：URL 查询串或查询文本；limit（int）：最多返回的条数；offset（int）：跳过的条数。
 // 返回 []User（[]User）：符合条件的用户；error（error）：失败原因，nil 表示成功。
@@ -358,11 +317,11 @@ func (db *DB) Login(ctx context.Context, email, password string) (*User, error) 
 		return nil, ErrNotFound
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
-		logx.Debug("login rejected for user %s", u.ID)
+		util.Debug("login rejected for user %s", u.ID)
 		return nil, ErrNotFound
 	}
 	if !u.Active() {
-		logx.Debug("login rejected for disabled user %s", u.ID)
+		util.Debug("login rejected for disabled user %s", u.ID)
 		return nil, ErrNotFound
 	}
 	return u, nil

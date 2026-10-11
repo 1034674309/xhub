@@ -3,9 +3,10 @@ package router
 import (
 	"encoding/json"
 	"errors"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"reflect"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 type compileStore struct {

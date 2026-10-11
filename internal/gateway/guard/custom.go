@@ -4,19 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/goplus/ixgo"
-	_ "github.com/goplus/ixgo/pkg/fmt"
-	"github.com/goplus/ixgo/xgobuild"
-	lru "github.com/hashicorp/golang-lru/v2"
 	"go/ast"
 	"go/parser"
 	"go/types"
-	"golang.org/x/tools/go/ssa"
 	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/goplus/ixgo"
+	_ "github.com/goplus/ixgo/pkg/fmt"
+	"github.com/goplus/ixgo/xgobuild"
+	lru "github.com/hashicorp/golang-lru/v2"
+	"golang.org/x/tools/go/ssa"
 )
 
 // customAPI 是唯一允许脚本导入的虚拟包路径，注册函数在这里提供受控能力。

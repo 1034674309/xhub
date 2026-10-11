@@ -6,9 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 )
 
 var logTraceOnceRouteTemplate sync.Once
@@ -78,7 +77,7 @@ func (t RouteTemplate) Settings() map[string]any {
 	}
 	out := map[string]any{}
 	if err := json.Unmarshal([]byte(trimmed), &out); err != nil {
-		logx.Error("route template body is not readable id=%s err=%v", t.ID, err)
+		util.Error("route template body is not readable id=%s err=%v", t.ID, err)
 		return map[string]any{}
 	}
 	return out
@@ -92,7 +91,7 @@ func (t RouteTemplate) Settings() map[string]any {
 // 调用：gateway/route_template.go
 // 测试：route_template_test.go
 func (db *DB) ListRouteTemplates(ctx context.Context) ([]RouteTemplate, error) {
-	logTraceOnceRouteTemplate.Do(func() { logx.Trace("enter iam.ListRouteTemplates") })
+	logTraceOnceRouteTemplate.Do(func() { util.Trace("enter iam.ListRouteTemplates") })
 
 	s := db.session(ctx)
 	defer s.Close()

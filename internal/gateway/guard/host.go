@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Host 定义管理鉴权和配置存储边界，由 gateway.Server 实现，避免本包反向依赖网关。
@@ -31,5 +31,5 @@ type Host interface {
 // 调用：guard 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

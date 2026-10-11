@@ -240,19 +240,3 @@ func visitGuardedText(body map[string]any, p map[string]any, visit func(string) 
 	}
 
 }
-
-// ruleText 提取单条规则可见的非空文本并用空格连接，用于兼容展示。
-// 参数：body：请求正文；p：跳过消息等参数；提取回调不改写原文。
-// 返回：连接后的文本；不存在文本时为空串。
-// 调用：护栏兼容辅助路径。
-// 测试：engine_test.go 的角色过滤测试。
-func ruleText(body map[string]any, p map[string]any) string {
-	var parts []string
-	visitGuardedText(body, p, func(text string) string {
-		if text != "" {
-			parts = append(parts, text)
-		}
-		return text
-	})
-	return strings.Join(parts, " ")
-}

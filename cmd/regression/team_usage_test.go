@@ -2,11 +2,12 @@ package regression
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/iam"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/sunqirui1987/xhub/internal/iam"
 )
 
 // TestTeamUsageWithoutAgentSurface 验证真实团队调用在聚合及分页接口可见，已移除的 Agent 接口保持 JSON 404。

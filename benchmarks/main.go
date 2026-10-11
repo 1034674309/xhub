@@ -7,8 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/sunqirui1987/xhub/benchmarks/fixture"
-	"github.com/sunqirui1987/xhub/benchmarks/load"
 	"log"
 	"math"
 	"os"
@@ -20,6 +18,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/sunqirui1987/xhub/benchmarks/fixture"
+	"github.com/sunqirui1987/xhub/benchmarks/load"
 )
 
 // report 保存运行参数和阶段结果，不包含密钥和数据库 URL。

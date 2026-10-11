@@ -24,6 +24,7 @@ const base = {
   empty: "No matching documents. Try another keyword.",
   results: "{count} documents found",
   navigation: "Documentation categories",
+  apiOverview: "Overview",
   directory: "Documentation directory",
   onPage: "On this page",
   console: "Back to console",

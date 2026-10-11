@@ -1,6 +1,6 @@
 # 隔离数据库测试支持
 
-[English](readme.md) · [全功能实现说明](../../../docs/development/implementation.md)
+[English](readme.md) · [全功能实现说明](../../../docs/development/zh-CN/implementation.md)
 
 ## 职责与实现契约
 

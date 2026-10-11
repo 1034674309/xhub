@@ -1,11 +1,5 @@
 # OpenAI video tasks
 
-## Overview
-
-OpenAI video tasks
-
-### OpenAI video tasks
-
 ## Behavior
 After creation, GET /v1/videos/{id}; when completed GET /v1/videos/{id}/content. Poll with backoff and the same caller. No universal cancel endpoint is provided.
 

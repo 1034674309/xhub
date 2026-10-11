@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -87,7 +87,7 @@ func Load(r io.Reader) (Config, error) {
 	if err := Validate(cfg); err != nil {
 		return Config{}, err
 	}
-	logx.Debug("provider configuration validated providers=%d weighted_scenarios=%d", len(cfg.Providers), len(cfg.WeightedScenarios))
+	util.Debug("provider configuration validated providers=%d weighted_scenarios=%d", len(cfg.Providers), len(cfg.WeightedScenarios))
 	return cfg, nil
 }
 

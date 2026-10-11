@@ -1,0 +1,209 @@
+package runtime
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/sunqirui1987/xhub/internal/config"
+	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
+	"github.com/sunqirui1987/xhub/internal/iam"
+	"github.com/sunqirui1987/xhub/internal/live"
+	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
+)
+
+var logTraceOnceLive sync.Once
+
+// State 组装这一刻的在途请求、冷却、延迟和用量，交给路由器排序。没有 Redis 时只有在途请求。
+// 参数 h：Runtime。
+// 返回：router.State。
+// 调用：gateway routerState。测试不连 Redis，prefer_test.go 使用空 State。
+func State(h Runtime) router.State {
+	logTraceOnceLive.Do(func() { util.Trace("enter dataplane.State") })
+
+	st := router.State{Busy: h.BusyMap()}
+	redis := h.Redis()
+	if redis == nil {
+		return st
+	}
+	ids := make([]string, 0, len(h.Models()))
+	for _, m := range h.Models() {
+		ids = append(ids, router.CooldownID(m))
+	}
+	st.Cooldown = redis.Cooled(ids)
+	st.Latency = redis.Latencies(ids)
+	st.Usage = redis.Usages(ids)
+	return st
+}
+
+// RecordFailure 按这一次请求生效的路由设置记一次失败。allowed_fails 小于 1 时不写 Redis。
+// cooldown_time 为 0 或缺失时冷却一分钟。
+//
+// 阈值来自 RouteSettingsFor 解析出来的那一份，而不是全局文档：一个团队把
+// allowed_fails 调低之后，它的失败要按它自己的阈值计数。
+// 参数 h：Runtime。id：部署 id。空 id 直接返回。settings：这一次请求生效的路由设置。
+// 返回：无。
+// 调用：gateway noteFailure，由 Serve 的 NoteFailure 转来。无单独测试。
+func RecordFailure(h Runtime, id string, settings prefs.RouteSettings) {
+	redis := h.Redis()
+	if redis == nil || id == "" {
+		return
+	}
+	allowed := settings.AllowedFails()
+	if allowed < 1 {
+		return
+	}
+	cd := time.Duration(settings.CooldownSeconds() * float64(time.Second))
+	if cd <= 0 {
+		cd = time.Minute
+	}
+	_ = redis.RecordFailure(id, allowed, cd)
+}
+
+// RecordLatency 把这次延迟累进 Redis，供下次排序使用。没有 Redis 时直接返回。
+// 参数 id：部署 id。ms：耗时毫秒。
+// 返回：无。
+// 调用：gateway noteLatency。无单独测试。
+func RecordLatency(h Runtime, id string, ms float64) {
+	if h.Redis() == nil {
+		return
+	}
+	_ = h.Redis().AddLatency(id, ms)
+}
+
+// RecordUsage 把这次 token 数累进 Redis。没有 Redis 时直接返回。
+// 参数 id：部署 id。tokens：本次 token 数。
+// 返回：无。
+// 调用：gateway noteUsage。无单独测试。
+func RecordUsage(h Runtime, id string, tokens int) {
+	if h.Redis() == nil {
+		return
+	}
+	_ = h.Redis().AddUsage(id, tokens)
+}
+
+// FlushLoop 每分钟调用一次 Flush，直到进程退出。只在配置了 Redis 时启动。
+// 参数 h：Runtime。返回：无。这个函数不返回，直到进程退出。
+// 调用：gateway flushLoop，且只在配置了 Redis 时。无单测。
+// 测试：无直接单测
+func FlushLoop(h Runtime) {
+	t := time.NewTicker(60 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		Flush(h)
+	}
+}
+
+// Flush 把 Redis 队列里的花费日志写入 PostgreSQL，成功后再从队列确认删除。
+// 参数 h：Runtime。Redis 或 Identity 为 nil 时立即返回。
+// 返回：无。
+// 调用：FlushLoop 和 gateway FlushSpend。无单测。
+// 测试：无直接单测
+func Flush(h Runtime) {
+	redis := h.Redis()
+	db := h.Identity()
+	if redis == nil || db == nil {
+		return
+	}
+	logs, raw := redis.PeekLogs(500)
+	n := len(raw)
+	if n == 0 {
+		return
+	}
+	head := raw[0]
+	records := make([]iam.UsageRecord, 0, len(logs))
+	for _, row := range logs {
+		start, err := time.Parse(time.RFC3339Nano, row.Start)
+		if err != nil {
+			start = time.Now()
+		}
+		end, err := time.Parse(time.RFC3339Nano, row.End)
+		if err != nil {
+			end = time.Now()
+		}
+		spend := 0.0
+		if row.SpendValid {
+			spend = row.Spend
+		}
+		rec := iam.UsageRecord{
+			RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
+			UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
+			Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
+			PromptTokens: row.Prompt, CompletionTokens: row.Completion, Cost: spend,
+			DurationMS:  int(end.Sub(start).Milliseconds()),
+			RequestBody: row.Messages, ResponseBody: row.Response, Error: row.Error, ProxyRequest: row.ProxyRequest,
+			UpstreamResponse: row.UpstreamResponse,
+			EndedAt:          end, TTFTMs: row.TTFTMs, CacheHit: row.CacheHit,
+			KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
+			Provider: row.Provider, CachedTokens: row.CachedTokens,
+			SessionID: row.SessionID, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
+			PriceSnapshot: row.PriceSnapshot,
+		}
+		records = append(records, rec)
+	}
+	if len(records) == 0 {
+		_ = redis.AckFlushed(nil, n, head)
+		return
+	}
+	if err := db.RecordUsage(context.Background(), records); err != nil {
+		util.Error("spend flush failed: %v", err)
+		return
+	}
+	_ = redis.AckFlushed(hotDeltas(logs), n, head)
+}
+
+// hotDeltas 把一批花费日志按密钥、团队、用户、组织和项目拆成要回写的热计数。
+// 参数 logs：Redis 队列里取出的花费日志。
+// 返回：live.SpendRef 到金额的映射，交给 Redis 确认。
+// 调用：Flush。测试：live_test.go TestHotDeltasIncludesProject。
+func hotDeltas(logs []live.SpendLog) map[string]float64 {
+	out := map[string]float64{}
+	for _, row := range logs {
+		if !row.SpendValid || row.Spend == 0 {
+			continue
+		}
+		for _, ref := range []struct{ kind, id string }{
+			{"key", row.APIKey}, {"team", row.TeamID}, {"user", row.UserID},
+			{"org", row.OrgID}, {"project", row.ProjectID},
+		} {
+			id := live.SpendRef(ref.kind, ref.id)
+			if id != "" {
+				out[id] += row.Spend
+			}
+		}
+	}
+	return out
+}
+
+// Runtime 是 Redis 快照和花费刷写。它不处理 HTTP，也不看请求正文。
+// 网关在 routerState、noteFailure、noteLatency、noteUsage 和 flushLoop 里调用 live.go。
+type Runtime interface {
+	// BusyMap 返回本进程内每个部署 id 正在处理的请求数。
+	// 参数：无。接收者是实现 Runtime 的进程。
+	// 返回：部署 id 到正在处理的请求数。没有该 id 表示当前是 0，不是一份解析出来的 JSON。
+	// 调用：State，放进 router.State.Busy。
+	// 测试：failure_log_test.go 的夹具返回空表。
+	BusyMap() map[string]int
+
+	// Redis 返回热路径客户端。未配置 Redis 时返回 nil，State 只填 Busy，Flush 直接返回。
+	// 参数：无。
+	// 返回 *live.Client（*live.Client）：热路径 Redis 客户端。未配置 Redis 时为 nil，花费改为当场写数据库。
+	// 调用：dataplane/runtime/live.go、gateway/wire.go
+	// 测试：bypass_logic_test.go、failure_log_test.go
+	Redis() *live.Client
+
+	// Models 返回全部部署，用来把模型行换成部署 id，再向 Redis 批量问冷却、延迟和用量。
+	// 参数：无。
+	// 返回：当前模型表。空表表示没有部署。
+	// 调用：State 和 Bypass 的 eligible。
+	// 测试：bypass_logic_test.go 用夹具模型表选部署。
+	Models() []config.ModelEntry
+
+	// Identity 是 Flush 写入用量的库。没配 PostgreSQL 时为 nil，Flush 直接返回。
+	// 参数：无。
+	// 返回 *iam.DB（*iam.DB）：Flush 写入用量的库。没有 PostgreSQL 时为 nil，Flush 直接返回。
+	// 调用：dataplane/runtime/live.go、gateway/identity/gate.go、gateway/identity/handlers.go、gateway/identity/members.go
+	// 测试：bypass_logic_test.go、failure_log_test.go
+	Identity() *iam.DB
+}

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // PriceDocument is the embedded price catalog. It is generated from the
@@ -29,7 +29,7 @@ type PriceDocument struct {
 func loadPriceDocument() {
 	var doc PriceDocument
 	if err := json.Unmarshal(Embedded("pricedata", pricedataJSON), &doc); err != nil {
-		logx.Error("catalog pricedata is not readable: %v", err)
+		util.Error("catalog pricedata is not readable: %v", err)
 		doc = PriceDocument{}
 	}
 	if doc.Models == nil {

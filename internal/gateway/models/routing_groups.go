@@ -3,12 +3,13 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/router"
 	"io"
 	"net/http"
 	"sort"
+
+	"github.com/sunqirui1987/xhub/internal/config"
+	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // loadRoutingGroups 读取独立命名组配置；参数为宿主，返回有序列表或存储/契约错误，无写入副作用。
@@ -40,7 +41,7 @@ func RoutingGroups(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.PlatformAdmin() {
-		httpx.WriteError(w, 403, "forbidden", "platform administrator required")
+		util.WriteError(w, 403, "forbidden", "platform administrator required")
 		return
 	}
 	var group router.Group
@@ -52,17 +53,17 @@ func RoutingGroups(s Host, w http.ResponseWriter, r *http.Request) {
 				Name string `json:"group_name"`
 			}
 			if err := dec.Decode(&input); err != nil || input.Name == "" {
-				httpx.WriteError(w, 400, "invalid_request", "group_name required")
+				util.WriteError(w, 400, "invalid_request", "group_name required")
 				return
 			}
 			group.Name = input.Name
 		} else if err := dec.Decode(&group); err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return
 		}
 		var trailing any
 		if dec.Decode(&trailing) != io.EOF {
-			httpx.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
+			util.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
 			return
 		}
 	}
@@ -70,11 +71,11 @@ func RoutingGroups(s Host, w http.ResponseWriter, r *http.Request) {
 	defer s.UnlockModels()
 	groups, err := loadRoutingGroups(s)
 	if err != nil {
-		httpx.WriteError(w, 503, "unavailable", "routing groups unavailable")
+		util.WriteError(w, 503, "unavailable", "routing groups unavailable")
 		return
 	}
 	if r.Method == "GET" {
-		httpx.WriteJSON(w, 200, map[string]any{"data": groups})
+		util.WriteJSON(w, 200, map[string]any{"data": groups})
 		return
 	}
 	existing := -1
@@ -85,23 +86,23 @@ func RoutingGroups(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == "POST" && existing >= 0 {
-		httpx.WriteError(w, 409, "conflict", "routing group already exists")
+		util.WriteError(w, 409, "conflict", "routing group already exists")
 		return
 	}
 	if r.Method != "POST" && existing < 0 {
-		httpx.WriteError(w, 404, "not_found", "routing group not found")
+		util.WriteError(w, 404, "not_found", "routing group not found")
 		return
 	}
 	if r.Method == "DELETE" {
 		if s.RecordStore() == nil {
-			httpx.WriteError(w, 503, "unavailable", "routing group store unavailable")
+			util.WriteError(w, 503, "unavailable", "routing group store unavailable")
 			return
 		}
 		if err = s.RecordStore().DeleteConfig("routing_groups", group.Name); err != nil {
-			httpx.WriteError(w, 503, "unavailable", err.Error())
+			util.WriteError(w, 503, "unavailable", err.Error())
 			return
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"deleted": group.Name})
+		util.WriteJSON(w, 200, map[string]any{"deleted": group.Name})
 		return
 	}
 	next := append([]router.Group(nil), groups...)
@@ -117,18 +118,18 @@ func RoutingGroups(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err = router.ValidateGroups(next, list); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if s.RecordStore() == nil {
-		httpx.WriteError(w, 503, "unavailable", "routing group store unavailable")
+		util.WriteError(w, 503, "unavailable", "routing group store unavailable")
 		return
 	}
 	if err = s.RecordStore().PutConfig("routing_groups", group.Name, group); err != nil {
-		httpx.WriteError(w, 503, "unavailable", err.Error())
+		util.WriteError(w, 503, "unavailable", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, group)
+	util.WriteJSON(w, 200, group)
 }
 
 // checkRoutingGroupRemoval 拒绝删除或改名仍被组引用的最后部署；调用方持锁，返回引用冲突或存储错误。

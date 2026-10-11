@@ -1,38 +1,27 @@
-# In-flight request accounting
+# In-flight request hooks
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../docs/development/implementation.md)
+## Overview
 
-## Responsibilities and behavior
+The hooks package tracks active inference calls by virtual-key ID inside one gateway process. Gateway startup creates an Engine and the data plane calls Begin when execution starts, then defers the returned release function across normal completion, timeout, send failure, and stream interruption. The count is transient concurrency state. It does not grant access, enforce a cluster-wide limit, persist accounting, or coordinate gateway replicas.
 
-Engine tracks process-local in-flight calls for routing hints such as least-busy. New creates the engine; Begin increments a key's count and returns a release function protected by sync.Once. Empty identifiers are no-ops.
-The gateway must defer release across normal completion, timeout, send errors, and stream interruption. These counters are routing hints, not authorization, rate enforcement, or accounting records.
-There are no HTTP or storage interfaces here. Counts are not automatically aggregated across instances. Tests cover concurrent starts, repeated release, empty identifiers, and return to zero.
+## External interfaces
+
+- `New() *Engine` returns an Engine with an initialized empty counter map. Gateway server assembly is the primary constructor call site.
+- `(*Engine).Begin(keyID string) func()` reserves one local in-flight slot for a non-empty key and returns a release closure. An empty ID produces a safe no-op closure and does not create map state. The closure returns no error and is idempotent: its first call decrements the exact key captured at Begin time, removes the entry when the count reaches zero, and subsequent calls do nothing.
+
+The package exposes no count-reading method and registers no route. internal/dataplane uses the lifecycle hook; internal/gateway owns the Engine. A caller must always invoke the returned closure, normally with defer.
+
+## Core implementation
+
+Engine contains one mutex and a map from key ID to integer count. Begin locks only while incrementing, then creates a closure containing its own sync.Once. On the first release, that Once enters another short critical section, decrements the same map entry, and deletes it at zero or below. Deletion prevents inactive key IDs from accumulating. Per-closure Once is essential: without it, a duplicated cleanup path could decrement a different call's slot or remove a key while another call is still running.
+
+The mutex gives consistent updates among concurrent calls in one process. No condition variable or admission decision exists here, and no public reader consumes the count in this version; the structure preserves accurate lifecycle state for local routing/concurrency integration. There is no timeout sweeper. If a caller omits release, the count stays elevated until process restart because only the owner of the request knows when it ended. Nil Engine receivers are unsupported.
+
+### Test dependencies
+
+`hooks_test.go` starts two calls for one key, releases one closure twice, and verifies the second call remains counted until its own release. Run `go test ./internal/hooks -count=1`; no external dependency is involved.
 
 ## Source responsibilities and entry points
 
-### hooks.go
-
-Exported types: `Engine`.
-
-- [`func New() *Engine`](hooks.go) — New returns an empty gate. In-flight calls are counted by key id.
-- [`func (e *Engine) Begin(keyID string) func()`](hooks.go) — Begin reserves one in-flight slot and returns the release function. An empty key id is not counted, so a caller without a key still gets a release.
-
-## External HTTP boundary
-
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
-
-## Dependencies
-
-[internal/logx](../logx/readme.md).
-
-## Verification and maintenance
-
-| Test file | Scenario entry points |
-| --- | --- |
-| [hooks_test.go](hooks_test.go) | `TestReleaseIsIdempotentWithOtherCallsInFlight` |
-
-```bash
-go test ./internal/hooks -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+- `hooks.go` is the entire production package. It defines `Engine`, its mutex and count map, one-time trace logging, `New`, and `Begin` with empty-ID handling, synchronized increment/decrement, per-call `sync.Once`, and zero-entry deletion.
+- `hooks_test.go` verifies that release is idempotent without disturbing concurrent work for the same key.

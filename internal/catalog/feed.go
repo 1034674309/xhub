@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // MarketURL 是默认价格来源；运行时可通过 XHUB_PRICE_FEED_URL 指定内部镜像。
@@ -177,26 +177,6 @@ var (
 	videoSecondKeys = []string{"av_duration", "v_duration"}
 )
 
-// variantUnitSuffix falls back to the unit the feed declares when a variant key
-// does not carry a recognizable one.
-// variantUnitOf 把市场声明的单位名收成展示用的单位词。
-// 参数 unit（feedUnit）：一段计价单位。空单位名或认不出的名字一律算 unit。
-// 返回 string（string）：second、picture、token 或 unit。
-// 调用：convertFeedModel 在写 price_units 时。
-// 测试：无直接单测
-func variantUnitOf(unit feedUnit) string {
-	switch strings.ToLower(strings.TrimSpace(unit.UnitName)) {
-	case "second", "time":
-		return "second"
-	case "pic":
-		return "picture"
-	case "token":
-		return "token"
-	default:
-		return "unit"
-	}
-}
-
 // tokenKeys keeps the variant keys whose feed unit is a token. A picture or a
 // second that happens to have "input" in its key is not a per-token rate.
 // tokenKeys 只留下单位是 token 的键。
@@ -339,7 +319,7 @@ func BuildPriceDocument(raw []byte) (PriceDocument, error) {
 		return PriceDocument{}, fmt.Errorf("market feed reported failure")
 	}
 	if len(feed.Data) == 0 {
-		logx.Error("market feed carried no models; refusing to build an empty catalog")
+		util.Error("market feed carried no models; refusing to build an empty catalog")
 		return PriceDocument{}, fmt.Errorf("market feed returned no models")
 	}
 
@@ -872,15 +852,15 @@ func FetchMarket(ctx context.Context, url string) (PriceDocument, error) {
 func ReloadFromMarket(ctx context.Context, url string) (int, error) {
 	doc, err := FetchMarket(ctx, url)
 	if err != nil {
-		logx.Error("price catalog fetch failed url=%s err=%v", url, err)
+		util.Error("price catalog fetch failed url=%s err=%v", url, err)
 		return 0, err
 	}
 	n, err := ApplyDocument(doc)
 	if err != nil {
-		logx.Error("price catalog apply failed err=%v", err)
+		util.Error("price catalog apply failed err=%v", err)
 		return 0, err
 	}
-	logx.Info("price catalog reloaded models=%d source=%s", n, doc.Source)
+	util.Info("price catalog reloaded models=%d source=%s", n, doc.Source)
 	return n, nil
 }
 

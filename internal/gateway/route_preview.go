@@ -11,10 +11,12 @@ import (
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/llm"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // previewDeployment 是预览的安全投影，只包含声明与路由事实，不序列化连接凭据或内部地址。
@@ -49,29 +51,29 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 		Request    map[string]any `json:"request"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
-	if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Model) == "" || !provider.KnownEndpoint(input.Endpoint) {
-		httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "model_name and registered endpoint_id are required")
+	if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Model) == "" || !providercapability.KnownEndpoint(input.Endpoint) {
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "model_name and registered endpoint_id are required")
 		return
 	}
 	var trailing any
 	if decoder.Decode(&trailing) != io.EOF {
-		httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "exactly one JSON object is required")
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "exactly one JSON object is required")
 		return
 	}
 	// 补齐可信归属后再检查可见性，不调用会消耗窗口计数的推理额度检查。
 	if err := s.resolvePreviewIdentity(r.Context(), p); err != nil {
-		httpx.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template binding unavailable")
+		util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template binding unavailable")
 		return
 	}
 	if !models.AllowsModel(s, r.Context(), p, p.TeamID, input.Model) {
-		httpx.WriteTypedError(w, r.URL.Path, 403, "forbidden", "model is not allowed")
+		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "model is not allowed")
 		return
 	}
 	settings := prefs.BuiltinSettings()
 	object := authz.Object{Type: authz.ObjectRouteTemplate, OrgID: input.OrgID, TeamID: input.TeamID}
 	if input.TemplateID != "" {
 		if s.IAM == nil {
-			httpx.WriteTypedError(w, r.URL.Path, 503, "unavailable", "identity store unavailable")
+			util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "identity store unavailable")
 			return
 		}
 		if s.WriteAuthz(w, r, templateauth.Selection(s, r, p, input.TemplateID)) {
@@ -79,7 +81,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		row, err := s.IAM.GetRouteTemplate(r.Context(), input.TemplateID)
 		if err != nil || row == nil {
-			httpx.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template unavailable")
+			util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template unavailable")
 			return
 		}
 		object.ID = row.ID
@@ -98,7 +100,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 		// 复用最窄绑定；指定模板被删除时与推理一致，回到平台默认，不猜测父级。
 		row, err := s.IAM.GetRouteTemplate(r.Context(), id)
 		if err != nil {
-			httpx.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template unavailable")
+			util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "template unavailable")
 			return
 		}
 		if row != nil {
@@ -121,7 +123,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := prefs.ValidateRouteTemplateDocument(input.Body); err != nil {
-			httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
+			util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
 			return
 		}
 		settings.Settings = input.Body
@@ -134,20 +136,20 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 	settings = router.Compile(settings, s.RecordStore(), directory)
 	settings = settings.ForModel(input.Model)
 	if settings.Err != nil {
-		httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", settings.Err.Error())
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", settings.Err.Error())
 		return
 	}
 	if err := router.ValidateStrategy(settings.Strategy()); err != nil {
-		httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
 		return
 	}
-	var dialogue *llm.Dialogue
+	var dialogue *llmdialogue.Dialogue
 	if input.Request != nil {
-		for _, entry := range provider.EndpointTypes() {
-			if entry.ID == input.Endpoint && entry.Kind == provider.KindAdapted && provider.DialogueProtocol(entry.Protocol) {
-				d, err := llm.ParseDialogue(entry.Protocol, input.Request)
+		for _, entry := range providercapability.EndpointTypes() {
+			if entry.ID == input.Endpoint && entry.Kind == providercontract.KindAdapted && providercapability.DialogueProtocol(entry.Protocol) {
+				d, err := llmdialogue.ParseDialogue(entry.Protocol, input.Request)
 				if err != nil {
-					httpx.WriteTypedError(w, r.URL.Path, 400, "unsupported_capability", err.Error())
+					util.WriteTypedError(w, r.URL.Path, 400, "unsupported_capability", err.Error())
 					return
 				}
 				dialogue = &d
@@ -164,7 +166,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 			matched = append(matched, dep)
 		}
 	}
-	compatible, decisions := provider.Candidates(matched, input.Endpoint, dialogue)
+	compatible, decisions := providerdeployment.Candidates(matched, input.Endpoint, dialogue)
 	state := s.RouteState()
 	rows := make([]previewDeployment, 0, len(decisions))
 	total := 0.0
@@ -176,8 +178,8 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, decision := range decisions {
 		dep := decision.Deployment
-		row := previewDeployment{DeploymentID: router.DeploymentID(dep), Connection: dep.ParamString("litellm_credential_name", ""), Supplier: dep.ParamString("custom_llm_provider", ""), Model: dep.ParamString("model", ""), Transport: provider.SelectedTransport(dep), Reason: decision.Reason}
-		if execution, ok := provider.Execution(dep); ok {
+		row := previewDeployment{DeploymentID: router.DeploymentID(dep), Connection: dep.ParamString("litellm_credential_name", ""), Supplier: dep.ParamString("custom_llm_provider", ""), Model: dep.ParamString("model", ""), Transport: providerdeployment.SelectedTransport(dep), Reason: decision.Reason}
+		if execution, ok := providerdeployment.Execution(dep); ok {
 			row.Protocol = execution.Protocol
 		}
 		if row.Reason == "" && !available[router.CooldownID(dep)] && state.Cooldown[router.CooldownID(dep)] {
@@ -214,5 +216,5 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 			rows[i].Share = &share
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "endpoint_id": input.Endpoint, "template_id": settings.TemplateID, "source": settings.Source, "rule_source": settings.RuleSource, "routing_strategy": settings.Strategy(), "data": rows})
+	util.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "endpoint_id": input.Endpoint, "template_id": settings.TemplateID, "source": settings.Source, "rule_source": settings.RuleSource, "routing_strategy": settings.Strategy(), "data": rows})
 }

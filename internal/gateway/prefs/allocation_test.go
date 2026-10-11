@@ -1,6 +1,8 @@
 package prefs
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestTemplateOnlyOverridesNamedModels 验证模板只覆盖明确列出的公开模型；未列出的模型继续读取模型管理实时权重。
 // 前置条件为四个模型均有默认分配，模板只包含 a、b；测试只使用内存数据，无需清理。

@@ -18,7 +18,7 @@ path = Path(env.get("E2E_PROVIDER_CONFIG", str(root / "config_provider.yaml"))).
 print("Loading supplier configuration: " + str(path), flush=True)
 parsed = subprocess.run(["go", "run", "./e2e/providerconfig", str(path)], cwd=root, capture_output=True, text=True)
 if parsed.returncode:
-    raise SystemExit("Invalid provider YAML; check config_provider.yaml against docs/development/e2e-regression.md")
+    raise SystemExit("Invalid provider YAML; check config_provider.yaml against docs/development/zh-CN/e2e-regression.md")
 config = json.loads(parsed.stdout)
 if config["version"] != 1:
     raise SystemExit("Provider config version must be 1")

@@ -2,12 +2,13 @@ package guard
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // configHost 为回归测试提供独立 YAML 配置和已有 KV 测试宿主。

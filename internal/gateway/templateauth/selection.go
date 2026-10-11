@@ -9,7 +9,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 type Host interface {
@@ -36,7 +36,7 @@ func Selection(h Host, r *http.Request, p *auth.Principal, id string) error {
 	}
 	row, err := h.Identity().GetRouteTemplate(r.Context(), id)
 	if err != nil {
-		logx.Error("route template selection lookup failed err=%v", err)
+		util.Error("route template selection lookup failed err=%v", err)
 		return &authz.InternalError{Err: err}
 	}
 	if row == nil {

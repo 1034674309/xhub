@@ -4,10 +4,10 @@ package store
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/builder"
 )
 
@@ -19,7 +19,7 @@ var logTraceOnceKeys sync.Once
 // 调用：gateway/models/admin.go、gateway/models/builtin.go
 // 测试：builtin_providers_test.go、chains_test.go
 func (s *Store) UpsertProxyModel(m ProxyModel) error {
-	logTraceOnceKeys.Do(func() { logx.Trace("enter store.UpsertProxyModel") })
+	logTraceOnceKeys.Do(func() { util.Trace("enter store.UpsertProxyModel") })
 
 	if m.Params == nil {
 		m.Params = map[string]any{}
@@ -79,7 +79,7 @@ func (s *Store) ListProxyModels() ([]ProxyModel, error) {
 	return out, nil
 }
 
-// DeleteProxyModel deletes a proxy model by id and clears the cache.
+// DeleteProxyModel deletes a proxy model by id and clears the util.
 // 参数 id（string）：部署、模型或凭据 id。空串表示没有选定。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/models/admin.go、gateway/models/builtin.go
@@ -114,7 +114,7 @@ func (s *Store) PutConfig(namespace, key string, value any) error {
 	return nil
 }
 
-// DeleteConfig deletes one namespaced configuration row and clears the cache.
+// DeleteConfig deletes one namespaced configuration row and clears the util.
 // 参数 namespace（string）：删除配置使用的namespace。空串表示调用方没有提供这项；key（string）：上游或调用方的密钥。空串表示还不能转发或还没有密钥。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/prefs/settings.go

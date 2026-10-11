@@ -3,10 +3,11 @@ package guard
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"io"
 	"net/http"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -17,7 +18,7 @@ var logTraceOnceCodec sync.Once
 // 调用：历史调试接口；新管理接口另行解码并调用 Validate 严格校验。
 // 测试：无直接单测；历史接口行为由 guard_test.go 间接覆盖。
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter guard.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter guard.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)

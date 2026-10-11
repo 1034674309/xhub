@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,15 +11,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/cache"
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/llm"
 	"github.com/sunqirui1987/xhub/internal/llm/estimate"
 	"github.com/sunqirui1987/xhub/internal/plugin"
-	"github.com/sunqirui1987/xhub/internal/provider"
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
+	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
+	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
+	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
+	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // regressionExtension 是内部扩展注册表的可观察替身，记录收到的调用并返回固定决定。
@@ -40,114 +42,6 @@ func (e *regressionExtension) Name() string { return e.name }
 func (e *regressionExtension) BeforeUpstream(call plugin.Call) plugin.Decision {
 	*e.seen = call
 	return e.value
-}
-
-// TestInternalLLMRouteBoundary 验证内部 LLM 路由过滤器只放行数据面、健康检查和明确公开入口。
-// 前置条件是内存 HTTP handler；验证普通路由、挂载路由、拒绝路径和 allowlist 副本隔离；无测试数据需要清理。
-func TestInternalLLMRouteBoundary(t *testing.T) {
-	prefixes := llm.PathPrefixes()
-	if len(prefixes) == 0 {
-		t.Fatal("LLM 路径白名单为空")
-	}
-	original := prefixes[0]
-	prefixes[0] = "/mutated/"
-	if llm.PathPrefixes()[0] != original {
-		t.Fatal("调用方修改了 LLM 路径白名单源数据")
-	}
-
-	for _, tc := range []struct {
-		path  string
-		mount bool
-		want  bool
-	}{
-		{path: "/v1/chat/completions", want: true},
-		{path: "/health", want: true},
-		{path: "/", want: true},
-		{path: "/key/generate", want: false},
-		{path: "", want: false},
-		{path: "/metrics", mount: true, want: true},
-		{path: "/docs", mount: true, want: false},
-	} {
-		if got := llm.Allow(tc.path, tc.mount); got != tc.want {
-			t.Errorf("Allow(%q, mount=%v)=%v，期望 %v", tc.path, tc.mount, got, tc.want)
-		}
-	}
-
-	filtered := llm.Filter(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	for _, tc := range []struct {
-		path string
-		want int
-	}{
-		{path: "/v1/embeddings", want: http.StatusNoContent},
-		{path: "/team/new", want: http.StatusNotFound},
-	} {
-		r := httptest.NewRequest(http.MethodPost, tc.path, nil)
-		w := httptest.NewRecorder()
-		filtered.ServeHTTP(w, r)
-		if w.Code != tc.want {
-			t.Errorf("过滤路径 %q 得到状态码 %d，期望 %d", tc.path, w.Code, tc.want)
-		}
-	}
-}
-
-// TestInternalLLMProtocolHelpersBoundary 验证响应消息整形、流选项、透传 URL 和上游错误映射的协议边界。
-// 前置条件仅为内存对象；验证输入不被改写、目录前缀不丢失、越界子路径被约束及未知状态失败；无清理需求。
-func TestInternalLLMProtocolHelpersBoundary(t *testing.T) {
-	message := map[string]any{
-		"role": "user",
-		"content": []any{
-			map[string]any{"type": "text", "text": "hello"},
-			map[string]any{"type": "image_url", "image_url": "https://example.invalid/a.png"},
-		},
-	}
-	shaped := llm.ShapeResponsesMessage(message)
-	parts := shaped["content"].([]any)
-	if parts[0].(map[string]any)["type"] != "input_text" || parts[1].(map[string]any)["type"] != "image_url" {
-		t.Fatalf("Responses 消息整形错误: %#v", parts)
-	}
-	if message["content"].([]any)[0].(map[string]any)["type"] != "text" {
-		t.Fatal("Responses 消息整形修改了调用方输入")
-	}
-	assistant := map[string]any{"role": "assistant", "content": "done"}
-	if got := llm.ShapeResponsesMessage(assistant); !reflect.DeepEqual(got, assistant) {
-		t.Fatalf("助手消息不应被改写: %#v", got)
-	}
-	if got := llm.ShapeResponsesMessage(nil); got != nil {
-		t.Fatalf("nil 消息应保持 nil: %#v", got)
-	}
-
-	if flag, ok := llm.NormalizeStreamOptions(map[string]any{"include_obfuscation": true}); !ok || !flag {
-		t.Fatalf("合法流选项未被识别: flag=%v ok=%v", flag, ok)
-	}
-	for _, opts := range []map[string]any{nil, {}, {"include_obfuscation": "true"}} {
-		if _, ok := llm.NormalizeStreamOptions(opts); ok {
-			t.Fatalf("非法流选项被当作显式布尔值: %#v", opts)
-		}
-	}
-
-	if got := llm.PassthroughURL("https://api.openai.com/proxy", "chat/completions", "openai"); got != "https://api.openai.com/v1/proxy/chat/completions" {
-		t.Fatalf("OpenAI 透传地址错误: %q", got)
-	}
-	if got := llm.PassthroughURL("https://vendor.invalid/root/", "/v1/models/", "custom"); got != "https://vendor.invalid/root/v1/models/" {
-		t.Fatalf("供应商根路径或末尾斜杠丢失: %q", got)
-	}
-	if got := llm.PassthroughSubpath("https://vendor.invalid/root", "../escape/", true); got != "https://vendor.invalid/root/escape/" {
-		t.Fatalf("透传子路径未规范化: %q", got)
-	}
-	if got := llm.PassthroughSubpath("https://vendor.invalid/root", "child", false); got != "https://vendor.invalid/root" {
-		t.Fatalf("关闭子路径拼接后仍改写地址: %q", got)
-	}
-
-	for status, want := range map[int]string{400: "BadRequestError", 401: "AuthenticationError", 404: "NotFoundError", 408: "Timeout", 429: "RateLimitError", 500: "InternalServerError", 502: "BadGatewayError", 503: "ServiceUnavailableError", 504: "Timeout"} {
-		if got, ok := llm.ExceptionForStatus(status); !ok || got != want {
-			t.Errorf("状态码 %d 映射为 %q/%v，期望 %q/true", status, got, ok, want)
-		}
-	}
-	if got, ok := llm.ExceptionForStatus(418); ok || got != "" {
-		t.Fatalf("未知状态码不应伪装成已知异常: %q/%v", got, ok)
-	}
 }
 
 // TestInternalEstimateBoundary 验证折扣、加价、计费档位和本地 token 估算的组合契约。
@@ -281,7 +175,7 @@ func TestInternalCatalogClassificationBoundary(t *testing.T) {
 // TestInternalCacheAndPluginBoundary 验证缓存清空与具名扩展调用这两个进程内模块的实际边界。
 // 前置条件是新建内存缓存和注册表；验证副本隔离、Flush、调用透传及缺失扩展错误；所有状态随测试进程释放。
 func TestInternalCacheAndPluginBoundary(t *testing.T) {
-	c := cache.New()
+	c := util.NewCache()
 	source := []byte("answer")
 	c.Set("key", source)
 	source[0] = 'X'
@@ -298,7 +192,7 @@ func TestInternalCacheAndPluginBoundary(t *testing.T) {
 	if _, ok := c.Get("key"); ok {
 		t.Fatal("Flush 后缓存仍命中")
 	}
-	if cache.Key("ab", "c") == cache.Key("a", "bc") {
+	if util.CacheKey("ab", "c") == util.CacheKey("a", "bc") {
 		t.Fatal("缓存键分段发生碰撞")
 	}
 
@@ -400,19 +294,19 @@ func TestInternalLiveUnavailableBoundary(t *testing.T) {
 // 前置条件是内建供应商注册表和内存事件；验证能力去重、流终态、视频完成计量及非法结果拒绝；不发起供应商调用。
 func TestInternalProviderProtocolBoundary(t *testing.T) {
 	entry := config.ModelEntry{ModelInfo: map[string]any{"endpoint_types": []any{" chat ", "video", "chat", "unknown"}}}
-	if got := provider.SelectedCapabilities(entry); !reflect.DeepEqual(got, []string{"chat", "video"}) {
+	if got := providerdeployment.SelectedCapabilities(entry); !reflect.DeepEqual(got, []string{"chat", "video"}) {
 		t.Fatalf("部署能力未按目录去重过滤: %#v", got)
 	}
-	if !provider.KnownEndpoint("video") || provider.KnownEndpoint("unknown") || !provider.IncludesCapability(entry, "chat") || provider.IncludesCapability(entry, "embedding") {
+	if !providercapability.KnownEndpoint("video") || providercapability.KnownEndpoint("unknown") || !providerdeployment.IncludesCapability(entry, "chat") || providerdeployment.IncludesCapability(entry, "embedding") {
 		t.Fatal("公开端点目录与部署能力判断不一致")
 	}
 
 	raw := []byte("event: response.completed\ndata: {\"response\":{\"id\":\"resp-1\",\"status\":\"completed\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
-	usage := provider.NativeStreamUsage("openai-responses", raw, nil)
+	usage := providermeasurement.NativeStreamUsage("openai-responses", raw, nil)
 	if usage["input_tokens"] != float64(3) || usage["output_tokens"] != float64(2) {
 		t.Fatalf("Responses SSE 用量提取错误: %#v", usage)
 	}
-	state := provider.NativeStreamState{}
+	state := providermeasurement.NativeStreamState{}
 	state.Observe("openai-responses", raw)
 	if !state.Completed || state.Failed || state.ResponseID != "resp-1" {
 		t.Fatalf("Responses SSE 终态识别错误: %#v", state)
@@ -422,8 +316,8 @@ func TestInternalProviderProtocolBoundary(t *testing.T) {
 		t.Fatal("失败事件被后续状态观察遗漏")
 	}
 
-	var video *provider.Transport
-	transports := provider.Transports()
+	var video *providercontract.Transport
+	transports := providerregistry.Transports()
 	for i := range transports {
 		if transports[i].ID == "openai_videos" {
 			video = &transports[i]
@@ -447,23 +341,6 @@ func TestInternalProviderProtocolBoundary(t *testing.T) {
 			t.Errorf("视频非成功或非法结果被错误计量: doc=%#v usage=%#v", doc, got)
 		}
 	}
-}
-
-// TestInternalProxyParameterBoundary 验证代理控制字段不会泄漏给上游，同时保留模型协议自己的字段。
-// 前置条件是内存请求正文；验证已知代理字段、未知扩展和 nil 正文边界；只修改测试局部 map，无清理需求。
-func TestInternalProxyParameterBoundary(t *testing.T) {
-	body := map[string]any{"model": "gpt-4o", "messages": []any{}, "api_base": "https://secret.invalid", "rpm": 10, "vendor_extension": true}
-	llm.StripProxyParams(body)
-	if _, ok := body["api_base"]; ok {
-		t.Fatal("代理上游地址字段泄漏到供应商正文")
-	}
-	if _, ok := body["rpm"]; ok {
-		t.Fatal("代理限流字段泄漏到供应商正文")
-	}
-	if body["model"] != "gpt-4o" || body["vendor_extension"] != true {
-		t.Fatalf("供应商协议字段被误删: %#v", body)
-	}
-	llm.StripProxyParams(nil)
 }
 
 // TestInternalConfigLoadBoundary 验证磁盘配置从环境引用解析到运行默认值和原始扩展字段的服务启动边界。
@@ -503,7 +380,7 @@ func TestInternalConfigLoadBoundary(t *testing.T) {
 // 前置条件是内存 SSE 事件；验证数值类型归一、缓存 token 和完成标记；不访问 Google 或 Vertex 服务。
 func TestInternalGeminiNativeStreamBoundary(t *testing.T) {
 	raw := []byte("data: {\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":4,\"candidatesTokenCount\":3,\"thoughtsTokenCount\":2,\"cachedContentTokenCount\":1}}\n\n")
-	usage := provider.NativeStreamUsage("gemini", raw, nil)
+	usage := providermeasurement.NativeStreamUsage("gemini", raw, nil)
 	if usage["prompt_tokens"] != float64(4) || usage["completion_tokens"] != float64(5) {
 		t.Fatalf("Gemini 原生流 token 汇总错误: %#v", usage)
 	}
@@ -511,7 +388,7 @@ func TestInternalGeminiNativeStreamBoundary(t *testing.T) {
 	if details["cached_tokens"] != float64(1) {
 		t.Fatalf("Gemini 缓存 token 丢失: %#v", details)
 	}
-	state := provider.NativeStreamState{}
+	state := providermeasurement.NativeStreamState{}
 	state.Observe("gemini", raw)
 	if !state.Completed || state.Failed {
 		t.Fatalf("Gemini 完成候选终态错误: %#v", state)

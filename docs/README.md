@@ -13,24 +13,24 @@ Start with installation, then follow the user guide to connect a provider, creat
 
 ## Develop XHub
 
-The central development references are in Chinese. Package-level `readme.md` and `readme_cn.md` files provide English and Chinese code guides.
+Development references are organized in `development/en/` and `development/zh-CN/`. English editions currently provide concise topic references; detailed section parity is still being reviewed. Package guides also have English and Chinese editions.
 
 | Reference | Purpose |
 | --- | --- |
-| [Developer and coding-agent guide](development/README.md) | Find the right module, preserve invariants, and choose checks for a change |
-| [Architecture](development/architecture.md) | Services, request flow, ownership, and module boundaries |
-| [Permissions](development/permissions.md) | Roles, visibility, secret access, and model scope |
-| [Routing](development/routing.md) | Template inheritance, weights, retries, timeouts, and affinity |
-| [Pricing and usage](development/pricing.md) | Rates, time windows, price snapshots, and persistence |
-| [Quota implementation and verification](development/quota-chain.md) | Allocation invariants, request admission, spend attribution, and layered tests |
-| [Runtime behavior and limits](development/runtime.md) | Cache, idempotency, protocols, media tasks, and operating limits |
-| [Testing](development/testing.md) | Test layers, database isolation, focused commands, and optional demo data |
-| [Feature implementation](development/implementation.md) | End-to-end contracts and source locations for core features |
-| [HTTP API reference](development/api-reference.md) | Registered endpoints and their handler sources |
-| [Configuration and storage](development/configuration.md) | Settings precedence, model fields, persistence, and runtime defaults |
-| [Regression plan](development/regression.md) | File-by-file backend coverage, live models, template cases, and acceptance procedure |
-| [Browser regression](development/e2e-regression.md) | Console flows, coverage matrix, environment and assertions |
-| [Operations](development/operations.md) | Diagnose failures using call IDs, logs, state, and billing evidence |
+| [Developer and coding-agent guide](development/en/README.md) | Find the right module, preserve invariants, and choose checks for a change |
+| [Architecture](development/en/architecture.md) | Services, request flow, ownership, and module boundaries |
+| [Permissions](development/en/permissions.md) | Roles, visibility, secret access, and model scope |
+| [Routing](development/en/routing.md) | Template inheritance, weights, retries, timeouts, and affinity |
+| [Pricing and usage](development/en/pricing.md) | Rates, time windows, price snapshots, and persistence |
+| [Quota implementation and verification](development/en/quota-chain.md) | Allocation invariants, request admission, spend attribution, and layered tests |
+| [Runtime behavior and limits](development/en/runtime.md) | Cache, idempotency, protocols, media tasks, and operating limits |
+| [Testing](development/en/testing.md) | Test layers, database isolation, focused commands, and optional demo data |
+| [Feature implementation](development/en/implementation.md) | End-to-end contracts and source locations for core features |
+| [HTTP API reference](development/en/api-reference.md) | Registered endpoints and their handler sources |
+| [Configuration and storage](development/en/configuration.md) | Settings precedence, model fields, persistence, and runtime defaults |
+| [Regression plan](development/en/regression.md) | File-by-file backend coverage, live models, template cases, and acceptance procedure |
+| [Browser regression](development/en/e2e-regression.md) | Console flows, coverage matrix, environment and assertions |
+| [Operations](development/en/operations.md) | Diagnose failures using call IDs, logs, state, and billing evidence |
 
 ## Maintain these documents
 

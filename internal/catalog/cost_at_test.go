@@ -31,14 +31,6 @@ func installRow(t *testing.T, model string, row map[string]any) {
 	raw[model] = row
 }
 
-// tokenRates builds an input/output rate pair for one window.
-func tokenRate(side, window string, usd float64) Rate {
-	return Rate{
-		Measure: "token", UnitSize: 1000, Side: side, Variant: "uncached",
-		Window: window, SourceKey: side + "_" + window, USD: usd,
-	}
-}
-
 // TestPeakCostsTwiceOffpeak 是这次改动的核心断言：同一批 token，落在高峰时段
 // 的那次调用正好贵一倍。
 //

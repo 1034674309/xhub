@@ -1,11 +1,5 @@
 # Audio transcription
 
-## Overview
-
-Audio transcription
-
-### Audio transcription
-
 ## Behavior
 File formats and translation target depend on upstream.
 

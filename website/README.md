@@ -53,7 +53,7 @@ git status --short
 如果当前已经是 `main`，可以只提交本次官网和文档相关文件：
 
 ```bash
-git add website .github/workflows/website.yml README.md README.zh-CN.md docs/user-guide.md docs/user-guide.zh-CN.md docs/development/model-marketplace.md
+git add website .github/workflows/website.yml README.md README.zh-CN.md docs/user-guide.md docs/user-guide.zh-CN.md docs/development/en docs/development/zh-CN
 git diff --cached --stat
 git commit -m "docs: add XHub website and GitHub Pages guide"
 git push origin main
@@ -147,6 +147,8 @@ npm run test:e2e
 ```
 
 单元测试验证路径映射、Markdown 安全处理、锚点、全文搜索和键盘交互；服务测试启动真实 HTTP 服务器检查状态码、文件类型、HEAD 和子路径访问。构建回归遍历生成页面的站内链接、图片、资源与锚点。
+
+开发文档源按 `docs/development/en/` 和 `docs/development/zh-CN/` 组织，同一主题使用相同文件名。新增主题必须同步维护两种语言；测试检查文件名配对，正文的完整翻译仍需审校。网站保留历史 `docs/development/<topic>.html` 与 `<topic>.en.html` 地址，跳转到对应语言目录并保留查询串与锚点。语言切换打开同主题页面；搜索仅显示当前语言结果。
 
 浏览器验证在 `/xhub/` 路径覆盖首页到 Docker 安装文档、刷新、全文搜索到护栏、代码复制、中英文切换、空结果与 Escape 关闭、索引加载失败及重试、Mermaid 渲染和移动端导航。测试读取真实构建文件和索引；失败场景仅中止索引请求，恢复后继续读取真实索引。
 

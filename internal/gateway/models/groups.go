@@ -2,13 +2,13 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/pagination"
-	"github.com/sunqirui1987/xhub/internal/router"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/sunqirui1987/xhub/internal/config"
+	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // ModelGroup 聚合一个公开模型的部署、默认权重和独立回退策略，不复制供应商数据。
@@ -70,17 +70,17 @@ func Groups(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.PlatformAdmin() {
-		httpx.WriteError(w, 403, "forbidden", "platform administrator required")
+		util.WriteError(w, 403, "forbidden", "platform administrator required")
 		return
 	}
 	defaults, err := s.RecordStore().ListConfig("model_defaults")
 	if err != nil {
-		httpx.WriteError(w, 503, "unavailable", "model defaults unavailable")
+		util.WriteError(w, 503, "unavailable", "model defaults unavailable")
 		return
 	}
 	fallbacks, err := s.RecordStore().ListConfig("model_fallbacks")
 	if err != nil {
-		httpx.WriteError(w, 503, "unavailable", "model fallbacks unavailable")
+		util.WriteError(w, 503, "unavailable", "model fallbacks unavailable")
 		return
 	}
 	s.LockModels()
@@ -88,14 +88,14 @@ func Groups(s Host, w http.ResponseWriter, r *http.Request) {
 	s.UnlockModels()
 	groups, err := groupModels(list, defaults, r.URL.Query().Get("search"))
 	if err != nil {
-		httpx.WriteError(w, 500, "invalid_model_default", err.Error())
+		util.WriteError(w, 500, "invalid_model_default", err.Error())
 		return
 	}
 	for i := range groups {
 		if raw, exists := fallbacks[groups[i].Name]; exists {
 			groups[i].Fallback, err = router.ParseFallbackPolicy(raw)
 			if err != nil {
-				httpx.WriteError(w, 500, "invalid_model_fallback", err.Error())
+				util.WriteError(w, 500, "invalid_model_fallback", err.Error())
 				return
 			}
 		}
@@ -112,12 +112,12 @@ func Groups(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(groups)
 	// 超大页码返回空页，避免整数溢出造成切片崩溃。
-	start, end := pagination.Bounds(total, page, size)
+	start, end := util.Bounds(total, page, size)
 	pages := 1
 	if total > 0 {
 		pages = (total + size - 1) / size
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"data": groups[start:end], "total_count": total, "current_page": page, "total_pages": pages})
+	util.WriteJSON(w, 200, map[string]any{"data": groups[start:end], "total_count": total, "current_page": page, "total_pages": pages})
 }
 
 // SetDefault 保存公开模型的唯一全局分配；严格验证相对权重和部署归属，不存储分配策略。
@@ -128,7 +128,7 @@ func SetDefault(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.PlatformAdmin() {
-		httpx.WriteError(w, 403, "forbidden", "platform administrator required")
+		util.WriteError(w, 403, "forbidden", "platform administrator required")
 		return
 	}
 	var input struct {
@@ -138,17 +138,17 @@ func SetDefault(s Host, w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil || input.Model == "" {
-		httpx.WriteError(w, 400, "invalid_request", "model_name and weights required")
+		util.WriteError(w, 400, "invalid_request", "model_name and weights required")
 		return
 	}
 	var trailing any
 	if decoder.Decode(&trailing) != io.EOF {
-		httpx.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
+		util.WriteError(w, 400, "invalid_request", "exactly one JSON object required")
 		return
 	}
 	policy, err := router.ParseDefaultWeights(input.Policy)
 	if err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	// 校验与写入共用模型锁，避免部署同时删除后存入悬空分配引用。
@@ -162,16 +162,16 @@ func SetDefault(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !exists {
-		httpx.WriteError(w, 404, "not_found", "public model not found")
+		util.WriteError(w, 404, "not_found", "public model not found")
 		return
 	}
 	if err := policy.ValidateDeployments(list, input.Model); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if err := s.RecordStore().PutConfig("model_defaults", input.Model, router.DefaultWeights{Allocations: policy.Allocations}); err != nil {
-		httpx.WriteError(w, 503, "unavailable", err.Error())
+		util.WriteError(w, 503, "unavailable", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "weights": router.DefaultWeights{Allocations: policy.Allocations}})
+	util.WriteJSON(w, 200, map[string]any{"model_name": input.Model, "weights": router.DefaultWeights{Allocations: policy.Allocations}})
 }

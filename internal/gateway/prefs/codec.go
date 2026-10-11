@@ -3,10 +3,11 @@ package prefs
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"io"
 	"net/http"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -17,7 +18,7 @@ var logTraceOnceCodec sync.Once
 // 调用：gateway/prefs/settings.go。
 // 测试：无直接单测
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter prefs.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter prefs.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)

@@ -1,11 +1,5 @@
 # 内容生成任务协议
 
-## 接口概述
-
-内容生成任务协议
-
-### 内容生成任务协议
-
 ## 协议与适用范围
 本文按内容生成任务协议组织，供应商只是部署实现。标准 /api/v3 路径支持集合 POST/GET 及 GET /api/v3/contents/generations/tasks/{id}；采用 /v3 变体的部署支持 POST /v3/contents/generations/tasks 与 GET /v3/contents/generations/tasks/{id}。路由上下文保留七天，不提供通用回调或取消，成功终态实测用量只结算一次。
 

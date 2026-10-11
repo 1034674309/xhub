@@ -1,11 +1,5 @@
 # Rerank
 
-## Overview
-
-Rerank
-
-### Rerank
-
 ## Behavior
 Map results by original index. Response fields depend on registered rerank protocol.
 

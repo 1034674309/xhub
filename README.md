@@ -82,7 +82,7 @@ Organizations, teams, and keys can select or inherit routing templates. Session 
 
 Apply keyword, RE2 regular-expression, secret-detection, and custom XGo checks to applicable Chat/Responses text. Rules can run by default or on demand, in priority order, with blocking, redaction, modification, or non-blocking flags and records of actual execution.
 
-XGo guardrails can combine HTTP, JSON, and LLM calls for business checks. Implemented adapters connect OpenAI Moderation, Lakera, Azure, Bedrock, Presidio, and remote LiteLLM guardrails. The console supports draft testing, configuration validation, and rule management. The current execution stage is pre-call; see the [guardrail guide](docs/development/guardrails.md) for coverage.
+XGo guardrails can combine HTTP, JSON, and LLM calls for business checks. Implemented adapters connect OpenAI Moderation, Lakera, Azure, Bedrock, Presidio, and remote LiteLLM guardrails. The console supports draft testing, configuration validation, and rule management. The current execution stage is pre-call; see the [guardrail guide](docs/development/en/guardrails.md) for coverage.
 
 ### Agents and sessions: context and cost across turns
 
@@ -94,7 +94,7 @@ The Playground supports streaming and non-streaming calls, session continuation,
 
 Connect image generation/editing, speech generation/transcription, embeddings, reranking, and other operations according to declared deployment capabilities and their implementations. Video task transports include Volcengine Ark, Qiniu Seedance, and registered Fal queues. Protocol, model, and pricing support depends on the deployment.
 
-Supported asynchronous tasks can be created and queried, with links between the original request, terminal results, and usage. Logs show running, completed, or failed states; repeated completion queries deduplicate settlement. See the [runtime reference](docs/development/runtime.md) and [Qiniu Fal extension](docs/development/qiniu-fal.md) for provider-specific operations and pricing boundaries.
+Supported asynchronous tasks can be created and queried, with links between the original request, terminal results, and usage. Logs show running, completed, or failed states; repeated completion queries deduplicate settlement. See the [runtime reference](docs/development/en/runtime.md) and [Qiniu Fal extension](docs/development/en/qiniu-fal.md) for provider-specific operations and pricing boundaries.
 
 ### Operations: from provider validation to investigation
 
@@ -247,21 +247,21 @@ SDK requests go to the **gateway on port 4000**; port 3000 serves the web consol
 | --- | --- |
 | [Installation and running guide](docs/getting-started.md) | Docker, source setup, first request, and deployment configuration |
 | [User and administration guide](docs/user-guide.md) | Model setup, members and keys, routing, cost review, and troubleshooting |
-| [Permission rules](docs/development/permissions.md) | Platform, organization, team, and member access scopes |
-| [Runtime behavior and limits](docs/development/runtime.md) | Budgets, protocols, cache, idempotency, and multiple gateway instances |
+| [Permission rules](docs/development/en/permissions.md) | Platform, organization, team, and member access scopes |
+| [Runtime behavior and limits](docs/development/en/runtime.md) | Budgets, protocols, cache, idempotency, and multiple gateway instances |
 | [Documentation index](docs/README.md) | User guides and implementation references |
-| [Developer and coding-agent guide](docs/development/README.md) | Code map, invariants, and checks for a change |
-| [Testing](docs/development/testing.md) | Unit tests, backend regression, and browser E2E |
+| [Developer and coding-agent guide](docs/development/en/README.md) | Code map, invariants, and checks for a change |
+| [Testing](docs/development/en/testing.md) | Unit tests, backend regression, and browser E2E |
 
 Installation and customer guides are available in English and Chinese. Central development references are in Chinese; package-level `readme.md` / `readme_cn.md` files provide bilingual code guides.
 
 ## Project status and deployment references
 
-XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/runtime.md), [permission rules](docs/development/permissions.md), and [guardrail guide](docs/development/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Account login and scoped roles currently exclude SSO/SCIM; this repository does not promise commercial SLAs or compliance certifications.
+XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Account login and scoped roles currently exclude SSO/SCIM; this repository does not promise commercial SLAs or compliance certifications.
 
 ## Contributing
 
-XHub is actively evolving. [Open an issue](https://github.com/sunqirui1987/xhub/issues) with an enterprise use case or reproduction steps, improve the documentation, or submit a pull request. For code changes, follow the [developer guide](docs/development/README.md) and the relevant module's validation requirements.
+XHub is actively evolving. [Open an issue](https://github.com/sunqirui1987/xhub/issues) with an enterprise use case or reproduction steps, improve the documentation, or submit a pull request. For code changes, follow the [developer guide](docs/development/en/README.md) and the relevant module's validation requirements.
 
 ### Hierarchical quota allocation
 
@@ -270,5 +270,5 @@ Budgets follow **Organization → Team → Person → API Key**, in USD. Each pe
 RPM and TPM follow the same hierarchy: team allocations sum within the organization, personal allocations within the team, and key allocations within the person. Fixed values reserve minute capacity; blank values share the unreserved remainder; zero blocks calls. Blank intermediates pass fixed descendant allocations upward. Over-allocation rolls back the save. Admission atomically counts the unique ownership path and rejected calls consume no rate capacity. TPM uses the incoming token estimate; windows are UTC calendar minutes. Multiple gateway instances need shared Redis.
 
 See [quota management](docs/quota-management.md) for examples, administrator permissions, membership changes, historical spending, and the request-admission/settlement boundary.
-For code ownership, allocation invariants, admission and accounting flow, and layered test commands, see [quota implementation and verification](docs/development/quota-chain.md).
+For code ownership, allocation invariants, admission and accounting flow, and layered test commands, see [quota implementation and verification](docs/development/en/quota-chain.md).
 Quota acceptance uses fresh temporary ownership chains for each budget and RPM/TPM check, verifies rejection before any upstream call and successful billed recovery, then deletes all temporary resources. Existing allocations and spending remain intact. The actual acceptance script is covered by a local gateway/database regression test; see [acceptance dataset documentation](docs/testdata/real-acceptance/README.md).

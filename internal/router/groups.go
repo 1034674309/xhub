@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // Group 是可直接作为 API model 使用的显式路由组；成员请求也继承组策略。

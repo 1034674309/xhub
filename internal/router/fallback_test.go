@@ -2,8 +2,9 @@ package router
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestFallbackPolicy 验证三类策略解析及无效边界；前置内存 JSON，断言严格格式且无需清理。

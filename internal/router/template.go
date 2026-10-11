@@ -2,8 +2,9 @@ package router
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"strings"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TemplateRouting 解析模板内的组和三类 LiteLLM 形式回退表，返回独立对象或字段错误。

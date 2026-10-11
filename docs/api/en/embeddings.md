@@ -1,11 +1,5 @@
 # Embeddings
 
-## Overview
-
-Embeddings
-
-### Embeddings
-
 ## Behavior
 Example vectors are shortened. Match data[].index to each input and validate dimensions before indexing.
 

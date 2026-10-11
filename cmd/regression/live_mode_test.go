@@ -3,7 +3,7 @@ package regression
 import (
 	"os"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // liveModeEnabled 报告这次是否要调用真实供应商，并把这个选择写进进程日志。
@@ -16,9 +16,9 @@ import (
 func liveModeEnabled() bool {
 	live := os.Getenv("XHUB_REGRESSION_LIVE") == "1"
 	if live {
-		logx.Info("regression suite running with live vendor calls")
+		util.Info("regression suite running with live vendor calls")
 		return true
 	}
-	logx.Debug("regression suite running against the fake provider")
+	util.Debug("regression suite running against the fake provider")
 	return false
 }

@@ -1,6 +1,6 @@
 # Live provider test configuration
 
-[简体中文](readme_cn.md) · [Regression plan](../../../docs/development/regression.md) · [Multi-provider scenarios](../../../docs/development/multi-supplier-regression.md)
+[简体中文](readme_cn.md) · [Regression plan](../../../docs/development/zh-CN/regression.md) · [Multi-provider scenarios](../../../docs/development/zh-CN/multi-supplier-regression.md)
 
 ## Responsibility and data boundary
 

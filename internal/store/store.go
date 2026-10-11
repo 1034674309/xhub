@@ -10,9 +10,9 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 	"xorm.io/xorm"
 )
 
@@ -31,7 +31,7 @@ var logTraceOnceStore sync.Once
 // 调用：gateway/server.go、iam/db.go、live/redis.go、store/engine.go
 // 测试：authz_test.go、builtin_providers_test.go、chains_test.go
 func Open(databaseURL string) (*Store, error) {
-	logTraceOnceStore.Do(func() { logx.Trace("enter store.Open") })
+	logTraceOnceStore.Do(func() { util.Trace("enter store.Open") })
 
 	u := strings.ToLower(strings.TrimSpace(databaseURL))
 	switch {

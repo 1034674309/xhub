@@ -54,7 +54,7 @@
 
 只有平台管理员能够创建账号。创建账号不会发送邀请邮件；密码找回当前通过管理员直接重置，不提供邮件重置链接。团队管理员不能重置平台管理员或组织管理员的密码。修改密码会使旧会话失效，用户需要重新登录。
 
-不能移除或降级最后一名团队管理员，先指定接任者再调整成员关系。详细接口规则见[开发者权限参考](development/permissions.md)。
+不能移除或降级最后一名团队管理员，先指定接任者再调整成员关系。详细接口规则见[开发者权限参考](development/zh-CN/permissions.md)。
 
 ## 4. 管理模型范围和预算
 
@@ -134,7 +134,7 @@ print(response.choices[0].message.content)
 | 模板 `retry_policy.max_attempts` | 每个部署的总尝试次数，包括第一次；模板可靠性四字段必须完整，计数与旧配置 `num_retries` 不同 |
 | 超时 | 单次上游尝试的超时，默认 60 秒，不是整次请求的总时限 |
 
-支持同一公开模型的部署故障切换，也可配置跨公开模型或路由组的通用错误、上下文超限与供应商内容策略回退链。模板不能扩大模型权限或绕过预算，本地护栏拦截不会触发供应商内容策略回退。完整字段与继承语义见[路由参考](development/routing.md)。回退只发生在响应字节输出前，可用 `disable_fallbacks:true` 按请求关闭；固定续传、原生异步任务创建和 Responses background 请求不会换模型重放。
+支持同一公开模型的部署故障切换，也可配置跨公开模型或路由组的通用错误、上下文超限与供应商内容策略回退链。模板不能扩大模型权限或绕过预算，本地护栏拦截不会触发供应商内容策略回退。完整字段与继承语义见[路由参考](development/zh-CN/routing.md)。回退只发生在响应字节输出前，可用 `disable_fallbacks:true` 按请求关闭；固定续传、原生异步任务创建和 Responses background 请求不会换模型重放。
 
 ## 8. 查看用量、费用和日志
 
@@ -148,7 +148,7 @@ print(response.choices[0].message.content)
 
 请求/响应内容存储由 `general_settings.store_prompts_in_spend_logs` 控制，可选择开启。范围内的管理员可查看保存的内容。根据业务数据要求决定是否开启，并通过运维流程设置留存；该开关本身不提供自动加密或留存策略。
 
-[计价参考](development/pricing.md)解释单价单位、价格快照和结算；[运行行为参考](development/runtime.md)解释缓存、幂等、流式和任务边界。
+[计价参考](development/zh-CN/pricing.md)解释单价单位、价格快照和结算；[运行行为参考](development/zh-CN/runtime.md)解释缓存、幂等、流式和任务边界。
 
 ## 9. 成员离职与访问回收
 
@@ -179,6 +179,6 @@ print(response.choices[0].message.content)
 
 外部访问地址、环境变量密钥和 Docker 配置见[安装指南](getting-started.zh-CN.md)。升级前备份 PostgreSQL 和部署配置，并在独立数据库验证恢复。当前身份结构不提供从早期结构自动迁移的路径。
 
-提交缺陷或准备修改代码时，记录受影响的操作、公开模型名、调用 ID、预期结果和已脱敏日志。开发者从[代码与 AI 编程指南](development/README.md)开始定位。
+提交缺陷或准备修改代码时，记录受影响的操作、公开模型名、调用 ID、预期结果和已脱敏日志。开发者从[代码与 AI 编程指南](development/zh-CN/README.md)开始定位。
 
 供应商均由管理员显式创建：选择提供商后填写对应凭据字段。系统不会自动安装中转供应商。价格刷新需设置 XHUB_PRICE_FEED_URL，未配置时继续使用当前嵌入价格及人工覆盖。

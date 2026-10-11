@@ -161,33 +161,48 @@ export function DocsCenter({ page, apiMarkdown }: { page: DocPage; apiMarkdown?:
                             <h2 className="px-3 pt-4 pb-2 text-sm font-semibold">
                               {t("docs.sections." + module.section)}
                             </h2>
-                            {module.protocols.map((branch) => (
-                              <details key={branch.protocol} open className="ml-2 border-l border-border pl-2">
-                                <summary className="cursor-pointer px-2 py-2 text-xs font-medium text-muted-foreground">
-                                  {t("docs.protocols." + branch.protocol)}
-                                </summary>
-                                {branch.pages.map((item) => (
-                                  <Link
-                                    key={item.id}
-                                    href={docHref(item)}
-                                    aria-current={item.id === page.id ? "page" : undefined}
-                                    className={
-                                      "block rounded-md px-3 py-2 text-sm " +
-                                      (item.id === page.id
-                                        ? "bg-emerald-500/10 font-medium text-emerald-600"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground")
-                                    }
-                                  >
-                                    {group === "api" && (
-                                      <span aria-hidden="true" className="mr-2 font-mono text-xs text-emerald-600">
-                                        {apiMethods[item.id]}
-                                      </span>
-                                    )}
-                                    {t("docs.articles." + item.id + ".title")}
-                                  </Link>
-                                ))}
-                              </details>
-                            ))}
+                            {module.protocols.map((branch) => {
+                              // 分类与协议相同时省略重复的折叠层，保留总览和所有接口入口；搜索后仍按稳定分类判断。
+                              const redundantProtocol = module.section === branch.protocol;
+                              const Branch = redundantProtocol ? "div" : "details";
+                              return (
+                                <Branch
+                                  key={branch.protocol}
+                                  {...(redundantProtocol ? {} : { open: true })}
+                                  className="ml-2 border-l border-border pl-2"
+                                >
+                                  {!redundantProtocol && (
+                                    <summary className="cursor-pointer px-2 py-2 text-xs font-medium text-muted-foreground">
+                                      {t("docs.protocols." + branch.protocol)}
+                                    </summary>
+                                  )}
+                                  {branch.pages.map((item) => (
+                                    <Link
+                                      key={item.id}
+                                      href={docHref(item)}
+                                      aria-current={item.id === page.id ? "page" : undefined}
+                                      className={
+                                        "block rounded-md px-3 py-2 text-sm " +
+                                        (item.id === page.id
+                                          ? "bg-emerald-500/10 font-medium text-emerald-600"
+                                          : "text-muted-foreground hover:bg-muted hover:text-foreground")
+                                      }
+                                    >
+                                      {group === "api" && (
+                                        <span aria-hidden="true" className="mr-2 font-mono text-xs text-emerald-600">
+                                          {apiMethods[item.id]}
+                                        </span>
+                                      )}
+                                      {t(
+                                        item.id === "bypass"
+                                          ? "docs.apiOverview"
+                                          : "docs.articles." + item.id + ".title",
+                                      )}
+                                    </Link>
+                                  ))}
+                                </Branch>
+                              );
+                            })}
                           </section>
                         ))
                       : items.map((item, position) => (
@@ -265,7 +280,9 @@ export function DocsCenter({ page, apiMarkdown }: { page: DocPage; apiMarkdown?:
           {markdown && (
             <div className="docs-prose mt-8" id={spec?.anchor}>
               <DocumentationMarkdown
-                linkHrefs={Object.fromEntries(docPages.filter((item) => item.group === "api").map((item) => [item.id + ".md", docHref(item)]))}
+                linkHrefs={Object.fromEntries(
+                  docPages.filter((item) => item.group === "api").map((item) => [item.id + ".md", docHref(item)]),
+                )}
                 markdown={markdown
                   .replace(/^# .+\n/, "")
                   .replaceAll("https://YOUR_GATEWAY_HOST", gatewayBase)

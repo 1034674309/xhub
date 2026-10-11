@@ -1,11 +1,5 @@
 # Gemini / Vertex 原生协议
 
-## 接口概述
-
-Gemini / Vertex 原生协议
-
-### Gemini / Vertex 原生协议
-
 ## 接口行为
 路径使用 URL 编码的公开模型名，还支持 :streamGenerateContent、:countTokens。Vertex 使用 /vertex/v1/models/{model} 及相同操作后缀。上游 OAuth 凭据保留在部署设置。
 

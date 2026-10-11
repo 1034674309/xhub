@@ -3,15 +3,16 @@ package guard
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+	"unicode"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"net/url"
-	"strings"
-	"time"
-	"unicode"
 )
 
 // externalProviders 只列实际具有 Go 适配器的服务；花园中其他伙伴不能据目录存在宣称已接入。

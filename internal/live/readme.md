@@ -1,61 +1,64 @@
-# Redis hot state and usage queue
+# Redis hot state, rate admission, and durable-usage handoff
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../docs/development/implementation.md)
+[简体中文](readme_cn.md)
 
-## Responsibilities and behavior
+## Overview
 
-redis.go stores failures, cooldowns, latency, RPM/TPM, hot spend, affinity, and pending logs. Methods have explicit behavior when Redis is absent; degraded operation does not retain distributed guarantees.
-Hot spend supports immediate budget checks, while PostgreSQL owns durable accounting. Queue peeking and acknowledgment are separate; consumers acknowledge after commit, and IAM request_id deduplicates redelivery. Queue pressure and Redis failure need observable behavior.
-Cooldown read failures yield no cooled entries; that policy must not be copied to identity database errors. Shared state uses deployment-specific identifiers. Real Redis tests verify counters, expiry, queue order, and acknowledgment; skipped Redis cases are unverified.
+`internal/live` owns state that must be shared immediately between gateway processes but does not belong in the durable IAM ledger: deployment cooldowns, recent latency and minute usage, hierarchical RPM/TPM counters, unflushed spend, a reliable usage queue, and short-lived strings. PostgreSQL remains the source of truth for identities and settled usage. This package closes the interval between admission and the IAM transaction committing.
+
+The package registers no HTTP handlers. Request execution builds an IAM rate plan, calls `AdmitRatePlan`, records deployment telemetry, and publishes completed usage with `EnqueueSpend`. The usage flusher peeks logs, commits them through `internal/iam`, then calls `AckFlushed`.
+
+## External interfaces
+
+### Connection, telemetry, and counters
+
+- `Open(url) (*Client, error)` parses the Redis URL, connects, and pings; parse, network, authentication, and ping failures close the client and propagate. `Close()` is safe on nil.
+- `RecordFailure(id, allowed, cooldown)` counts failures and starts cooldown at the threshold; `allowed < 1` and nil clients are no-ops. `Cooled(ids)` returns cooled IDs and degrades to an empty map on read failure. `AddLatency` retains 20 samples for one hour; `Latencies` averages valid samples.
+- `AddUsage`/`Usages` maintain per-deployment token totals in the UTC minute bucket. `HitRPM` and `HitTPM` increment one current-minute counter and return its new value; they do not provide combined admission.
+
+### Rate admission
+
+- `RateScope` carries a scope kind, ID, and optional RPM/TPM limits. `RateNode` adds a parent index. `RatePlan` carries the complete allocation tree and the current leaf-to-root `Path`.
+- `CheckRatePlan(plan, rpmUsed, tpmUsed, est) string` is the side-effect-free reference algorithm. Empty means admitted; rejection is `<kind> rpm_limit` or `<kind> tpm_limit`. The caller must supply a valid acyclic tree, valid path/parent indexes, and usage slices aligned with `Nodes`; the function indexes them directly. Negative estimates become zero, and an explicit zero limit rejects.
+- `AdmitRates(scopes, est, now)` converts every scope into an independent root (`Parent == -1`) and uses input order as `Path`; it does not build a parent chain. `AdmitRatePlan(plan, est, now)` runs one Redis Lua script against UTC minute keys. It checks all RPM constraints before TPM and increments every path counter only after all checks pass. Redis/script errors propagate; gateway callers treat them as dependency failures instead of admitting an uncounted request.
+
+### Spend handoff and strings
+
+- `SpendRef(kind, id)` forms the hot-spend identity consumed by IAM quota checks. `ChargeSpend`, `HotSpend`, `PeekSpend`, `AckSpend`, `TakeSpend`, and `ClearSpendQueue` expose legacy aggregate operations; only peek then acknowledge preserves data over a failed database flush.
+- `EnqueueSpend(SpendLog)` requires a request ID and valid scope deltas. Lua atomically appends the log and increments all hot-spend scopes. Request IDs are permanent idempotency keys: retries are successful no-ops and the first payload wins. `EnqueueLog` queues a log without scope deltas.
+- `PeekLogs(n)` returns decoded and raw entries without deletion and stops at the first corrupt queue item. After PostgreSQL commits, `AckFlushed(deltas, n, head)` verifies the observed head, subtracts hot spend, and trims the prefix atomically; a changed head is a no-op. `AckLogs` and `DrainLogs` are destructive lower-level alternatives.
+- `GetString(ctx, key)` returns `(value, true)` only for an existing readable key. `SetString(ctx, key, value, ttl)` stores a TTL value and silently skips nil clients.
+
+Callers include inference admission/routing, the usage flusher, IAM quota checks, and deployment telemetry. Their HTTP routes live in gateway packages.
+
+## Core implementation
+
+### Hierarchical reservation
+
+A tree is required because fixed child allocations reserve capacity at shared ancestors. For each node, the algorithm computes unused fixed allocations below it: a fixed child contributes `max(limit-used, 0)` and a shared child passes through fixed descendant reservations. A path node deducts sibling reservations, then `credit` adds back the current path's own reservation so a request is not blocked by its allocation. RPM is checked first, then TPM with the same topology. The function assumes a valid acyclic tree, valid indexes, and usage slices with one entry per node; malformed input can panic or recurse indefinitely. IAM constructs valid plans.
+
+`AdmitRatePlan` serializes nodes, parents, limits, estimate, and path into Lua arguments and creates two keys per node. Lua reads every counter, performs both dimensions in full, then increments all path keys. Keys expire after 120 seconds. The single script prevents races and partial ancestor updates across replicas; `CheckRatePlan` mirrors it for deterministic tests.
+
+### Reliable usage handoff
+
+`EnqueueSpend` validates and serializes the event before a script updates the log queue, dedup set, pending-spend set, and floating-point scope counters together. IAM adds these hot values during `QuotaPath`. The flusher follows peek, database commit, acknowledge: failed IAM transactions leave Redis intact, while successful commits receive one head-checked acknowledgement. IAM also deduplicates `request_id`, making replay safe after a crash between commit and acknowledgement.
+
+Telemetry reads deliberately degrade when Redis is absent, and several optional methods accept nil clients. Atomic admission and reliable queued accounting require a real Redis client. Enqueue success does not wait for disk fsync or replica quorum, so Redis persistence and retention remain deployment boundaries.
+
+### Dependencies and verification
+
+The package uses Redis and `internal/util`; `internal/iam` is the durable consumer. `rate_plan_test.go` covers valid allocation trees, shared ancestors, zero limits, and estimates; callers remain responsible for satisfying the plan preconditions. `rates_test.go` compares Lua admission and atomic increments with the pure algorithm. `redis_test.go` covers concurrent deduplication, invalid queue input, corrupt heads, acknowledgement, and key expiry. Redis-backed cases skip when no test Redis is available.
 
 ## Source responsibilities and entry points
 
-### redis.go
+### `rate_plan.go`
 
-Exported types: `Client`, `SpendLog`.
+Defines `RateNode`, `RatePlan`, the pure `CheckRatePlan` entry point, and private helpers for child indexes, fixed-descendant reservation, and path credit. The implementation directly indexes nodes and usage slices, so its result contract and valid-plan preconditions must match Lua exactly.
 
-- [`func SpendRef(kind, id string) string`](redis.go) — SpendRef 拼出热花费计数的 Redis 键，按密钥、团队、用户、组织或项目分开。
-- [`func Open(url string) (*Client, error)`](redis.go) — Open parses the Redis URL and pings it. On failure it closes the client and returns the error.
-- [`func (c *Client) Close() error`](redis.go) — Close closes Redis. A nil client is not an error.
-- [`func (c *Client) RecordFailure(id string, allowed int, cooldown time.Duration) error`](redis.go) — RecordFailure increments the failure count. After allowed failures it writes the cooldown key. An allowed below 1 does nothing.
-- [`func (c *Client) Cooled(ids []string) map[string]bool`](redis.go) — Cooled reports which deployment ids are still cooling down. If Redis is unavailable it returns an empty map and the caller treats that as no cooldown.
-- [`func (c *Client) AddLatency(id string, ms float64) error`](redis.go) — AddLatency pushes one latency onto the left of the list, keeps the latest 20, and expires the key after one hour.
-- [`func (c *Client) Latencies(ids []string) map[string]float64`](redis.go) — Latencies returns the average of recent latencies for each deployment. An id with no sample is omitted.
-- [`func (c *Client) AddUsage(id string, tokens int) error`](redis.go) — AddUsage adds tokens to the current minute bucket.
-- [`func (c *Client) Usages(ids []string) map[string]float64`](redis.go) — Usages returns each deployment's token usage for the current minute.
-- [`func (c *Client) HitRPM(id string) (int64, error)`](redis.go) — HitRPM increments the current minute's request count and returns the new value.
-- [`func (c *Client) HitTPM(id string, tokens int) (int64, error)`](redis.go) — HitTPM adds tokens to the current minute and returns the new value.
-- [`func (c *Client) ChargeSpend(id string, usd float64) error`](redis.go) — ChargeSpend adds a dollar delta to hot spend and puts the id in the set waiting to be flushed.
-- [`func (c *Client) HotSpend(id string) float64`](redis.go) — HotSpend is the spend delta not yet flushed to PostgreSQL. A missing id returns 0.
-- [`func (c *Client) PeekSpend() map[string]float64`](redis.go) — PeekSpend reads hot spend with GET and does not subtract or delete it. After a failed flush the same deltas can still be read.
-- [`func (c *Client) AckSpend(deltas map[string]float64) error`](redis.go) — AckSpend subtracts a delta only after PostgreSQL has committed it. It decrements the Redis counters for the map it is given and does not read the database itself.
-- [`func (c *Client) ClearSpendQueue() error`](redis.go) — ClearSpendQueue drops spend waiting to be flushed. Use it only from a test or an explicit reset.
-- [`func (c *Client) TakeSpend() map[string]float64`](redis.go) — TakeSpend reads and clears spend waiting to be flushed. Unlike Peek, a later failure no longer finds the delta in Redis.
-- [`func (c *Client) EnqueueSpend(row SpendLog) error`](redis.go) — EnqueueSpend publishes a log and its hot budget deltas atomically. RequestID must identify one immutable event globally (including the tenant namespace). Replays are successful no-ops, even after AckFlushed; the first payload wins. Dedup identities have no TTL. Redis persistence/retention is required until PostgreSQL commits; this method does not wait for an fsync or replica quorum.
-- [`func (c *Client) EnqueueLog(row SpendLog) error`](redis.go) — 把一条花费日志放进 Redis 队列，等刷写进 PostgreSQL。客户端为空时直接返回。
-- [`func (c *Client) PeekLogs(n int) (rows []SpendLog, raw []string)`](redis.go) — PeekLogs 查看花费队列头部的若干条，不删除。客户端为空或没有日志时两个返回值都是 nil。
-- [`func (c *Client) AckFlushed(deltas map[string]float64, n int, head string) error`](redis.go) — AckFlushed acknowledges spend deltas and the written log prefix together after the database transaction succeeds. AckFlushed subtracts hot spend and trims the log prefix in one Redis script. If the queue head is no longer the batch that was peeked, it does nothing, so a retry cannot subtract twice after a successful ack and cannot drop the logs first.
-- [`func (c *Client) AckLogs(n int) error`](redis.go) — AckLogs 从花费队列头部丢掉已经刷进数据库的 n 条。
-- [`func (c *Client) DrainLogs(n int) []SpendLog`](redis.go) — DrainLogs 从队列头部弹出最多 n 条花费日志。弹出后队列里不再保留它们。
-- [`func (c *Client) GetString(ctx context.Context, key string) (string, bool)`](redis.go) — GetString reads one Redis string. A missing key returns ok false.
-- [`func (c *Client) SetString(ctx context.Context, key, value string, ttl time.Duration)`](redis.go) — SetString stores one Redis string with a TTL. A nil client does nothing.
+### `rates.go`
 
-## External HTTP boundary
+Defines `RateScope`, the `rateAdmission` Lua program, `AdmitRates`, and `AdmitRatePlan`. It serializes the caller-supplied plan without index validation, builds UTC minute keys and arguments, applies a two-second Redis timeout, maps the returned node/dimension index to a rejection string, and propagates Redis errors.
 
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
+### `redis.go`
 
-## Dependencies
-
-[internal/logx](../logx/readme.md).
-
-## Verification and maintenance
-
-| Test file | Scenario entry points |
-| --- | --- |
-| [redis_test.go](redis_test.go) | `TestEnqueueSpendConcurrentDedupAndAck`, `TestEnqueueSpendRequiresIdentity`, `TestEnqueueSpendRejectsInvalidStateWithoutPartialWrites`, `TestPeekLogsStopsAtCorruptEvent`, `TestConcurrentTokenCounterHasExpiry` |
-
-```bash
-go test ./internal/live -count=1
-```
-
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+Defines `Client`, `SpendLog`, key construction, connection lifecycle, cooldown/latency/minute telemetry, legacy spend counters, reliable queue operations, and TTL strings. Its scripts provide enqueue idempotency and atomic acknowledgement; private parsers may omit bad telemetry values but never skip past a corrupt reliable-queue entry.

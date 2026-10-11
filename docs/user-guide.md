@@ -54,7 +54,7 @@ Account roles, organization roles, and team roles are separate assignments. A pe
 
 Only platform administrators create accounts. Account creation does not send an invitation email. Password recovery currently uses a direct administrator reset rather than an email reset link. A team administrator cannot reset a platform or organization administrator's password. Password changes invalidate older sessions, so the affected user must sign in again.
 
-The last team administrator cannot be removed or demoted. Assign a replacement before changing that membership. Detailed endpoint rules are in the [developer permission reference](development/permissions.md).
+The last team administrator cannot be removed or demoted. Assign a replacement before changing that membership. Detailed endpoint rules are in the [developer permission reference](development/zh-CN/permissions.md).
 
 ## 4. Organize access and budgets
 
@@ -134,7 +134,7 @@ Manage templates at `/route-templates` with an account authorized for the target
 | Template `retry_policy.max_attempts` | Total attempts per deployment, including the first. All four reliability fields are required; counting differs from legacy `num_retries`. |
 | Timeout | Per upstream attempt; default 60 seconds, rather than a deadline for the entire request |
 
-Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/routing.md) for fields and inheritance semantics. Fallback happens only before response bytes are emitted and can be disabled per request with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
+Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/zh-CN/routing.md) for fields and inheritance semantics. Fallback happens only before response bytes are emitted and can be disabled per request with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
 
 ## 8. Read usage, costs, and logs
 
@@ -148,7 +148,7 @@ Use `/usage` for trends and breakdowns and `/logs` for individual calls. Visibil
 
 Prompt/response storage is optional, controlled by `general_settings.store_prompts_in_spend_logs`. Scoped administrators can inspect stored content. Decide whether to enable it based on your data requirements and configure retention in your operations process; this setting does not provide automatic encryption or a retention policy.
 
-The [pricing reference](development/pricing.md) explains rate units, snapshots, and settlement. The [runtime reference](development/runtime.md) describes cache, idempotency, streaming, and task boundaries.
+The [pricing reference](development/zh-CN/pricing.md) explains rate units, snapshots, and settlement. The [runtime reference](development/zh-CN/runtime.md) describes cache, idempotency, streaming, and task boundaries.
 
 ## 9. Remove access safely
 
@@ -179,6 +179,6 @@ For supported provider content-generation tasks, query with the same virtual key
 
 Use the [installation guide](getting-started.md) for external URLs, environment secrets, and Docker configuration. Back up PostgreSQL and deployment configuration before upgrades; validate a restore in a separate database. The current identity schema has no automatic migration from the earlier schema.
 
-For a code change or reproducible defect, include the affected operation, public model name, call ID, expected result, and relevant redacted logs. Developers can start with the [code and AI programming guide](development/README.md).
+For a code change or reproducible defect, include the affected operation, public model name, call ID, expected result, and relevant redacted logs. Developers can start with the [code and AI programming guide](development/zh-CN/README.md).
 
 Administrators explicitly create providers by selecting a type and entering its authentication fields. Price refresh requires XHUB_PRICE_FEED_URL; without it, the current bundled prices and manual overrides remain in use.

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 //go:embed publicdata/cn_holidays.json
@@ -54,7 +54,7 @@ func init() {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		// Fallback: fixed UTC+8, no DST. China has not observed DST since 1991.
-		logx.Error("Asia/Shanghai is unavailable; peak-hour billing falls back to a fixed UTC+8 offset err=%v", err)
+		util.Error("Asia/Shanghai is unavailable; peak-hour billing falls back to a fixed UTC+8 offset err=%v", err)
 		loc = time.FixedZone("CST", 8*3600)
 	}
 	shanghaiLoc = loc
@@ -63,7 +63,7 @@ func init() {
 		// An unreadable table is not fatal, but it changes what customers are
 		// charged: every weekday 09:00-12:00 and 14:00-18:00 becomes peak,
 		// including public holidays, which the published rates exclude.
-		logx.Error("cn_holidays is unreadable; peak hours will be judged on weekdays alone")
+		util.Error("cn_holidays is unreadable; peak hours will be judged on weekdays alone")
 	}
 }
 
@@ -79,7 +79,7 @@ func parseHolidays(data []byte) holidayIndex {
 	}
 	var years []holidayYear
 	if err := json.Unmarshal(data, &years); err != nil {
-		logx.Error("cn_holidays is not readable err=%v", err)
+		util.Error("cn_holidays is not readable err=%v", err)
 		return idx
 	}
 	for _, y := range years {

@@ -12,22 +12,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/cache"
+	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/dataplane"
+	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
+	"github.com/sunqirui1987/xhub/internal/gateway/affinity"
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/iam"
-
 	"github.com/sunqirui1987/xhub/internal/hooks"
+	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/plugin"
-	"github.com/sunqirui1987/xhub/internal/store"
-
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
+	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const Version = family.ProxyVersion
@@ -49,7 +47,7 @@ type Server struct {
 	// route cannot replace a module route that was mounted first.
 	engine     *gin.Engine
 	registered map[string]struct{}
-	Cache      *cache.DualCache
+	Cache      *util.DualCache
 	Hooks      *hooks.Engine
 	extensions *plugin.Registry
 	// Busy counts in-flight calls per deployment id inside this process.
@@ -61,7 +59,7 @@ type Server struct {
 	rpmHits map[string][]time.Time
 	tpmHits map[string][]tokHit
 	// catalog is the routes.json table mounted after the modules.
-	catalog []catRoute
+	catalog []catalog.Route
 	// sessions is the console login state. idem is the authenticated
 	// Idempotency-Key replay and in-flight table.
 	sessions map[string]sessionRec
@@ -72,19 +70,16 @@ type Server struct {
 	// yamlStoreModelInDB is the startup flag. A database override can change
 	// the same behavior later through prefs.
 	yamlStoreModelInDB bool
-	modules            []httpx.Module
+	modules            []util.Module
 	modulesReady       bool
 	// exchanges holds headers and bodies until recordSpend copies them onto the
 	// usage row. callNotes holds provider, TTFT, session, and deployment.
 	// guardrailNotes holds the rule name when a guardrail refused the call.
 	exchanges      map[string]promptExchange
-	callNotes      map[string]dataplane.CallNote
+	callNotes      map[string]dpcontract.CallNote
 	guardrailNotes map[string]string
-	// affinity is the session pin and the official-task pin. Official task pins
-	// use a 7-day TTL; chat session pins use affinityTTL. affinityMu guards
-	// this map only. mu guards the other process-local maps.
-	affinity   map[string]affinityPin
-	affinityMu sync.Mutex
+	// State 独立管理会话与任务归属；通过组合提供数据面需要的路由接口。
+	affinity.State
 }
 
 type idemRec struct {
@@ -111,12 +106,12 @@ type tokHit struct {
 var logTraceOnceServer sync.Once
 
 // New assembles the gateway. It loads the catalog, merges router settings, and registers dedicated routes plus the remaining catalog routes. The identity store is required: a gateway without one could not tell who is calling.
-// 调用：authz/authz.go、authz/decide.go、cache/cache.go、dataplane/serve.go
+// 调用：authz/authz.go、authz/decide.go、cache/util.go、dataplane/execution/serve.go
 // 测试：activity_http_test.go、authz_test.go、builtin_providers_test.go
 // 参数 cfg（*config.Config）：进程配置，含模型表和路由策略；st（*store.Store）：此刻的冷却、延迟、用量和并发，用来排序；db（*iam.DB）：身份和用量库。
 // 返回 *Server（*Server）：装好模块和目录路由的网关进程。
 func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
-	logTraceOnceServer.Do(func() { logx.Trace("enter gateway.New") })
+	logTraceOnceServer.Do(func() { util.Trace("enter gateway.New") })
 
 	s := &Server{
 		Cfg:                cfg,
@@ -126,13 +121,13 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 		Client:             &http.Client{Timeout: time.Duration(cfg.RouterSettings.Timeout) * time.Second},
 		engine:             newEngine(),
 		registered:         map[string]struct{}{},
-		Cache:              cache.New(),
+		Cache:              util.NewCache(),
 		Hooks:              hooks.New(),
 		extensions:         plugin.New(),
 		Busy:               map[string]int{},
 		rpmHits:            map[string][]time.Time{},
 		tpmHits:            map[string][]tokHit{},
-		catalog:            loadCatalog(),
+		catalog:            catalog.Load(),
 		sessions:           map[string]sessionRec{},
 		idem:               map[string]*idemRec{},
 		idemTTL:            defaultIdempotencyTTL,
@@ -143,6 +138,9 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 		if client, err := live.Open(cfg.GeneralSettings.RedisURL); err == nil {
 			s.Live = client
 		}
+	}
+	if s.Live != nil {
+		s.State = *affinity.New(s.Live)
 	}
 	prefs.ApplyTyped(s, prefs.MergedRouter(s))
 	models.LoadStored(s)
@@ -162,7 +160,7 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 // Run accepts connections on addr. The process entry uses it instead of handing a ServeMux to ListenAndServe.
 // 参数 addr（string）：Run使用的addr。空串表示调用方没有提供这项。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：dataplane/serve.go、live/redis.go、plugin/registry.go
+// 调用：dataplane/execution/serve.go、live/redis.go、plugin/registry.go
 // 测试：authz_test.go、catalog_reads_test.go、chains_test.go
 func (s *Server) Run(addr string) error {
 	if s.Live != nil {

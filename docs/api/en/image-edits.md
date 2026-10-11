@@ -1,11 +1,5 @@
 # Image edits
 
-## Overview
-
-Image edits
-
-### Image edits
-
 ## Behavior
 Let curl set multipart boundaries. Some native deployments accept JSON references instead; use the matching protocol.
 

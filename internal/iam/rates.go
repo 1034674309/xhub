@@ -3,8 +3,9 @@ package iam
 import (
 	"context"
 	"errors"
-	"github.com/sunqirui1987/xhub/internal/live"
 	"sort"
+
+	"github.com/sunqirui1987/xhub/internal/live"
 )
 
 // ErrRateAllocation 表示下级 RPM/TPM 分配总和超出父级，管理接口回滚并返回 400。

@@ -6,8 +6,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"github.com/sunqirui1987/xhub/internal/router"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // RouteSettingsFor 读取身份归属链已经选定的客户模板，并合并公开模型的默认权重与回退配置。
@@ -29,7 +29,7 @@ func (s *Server) RouteSettingsFor(p *auth.Principal) (result prefs.RouteSettings
 	}
 	row, err := s.IAM.GetRouteTemplate(context.Background(), p.RouteTemplateID)
 	if err != nil {
-		logx.Error("route template lookup failed id=%s err=%v", p.RouteTemplateID, err)
+		util.Error("route template lookup failed id=%s err=%v", p.RouteTemplateID, err)
 		return prefs.RouteSettings{Err: err, TemplateID: p.RouteTemplateID}
 	}
 	if row == nil {
@@ -37,7 +37,7 @@ func (s *Server) RouteSettingsFor(p *auth.Principal) (result prefs.RouteSettings
 		// that follow land on the platform default, which is the same state as a
 		// scope that selects nothing - the state the operator left behind when
 		// they deleted it.
-		logx.Error("route template is gone id=%s; falling back to model defaults", p.RouteTemplateID)
+		util.Error("route template is gone id=%s; falling back to model defaults", p.RouteTemplateID)
 		return prefs.BuiltinSettings()
 	}
 	source := p.RouteTemplateSource

@@ -11,11 +11,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const (
@@ -82,7 +81,7 @@ var flagFields = []string{
 // 调用：gateway.New。
 // 测试：无直接单测
 func LoadPriceOverrides(s Host) {
-	logTraceOncePrice.Do(func() { logx.Trace("enter models.LoadPriceOverrides") })
+	logTraceOncePrice.Do(func() { util.Trace("enter models.LoadPriceOverrides") })
 
 	st := s.RecordStore()
 	if st == nil {
@@ -116,7 +115,7 @@ func LoadPriceOverrides(s Host) {
 	}
 	rows, err := st.ListConfig(priceModelNS)
 	if err != nil {
-		logx.Error("price overrides unreadable: %v", err)
+		util.Error("price overrides unreadable: %v", err)
 		return
 	}
 	for id, raw := range rows {
@@ -139,7 +138,7 @@ func LoadPriceOverrides(s Host) {
 	}
 	providers, err := st.ListConfig(priceProviderNS)
 	if err != nil {
-		logx.Error("price providers unreadable: %v", err)
+		util.Error("price providers unreadable: %v", err)
 		return
 	}
 	for slug, raw := range providers {
@@ -219,7 +218,7 @@ func PriceList(s Host, w http.ResponseWriter, r *http.Request) {
 		return str(out[i]["litellm_provider"]) < str(out[j]["litellm_provider"])
 	})
 
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"models":       models,
 		"providers":    out,
 		"source":       catalog.PriceSource(),
@@ -242,12 +241,12 @@ func UpsertPriceModel(s Host, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	id := strings.TrimSpace(str(body["id"]))
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "id is required")
+		util.WriteError(w, 400, "invalid_request", "id is required")
 		return
 	}
 	provider := strings.TrimSpace(str(body["litellm_provider"]))
 	if provider == "" {
-		httpx.WriteError(w, 400, "invalid_request", "litellm_provider is required")
+		util.WriteError(w, 400, "invalid_request", "litellm_provider is required")
 		return
 	}
 	row := priceRowFrom(body, provider)
@@ -260,21 +259,21 @@ func UpsertPriceModel(s Host, w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if n, valid := numberField(v); !valid || n < 0 {
-			httpx.WriteError(w, 400, "invalid_request", field+" must be a finite non-negative number")
+			util.WriteError(w, 400, "invalid_request", field+" must be a finite non-negative number")
 			return
 		}
 	}
 
 	if err := s.RecordStore().PutConfig(priceModelNS, id, row); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	// An id that was deleted and is now being written back is live again.
 	if s.RecordStore().DeleteConfig(priceRemovedNS, id) != nil {
-		logx.Debug("price tombstone for %s was already absent", id)
+		util.Debug("price tombstone for %s was already absent", id)
 	}
 	catalog.SetModel(id, row)
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "id": id})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "id": id})
 }
 
 // DeletePriceModel 兼容旧入口，将删除请求转为下架，完整价格与本地记录保留。
@@ -298,22 +297,22 @@ func setPriceListing(s Host, w http.ResponseWriter, r *http.Request, legacy bool
 		delisted, valid = true, true
 	}
 	if id == "" || !valid {
-		httpx.WriteError(w, 400, "invalid_request", "id and boolean delisted are required")
+		util.WriteError(w, 400, "invalid_request", "id and boolean delisted are required")
 		return
 	}
 	if _, ok := catalog.ModelRow(id); !ok {
-		httpx.WriteError(w, 404, "not_found", "model is not in the local catalog")
+		util.WriteError(w, 404, "not_found", "model is not in the local catalog")
 		return
 	}
 	if s.RecordStore() == nil {
-		httpx.WriteError(w, 500, "internal", "local catalog store unavailable")
+		util.WriteError(w, 500, "internal", "local catalog store unavailable")
 		return
 	}
 	if err := s.RecordStore().PutConfig(priceListingNS, id, delisted); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "id": id, "delisted": delisted})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "id": id, "delisted": delisted})
 }
 
 // ResetPriceModel drops an override and restores the embedded row.
@@ -327,24 +326,24 @@ func ResetPriceModel(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	id := strings.TrimSpace(str(readMap(r)["id"]))
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "id is required")
+		util.WriteError(w, 400, "invalid_request", "id is required")
 		return
 	}
 	row, ok := catalog.BaselineModel(id)
 	if !ok {
-		httpx.WriteError(w, 409, "no_baseline", "custom models have no market baseline; delist instead")
+		util.WriteError(w, 409, "no_baseline", "custom models have no market baseline; delist instead")
 		return
 	}
 	if s.RecordStore() == nil {
-		httpx.WriteError(w, 500, "internal", "local catalog store unavailable")
+		util.WriteError(w, 500, "internal", "local catalog store unavailable")
 		return
 	}
 	if err := s.RecordStore().DeleteConfig(priceModelNS, id); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	catalog.SetModel(id, row)
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "id": id, "restored": true})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "id": id, "restored": true})
 }
 
 // UpsertPriceProvider adds or edits one supplier in the add-model dropdown.
@@ -359,19 +358,19 @@ func UpsertPriceProvider(s Host, w http.ResponseWriter, r *http.Request) {
 	body := readMap(r)
 	slug := strings.TrimSpace(str(body["litellm_provider"]))
 	if slug == "" {
-		httpx.WriteError(w, 400, "invalid_request", "litellm_provider is required")
+		util.WriteError(w, 400, "invalid_request", "litellm_provider is required")
 		return
 	}
 	row := providerRowFrom(body, slug)
 	if err := s.RecordStore().PutConfig(priceProviderNS, slug, row); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	if err := s.RecordStore().DeleteConfig(priceRemovedNS+"_provider", slug); err != nil {
-		logx.Debug("provider tombstone for %s was already absent", slug)
+		util.Debug("provider tombstone for %s was already absent", slug)
 	}
 	catalog.SetProvider(slug, row)
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "litellm_provider": slug})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "litellm_provider": slug})
 }
 
 // DeletePriceProvider removes one supplier from the dropdown.
@@ -385,20 +384,20 @@ func DeletePriceProvider(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.TrimSpace(str(readMap(r)["litellm_provider"]))
 	if slug == "" {
-		httpx.WriteError(w, 400, "invalid_request", "litellm_provider is required")
+		util.WriteError(w, 400, "invalid_request", "litellm_provider is required")
 		return
 	}
 	if catalog.IsBaselineProvider(slug) {
 		if err := s.RecordStore().PutConfig(priceRemovedNS+"_provider", slug, true); err != nil {
-			httpx.WriteError(w, 500, "internal", err.Error())
+			util.WriteError(w, 500, "internal", err.Error())
 			return
 		}
 	}
 	if err := s.RecordStore().DeleteConfig(priceProviderNS, slug); err != nil {
-		logx.Debug("price provider %s was already absent", slug)
+		util.Debug("price provider %s was already absent", slug)
 	}
 	catalog.RemoveProvider(slug)
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success", "litellm_provider": slug})
+	util.WriteJSON(w, 200, map[string]any{"status": "success", "litellm_provider": slug})
 }
 
 // storedKeys reads which ids have a row in a namespace. A nil store reads as an

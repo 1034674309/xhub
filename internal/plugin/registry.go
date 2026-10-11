@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Call is the inference attempt an extension can read. The data plane fills it before contacting the upstream.
@@ -52,11 +52,11 @@ var logTraceOnceRegistry sync.Once
 
 // New returns an empty registry. Run allows the call when nothing is registered.
 // 参数：无。
-// 调用：authz/authz.go、authz/decide.go、cache/cache.go、dataplane/serve.go
+// 调用：authz/authz.go、authz/decide.go、cache/util.go、dataplane/serve.go
 // 测试：activity_http_test.go、authz_test.go、builtin_providers_test.go
 // 返回：空注册表，可以立刻 Register。不会返回 nil。
 func New() *Registry {
-	logTraceOnceRegistry.Do(func() { logx.Trace("enter plugin.New") })
+	logTraceOnceRegistry.Do(func() { util.Trace("enter plugin.New") })
 
 	return &Registry{by: map[string]Extension{}}
 }

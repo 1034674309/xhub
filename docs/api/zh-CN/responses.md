@@ -1,11 +1,5 @@
 # Responses 响应
 
-## 接口概述
-
-Responses 响应
-
-### Responses 响应
-
 ## 接口行为
 POST /responses 是别名。读取 output[].content，output_text 是 SDK 便利属性，不保证在原始 JSON 中。创建不意味着支持查询或取消路由。
 

@@ -2,9 +2,10 @@ package models
 
 import (
 	"bytes"
-	"github.com/sunqirui1987/xhub/internal/config"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestSetFallbackInvalidAndUnavailable 验证管理接口严格正文、缺失模型和存储不可用。

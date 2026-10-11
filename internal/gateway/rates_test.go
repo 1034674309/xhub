@@ -2,11 +2,12 @@ package gateway
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/live"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sunqirui1987/xhub/internal/live"
 )
 
 // TestHierarchicalLocalRates 验证四层合并计数、零/共享、拒绝不计数及分钟恢复；内存前置，无数据清理需求。

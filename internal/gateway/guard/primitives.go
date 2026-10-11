@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/goplus/ixgo"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/goplus/ixgo"
 )
 
 // jsonParse 将 JSON 字符串解析为脚本可访问的动态对象。

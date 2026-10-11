@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/gateway/health"
 )
 
 func TestHandlerLogsMethodPathStatusAndDuration(t *testing.T) {
@@ -16,7 +18,7 @@ func TestHandlerLogsMethodPathStatusAndDuration(t *testing.T) {
 		registered: map[string]struct{}{},
 		idem:       map[string]*idemRec{},
 	}
-	s.Handle("GET /health/liveliness", s.healthLive)
+	health.Module(testPinger{}, Version).Mount(s)
 
 	var buf bytes.Buffer
 	prev := log.Writer()
@@ -55,6 +57,7 @@ func TestHandlerLogsErrorLineForFailure(t *testing.T) {
 		registered: map[string]struct{}{},
 		idem:       map[string]*idemRec{},
 	}
+	health.Module(testPinger{}, Version).Mount(s)
 	var buf bytes.Buffer
 	prev := log.Writer()
 	log.SetOutput(&buf)

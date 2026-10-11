@@ -1,74 +1,44 @@
 # 动作授权与查询范围
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-authz.go 定义 Actor、Action、Object、Guard 和 Authorizer，decide.go 实现角色与对象决策，scope.go 把授权结果应用到查询。Authorize(ctx, guard, action, object) 在 guard 为空时拒绝；资源 ID 并不自动等于资源归属，需按对象类型加载可信数据库信息。
-平台管理员、组织管理员、团队管理员、普通成员与服务密钥拥有不同动作集合。密钥只能推理和读取允许范围的自身信息、用量及日志；主密钥的动作集合很窄。被禁用对象通常拒绝，只允许平台管理员执行相应解禁操作。
-列表授权在 SQL 查询之前生成 Scope。无合法范围拒绝查询，All 才明确表示全局，不把空团队列表解释为全平台。用户提供的筛选只能收窄已授权范围。特权读取个人日志正文要写入持久审计；审计写失败拒绝读取。
+`internal/authz` 是网关统一的权限策略层。它接收已经认证的 `Actor`，从存储中解析 `Object` 的真实归属与生命周期状态，判定一个 `Action`，并为列表查询生成 SQL 范围。处理函数只提交资源标识和动作，不能通过自行填写团队、组织、项目或所有者来获得权限。会话访问已有记录时会重新读取 IAM 关系；依赖状态无法确认时一律关闭访问。
+
+策略明确区分会话、虚拟密钥和应急主密钥。会话权限来自平台角色、团队成员关系、团队角色及显式组织管理员授权；密钥走范围很窄且每次实时复核的路径；主密钥只允许读取用户与审计。包内还向控制台提供排序后的能力列表与团队过滤器，但最终依据始终是服务端的 `Authorize` 和 `Scope`。
+
+## 对外接口
+
+- `New(*iam.DB) *Authorizer` 把策略绑定到 IAM 存储，`DB()` 返回同一存储，供已完成授权的代码执行查询。`Guard(ctx, Actor) (*Guard, error)` 创建仅用于本次请求的状态：会话用户的团队成员关系和组织管理员授权分别一次性装入映射；任一读取失败都返回 `InternalError`。密钥、主密钥、无存储或身份不完整的调用方以空映射开始，后续判定会拒绝或严格收窄它们。
+- `Authorize(ctx, guard, action, object) error` 是单对象判定入口。guard 为空或 Actor 类型未知时视为未认证；允许时返回 nil。`ErrUnauthenticated`、`ErrForbidden`、`ErrNotFound` 分别对应 401、403、404；资源不存在与对当前用户不可见故意共用 404。`InternalError` 表示归属、成员、审计或其他依赖读取失败，对应 500。`IsUnauthenticated`、`IsForbidden`、`IsNotFound`、`IsInternal` 用于识别包装后的结果。
+- `Actor` 记录身份来源及授权所需字段：会话用户与平台角色，或密钥 ID、所有者类型、团队和项目。`Object` 描述目标资源，并承载解析后的归属和状态。对象类型覆盖用户、组织、团队与成员、项目、密钥、路由模板、用量、日志、审计、预算和模型；动作覆盖用户生命周期、密码和额度，组织与团队管理，成员、项目、密钥、路由模板，用量/日志/审计读取及推理。
+- Guard 辅助接口读取已装载快照：`Actor`、`PlatformAdmin`、`TeamRole`、`InTeam`、`TeamAdminOf`、`InOrg`、`OrgAdminOf`，以及排序后的 `TeamRoles`、`AdminOrgIDs`、`ManagedTeamIDs`、`Capabilities`。`VisibleTeamIDs` 与 `TeamFilter` 有严格语义：nil 表示全部团队，只会返回给平台管理员会话；非 nil 空切片表示没有任何团队，主密钥也属于这种情况。查询调用方必须保留两者差异。
+- `CheckKey(ctx)` 按当前 IAM 状态重新验证密钥。`KeysScope`、`UsageScope`、`LogsScope` 返回包含 SQL 条件和已解析维度的 `Scope`。`Scope.Apply`、`ApplyTeam`、`ApplyUser` 把限制附加到 xorm 查询；Scope 为 nil、条件无效、团队列表为空或用户 ID 为空时都会注入恒假条件，只有显式 `All` 才允许不加过滤。
+
+主要调用者是网关的身份、密钥、用量、模型、会话、推理和路由模板处理链。界面能力列表只负责呈现，处理函数仍须逐项授权，并在读取记录前应用查询范围。
+
+## 内部核心实现
+
+会话请求先构造一个 `Guard`。成员记录形成“团队到角色”和“所属组织”映射，显式组织管理权限另存一份，因为加入组织下某个团队并不等于能管理组织。所有对外列表均排序，保证接口输出稳定。带 ID 的已有对象按类型从 IAM 读取，补齐所有者路径和父级状态；每个 `类型:ID` 的结果缓存在当前 Guard 中，避免一次请求重复读取。创建对象尚无数据库行，但若指定团队，仍会加载该团队及组织，防止伪造团队提示扩大权限。用量、日志、审计、模型与路由模板采用各自的归属输入。未知的可解析类型或读取失败不会回退为信任调用方字段。
+
+判定顺序固定为：拒绝缺失或未知身份；让主密钥和虚拟密钥进入各自的窄权限矩阵；为会话解析对象真实归属；非平台管理员遇到对象自身、所属团队或组织被封禁时立即拒绝；执行动作矩阵；最后，如果平台管理员读取他人的个人日志正文，持久写入 `log.read_content` 审计。审计写入失败时返回 `InternalError` 并拒绝读取，保证特权日志内容不会在无审计记录时泄露。
+
+主密钥只允许 `user.read` 与 `audit.read`。密钥必须有 ID，并在每次请求通过 `CheckKey`，随后只能推理、读取自身以及获得绑定自身 ID 的用量和日志范围，所有管理动作均拒绝。实时复核首先要求密钥活动。无团队密钥必须是有活动所有者且不绑定项目的个人密钥；团队密钥要求团队活动、存在时组织未封禁、绑定项目活动；个人密钥还要求所有者活动且仍是该团队成员。记录不存在转为未找到，其他读取错误转为内部错误。
+
+会话矩阵把“可见”与“可修改”分开。用户可读写本人资料；平台管理员管理账号；委托重置他人密码时，还会读取目标角色、成员关系和组织管理员身份，避免团队管理员控制更高权限账号。组织成员可看所属组织，组织管理员管理本组织成员和团队；组织删除、全局写入、团队迁移与模型上限等动作仍限平台管理员。团队成员可读团队、成员和项目，团队管理员或组织管理员执行相应管理动作，服务密钥权限另行收紧。个人密钥只对本人和平台管理员可见、可改，团队管理员管理服务密钥时不会看到成员个人密钥。会话推理指定团队时必须是成员，平台管理员除外。
+
+路由模板把读取、写入和选择分成三个动作。平台模板所有人可读；组织和团队模板在对应归属范围内可见；写入必须由所属层级管理员执行。选择权限比写入更窄地作用于调用者已有范围：成员可为所属团队、所属组织及自己的个人密钥选择模板，服务密钥则要求团队管理员。用量与日志允许本人个人数据及所监督团队的数据，不可见数据返回未找到；审计读取限平台管理员，跨用户个人日志读取还会触发前述持久审计。
+
+列表范围在 SQL 层重复同一边界。主密钥得到恒假范围；平台管理员得到显式 `All`，除非主动按团队收窄；密钥先实时复核，再只按自身 ID 查询。会话密钥范围由本人个人密钥与所管理团队的服务密钥组成；用量范围由本人记录与所监督团队组成，显式团队筛选只有在可监督时才能看全团队，否则团队成员只能看自己；日志范围由本人个人密钥日志与所监督团队的服务密钥日志组成。`assertLoaded` 在范围查询前再次确认会话用户仍活动，`Scope.Apply*` 则防止残缺或空范围意外退化成全表查询。
+
+### 测试依赖
+
+`authz_test.go` 使用真实 IAM 测试库覆盖会话动作矩阵、团队额度与模型管理边界、密钥禁止管理、密钥实时失效、日志范围隔离、主密钥收窄、Scope 失败关闭、nil 与空团队过滤的差异、未知 Actor、额度及密码委托管理。`personal_keys_test.go` 覆盖无团队个人密钥的创建和实时使用。测试只依赖本地存储行为，不需要网络服务。
 
 ## 源码职责与入口
 
-### authz.go
-
-公开类型：`InternalError`, `Kind`, `Actor`, `ObjectType`, `Object`, `Authorizer`, `Guard`.
-
-- [`func (e *InternalError) Error() string`](authz.go) — 实现 error 接口，返回写进日志或 HTTP 错误体的文本。
-- [`func (e *InternalError) Unwrap() error`](authz.go) — 交出被包装的底层错误，供 errors.Is 和 errors.As 识别具体类型。
-- [`func IsInternal(err error) bool`](authz.go) — IsInternal reports a dependency failure, which callers answer with 500.
-- [`func IsNotFound(err error) bool`](authz.go) — IsNotFound reports an object that does not exist or is not visible to the actor. The two cases are deliberately indistinguishable.
-- [`func IsForbidden(err error) bool`](authz.go) — IsForbidden reports a visible object the actor may not act on.
-- [`func IsUnauthenticated(err error) bool`](authz.go) — IsUnauthenticated reports a missing or unusable identity.
-- [`func New(db *iam.DB) *Authorizer`](authz.go) — New returns an Authorizer over the given store.
-- [`func (z *Authorizer) DB() *iam.DB`](authz.go) — DB exposes the store so handlers can run the query the Guard authorized.
-- [`func (z *Authorizer) Guard(ctx context.Context, a Actor) (*Guard, error)`](authz.go) — Guard loads the actor's memberships and returns the request's Guard.
-- [`func (g *Guard) Actor() Actor`](authz.go) — Actor returns the actor this Guard was built for.
-- [`func (g *Guard) PlatformAdmin() bool`](authz.go) — PlatformAdmin reports an active platform administrator session.
-- [`func (g *Guard) TeamRole(teamID string) string`](authz.go) — TeamRole returns the actor's role in a team, or "" when not a member.
-- [`func (g *Guard) InTeam(teamID string) bool`](authz.go) — InTeam reports membership of a team.
-- [`func (g *Guard) TeamRoles() []map[string]string`](authz.go) — TeamRoles lists the actor's teams with the role held in each, sorted by team id. It is what /auth/me reports so the console knows which teams it may administer without re-deriving the rule itself.
-- [`func (g *Guard) TeamAdminOf(teamID string) bool`](authz.go) — TeamAdminOf reports team administration inside one team.
-- [`func (g *Guard) InOrg(orgID string) bool`](authz.go) — InOrg reports membership of at least one team of an organization.
-- [`func (g *Guard) OrgAdminOf(orgID string) bool`](authz.go) — OrgAdminOf reports whether this actor administers one organization. It is distinct from PlatformAdmin, which reaches every organization: this one is true for exactly the organizations the actor was granted.
-- [`func (g *Guard) AdminOrgIDs() []string`](authz.go) — AdminOrgIDs lists the organizations this actor administers, sorted. It is what the console reads to offer organization management, and it is the same set the decision matrix consults.
-- [`func (g *Guard) VisibleTeamIDs() []string`](authz.go) — VisibleTeamIDs lists the teams the actor belongs to, sorted. Only a platform administrator sees every team, and that is expressed by returning nil rather than a list, matching the store's "nil means all" convention. The master credential is deliberately not in that group, even though it is the most privileged string in the config. It reaches the bootstrap and emergency routes only, so it belongs to no team: an empty, non-nil slice means "no team", and every caller turns that into an empty result. Treating it as "every team" is what let GET /organization/list and POST /project/list answer withthe whole tenant inventory, because those listings computed their scope from a principal that carries no user ID, and the store reads an empty ID as "no filter". KeysScope, UsageScope and LogsScope alr
-- [`func (g *Guard) ManagedTeamIDs() []string`](authz.go) — ManagedTeamIDs lists the teams the actor administers, sorted.
-- [`func (g *Guard) Capabilities() []string`](authz.go) — Capabilities lists what this actor may do, sorted. It is derived from the same roles the decision matrix reads, so the UI cannot drift from the server.
-
-### decide.go
-
-公开类型：`Action`, `Scope`, `ScopeKind`.
-
-- [`func (z *Authorizer) Authorize(ctx context.Context, g *Guard, action Action, obj Object) error`](decide.go) — Authorize decides one action against one object. It returns nil to allow, or ErrUnauthenticated, Err Forbidden, ErrNotFound, or an *InternalError. Ownership is read from the database, never from the caller: an object whose ID is given has its org/team/project and owner resolved here, so a handler cannot widen its own reach by passing a team or owner that is not the stored one.
-- [`func (g *Guard) CheckKey(ctx context.Context) error`](decide.go) — CheckKey re-reads the live state behind a virtual key: the key row itself, the team and project it is bound to, and, for a personal key, that its owner is still an active account and still a member of the team. Authentication calls this too so there is exactly one definition of "this key still works".
-- [`func (g *Guard) KeysScope(ctx context.Context) (*Scope, error)`](decide.go) — KeysScope returns the key-listing scope for an actor.
-- [`func (g *Guard) UsageScope(ctx context.Context, teamID string) (*Scope, error)`](decide.go) — UsageScope returns the usage-listing scope for an actor. teamID optionally narrows to one team, and the guard checks the actor may see it at all.
-- [`func (g *Guard) LogsScope(ctx context.Context) (*Scope, error)`](decide.go) — LogsScope returns the request-log scope for an actor: own personal logs, plus the service-key logs of the teams the actor administers. A platform administrator sees everything.
-- [`func (g *Guard) TeamFilter() []string`](decide.go) — TeamFilter returns the team-ID filter for team-scoped listings such as projects and members. A nil slice means "every team", which only a platform administrator receives; an empty slice means "no team ", which the store turns into an empty result rather than an unfiltered query.
-
-### scope.go
-
-- [`func (s *Scope) Apply(session *xorm.Session) *xorm.Session`](scope.go) — Apply 把鉴权范围收成 SQL 条件，接到当前查询上。范围为空时条件恒为假，避免查出全部行。
-- [`func (s *Scope) ApplyTeam(session *xorm.Session, column string) *xorm.Session`](scope.go) — ApplyTeam narrows a session by a column holding team IDs, using the resolved team list rather than a stored condition. It is used by listings whose team column is not the one the scope's condition names.
-- [`func (s *Scope) ApplyUser(session *xorm.Session, column string) *xorm.Session`](scope.go) — ApplyUser narrows a session by an owner column, failing closed when the scope carries no owner.
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/iam](../iam/readme_cn.md), [internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [authz_test.go](authz_test.go) | `TestSessionMatrix`, `TestKeyActorCannotManage`, `TestKeyRevalidatedEveryRequest`, `TestTeamAdminLogScopeExcludesOtherPersonalKeys`, `TestMasterIsNarrow`, `TestScopeFailsClosed`, `TestApplyTeamFailsClosed`, `TestTeamFilterNilMeansAllEmptyMeansNone`, `TestUnknownActorKindDenies` |
-
-```bash
-go test ./internal/authz -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- [authz.go](authz.go) 定义错误类别、Actor/Object 模型、Authorizer 与请求级 Guard、成员关系装载、团队与组织角色辅助函数、团队可见性的 nil/空切片契约，以及排序后的界面能力。理解请求状态应从 `Authorizer.Guard` 开始。
+- [decide.go](decide.go) 定义全部动作、对象归属解析与请求内缓存、主密钥/密钥/会话判定路径、密钥实时验证、路由模板策略、日志读取审计，以及密钥/用量/日志查询范围。单对象检查从 `Authorizer.Authorize` 开始，列表检查从 `KeysScope`、`UsageScope`、`LogsScope` 开始。
+- [scope.go](scope.go) 把已解析范围写入 xorm 查询，并对 nil、无效或空维度提供最后一道失败关闭屏障。
+- [authz_test.go](authz_test.go) 保存主要策略与范围回归矩阵；[personal_keys_test.go](personal_keys_test.go) 覆盖无团队个人密钥边界。

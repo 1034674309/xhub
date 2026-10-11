@@ -2,14 +2,13 @@ package usage
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/pagination"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const guardrailUsageLimit = 5000
@@ -61,7 +60,7 @@ func GuardrailOverview(s Host, w http.ResponseWriter, r *http.Request) {
 			allDays[day].Blocked += point.Blocked
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+	util.WriteJSON(w, http.StatusOK, map[string]any{
 		"totalRequests": total, "totalBlocked": blocked, "passRate": percentage(passed, total),
 		"totalCost": nil, "totalUsageUnits": map[string]float64{}, "totalUntrackedUsageUnits": map[string]float64{},
 		"rows": rows, "chart": guardrailChart(allDays),
@@ -85,10 +84,10 @@ func GuardrailDetail(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if found == nil {
-		httpx.WriteError(w, http.StatusNotFound, "not_found", "guardrail usage not found")
+		util.WriteError(w, http.StatusNotFound, "not_found", "guardrail usage not found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, guardrailDetailBody(found))
+	util.WriteJSON(w, http.StatusOK, guardrailDetailBody(found))
 }
 
 // GuardrailLogs 返回指定护栏的真实执行日志并支持 action、日期和分页筛选。
@@ -115,7 +114,7 @@ func GuardrailLogs(s Host, w http.ResponseWriter, r *http.Request) {
 		pageSize = 50
 	}
 	// 超大页码返回空页，避免整数溢出造成切片崩溃。
-	start, end := pagination.Bounds(len(filtered), page, pageSize)
+	start, end := util.Bounds(len(filtered), page, pageSize)
 	logs := make([]any, 0, end-start)
 	for _, finding := range filtered[start:end] {
 		logs = append(logs, map[string]any{
@@ -126,7 +125,7 @@ func GuardrailLogs(s Host, w http.ResponseWriter, r *http.Request) {
 			"guardrail_mode": nullableString(finding.Mode), "latency_ms": finding.LatencyMS,
 		})
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"logs": logs, "page": page, "page_size": pageSize, "total": len(filtered)})
+	util.WriteJSON(w, http.StatusOK, map[string]any{"logs": logs, "page": page, "page_size": pageSize, "total": len(filtered)})
 }
 
 // readGuardrailFindings 完成管理员鉴权、平台用量范围计算和事件读取。

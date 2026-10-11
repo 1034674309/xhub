@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // AllowsModel is the model authorization decision shared by the model catalog and the inference path, so a listed model is always a usable model. The permitted set comes from iam alone, which resolves it down one chain: team = union of the team's active access groups project = team ∩ project narrowing (when the key names a project) key = (project or team) ∩ key narrowing (when the key narrows) teamI
@@ -15,7 +15,7 @@ import (
 // 调用：gateway/limits.go、gateway/models/available.go、gateway/models/list.go
 // 测试：无直接单测
 func AllowsModel(s Host, ctx context.Context, p *auth.Principal, teamID, alias string) bool {
-	logx.Trace("evaluate model access")
+	util.Trace("evaluate model access")
 	alias = strings.TrimSpace(alias)
 	if p == nil || alias == "" {
 		return false
@@ -25,7 +25,7 @@ func AllowsModel(s Host, ctx context.Context, p *auth.Principal, teamID, alias s
 	}
 	names, err := effectiveModels(s, ctx, p, teamID)
 	if err != nil {
-		logx.Error("model access failed kind=%s user=%s err=%v", p.Kind, p.UserID, err)
+		util.Error("model access failed kind=%s user=%s err=%v", p.Kind, p.UserID, err)
 		return false
 	}
 	if names == nil {

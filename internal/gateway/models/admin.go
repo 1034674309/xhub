@@ -5,15 +5,14 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"github.com/sunqirui1987/xhub/internal/provider"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 	"github.com/sunqirui1987/xhub/internal/store"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceAdmin sync.Once
@@ -24,7 +23,7 @@ var logTraceOnceAdmin sync.Once
 // 调用：gateway/models/list.go、gateway/wire.go
 // 测试：无直接单测
 func Public(m config.ModelEntry) map[string]any {
-	logTraceOnceAdmin.Do(func() { logx.Trace("enter models.Public") })
+	logTraceOnceAdmin.Do(func() { util.Trace("enter models.Public") })
 
 	info := maps.Clone(m.ModelInfo)
 	if info == nil {
@@ -36,7 +35,7 @@ func Public(m config.ModelEntry) map[string]any {
 	stripModelOwnership(info)
 	params := redactLiteLLMParams(m.LiteLLMParams)
 
-	if err := provider.ValidateDeployment(m); err != nil {
+	if err := providerdeployment.ValidateDeployment(m); err != nil {
 		info["unavailable_reason"] = err.Error()
 	}
 	info["disabled"] = m.Disabled()
@@ -93,21 +92,21 @@ func New(s Host, w http.ResponseWriter, r *http.Request) {
 		info["disabled"] = false
 	}
 	if str(info["id"]) == "" {
-		info["id"] = "model_" + httpx.CallID()[:12]
+		info["id"] = "model_" + util.CallID()[:12]
 	}
 	if err := validateNewDeploymentSurface(params, info); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	if err := validateDeployment(s, name, params, info); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	// 校验与目录修改共用锁，避免模型创建与路由组创建同时占用同一名称。
 	s.LockModels()
 	defer s.UnlockModels()
 	if err := checkRoutingGroupName(s, name); err != nil {
-		httpx.WriteError(w, 409, "routing_group_conflict", err.Error())
+		util.WriteError(w, 409, "routing_group_conflict", err.Error())
 		return
 	}
 	// A model created from the page is stored in the database. After a restart LoadStored adds it back and marks it db_model.
@@ -120,11 +119,11 @@ func New(s Host, w http.ResponseWriter, r *http.Request) {
 	directory := append(append([]config.ModelEntry(nil), (*s.ModelTable())...), entry)
 	record := proxyModel(entry)
 	if err := s.RecordStore().SaveModelDirectory(&record, "", directory); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	*s.ModelTable() = directory
-	httpx.WriteJSON(w, 200, Public(entry))
+	util.WriteJSON(w, 200, Public(entry))
 }
 
 // Update 修改数据库部署，并以修改后的完整目录原子清理改名或部署集合变化产生的失效权重。
@@ -147,23 +146,23 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 		id = str(body["id"])
 	}
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "model_info.id required")
+		util.WriteError(w, 400, "invalid_request", "model_info.id required")
 		return
 	}
 	s.LockModels()
 	defer s.UnlockModels()
 	i, m, ok := findModel(*s.ModelTable(), id)
 	if !ok {
-		httpx.WriteError(w, 400, "invalid_request", "model not found")
+		util.WriteError(w, 400, "invalid_request", "model not found")
 		return
 	}
 	if !modelIsDB(m) {
-		httpx.WriteError(w, 400, "invalid_request", "Config model cannot be updated. Edit the config file.")
+		util.WriteError(w, 400, "invalid_request", "Config model cannot be updated. Edit the config file.")
 		return
 	}
 	if params, ok := body["litellm_params"].(map[string]any); ok {
 		if _, exists := params["weight"]; exists {
-			httpx.WriteError(w, 400, "invalid_request", "deployment weight is obsolete; configure default weights in model management or customer overrides in route templates")
+			util.WriteError(w, 400, "invalid_request", "deployment weight is obsolete; configure default weights in model management or customer overrides in route templates")
 			return
 		}
 	}
@@ -206,16 +205,16 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 	// 改名最后一个部署前检查公开名引用，不能让回退策略指向已消失的模型。
 	if old := (*s.ModelTable())[i]; old.ModelName != m.ModelName {
 		if err := checkRoutingGroupName(s, m.ModelName); err != nil {
-			httpx.WriteError(w, 409, "routing_group_conflict", err.Error())
+			util.WriteError(w, 409, "routing_group_conflict", err.Error())
 			return
 		}
 		if err := checkFallbackRemoval(s, old.ModelName, id); err != nil {
-			httpx.WriteError(w, 409, "fallback_conflict", err.Error())
+			util.WriteError(w, 409, "fallback_conflict", err.Error())
 			return
 		}
 	}
 	if err := validateDeployment(s, m.ModelName, m.LiteLLMParams, m.ModelInfo); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", err.Error())
+		util.WriteError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	// 改名会改变两个公开模型的部署集合，清理默认与模板分配后再更新内存。
@@ -223,11 +222,11 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 	directory[i] = m
 	record := proxyModel(m)
 	if err := s.RecordStore().SaveModelDirectory(&record, "", directory); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	*s.ModelTable() = directory
-	httpx.WriteJSON(w, 200, Public(m))
+	util.WriteJSON(w, 200, Public(m))
 }
 
 // Delete 删除数据库部署，并在同一事务中移除默认权重、历史路由组和客户模板里的悬空部署引用。
@@ -245,37 +244,37 @@ func Delete(s Host, w http.ResponseWriter, r *http.Request) {
 		id = str(body["model_name"])
 	}
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "id required")
+		util.WriteError(w, 400, "invalid_request", "id required")
 		return
 	}
 	s.LockModels()
 	defer s.UnlockModels()
 	i, m, ok := findModel(*s.ModelTable(), id)
 	if !ok {
-		httpx.WriteError(w, 400, "invalid_request", "model not found")
+		util.WriteError(w, 400, "invalid_request", "model not found")
 		return
 	}
 	if !modelIsDB(m) {
-		httpx.WriteError(w, 400, "invalid_request", "Config model cannot be deleted on the dashboard. Delete it from the config file.")
+		util.WriteError(w, 400, "invalid_request", "Config model cannot be deleted on the dashboard. Delete it from the config file.")
 		return
 	}
 	// 拒绝移除仍被策略引用的最后一个部署；管理员清除策略后可安全删除。
 	if err := checkFallbackRemoval(s, m.ModelName, str(m.ModelInfo["id"])); err != nil {
-		httpx.WriteError(w, 409, "fallback_conflict", err.Error())
+		util.WriteError(w, 409, "fallback_conflict", err.Error())
 		return
 	}
 	// 复制目录，事务同时移除部署及悬空权重；回滚时保留原目录和原分配。
 	directory := append([]config.ModelEntry(nil), (*s.ModelTable())[:i]...)
 	directory = append(directory, (*s.ModelTable())[i+1:]...)
 	if err := s.RecordStore().SaveModelDirectory(nil, str(m.ModelInfo["id"]), directory); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	*s.ModelTable() = directory
 	out := Public(m)
 	out["id"] = id
 	out["deleted"] = true
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // Disable prevents a stored deployment from being selected at runtime.
@@ -314,18 +313,18 @@ func setDisabled(s Host, w http.ResponseWriter, r *http.Request, disabled bool) 
 		id = str(body["model_name"])
 	}
 	if id == "" {
-		httpx.WriteError(w, 400, "invalid_request", "model required")
+		util.WriteError(w, 400, "invalid_request", "model required")
 		return
 	}
 	s.LockModels()
 	defer s.UnlockModels()
 	i, m, ok := findModel(*s.ModelTable(), id)
 	if !ok {
-		httpx.WriteError(w, 400, "invalid_request", "model not found")
+		util.WriteError(w, 400, "invalid_request", "model not found")
 		return
 	}
 	if !modelIsDB(m) {
-		httpx.WriteError(w, 400, "invalid_request", "Config models cannot be disabled from the dashboard.")
+		util.WriteError(w, 400, "invalid_request", "Config models cannot be disabled from the dashboard.")
 		return
 	}
 	m.ModelInfo = maps.Clone(m.ModelInfo)
@@ -335,11 +334,11 @@ func setDisabled(s Host, w http.ResponseWriter, r *http.Request, disabled bool) 
 	stripModelOwnership(m.ModelInfo)
 	m.ModelInfo["disabled"] = disabled
 	if err := s.RecordStore().UpsertProxyModel(proxyModel(m)); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	(*s.ModelTable())[i] = m
-	httpx.WriteJSON(w, 200, Public(m))
+	util.WriteJSON(w, 200, Public(m))
 }
 
 // CostMapSource returns the price-map source, whether the built-in map is forced, the load time, and the model count.
@@ -354,7 +353,7 @@ func CostMapSource(s Host, w http.ResponseWriter, r *http.Request) {
 	// The catalog is generated from the market feed and embedded, then refreshed
 	// in place by a reload. source is "market" either way, and generated_at says
 	// how old the embedded copy is.
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"source":          "market",
 		"url":             catalog.PriceSource(),
 		"is_env_forced":   catalog.EnvForced(),
@@ -379,7 +378,7 @@ func GroupInfo(s Host, w http.ResponseWriter, r *http.Request) {
 	s.LockModels()
 	list := append([]config.ModelEntry(nil), (*s.ModelTable())...)
 	s.UnlockModels()
-	httpx.WriteJSON(w, 200, map[string]any{"data": playgroundGroups(list)})
+	util.WriteJSON(w, 200, map[string]any{"data": playgroundGroups(list)})
 }
 
 // playgroundGroups 是 Playground 的模型列表；能力从部署的 endpoint_types 读取。
@@ -414,7 +413,7 @@ func playgroundGroups(list []config.ModelEntry) []map[string]any {
 			if m.ModelName != name || providerShell(m.ModelInfo) || m.Disabled() {
 				continue
 			}
-			if caps := provider.SelectedCapabilities(m); len(caps) > 0 {
+			if caps := providerdeployment.SelectedCapabilities(m); len(caps) > 0 {
 				mode = caps[0]
 			}
 			break
@@ -482,7 +481,7 @@ func LoadStored(s Host) {
 		changed = changed || len(row.Info) != before
 		if changed {
 			if err := s.RecordStore().UpsertProxyModel(row); err != nil {
-				logx.Error("stored model %s: %v", row.ID, err)
+				util.Error("stored model %s: %v", row.ID, err)
 			}
 		}
 		row.Info["id"] = row.ID
@@ -496,7 +495,7 @@ func LoadStored(s Host) {
 	}
 	// 启动时目录已经包含 YAML 与数据库部署，可据此一次性删除停机期间遗留的部署引用。
 	if err := s.RecordStore().SaveModelDirectory(nil, "", append([]config.ModelEntry(nil), (*s.ModelTable())...)); err != nil {
-		logx.Error("clean stored model weights: %v", err)
+		util.Error("clean stored model weights: %v", err)
 	}
 }
 
@@ -538,11 +537,11 @@ func findModel(list []config.ModelEntry, id string) (int, config.ModelEntry, boo
 // 返回 []provider.EndpointBinding（[]provider.EndpointBinding）：该别名的端点绑定。
 // 调用：Admin/Playground 模型列表。
 // 测试：admin_test.go、bindings_test.go。
-func modelEndpointsForAlias(list []config.ModelEntry, alias string) []provider.EndpointBinding {
-	out := []provider.EndpointBinding{}
+func modelEndpointsForAlias(list []config.ModelEntry, alias string) []providerdeployment.EndpointBinding {
+	out := []providerdeployment.EndpointBinding{}
 	for _, m := range list {
 		if m.ModelName == alias && !providerShell(m.ModelInfo) {
-			out = provider.MergeEndpoints(out, provider.DeploymentEndpoints(m))
+			out = providerdeployment.MergeEndpoints(out, providerdeployment.DeploymentEndpoints(m))
 		}
 	}
 	return out

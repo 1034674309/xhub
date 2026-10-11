@@ -15,21 +15,21 @@
 
 | 文档 | 解决的问题 |
 | --- | --- |
-| [开发与 AI 编程指南](development/README.md) | 找代码、理解约束、选择修改范围和验证方法 |
-| [架构与代码导航](development/architecture.md) | 服务职责、请求链路、模块边界 |
-| [权限规则](development/permissions.md) | 角色、可见范围、秘密串读取、模型范围 |
-| [路由规则](development/routing.md) | 模板继承、权重、重试、超时、会话粘性 |
-| [计价与用量](development/pricing.md) | 费率、时段、价格快照、持久化链路 |
-| [额度链路实现与验证](development/quota-chain.md) | 四层分配不变量、请求准入、消费归属与分层测试 |
-| [运行行为与限制](development/runtime.md) | 缓存、幂等、协议、媒体任务及运行边界 |
-| [测试指南](development/testing.md) | 测试层次、数据库隔离、定向运行、可选演示数据 |
-| [全功能实现说明](development/implementation.md) | 逐项功能契约、实现位置及验收要点 |
-| [HTTP 接口参考](development/api-reference.md) | 实际登记的入口、处理器和源码 |
-| [配置与存储](development/configuration.md) | 设置优先级、模型字段、持久化与运行默认值 |
-| [全链路回归方案](development/regression.md) | 后端逐文件覆盖、真实模型、模板专项及执行流程 |
-| [真实供应商回归执行](development/regression-live.md) | Fenno 与七牛的一条命令、实时日志和运行目录 |
-| [浏览器回归](development/e2e-regression.md) | 控制台业务矩阵、环境、断言与维护 |
-| [运行排查](development/operations.md) | 按调用 ID、日志、状态与费用证据定位故障 |
+| [开发与 AI 编程指南](development/zh-CN/README.md) | 找代码、理解约束、选择修改范围和验证方法 |
+| [架构与代码导航](development/zh-CN/architecture.md) | 服务职责、请求链路、模块边界 |
+| [权限规则](development/zh-CN/permissions.md) | 角色、可见范围、秘密串读取、模型范围 |
+| [路由规则](development/zh-CN/routing.md) | 模板继承、权重、重试、超时、会话粘性 |
+| [计价与用量](development/zh-CN/pricing.md) | 费率、时段、价格快照、持久化链路 |
+| [额度链路实现与验证](development/zh-CN/quota-chain.md) | 四层分配不变量、请求准入、消费归属与分层测试 |
+| [运行行为与限制](development/zh-CN/runtime.md) | 缓存、幂等、协议、媒体任务及运行边界 |
+| [测试指南](development/zh-CN/testing.md) | 测试层次、数据库隔离、定向运行、可选演示数据 |
+| [全功能实现说明](development/zh-CN/implementation.md) | 逐项功能契约、实现位置及验收要点 |
+| [HTTP 接口参考](development/zh-CN/api-reference.md) | 实际登记的入口、处理器和源码 |
+| [配置与存储](development/zh-CN/configuration.md) | 设置优先级、模型字段、持久化与运行默认值 |
+| [全链路回归方案](development/zh-CN/regression.md) | 后端逐文件覆盖、真实模型、模板专项及执行流程 |
+| [真实供应商回归执行](development/zh-CN/regression-live.md) | Fenno 与七牛的一条命令、实时日志和运行目录 |
+| [浏览器回归](development/zh-CN/e2e-regression.md) | 控制台业务矩阵、环境、断言与维护 |
+| [运行排查](development/zh-CN/operations.md) | 按调用 ID、日志、状态与费用证据定位故障 |
 
 各模块的 `readme.md` / `readme_cn.md` 提供英文和中文代码说明。
 

@@ -3,13 +3,15 @@ package regression
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/llm"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
 // TestEndpointAvailableContract 验证真实接口对缺失声明、同别名有效部署和未授权访问的响应。
@@ -67,6 +69,15 @@ func TestEndpointRedesignNativeLifecycle(t *testing.T) {
 			}
 			writeJSON(w, map[string]any{"candidates": []any{map[string]any{"finishReason": "STOP", "content": map[string]any{"role": "model", "parts": []any{map[string]any{"text": "e2e-ok"}}}}}, "usageMetadata": map[string]any{"promptTokenCount": 8, "candidatesTokenCount": 2}})
 		case "/v1/images/generations":
+			for key, want := range map[string]string{"id": "client-item", "user": "owner", "vendor_extension": "kept"} {
+				if string(d[key]) != strconv.Quote(want) {
+					t.Errorf("合法原生字段 %s 被误删: %v", key, d)
+				}
+			}
+			if !strings.Contains(string(d["metadata"]), "preserved") {
+				t.Error("合法 metadata 被误删")
+			}
+
 			if string(d["model"]) != `"real-image"` || string(d["opaque"]) != "9007199254740993" || r.Header.Get("Authorization") != "Bearer saved-secret" {
 				t.Errorf("图片原生字段或鉴权错误: %v", d)
 			}
@@ -104,7 +115,7 @@ func TestEndpointRedesignNativeLifecycle(t *testing.T) {
 			name += "-edited"
 			h.ok("PATCH", "/model/"+id+"/update", admin, map[string]any{"model_name": name})
 			path := tc.path
-			request := map[string]any{"model": name, "prompt": "hello", "opaque": json.Number("9007199254740993")}
+			request := map[string]any{"model": name, "prompt": "hello", "opaque": json.Number("9007199254740993"), "metadata": map[string]any{"request": "preserved"}, "id": "client-item", "user": "owner", "vendor_extension": "kept"}
 			if tc.id != "image_generation" {
 				path += name + ":generateContent"
 				request = map[string]any{"contents": []any{map[string]any{"parts": []any{map[string]any{"text": "hello"}}}}}
@@ -179,7 +190,7 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 					body["model"] = "real"
 				}
 				delete(body, "store")
-				parsed, err := llm.ParseDialogue(source, body)
+				parsed, err := llmdialogue.ParseDialogue(source, body)
 				if err != nil || len(parsed.Turns) != 1 || parsed.Turns[0].Text != "hello" {
 					t.Errorf("上游内容错配：%+v %v", parsed, err)
 				}
@@ -190,7 +201,7 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 					}
 					return
 				}
-				data, err := llm.EncodeDialogueResult(llm.DialogueResult{ID: "matrix", Text: "matrix-ok", Stop: "stop", Usage: map[string]any{"prompt_tokens": float64(8), "completion_tokens": float64(2)}}, source, "real")
+				data, err := llmdialogue.EncodeDialogueResult(llmdialogue.DialogueResult{ID: "matrix", Text: "matrix-ok", Stop: "stop", Usage: map[string]any{"prompt_tokens": float64(8), "completion_tokens": float64(2)}}, source, "real")
 				if err != nil {
 					t.Error(err)
 					w.WriteHeader(500)
@@ -211,7 +222,7 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 			for _, target := range protocols {
 				for _, stream := range []bool{false, true} {
 					t.Run(fmt.Sprintf("%s/stream=%t", target, stream), func(t *testing.T) {
-						body, err := llm.EncodeDialogue(llm.Dialogue{Stream: stream, Turns: []llm.Turn{{Role: "user", Text: "hello"}}}, target, "matrix")
+						body, err := llmdialogue.EncodeDialogue(llmdialogue.Dialogue{Stream: stream, Turns: []llmdialogue.Turn{{Role: "user", Text: "hello"}}}, target, "matrix")
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -228,7 +239,7 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 								t.Fatalf("客户流式正文或终态缺失：%s", response.describe())
 							}
 						} else {
-							result, err := llm.ParseDialogueResult(target, response.body)
+							result, err := llmdialogue.ParseDialogueResult(target, response.body)
 							if err != nil || result.Text != "matrix-ok" {
 								t.Fatalf("客户回复协议错误：%s %v", response.describe(), err)
 							}

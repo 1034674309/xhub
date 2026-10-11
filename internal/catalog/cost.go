@@ -2,9 +2,10 @@
 package catalog
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"strconv"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCost sync.Once
@@ -15,7 +16,7 @@ var logTraceOnceCost sync.Once
 // 参数 model（string）：发给上游或对外展示的模型名；prompt（int）：提示 token 数，用来估价；completion（int）：完成 token 数，用来估价。
 // 返回 total（float64）：这一次的总费用；input（float64）：输入侧费用；output（float64）：输出侧费用；ok（bool）：真表示找到了可用结果。
 func Cost(model string, prompt, completion int) (total, input, output float64, ok bool) {
-	logTraceOnceCost.Do(func() { logx.Trace("enter catalog.Cost") })
+	logTraceOnceCost.Do(func() { util.Trace("enter catalog.Cost") })
 
 	in, out, ok := rates(model)
 	if !ok {

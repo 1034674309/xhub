@@ -1,6 +1,8 @@
 package main
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestExpectedOperationalFailure 验证 sweep 只放行未配置价格源的精确失败，其他方法、状态和 502 仍失败；无外部数据且无需清理。
 func TestExpectedOperationalFailure(t *testing.T) {

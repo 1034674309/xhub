@@ -16,9 +16,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const invalidCredentials = "Invalid credentials. Check the email and password of your account."
@@ -42,7 +41,7 @@ type sessionRec struct {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	var body struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
@@ -54,19 +53,19 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		email = body.Username
 	}
 	if email == "" || body.Password == "" {
-		httpx.WriteError(w, 400, "invalid_request", "Please enter your username / password")
+		util.WriteError(w, 400, "invalid_request", "Please enter your username / password")
 		return
 	}
 	if s.IAM == nil {
-		httpx.WriteError(w, 503, "internal", "identity store unavailable")
+		util.WriteError(w, 503, "internal", "identity store unavailable")
 		return
 	}
 	u, err := s.IAM.Login(r.Context(), email, body.Password)
 	if err != nil {
 		// A missing account and a wrong password answer the same way, so the
 		// response cannot be used to enumerate accounts.
-		logx.Debug("login rejected user=%s", email)
-		httpx.WriteError(w, 401, "auth_error", invalidCredentials)
+		util.Debug("login rejected user=%s", email)
+		util.WriteError(w, 401, "auth_error", invalidCredentials)
 		return
 	}
 	s.loginSuccess(w, u)
@@ -78,14 +77,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 // 调用：仅在 session.go 内使用
 // 测试：无直接单测
 func (s *Server) loginSuccess(w http.ResponseWriter, u *iam.User) {
-	sess := "sess-" + httpx.CallID()
+	sess := "sess-" + util.CallID()
 	if !s.rememberSession(sess, u.ID, u.SessionVersion) {
-		httpx.WriteError(w, 500, "internal", "could not start a session")
+		util.WriteError(w, 500, "internal", "could not start a session")
 		return
 	}
 	jwt := signSessionJWT(sess, u.ID, u.SessionVersion, u.Role, u.Email, s.Cfg.GeneralSettings.MasterKey)
-	logx.Info("login ok user=%s role=%s", u.ID, u.Role)
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.Info("login ok user=%s role=%s", u.ID, u.Role)
+	util.WriteJSON(w, 200, map[string]any{
 		"token":        jwt,
 		"key":          sess,
 		"user_role":    iam.ConsoleRole(u.Role),
@@ -101,7 +100,7 @@ func (s *Server) loginSuccess(w http.ResponseWriter, u *iam.User) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	tok := auth.APIKeyFrom(r)
 	s.dropSession(tok)
 	// A JWT names its session row, so a logout with a token rather than an id
@@ -109,7 +108,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if sess, _, _, _, ok := verifySessionJWT(tok, s.Cfg.GeneralSettings.MasterKey); ok {
 		s.dropSession(sess)
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "ok"})
+	util.WriteJSON(w, 200, map[string]any{"status": "ok"})
 }
 
 // me reports the caller's identity and capabilities. The capability list comes from the same decision matrix the server enforces, so the console cannot offer a page the server would refuse.
@@ -140,7 +139,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		out["teams"] = g.TeamRoles()
 		out["admin_organization_ids"] = g.AdminOrgIDs()
 	}
-	httpx.WriteJSON(w, 200, out)
+	util.WriteJSON(w, 200, out)
 }
 
 // bootstrap creates the first platform administrator. It is the only route the master credential reaches besides emergency administration, and it can run exactly once: iam.Bootstrap refuses a second call.
@@ -149,13 +148,13 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	if s.Cfg.GeneralSettings.MasterKey == "" || auth.APIKeyFrom(r) != s.Cfg.GeneralSettings.MasterKey {
-		httpx.WriteError(w, 401, "invalid_api_key", "the master key is required to bootstrap")
+		util.WriteError(w, 401, "invalid_api_key", "the master key is required to bootstrap")
 		return
 	}
 	if s.IAM == nil {
-		httpx.WriteError(w, 503, "internal", "identity store unavailable")
+		util.WriteError(w, 503, "internal", "identity store unavailable")
 		return
 	}
 	var body struct {
@@ -164,11 +163,11 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpx.WriteError(w, 400, "invalid_request", "email, name and password are required")
+		util.WriteError(w, 400, "invalid_request", "email, name and password are required")
 		return
 	}
 	if body.Email == "" || body.Password == "" {
-		httpx.WriteError(w, 400, "invalid_request", "email and password are required")
+		util.WriteError(w, 400, "invalid_request", "email and password are required")
 		return
 	}
 	u, err := s.IAM.Bootstrap(r.Context(), body.Email, body.Name, body.Password)
@@ -194,11 +193,11 @@ func (s *Server) seedAdmin() {
 	}
 	created, err := s.IAM.EnsureAdmin(context.Background(), g.AdminEmail, g.AdminName, g.AdminPassword)
 	if err != nil {
-		logx.Error("configured administrator not created email=%s err=%v", g.AdminEmail, err)
+		util.Error("configured administrator not created email=%s err=%v", g.AdminEmail, err)
 		return
 	}
 	if !created {
-		logx.Info("configured administrator left as it is email=%s", g.AdminEmail)
+		util.Info("configured administrator left as it is email=%s", g.AdminEmail)
 	}
 }
 
@@ -208,7 +207,7 @@ func (s *Server) seedAdmin() {
 // 测试：无直接单测
 // 返回：无。状态码和正文写进调用方的响应。
 func (s *Server) bootstrapStatus(w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	done := false
 	if s.IAM != nil {
 		var err error
@@ -217,7 +216,7 @@ func (s *Server) bootstrapStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"bootstrap_required": !done, "bootstrapped": done})
+	util.WriteJSON(w, 200, map[string]any{"bootstrap_required": !done, "bootstrapped": done})
 }
 
 // signSessionJWT issues a session JWT. The signing key comes from configuration and is not written to logs beyond the response. user_role is the console spelling, not the stored one. The admin UI decides who is a platform administrator by reading this claim, and it only recognises proxy_admin. A token that omitted the claim, or that carried the stored "admin", was treated as an ordinary user.
@@ -269,7 +268,7 @@ func (s *Server) rememberSession(sess, userID string, version int) bool {
 		return false
 	}
 	if err := s.Store.PutKV("ui_session", sess, string(body)); err != nil {
-		logx.Error("session persist failed user=%s err=%v", userID, err)
+		util.Error("session persist failed user=%s err=%v", userID, err)
 		s.dropMemorySession(sess)
 		return false
 	}
@@ -393,32 +392,32 @@ func (s *Server) resolve(r *http.Request) (*auth.Principal, error) {
 		}
 		u, err := s.IAM.GetUser(ctx, rec.UserID)
 		if err != nil {
-			logx.Debug("session user unreadable user=%s err=%v", rec.UserID, err)
+			util.Debug("session user unreadable user=%s err=%v", rec.UserID, err)
 			return nil, auth.ErrSessionInvalid()
 		}
 		p, err := auth.SessionPrincipal(u, rec.Version, tok)
 		if err != nil {
 			return nil, err
 		}
-		logx.Debug("process %s %s step=identity source=session role=%s", r.Method, r.URL.Path, p.Role)
+		util.Debug("process %s %s step=identity source=session role=%s", r.Method, r.URL.Path, p.Role)
 		return p, nil
 	}
 	p, err := auth.Resolve(ctx, s.Cfg, s.IAM, r)
 	if err != nil {
 		if tok == "" {
-			logx.Debug("process %s %s step=identity source=none", r.Method, r.URL.Path)
+			util.Debug("process %s %s step=identity source=none", r.Method, r.URL.Path)
 		} else {
-			logx.Debug("process %s %s step=identity source=reject reason=%s", r.Method, r.URL.Path, err.Error())
+			util.Debug("process %s %s step=identity source=reject reason=%s", r.Method, r.URL.Path, err.Error())
 		}
 		return nil, err
 	}
 	if p.Kind == authz.KindKey {
 		if err := s.checkKey(ctx, p); err != nil {
-			logx.Debug("process %s %s step=identity source=key reason=stale key=%s", r.Method, r.URL.Path, p.KeyID)
+			util.Debug("process %s %s step=identity source=key reason=stale key=%s", r.Method, r.URL.Path, p.KeyID)
 			return nil, auth.ErrSessionInvalid()
 		}
 	}
-	logx.Debug("process %s %s step=identity source=%s", r.Method, r.URL.Path, p.Kind)
+	util.Debug("process %s %s step=identity source=%s", r.Method, r.URL.Path, p.Kind)
 	return p, nil
 }
 
@@ -495,22 +494,6 @@ func verifySessionJWT(tok, secret string) (sess, userID string, version int, exp
 	return sess, userID, int(v), time.Unix(int64(exp), 0), true
 }
 
-// requireMaster accepts only the master credential. It reaches the bootstrap and emergency routes and nothing else.
-// 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
-// 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 调用：仅在 session.go 内使用
-// 测试：无直接单测
-func (s *Server) requireMaster(w http.ResponseWriter, r *http.Request) *auth.Principal {
-	p, err := s.resolve(r)
-	if err != nil || !p.IsMaster() {
-		logx.Error("process %s %s step=auth gate=master ok=false", r.Method, r.URL.Path)
-		httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
-		return nil
-	}
-	logx.Debug("process %s %s step=auth gate=master ok=true", r.Method, r.URL.Path)
-	return p
-}
-
 // requireUser accepts any signed-in session or virtual key. It does not grant global management. Personal keys, team membership, usage, and logs use this gate and then narrow the rows.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
 // 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
@@ -519,53 +502,53 @@ func (s *Server) requireMaster(w http.ResponseWriter, r *http.Request) *auth.Pri
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) *auth.Principal {
 	p, err := s.resolve(r)
 	if err != nil {
-		logx.Error("process %s %s step=auth gate=user ok=false", r.Method, r.URL.Path)
+		util.Error("process %s %s step=auth gate=user ok=false", r.Method, r.URL.Path)
 		s.writeAuthError(w, r, err)
 		return nil
 	}
-	logx.Debug("process %s %s step=auth gate=user ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
+	util.Debug("process %s %s step=auth gate=user ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
 	return p
 }
 
 // requireManage requires a platform administrator session. A team administrator is not a platform administrator: management routes that a team admin may use resolve the team themselves and are gated by requireUser plus an explicit authorization decision.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
 // 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 调用：gateway/access.go、gateway/config_overrides.go、gateway/public_hub.go、gateway/theme_settings.go
+// 调用：gateway/access.go、gateway/config_overrides.go、gateway/publichub/public_hub.go、gateway/theme_settings.go
 // 测试：无直接单测
 func (s *Server) requireManage(w http.ResponseWriter, r *http.Request) *auth.Principal {
 	p, err := s.resolve(r)
 	if err != nil {
-		logx.Error("process %s %s step=auth gate=manage ok=false", r.Method, r.URL.Path)
+		util.Error("process %s %s step=auth gate=manage ok=false", r.Method, r.URL.Path)
 		s.writeAuthError(w, r, err)
 		return nil
 	}
 	if !s.canManage(p) {
-		logx.Error("process %s %s step=auth gate=manage ok=false kind=%s", r.Method, r.URL.Path, p.Kind)
-		httpx.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access management endpoints")
+		util.Error("process %s %s step=auth gate=manage ok=false kind=%s", r.Method, r.URL.Path, p.Kind)
+		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access management endpoints")
 		return nil
 	}
-	logx.Debug("process %s %s step=auth gate=manage ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
+	util.Debug("process %s %s step=auth gate=manage ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
 	return p
 }
 
 // requireMixed accepts either a management identity or an inference identity. If it is neither, it writes 401.
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态码和正文写在这里；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文。
 // 返回 *auth.Principal（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 调用：gateway/tokens.go、gateway/wire.go
+// 调用：gateway/tokens/tokens.go、gateway/wire.go
 // 测试：无直接单测
 func (s *Server) requireMixed(w http.ResponseWriter, r *http.Request) *auth.Principal {
 	p, err := s.resolve(r)
 	if err != nil {
-		logx.Error("process %s %s step=auth gate=mixed ok=false", r.Method, r.URL.Path)
+		util.Error("process %s %s step=auth gate=mixed ok=false", r.Method, r.URL.Path)
 		s.writeAuthError(w, r, err)
 		return nil
 	}
 	if !s.canManage(p) && !s.canLLM(p) {
-		logx.Error("process %s %s step=auth gate=mixed ok=false kind=%s", r.Method, r.URL.Path, p.Kind)
-		httpx.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access this endpoint")
+		util.Error("process %s %s step=auth gate=mixed ok=false kind=%s", r.Method, r.URL.Path, p.Kind)
+		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access this endpoint")
 		return nil
 	}
-	logx.Debug("process %s %s step=auth gate=mixed ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
+	util.Debug("process %s %s step=auth gate=mixed ok=true kind=%s", r.Method, r.URL.Path, p.Kind)
 	return p
 }
 
@@ -577,16 +560,16 @@ func (s *Server) requireMixed(w http.ResponseWriter, r *http.Request) *auth.Prin
 func (s *Server) requireLLMPrincipal(w http.ResponseWriter, r *http.Request) *auth.Principal {
 	p, err := s.resolve(r)
 	if err != nil {
-		logx.Error("auth %s %s no api key", r.Method, r.URL.Path)
+		util.Error("auth %s %s no api key", r.Method, r.URL.Path)
 		s.writeAuthError(w, r, err)
 		return nil
 	}
 	if !s.canLLM(p) {
-		logx.Error("auth %s %s cannot call llm kind=%s", r.Method, r.URL.Path, p.Kind)
-		httpx.WriteTypedError(w, r.URL.Path, 403, "forbidden", "this credential cannot call inference")
+		util.Error("auth %s %s cannot call llm kind=%s", r.Method, r.URL.Path, p.Kind)
+		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "this credential cannot call inference")
 		return nil
 	}
-	logx.Debug("process %s %s step=auth kind=%s", r.Method, r.URL.Path, p.Kind)
+	util.Debug("process %s %s step=auth kind=%s", r.Method, r.URL.Path, p.Kind)
 	return p
 }
 
@@ -619,13 +602,13 @@ func (s *Server) canLLM(p *auth.Principal) bool {
 func (s *Server) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case authz.IsInternal(err):
-		httpx.WriteTypedError(w, r.URL.Path, 500, "internal", "identity lookup failed")
+		util.WriteTypedError(w, r.URL.Path, 500, "internal", "identity lookup failed")
 	case authz.IsUnauthenticated(err):
-		httpx.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
+		util.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
 	case authz.IsNotFound(err):
-		httpx.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
+		util.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
 	default:
-		httpx.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
+		util.WriteTypedError(w, r.URL.Path, 401, auth.Code(err), authFailureMessage(r))
 	}
 }
 
@@ -651,13 +634,13 @@ func (s *Server) writeAuthzError(w http.ResponseWriter, r *http.Request, err err
 	case err == nil:
 		return
 	case authz.IsInternal(err):
-		httpx.WriteTypedError(w, r.URL.Path, 500, "internal", "authorization lookup failed")
+		util.WriteTypedError(w, r.URL.Path, 500, "internal", "authorization lookup failed")
 	case authz.IsUnauthenticated(err):
-		httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
+		util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
 	case authz.IsForbidden(err):
-		httpx.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access this resource")
+		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "Not allowed to access this resource")
 	default:
-		httpx.WriteTypedError(w, r.URL.Path, 404, "not_found", "Not found")
+		util.WriteTypedError(w, r.URL.Path, 404, "not_found", "Not found")
 	}
 }
 
@@ -671,19 +654,19 @@ func (s *Server) writeIAMError(w http.ResponseWriter, r *http.Request, err error
 	case err == nil:
 		return
 	case err == iam.ErrNotFound:
-		httpx.WriteTypedError(w, r.URL.Path, 404, "not_found", "Not found")
+		util.WriteTypedError(w, r.URL.Path, 404, "not_found", "Not found")
 	case err == iam.ErrConflict:
-		httpx.WriteTypedError(w, r.URL.Path, 409, "conflict", err.Error())
+		util.WriteTypedError(w, r.URL.Path, 409, "conflict", err.Error())
 	case errors.Is(err, iam.ErrRateAllocation):
-		httpx.WriteError(w, 400, "rate_allocation_exceeded", "child RPM/TPM allocations exceed the parent limit")
+		util.WriteError(w, 400, "rate_allocation_exceeded", "child RPM/TPM allocations exceed the parent limit")
 	case errors.Is(err, iam.ErrQuotaAllocation):
-		httpx.WriteTypedError(w, r.URL.Path, 400, "quota_allocation_exceeded", err.Error())
+		util.WriteTypedError(w, r.URL.Path, 400, "quota_allocation_exceeded", err.Error())
 	case errors.Is(err, iam.ErrMultipleTeams):
-		httpx.WriteTypedError(w, r.URL.Path, 400, "single_team_required", err.Error())
+		util.WriteTypedError(w, r.URL.Path, 400, "single_team_required", err.Error())
 	case err == iam.ErrInvalid, err == iam.ErrLastAdmin, err == iam.ErrLastPlatformAdmin, err == iam.ErrInactive:
-		httpx.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
 	default:
-		logx.Error("iam error %s %s: %v", r.Method, r.URL.Path, err)
-		httpx.WriteTypedError(w, r.URL.Path, 500, "internal", "request could not be completed")
+		util.Error("iam error %s %s: %v", r.Method, r.URL.Path, err)
+		util.WriteTypedError(w, r.URL.Path, 500, "internal", "request could not be completed")
 	}
 }

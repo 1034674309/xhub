@@ -6,7 +6,7 @@ package hooks
 import (
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Engine counts in-flight calls per key id. The count is per process, so it
@@ -24,7 +24,7 @@ var logTraceOnceHooks sync.Once
 // 调用：gateway/server.go 在组装进程时。
 // 测试：dataplane/bypass_logic_test.go、dataplane/failure_log_test.go。
 func New() *Engine {
-	logTraceOnceHooks.Do(func() { logx.Trace("enter hooks.New") })
+	logTraceOnceHooks.Do(func() { util.Trace("enter hooks.New") })
 
 	return &Engine{inflight: map[string]int{}}
 }

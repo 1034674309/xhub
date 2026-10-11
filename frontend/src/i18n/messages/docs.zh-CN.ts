@@ -24,6 +24,7 @@ const base = {
   empty: "没有找到相关文档，请尝试其他关键词。",
   results: "找到 {count} 篇文档",
   navigation: "文档分类",
+  apiOverview: "协议总览",
   directory: "文档目录",
   onPage: "本页内容",
   console: "返回控制台",

@@ -1,47 +1,37 @@
-# 调用身份解析
+# 请求身份认证
 
-[English](readme.md) · [全功能实现说明](../../docs/development/implementation.md)
+[English](readme.md)
 
-## 职责与实现契约
+## 说明
 
-auth.go 把 HTTP 凭据转为 Principal，统一记录身份类型、角色、用户、密钥、组织、团队、项目以及模板来源。APIKeyFrom 依次读取 x-litellm-api-key、Authorization、api-key、x-api-key。Resolve 识别 master 或数据库中的虚拟密钥；网页登录的 token 验证由网关完成，再调用 SessionPrincipal。
-密钥验证重新读取当前密钥、所有者、成员关系和父级资源，不能用陈旧缓存继续授权。禁用、撤销、过期分别有稳定错误码。SessionPrincipal 对比账号状态和 session_version，密码重置、禁用和版本变更使旧会话失效。
-Principal.Actor 为 authz 提供动作判断输入；PlatformAdmin 只认管理员会话，管理员拥有的 API key 不因此获得管理权限。主密钥是应急凭据，不能当作日常登录或推理密钥。依赖读取失败是内部错误，不能伪装成凭据无效。
+`internal/auth` 把 HTTP 请求携带的凭据或已验证的界面会话转换为 `Principal`。它只回答“调用者是谁”，具体动作能否执行由 `internal/authz` 决定。主调用方既包含鉴权所需的身份字段，也保留路由、预算、限流、花费、模型访问和请求日志后续需要的密钥信息，可表示应急主密钥、虚拟 API 密钥或已登录用户会话。
+
+本包不会保存明文密钥。`Resolve` 先提取请求中的明文，只对显式配置的主密钥做精确比较；其他值先计算哈希，再查询 IAM 密钥行。界面会话不经过 `Resolve`：网关先验证签名令牌，再把当前用户行、令牌中的版本和会话标识交给 `SessionPrincipal`。
+
+## 对外接口
+
+- `APIKeyFrom(*http.Request) string` 按固定优先级提取一个凭据：`x-litellm-api-key`、Bearer 或 Basic 形式的 `Authorization`、`api-key`、`x-api-key`。Basic 内容经标准 base64 解码后，存在冒号时取第一个冒号后的密码，否则取完整解码结果。只有 `/v1beta/models/` 与 `/vertex/v1/models/` 路径还接受 `x-goog-api-key`，最后才读取 `key` 查询参数。空值或格式错误的候选项会继续尝试低优先级来源；没有可用凭据时返回空串，不访问数据库。
+- `Resolve(context.Context, *config.Config, *iam.DB, *http.Request) (*Principal, error)` 认证主密钥和虚拟密钥。成功时返回主密钥调用方，或包含 IAM 行、SHA-256 查询哈希、归属 ID 与限额信息的密钥调用方。未提供凭据、没有存储实例、哈希不存在时返回包装 `authz.ErrUnauthenticated` 的 `invalid_api_key`；密钥已吊销、被封禁或处于其他非活动状态、已过期时分别返回包装 `authz.ErrForbidden` 的 `key_revoked`、`key_blocked`、`key_expired`。存储读取失败保留为 `authz.InternalError`，网关据此返回服务端错误，不会伪装成错误密钥。上下文可取消查询；日志只记录判定结果和标识，不记录明文。
+- `SessionPrincipal(*iam.User, version, session) (*Principal, error)` 只接受当前仍为活动状态、且数据库 `session_version` 与签名令牌版本完全一致的用户。成功结果包含用户 ID、平台角色、会话 ID 和版本。用户不存在、被停用、被删除或版本落后时，与 `ErrSessionInvalid()` 一样返回未认证错误。因此，修改密码或其他递增会话版本的操作会在下一次请求使全部旧会话失效。
+- `Principal` 是交给后续链路的身份对象。`Actor()` 只投影授权层使用的字段，nil 接收者返回零值 Actor；`IsMaster()` 判断应急主密钥；`PlatformAdmin()` 只对管理员会话成立，管理员拥有的密钥不会继承管理权限；`CanInfer()` 对会话和密钥类型成立，但密钥在执行受保护操作前仍由 authz 重查有效性。结构中还预留团队、项目、所有者、结算团队与组织快照、已选路由模板及来源、会话信息，由网关预算与模板解析阶段补齐或使用。
+- `Error` 把 authz 错误类别与稳定客户端错误码绑定。`Code(error)` 可取回该码，无法识别的错误默认得到 `invalid_api_key`；调用方仍应先判断 `authz.IsInternal`，避免把依赖故障当成凭据错误。
+
+主要调用者包括网关会话与请求引擎、数据面推理准入、模型访问与身份处理、密钥管理、路由模板选择、限流与花费结算。它们会补充或读取 `Principal`，但不能绕过 authz 的实时授权检查。
+
+## 内部核心实现
+
+凭据提取严格遵循优先级，首个非空且格式可接受的来源立即胜出，防止低优先级兼容头覆盖 LiteLLM 或 `Authorization` 凭据。Bearer 前缀不区分大小写，并清理两端空白。Basic 先清理整个头再截取内容，使用标准 base64 解码，并且只按第一个冒号拆分，因此密码本身可以包含冒号。Basic 解码失败不会直接报错，而是继续检查后续头。Google 查询参数受路径限制，其他接口不会从 URL 读取密钥。
+
+`Resolve` 首先拒绝空提取结果，然后仅在配置主密钥非空时做精确匹配；命中后直接生成 `KindMaster`，不查询 IAM。普通密钥必须有存储实例，明文经 `iam.HashKey` 计算后按哈希查行，再判断生命周期。状态判断早于过期判断：同时“已吊销且过期”的密钥报告 `key_revoked`；其他非活动状态统一报告 `key_blocked`。过期边界采用“当前时间不再早于 `ExpiresAt`”即拒绝。成功转换时复制可空用户与项目 ID，并保留原密钥行和哈希，供后续预算、限流和记账使用。
+
+认证结果不会冻结权限。此处接受的密钥在受保护请求中仍由 `authz.Guard.CheckKey` 重新加载，因此吊销、所有者停用、成员关系移除、团队或组织封禁、项目停用都会在下一次请求生效。会话构造同样使用实时用户行核对签名版本。数据库读取失败按内部错误关闭访问；不存在的哈希与普通无效密钥故意保持相同外部表现。
+
+### 测试依赖
+
+`auth_test.go` 验证 Basic 头两端空白会在截取和解码前清理。`google_key_test.go` 验证 Google 原生头、查询参数及其路径限制。生命周期优先级、依赖失败、Principal 投影和会话失效目前主要通过调用方与 authz 测试覆盖，本目录没有对应的直接单测。
 
 ## 源码职责与入口
 
-### auth.go
-
-公开类型：`Error`, `Principal`.
-
-- [`func (e *Error) Error() string`](auth.go) — 实现 error 接口，返回写进日志或 HTTP 错误体的文本。
-- [`func (e *Error) Unwrap() error`](auth.go) — 交出被包装的底层错误，供 errors.Is 和 errors.As 识别具体类型。
-- [`func Code(err error) string`](auth.go) — Code reports the failure code to send, defaulting to invalid_api_key for an error this package did not raise. A dependency failure keeps its own code out of the response: it is a 500, not a rejected credential.
-- [`func (p *Principal) Actor() authz.Actor`](auth.go) — Actor is the authorization-layer view of this caller.
-- [`func (p *Principal) IsMaster() bool`](auth.go) — IsMaster reports the emergency master credential, which only reaches the bootstrap and emergency routes.
-- [`func (p *Principal) PlatformAdmin() bool`](auth.go) — PlatformAdmin reports a platform administrator session. A key never confers it, whatever role its owner holds: a key is a credential for inference and for reading itself, and it does not become an administration credential by belonging to an administrator.
-- [`func (p *Principal) CanInfer() bool`](auth.go) — CanInfer reports whether this credential may send inference. Any active session may; a key may once the gateway has revalidated it for this request.
-- [`func APIKeyFrom(r *http.Request) string`](auth.go) — APIKeyFrom reads the credential in LiteLLM order: x-litellm-api-key, then Authorization, then api-key and x-api-key.
-- [`func Resolve(ctx context.Context, cfg *config.Config, db *iam.DB, r *http.Request) (*Principal, error)`](auth.go) — Resolve 从请求里识别主密钥或 API 密钥，并组装调用方。
-- [`func SessionPrincipal(u *iam.User, version int, session string) (*Principal, error)`](auth.go) — SessionPrincipal builds the actor for a signed-in user. The stored row is the authority, not the token: a session is refused once the account is no longer active or its session_version has moved, which is how a role change, a disable and a password reset end every session the user had open.
-- [`func ErrSessionInvalid() error`](auth.go) — ErrSessionInvalid reports a session that no longer maps to a usable account: the user is gone, disabled, or has moved past the session's version.
-
-## 对外 HTTP 边界
-
-无本目录直接登记的 HTTP 路由。导出的 Go API 由上层调用；运行时目录调度或调用宿主的入口应沿依赖链追踪。
-
-## 依赖关系
-
-[internal/authz](../authz/readme_cn.md), [internal/config](../config/readme_cn.md), [internal/iam](../iam/readme_cn.md), [internal/logx](../logx/readme_cn.md).
-
-## 验证与维护入口
-
-| 测试文件 | 场景入口 |
-| --- | --- |
-| [auth_test.go](auth_test.go) | `TestBasicCredentialTrimsHeaderBeforeSlicing` |
-
-```bash
-go test ./internal/auth -count=1
-```
-
-数据库验收设置 XHUB_REGRESSION_STRICT=1 并检查跳过项；Redis 和真实供应商需单独配置。接口、字段或行为改变后同步本说明及相关功能文档。
+- [auth.go](auth.go) 是唯一生产源码，定义稳定错误码与 `Error` 包装契约、`Principal` 及其授权视图、兼容凭据提取、主密钥与虚拟密钥解析、生命周期分类、密钥行转换和实时用户会话构造。理解线格式优先级从 `APIKeyFrom` 开始，理解密钥认证从 `Resolve` 开始，理解界面会话失效从 `SessionPrincipal` 开始。
+- [auth_test.go](auth_test.go) 验证 Basic 凭据空白处理。
+- [google_key_test.go](google_key_test.go) 验证仅限 Gemini/Vertex 路径的 Google 凭据形式。

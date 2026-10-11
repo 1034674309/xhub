@@ -1,11 +1,5 @@
 # Anthropic Messages
 
-## Overview
-
-Anthropic Messages
-
-### Anthropic Messages
-
 ## Behavior
 Use a Messages deployment. Native clients send anthropic-version: 2023-06-01. XHub also accepts its key in x-api-key. Tool use/results are content blocks.
 

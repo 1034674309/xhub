@@ -1,6 +1,8 @@
 package models
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestGoogleDeploymentAlias 验证网关传递真实公开别名并拒绝不能匹配原生路径的名称。
 // 参数 t：测试上下文；前置内存宿主和显式 Gemini/Vertex 声明；返回无，斜杠和冒号名称通过、空段及点段失败，无持久数据需清理。

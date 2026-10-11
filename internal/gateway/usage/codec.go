@@ -3,13 +3,12 @@ package usage
 
 import (
 	"encoding/json"
-	"github.com/sunqirui1987/xhub/internal/pagination"
 	"io"
 	"net/http"
 	"strconv"
 	"sync"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceCodec sync.Once
@@ -20,7 +19,7 @@ var logTraceOnceCodec sync.Once
 // 调用：gateway/usage/chat.go、gateway/usage/reports.go。
 // 测试：无直接单测
 func readMap(r *http.Request) map[string]any {
-	logTraceOnceCodec.Do(func() { logx.Trace("enter usage.readMap") })
+	logTraceOnceCodec.Do(func() { util.Trace("enter usage.readMap") })
 
 	var body map[string]any
 	b, _ := io.ReadAll(r.Body)
@@ -63,7 +62,7 @@ func queryInt(r *http.Request, key string, fallback int) int {
 // 调用：gateway/usage/activity.go。
 // 测试：无直接单测
 func pageOffset(r *http.Request, limit int) int {
-	return pagination.Offset(queryInt(r, "page", 1), limit)
+	return util.Offset(queryInt(r, "page", 1), limit)
 }
 
 // asFloat converts a JSON number to float64. An int is accepted. Any other type returns 0.

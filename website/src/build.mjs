@@ -1,6 +1,7 @@
+import { publicMarkdownSources } from "./document-links.mjs";
 import { consoleDocuments } from "./console-docs.mjs";
+import { documentLanguage, localizedSource } from "./localization.mjs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as bundle } from "esbuild";
@@ -23,14 +24,14 @@ async function emit(relative, content) {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 // 仅发布纳入版本管理的正式文档，不收集其他并行任务产生的临时文件。
-const sources = execFileSync("git", ["ls-files", "-z", "docs", "internal", "cmd/regression"], { cwd: root, encoding: "utf8" }).split("\0").filter((source) => /\.md$/i.test(source) && !/\/(?:testdata|assets|model-marketplace-proof)\/|\/(?:AGENTS|CLAUDE)\.md$|project-review|verification|validation-report/.test(source)).sort();
+const sources = publicMarkdownSources(root).filter((source) => source !== "README.md" && source !== "README.zh-CN.md");
 const mappings = new Map(sources.map((source) => [source, source.startsWith("docs/") ? source.slice(5) : `modules/${source}`]));
 const documents = [];
 for (const source of sources) {
   const websiteSource = mappings.get(source);
   const markdown = await readFile(path.join(root, source), "utf8");
   const rendered = renderMarkdown(markdown, source, websiteSource, mappings);
-  const lang = source.startsWith("docs/development/") || /zh-CN|_cn\.md$/.test(source) ? "zh" : "en";
+  const lang = documentLanguage(source);
   documents.push({ source: websiteSource, repositorySource: source, lang, ...rendered });
 }
 const synced = await consoleDocuments(root);
@@ -39,12 +40,19 @@ for (const document of synced.documents) {
   documents.push({ ...document, ...rendered });
 }
 for (const document of documents) {
-  const alternateCandidates = document.source.includes("zh-CN") ? [document.source.replace(".zh-CN", "")] : document.source.endsWith("_cn.md") ? [document.source.replace("_cn.md", ".md")] : [document.source.replace(/\.md$/, ".zh-CN.md"), document.source.replace(/\.md$/, "_cn.md")];
-  const alternate = alternateCandidates.find((candidate) => documents.some((item) => item.source === candidate)) || (document.lang === "zh" ? "README.md" : "README.zh-CN.md");
+  const counterpart = localizedSource(document.repositorySource, document.lang === "zh" ? "en" : "zh", new Set(documents.map((item) => item.repositorySource)));
+  const alternate = mappings.get(counterpart) || (document.lang === "zh" ? "README.md" : "README.zh-CN.md");
   await emit(documentPath(document.source), documentPage({ ...document, documents, alternate: document.source.startsWith("center/") ? document.source.replace("/" + document.lang + "/", document.lang === "zh" ? "/en/" : "/zh/") : alternate, centerGroups: synced.groups }));
 }
 await emit("docs/index.html", '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=./center/zh/index.html"><title>XHub 文档中心</title><a href="./center/zh/index.html">XHub 文档中心 / Documentation</a></html>');
 await emit("index.html", homepage("zh"));
+// 保留已公开开发文档地址；浏览器重定向保留原查询串和标题锚点，目标正文只发布在语言目录。
+for (const document of documents.filter((item) => /^development\/(en|zh-CN)\//.test(item.source))) {
+  const english = document.lang === "en";
+  const legacy = document.source.replace(/\/(en|zh-CN)\//, "/").replace(/\.md$/, english ? ".en.md" : ".md");
+  const target = "./" + (english ? "en/" : "zh-CN/") + path.posix.basename(documentPath(document.source));
+  await emit(documentPath(legacy), '<!doctype html><html lang="' + (english ? 'en' : 'zh-CN') + '"><meta charset="utf-8"><title>XHub</title><link rel="canonical" href="' + target + '"><a href="' + target + '">' + (english ? 'Open documentation' : '打开文档') + '</a><script>location.replace(' + JSON.stringify(target) + '+location.search+location.hash)</script></html>');
+}
 await emit("en/index.html", homepage("en"));
 await emit("search-index.json", JSON.stringify(documents.map(({ source, title, text, lang }) => ({ url: documentPath(source), title, text, lang }))));
 await emit("404.html", `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面未找到 · XHub</title><body><h1>页面未找到 / Page not found</h1><p>请从站点首页重新打开文档。 / Open documentation from the site home.</p><a href="https://sunqirui1987.github.io/xhub/">XHub 官网 / Website</a></body></html>`);

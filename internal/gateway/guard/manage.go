@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sunqirui1987/xhub/internal/httpx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // manageMu 串行化管理读改写，保证重名校验、密钥合并与保存处于同一临界区。
@@ -27,23 +27,23 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 	}
 	switch path {
 	case "/guardrails/ui/add_guardrail_settings":
-		httpx.WriteJSON(w, 200, map[string]any{"engine": "xhub", "supported_modes": []string{"pre_call"}, "supported_entities": []string{}, "supported_actions": []string{"BLOCK", "MASK"}, "pii_entity_categories": []any{}, "guardrail_provider_map": providerDirectory()})
+		util.WriteJSON(w, 200, map[string]any{"engine": "xhub", "supported_modes": []string{"pre_call"}, "supported_entities": []string{}, "supported_actions": []string{"BLOCK", "MASK"}, "pii_entity_categories": []any{}, "guardrail_provider_map": providerDirectory()})
 		return true
 	case "/guardrails/ui/provider_specific_params":
-		httpx.WriteJSON(w, 200, map[string]any{"local": map[string]any{"ui_friendly_name": "Local rules", "blocked_words": map[string]any{"type": "list", "description": "Case-insensitive keywords", "required": false}, "patterns": map[string]any{"type": "list", "description": "Regular expressions (RE2)", "required": false}, "action": map[string]any{"type": "select", "description": "Action on match", "options": []string{"block", "redact"}, "required": true}, "replacement": map[string]any{"type": "str", "description": "Replacement text", "required": false}}})
+		util.WriteJSON(w, 200, map[string]any{"local": map[string]any{"ui_friendly_name": "Local rules", "blocked_words": map[string]any{"type": "list", "description": "Case-insensitive keywords", "required": false}, "patterns": map[string]any{"type": "list", "description": "Regular expressions (RE2)", "required": false}, "action": map[string]any{"type": "select", "description": "Action on match", "options": []string{"block", "redact"}, "required": true}, "replacement": map[string]any{"type": "str", "description": "Replacement text", "required": false}}})
 		return true
 	case "/guardrails/submissions":
-		httpx.WriteJSON(w, 200, map[string]any{"supported": false, "submissions": []any{}, "summary": map[string]int{"total": 0, "pending_review": 0, "active": 0, "rejected": 0}})
+		util.WriteJSON(w, 200, map[string]any{"supported": false, "submissions": []any{}, "summary": map[string]int{"total": 0, "pending_review": 0, "active": 0, "rejected": 0}})
 		return true
 	case "/guardrails/test_custom_code":
 		testCustomCode(w, r)
 		return true
 	case "/guardrails/register", "/guardrails/validate_blocked_words_file":
-		httpx.WriteError(w, 501, "not_implemented", "remote submissions are not implemented; create a local rule or an xgo policy")
+		util.WriteError(w, 501, "not_implemented", "remote submissions are not implemented; create a local rule or an xgo policy")
 		return true
 	}
 	if strings.HasPrefix(path, "/guardrails/submissions/") || strings.HasPrefix(path, "/guardrails/ui/") {
-		httpx.WriteError(w, 501, "not_implemented", "this guardrail capability is not implemented")
+		util.WriteError(w, 501, "not_implemented", "this guardrail capability is not implemented")
 		return true
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
@@ -56,34 +56,34 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 	}
 	if path == "/guardrails/list" || path == "/v2/guardrails/list" {
 		if r.Method != http.MethodGet {
-			httpx.WriteError(w, 405, "method_not_allowed", "GET required")
+			util.WriteError(w, 405, "method_not_allowed", "GET required")
 			return true
 		}
 		if s.RecordStore() == nil {
 			rows := configuredRules(s)
-			httpx.WriteJSON(w, 200, map[string]any{"guardrails": publicRules(rows), "data": publicRules(rows), "object": "list", "engine": "xhub"})
+			util.WriteJSON(w, 200, map[string]any{"guardrails": publicRules(rows), "data": publicRules(rows), "object": "list", "engine": "xhub"})
 			return true
 		}
 	}
 	for _, rule := range configuredRules(s) {
 		if ruleIdentifies(rule, strings.TrimSuffix(strings.TrimPrefix(path, "/guardrails/"), "/info")) {
 			if r.Method == http.MethodGet {
-				httpx.WriteJSON(w, 200, publicRule(rule))
+				util.WriteJSON(w, 200, publicRule(rule))
 			} else {
-				httpx.WriteError(w, 400, "invalid_request", "edit config-defined guardrails in YAML")
+				util.WriteError(w, 400, "invalid_request", "edit config-defined guardrails in YAML")
 			}
 			return true
 		}
 	}
 	if s.RecordStore() == nil {
-		httpx.WriteError(w, 503, "unavailable", "guardrail store unavailable")
+		util.WriteError(w, 503, "unavailable", "guardrail store unavailable")
 		return true
 	}
 	fail := func(err error) {
 		if errors.Is(err, sql.ErrNoRows) {
-			httpx.WriteError(w, 404, "not_found", "guardrail not found")
+			util.WriteError(w, 404, "not_found", "guardrail not found")
 		} else {
-			httpx.WriteError(w, 503, "unavailable", "guardrail store unavailable")
+			util.WriteError(w, 503, "unavailable", "guardrail store unavailable")
 		}
 	}
 	if path == "/guardrails/list" || path == "/v2/guardrails/list" {
@@ -92,7 +92,7 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 			fail(err)
 			return true
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"guardrails": publicRules(rows), "data": publicRules(rows), "object": "list", "engine": "xhub"})
+		util.WriteJSON(w, 200, map[string]any{"guardrails": publicRules(rows), "data": publicRules(rows), "object": "list", "engine": "xhub"})
 		return true
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(path, "/guardrails/"), "/info")
@@ -100,7 +100,7 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 		id = ""
 	}
 	if strings.Contains(id, "/") {
-		httpx.WriteError(w, 404, "not_found", "unknown guardrail operation")
+		util.WriteError(w, 404, "not_found", "unknown guardrail operation")
 		return true
 	}
 	kind := "guardrails"
@@ -120,24 +120,24 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 	switch r.Method {
 	case http.MethodGet:
 		if row == nil {
-			httpx.WriteError(w, 400, "invalid_request", "guardrail id required")
+			util.WriteError(w, 400, "invalid_request", "guardrail id required")
 		} else {
-			httpx.WriteJSON(w, 200, publicRule(normalizeRule(row)))
+			util.WriteJSON(w, 200, publicRule(normalizeRule(row)))
 		}
 	case http.MethodDelete:
 		if id == "" {
-			httpx.WriteError(w, 400, "invalid_request", "guardrail id required")
+			util.WriteError(w, 400, "invalid_request", "guardrail id required")
 			return true
 		}
 		if err := s.RecordStore().DeleteKV(kind, id); err != nil {
 			fail(err)
 			return true
 		}
-		httpx.WriteJSON(w, 200, map[string]any{"guardrail_id": id, "deleted": 1})
+		util.WriteJSON(w, 200, map[string]any{"guardrail_id": id, "deleted": 1})
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
 		var body map[string]any
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&body); err != nil || body == nil {
-			httpx.WriteError(w, 400, "invalid_request", "JSON object required")
+			util.WriteError(w, 400, "invalid_request", "JSON object required")
 			return true
 		}
 		if inner, ok := body["guardrail"].(map[string]any); ok {
@@ -153,7 +153,7 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 			if key == "litellm_params" {
 				patch, ok := value.(map[string]any)
 				if !ok {
-					httpx.WriteError(w, 400, "invalid_request", "litellm_params must be an object")
+					util.WriteError(w, 400, "invalid_request", "litellm_params must be an object")
 					return true
 				}
 				params, _ := row[key].(map[string]any)
@@ -177,7 +177,7 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 			}
 		}
 		if err := Validate(row); err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return true
 		}
 		rows, err := storedRules(s)
@@ -187,28 +187,28 @@ func Manage(s Host, w http.ResponseWriter, r *http.Request) bool {
 		}
 		for _, existing := range rows {
 			if ruleIdentifies(existing, findingName(row)) && str(existing["guardrail_id"]) != id {
-				httpx.WriteError(w, 409, "conflict", "guardrail name conflicts with an existing name or id")
+				util.WriteError(w, 409, "conflict", "guardrail name conflicts with an existing name or id")
 				return true
 			}
 		}
 		if id == "" {
-			id = "guardrail_" + httpx.CallID()[:12]
+			id = "guardrail_" + util.CallID()[:12]
 		}
 		row["id"], row["guardrail_id"] = id, id
 		row["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 		row["guardrail_definition_location"] = "db"
 		raw, err := json.Marshal(row)
 		if err != nil {
-			httpx.WriteError(w, 400, "invalid_request", err.Error())
+			util.WriteError(w, 400, "invalid_request", err.Error())
 			return true
 		}
 		if err := s.RecordStore().PutKV(kind, id, string(raw)); err != nil {
 			fail(err)
 			return true
 		}
-		httpx.WriteJSON(w, 200, publicRule(normalizeRule(row)))
+		util.WriteJSON(w, 200, publicRule(normalizeRule(row)))
 	default:
-		httpx.WriteError(w, 405, "method_not_allowed", "method not allowed")
+		util.WriteError(w, 405, "method_not_allowed", "method not allowed")
 	}
 	return true
 }

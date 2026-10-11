@@ -3,7 +3,7 @@ package catalog
 import (
 	"strings"
 
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Rate is one entry in a model's rate table.
@@ -138,7 +138,7 @@ func buildRates(details map[string]feedUnit) []Rate {
 			// The feed added a price this table has never seen. The guess below
 			// still produces a rate, but it can put the wrong number on the
 			// wrong side, so the key is named in the log for someone to classify.
-			logx.Debug("market feed priced an unclassified key key=%s unit=%s", key, unit.UnitName)
+			util.Debug("market feed priced an unclassified key key=%s unit=%s", key, unit.UnitName)
 			spec = inferRateSpec(key)
 		}
 		size := unit.UnitSize

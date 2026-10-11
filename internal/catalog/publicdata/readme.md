@@ -1,29 +1,56 @@
 # Embedded public catalog resources
 
-[简体中文](readme_cn.md) · [Feature implementation reference](../../../docs/development/implementation.md)
+[简体中文](readme_cn.md)
 
-## Responsibilities and behavior
+## Overview
 
-pricedata.json supplies the embedded baseline, cn_holidays.json supplies the pricing calendar, and autorouter_presets.json is a retained resource rather than evidence that retired automatic routing is active. The parent catalog package embeds these files.
-There are no Go or HTTP entry points in this directory. Parsing, validation, overrides, and presentation are implemented by catalog and gateway/models. Changes require valid JSON, stable model identifiers, correct units, and explicit-zero handling.
-Embedded files are part of the build. Editing them does not update an existing binary; runtime feed reloads and overrides are separate mechanisms. Test calendar boundaries, rate selection, and historical snapshot isolation when changing resources.
+`internal/catalog/publicdata` contains build-time data consumed by the parent `catalog` package. It has no Go package, mutable state, or HTTP handler. The resources provide the baseline price/provider catalog, the Beijing billing calendar, a provider credential-field snapshot and its license, plus a retained autorouter preset document. `go:embed` puts their bytes into the binary; editing files cannot change a running process. Runtime market reloads and operator overrides are separate layers.
+
+## External interfaces
+
+The directory exports no Go symbols. Parent-package consumers are the interface:
+
+- `pricedata.json` is decoded at catalog initialization into `PriceDocument`; `CostAt`, `CostMap`, `Providers`, model/provider mutation, and gateway model/price endpoints consume the resulting in-memory catalog.
+- `cn_holidays.json` is parsed by `holiday.go` for `IsPeakHour`, affecting peak/off-peak billing snapshots.
+- `provider_fields.json` is parsed by `CredentialProviders`, then returned through catalog public bodies used by model-hub/provider-form endpoints.
+- `autorouter_presets.json` remains embedded for compatibility; its presence does not activate retired automatic routing.
+
+Actual HTTP consumers are registered above this package: public model catalog routes include `GET /public/v1/model_hub`, `/public/v1/model_hub/{facet}`, `/public/model_hub`, `/public/model_hub/info`, `/public/endpoints`, `/model_hub`, and `/model_hub/{facet}`. Administrative price and provider mutations live under `/price/catalog`, `/price/model`, and `/price/provider`. Parsing or shape errors surface through parent initialization/reload behavior; this directory itself cannot return errors.
+
+## Core implementation
+
+### Resource contracts
+
+`pricedata.json` is a JSON document with source metadata, generation time, provider rows, and model rows. Model IDs are stable lookup keys. Rate rows preserve measure, side, variant, window, unit size, source key, and per-base-unit USD; explicit zero is a real price and must not be treated as missing. Parent code copies the embedded baseline before applying provider contributions, feed replacement, and operator overrides.
+
+`cn_holidays.json` separates statutory holidays from weekend make-up workdays. `holiday.go` evaluates Asia/Shanghai weekdays and half-open 09:00–12:00 and 14:00–18:00 windows, then applies these exceptions. Calendar updates affect future calculations after rebuild but never rewrite stored price snapshots.
+
+`provider_fields.json` is a JSON array of provider descriptors and credential fields such as key, label, field type, required flag, defaults, and placeholders. `CredentialProviders` merges it with local provider rows, fills known default API bases, performs DeepSeek normalization, deduplicates provider/slug, deep-copies appended rows, and sorts by display name. These forms describe configuration; they do not prove that an adapter or external account is available.
+
+`provider_fields.LICENSE` records the license/provenance obligations for the credential-field snapshot and must travel with updates to that derived data. `autorouter_presets.json` is only a retained compatibility resource. All JSON must remain valid because malformed embedded resources can leave catalogs empty or cause fallback/error behavior during process startup.
+
+### Verification
+
+There are no direct tests in this resource-only directory. `internal/catalog` tests verify feed decoding, credential-provider merging and isolation, holidays/window boundaries, rate selection, explicit-zero pricing, aliases, and image/video variants. Run `go test ./internal/catalog -count=1`; rebuilding is required to validate changed embedded bytes. External provider availability and market-source freshness remain outside these fixtures.
 
 ## Source responsibilities and entry points
 
-This directory contains resources, subpackages, or tests without independent production Go implementation.
+### `pricedata.json`
 
-Resources and persistence definitions: [autorouter_presets.json](autorouter_presets.json), [cn_holidays.json](cn_holidays.json), [pricedata.json](pricedata.json).
+Generated baseline price catalog: metadata, provider dropdown rows, model properties, aliases, flat compatibility fields, and normalized rate tables. Embedded and decoded by `pricedata.go`/`model_cost.go`; billed by `cost_at.go`; exposed and mutated through gateway model handlers.
 
-## External HTTP boundary
+### `cn_holidays.json`
 
-This directory registers no direct HTTP route. Higher layers call its Go API; trace catalog dispatch or host calls through the dependency chain.
+Chinese holiday and adjusted-workday calendar consumed by `holiday.go` to classify Beijing peak windows. It is calendar data, not a scheduler.
 
-## Verification and maintenance
+### `provider_fields.json`
 
-There are no direct test files here. Integration tests prove executed paths rather than every internal failure branch.
+Credential-form snapshot consumed by `credential_providers.go`. It supplies provider display metadata and field schemas before local providers/default API bases are merged.
 
-```bash
-go test ./internal/catalog -count=1
-```
+### `provider_fields.LICENSE`
 
-Use XHUB_REGRESSION_STRICT=1 for database acceptance and inspect skips. Redis and live providers require separate configuration. Update this reference and feature documentation after contract changes.
+License notice for `provider_fields.json`. It has no runtime parser but is a required companion resource for redistribution and updates.
+
+### `autorouter_presets.json`
+
+Retained preset JSON embedded by the catalog resource bundle. No current route-selection entry point is enabled merely by this file.

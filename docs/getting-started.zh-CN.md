@@ -135,11 +135,11 @@ print(response.choices[0].message.content)
 - 配置中的 `os.environ/变量名` 可从环境读取密钥。Docker 部署修改 `configs/config.docker.yaml` 后，为网关服务传入对应环境变量并重新构建镜像。
 - 可选 `master_key` 用于初始化和应急访问，不能作为控制台登录凭证或普通应用密钥。
 
-平台、组织、团队和成员范围见[权限参考](development/permissions.md)。
+平台、组织、团队和成员范围见[权限参考](development/zh-CN/permissions.md)。
 
 ## 开发与验证
 
-从[开发与 AI 编程指南](development/README.md)定位模块，再按修改选择[测试指南](development/testing.md)中的检查。Go 基础检查与模拟上游回归：
+从[开发与 AI 编程指南](development/zh-CN/README.md)定位模块，再按修改选择[测试指南](development/zh-CN/testing.md)中的检查。Go 基础检查与模拟上游回归：
 
 ```bash
 make test
@@ -152,7 +152,7 @@ make regression
 
 ## 文档与能力边界
 
-客户操作见[客户手册](user-guide.zh-CN.md)，实现规则见[开发参考](development/README.md)，模块内的 `readme.md` / `readme_cn.md` 提供双语代码说明。文档记录当前行为，临时方案与执行记录不作为使用承诺。
+客户操作见[客户手册](user-guide.zh-CN.md)，实现规则见[开发参考](development/zh-CN/README.md)，模块内的 `readme.md` / `readme_cn.md` 提供双语代码说明。文档记录当前行为，临时方案与执行记录不作为使用承诺。
 
 
 供应商均由管理员显式创建：选择提供商后填写对应凭据字段。系统不会自动安装中转供应商。价格刷新需设置 XHUB_PRICE_FEED_URL，未配置时继续使用当前嵌入价格及人工覆盖。

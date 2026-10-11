@@ -16,7 +16,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Host is what the usage handlers ask the process for. *gateway.Server implements
@@ -37,7 +37,7 @@ type Host interface {
 	// Identity is the usage and key store. A handler reads from it only with a scope it obtained from one of the two methods below.
 	// 参数：无。
 	// 返回 *iam.DB（*iam.DB）：用量和密钥所在的库。处理函数只能带着已经算好的 scope 来读。没有 PostgreSQL 时为 nil。
-	// 调用：dataplane/host.go、dataplane/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
+	// 调用：dataplane/contract/host.go、dataplane/runtime/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	Identity() *iam.DB
 	// UsageScope narrows a usage listing to what the caller may see, optionally limited to one team. It is fail-closed: a caller who may see nothing receives a scope that matches no row.
@@ -91,5 +91,5 @@ type Host interface {
 // 调用：usage 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

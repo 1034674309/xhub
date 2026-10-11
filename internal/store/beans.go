@@ -8,8 +8,9 @@
 package store
 
 import (
-	"github.com/sunqirui1987/xhub/internal/logx"
 	"sync"
+
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceBeans sync.Once
@@ -27,7 +28,7 @@ type kvRow struct {
 // 调用：xorm 在映射这张表时。
 // 测试：无直接单测
 func (kvRow) TableName() string {
-	logTraceOnceBeans.Do(func() { logx.Trace("enter store.TableName") })
+	logTraceOnceBeans.Do(func() { util.Trace("enter store.TableName") })
 	return "kv"
 }
 

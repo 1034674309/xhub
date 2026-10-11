@@ -9,13 +9,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/llm"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 var logTraceOnceRouter sync.Once
@@ -26,7 +25,7 @@ var logTraceOnceRouter sync.Once
 // 参数 list（[]config.ModelEntry）：候选部署列表，后面按策略挑一条；alias（string）：对外模型名。
 // 返回：这个对外名下的全部部署，此时还没有按策略排序。
 func All(list []config.ModelEntry, alias string) []config.ModelEntry {
-	logTraceOnceRouter.Do(func() { logx.Trace("enter router.All") })
+	logTraceOnceRouter.Do(func() { util.Trace("enter router.All") })
 
 	return matchDeployments(list, alias)
 }
@@ -353,7 +352,7 @@ func matchDeployments(list []config.ModelEntry, alias string) []config.ModelEntr
 		if e.Disabled() {
 			continue
 		}
-		if !llm.IsWildcardModel(e.ModelName) {
+		if !strings.Contains(e.ModelName, "*") {
 			continue
 		}
 		if _, ok := byPattern[e.ModelName]; !ok {

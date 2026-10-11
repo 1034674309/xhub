@@ -1,7 +1,9 @@
 // Package prefs 保留控制台设置接口；路由解析与执行统一位于 internal/router。
 package prefs
 
-import "github.com/sunqirui1987/xhub/internal/router"
+import (
+	"github.com/sunqirui1987/xhub/internal/router"
+)
 
 type RouteSettings = router.RouteSettings
 type ScopeRef = router.ScopeRef

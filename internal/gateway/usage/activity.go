@@ -10,9 +10,8 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/httpx"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const activityPageSize = 50
@@ -25,7 +24,7 @@ var logTraceOnceActivity sync.Once
 // 调用：gateway/usage/mount.go
 // 测试：无直接单测
 func UserDailyActivity(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceActivity.Do(func() { logx.Trace("enter usage.UserDailyActivity") })
+	logTraceOnceActivity.Do(func() { util.Trace("enter usage.UserDailyActivity") })
 	writeDailyActivity(s, w, r, entityUser, false)
 }
 
@@ -53,7 +52,7 @@ func GatewayDailyActivity(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteIAMError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, 200, gatewayActivityBody(rows))
+	util.WriteJSON(w, 200, gatewayActivityBody(rows))
 }
 
 // openActivity accepts any signed-in caller and returns the usage scope that narrows every row the handler will read. A key reaches only its own usage; a session reaches its own rows plus the teams it belongs to; a platform administrator reaches everything. The scope is required rather than optional, so a handler cannot fall through to an unfiltered read.
@@ -665,24 +664,6 @@ func activityDay(ts time.Time, tzMinutes int) string {
 		return time.Now().UTC().Add(time.Duration(tzMinutes) * time.Minute).Format("2006-01-02")
 	}
 	return ts.UTC().Add(time.Duration(tzMinutes) * time.Minute).Format("2006-01-02")
-}
-
-// 判断这一天是否落在查询的起止日期里。
-// 参数 day（string）：日期边界，格式由调用方约定，空串表示这一端不限制；start（string）：日期边界，格式由调用方约定，空串表示这一端不限制；end（string）：日期边界，格式由调用方约定，空串表示这一端不限制。
-// 返回 bool（bool）：这一天落在起止日期里时为真。空日期为假。
-// 调用：仅在 activity.go 内使用
-// 测试：无直接单测
-func dayInRange(day, start, end string) bool {
-	if day == "" {
-		return false
-	}
-	if start != "" && day < start {
-		return false
-	}
-	if end != "" && day > end {
-		return false
-	}
-	return true
 }
 
 // 从价目表或模型名得到供应商名称。

@@ -1,9 +1,10 @@
 package prefs
 
 import (
+	"testing"
+
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/router"
-	"testing"
 )
 
 // TestRoutingGroupPrecedence 验证模板例外、组、模板默认优先级，缺省组权重不继承成员权重；内存测试无清理。

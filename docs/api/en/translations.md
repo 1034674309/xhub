@@ -1,11 +1,5 @@
 # Audio translation
 
-## Overview
-
-Audio translation
-
-### Audio translation
-
 ## Behavior
 File formats and translation target depend on upstream.
 

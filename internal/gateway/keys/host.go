@@ -7,7 +7,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/logx"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // Host is what create, list, and update ask the process for. It offers identity
@@ -46,7 +46,7 @@ type Host interface {
 	// Identity is the store. A handler reads its rows from here, but only after Authorize has permitted the action that reads them.
 	// 参数：无。
 	// 返回 *iam.DB（*iam.DB）：密钥处理函数读取密钥行的库，而且必须先通过 Authorize。没有数据库时为 nil。
-	// 调用：dataplane/host.go、dataplane/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
+	// 调用：dataplane/contract/host.go、dataplane/runtime/live.go、gateway/identity/gate.go、gateway/identity/handlers.go
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	Identity() *iam.DB
 	// WriteAuthz turns a refused authorization into the response and reports whether one was written.
@@ -69,5 +69,5 @@ type Host interface {
 // 调用：keys 的 mount。
 // 测试：无直接单测
 func traceModule(name string) {
-	logx.Trace("mount %s", name)
+	util.Trace("mount %s", name)
 }

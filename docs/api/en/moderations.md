@@ -1,11 +1,5 @@
 # Moderation
 
-## Overview
-
-Moderation
-
-### Moderation
-
 ## Behavior
 Provider moderation is separate from XHub guardrails. Categories are model-specific.
 

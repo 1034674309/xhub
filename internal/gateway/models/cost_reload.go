@@ -5,12 +5,11 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 const (
@@ -36,7 +35,7 @@ var logTraceOnceCostReload sync.Once
 // 调用：gateway/models/mount.go
 // 测试：无直接单测
 func ReloadCostMap(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceCostReload.Do(func() { logx.Trace("enter models.ReloadCostMap") })
+	logTraceOnceCostReload.Do(func() { util.Trace("enter models.ReloadCostMap") })
 
 	if s.RequireManage(w, r) == nil {
 		return
@@ -45,8 +44,8 @@ func ReloadCostMap(s Host, w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	n, err := refreshLocalCatalog(ctx, s)
 	if err != nil {
-		logx.Error("price catalog reload failed: %v", err)
-		httpx.WriteError(w, 502, "upstream_error", err.Error())
+		util.Error("price catalog reload failed: %v", err)
+		util.WriteError(w, 502, "upstream_error", err.Error())
 		return
 	}
 	plan := loadCostReload(s)
@@ -57,10 +56,10 @@ func ReloadCostMap(s Host, w http.ResponseWriter, r *http.Request) {
 		plan.NextRun = &next
 	}
 	if err := saveCostReload(s, plan); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":       "success",
 		"models_count": n,
 		"source":       catalog.PriceSource(),
@@ -78,7 +77,7 @@ func ScheduleCostMapReload(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	hours, err := strconv.Atoi(r.URL.Query().Get("hours"))
 	if err != nil || hours < 1 || hours > 168 {
-		httpx.WriteError(w, 400, "invalid_request", "hours must be a whole number between 1 and 168")
+		util.WriteError(w, 400, "invalid_request", "hours must be a whole number between 1 and 168")
 		return
 	}
 	plan := loadCostReload(s)
@@ -87,11 +86,11 @@ func ScheduleCostMapReload(s Host, w http.ResponseWriter, r *http.Request) {
 	next := time.Now().UTC().Add(time.Duration(hours) * time.Hour).Format(time.RFC3339)
 	plan.NextRun = &next
 	if err := saveCostReload(s, plan); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
 	StartScheduledReload(s)
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"status":         "success",
 		"interval_hours": hours,
 		"next_run":       next,
@@ -112,10 +111,10 @@ func CancelCostMapReload(s Host, w http.ResponseWriter, r *http.Request) {
 	plan.IntervalHours = nil
 	plan.NextRun = nil
 	if err := saveCostReload(s, plan); err != nil {
-		httpx.WriteError(w, 500, "internal", err.Error())
+		util.WriteError(w, 500, "internal", err.Error())
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"status": "success"})
+	util.WriteJSON(w, 200, map[string]any{"status": "success"})
 }
 
 // CostMapReloadStatus reports whether the timer is on, its interval, and the last and next run times.
@@ -127,7 +126,7 @@ func CostMapReloadStatus(s Host, w http.ResponseWriter, r *http.Request) {
 	if s.RequireManage(w, r) == nil {
 		return
 	}
-	httpx.WriteJSON(w, 200, loadCostReload(s).public())
+	util.WriteJSON(w, 200, loadCostReload(s).public())
 }
 
 // loadCostReload reads the saved timer. A missing record is treated as off.

@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/sunqirui1987/xhub/internal/config"
 	"math"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // deployment 为纯内存测试构造稳定 ID 部署；参数第三项不参与调度，返回独立配置，无外部清理。

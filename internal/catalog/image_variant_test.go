@@ -1,6 +1,8 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestImageVariantSelectsMeasuredPrice(t *testing.T) {
 	rates := []Rate{

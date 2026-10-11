@@ -3,17 +3,15 @@ package models
 
 import (
 	"fmt"
-	"github.com/sunqirui1987/xhub/internal/pagination"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/httpx"
-	"github.com/sunqirui1987/xhub/internal/logx"
-	"sync"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // LiteLLM litellm.constants.DEFAULT_MODEL_CREATED_AT_TIME
@@ -31,14 +29,14 @@ var logTraceOnceList sync.Once
 // 调用：gateway/keys/generate.go、gateway/keys/mount.go、gateway/models/mount.go、gateway/prefs/mount.go
 // 测试：无直接单测
 func List(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOnceList.Do(func() { logx.Trace("enter models.List") })
+	logTraceOnceList.Do(func() { util.Trace("enter models.List") })
 
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	// 根路径是公开发现入口，只公布已启用的公开模型名；有显式凭据时仍按权限过滤，错误凭据不能降级为匿名。
 	if r.URL.Path == "/models" && r.Header.Get("Authorization") == "" && r.Header.Get("x-api-key") == "" && r.Header.Get("x-goog-api-key") == "" && r.Header.Get("api-key") == "" && r.Header.Get("x-litellm-api-key") == "" {
 		scope := r.URL.Query().Get("scope")
 		if scope != "" && scope != "expand" {
-			httpx.WriteError(w, 400, "invalid_request", "Invalid scope parameter. Only 'expand' is currently supported.")
+			util.WriteError(w, 400, "invalid_request", "Invalid scope parameter. Only 'expand' is currently supported.")
 			return
 		}
 		s.LockModels()
@@ -54,15 +52,15 @@ func List(s Host, w http.ResponseWriter, r *http.Request) {
 	p, err := s.Resolve(r)
 	if err != nil || (!s.AllowLLM(p) && !p.PlatformAdmin()) {
 		if err != nil {
-			httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
+			util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
 			return
 		}
-		httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Not allowed to access LLM endpoints")
+		util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Not allowed to access LLM endpoints")
 		return
 	}
 	scope := r.URL.Query().Get("scope")
 	if scope != "" && scope != "expand" {
-		httpx.WriteError(w, 400, "invalid_request", fmt.Sprintf("Invalid scope parameter. Only 'expand' is currently supported. Received: %s", scope))
+		util.WriteError(w, 400, "invalid_request", fmt.Sprintf("Invalid scope parameter. Only 'expand' is currently supported. Received: %s", scope))
 		return
 	}
 	names := availableNames(s, r, p)
@@ -76,7 +74,7 @@ func writeModelList(w http.ResponseWriter, names []string) {
 	for _, name := range names {
 		data = append(data, map[string]any{"id": name, "object": "model", "created": defaultModelCreatedAt, "owned_by": "openai"})
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"object": "list", "data": data})
+	util.WriteJSON(w, 200, map[string]any{"object": "list", "data": data})
 }
 
 // availableNames computes visible model names from the caller's permitted set. A platform administrator with scope=expand sees every enabled deployment. only_model_access_groups returns an empty list because model-owned access groups no longer exist.
@@ -374,19 +372,19 @@ func dedupeModels(in []string) []string {
 //
 // 参数 s（Host）：信息使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
-// 调用：dataplane/log.go、dataplane/serve.go、gateway/engine.go、gateway/keys/generate.go
+// 调用：dataplane/diagnostics/log.go、dataplane/execution/serve.go、gateway/engine.go、gateway/keys/generate.go
 // 测试：files_test.go
 func Info(s Host, w http.ResponseWriter, r *http.Request) {
-	httpx.SetCallID(w, httpx.CallID())
+	util.SetCallID(w, util.CallID())
 	p, err := s.Resolve(r)
 	if err != nil {
-		httpx.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
+		util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
 		return
 	}
 	// The page is management UI: an inference key has no business enumerating
 	// deployments, and its own list route answers a different shape.
 	if !p.PlatformAdmin() {
-		httpx.WriteError(w, 403, "forbidden", "this credential cannot list deployments")
+		util.WriteError(w, 403, "forbidden", "this credential cannot list deployments")
 		return
 	}
 
@@ -430,12 +428,12 @@ func Info(s Host, w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(rows)
 	// 超大页码返回空页，避免整数溢出造成切片崩溃。
-	start, end := pagination.Bounds(total, page, size)
+	start, end := util.Bounds(total, page, size)
 	pages := 1
 	if total > 0 {
 		pages = (total + size - 1) / size
 	}
-	httpx.WriteJSON(w, 200, map[string]any{
+	util.WriteJSON(w, 200, map[string]any{
 		"data":         rows[start:end],
 		"total_count":  total,
 		"current_page": page,

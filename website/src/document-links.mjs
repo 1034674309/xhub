@@ -6,11 +6,11 @@ import { headingSlug } from "./core.mjs";
 
 const excluded = /\/(?:testdata|assets|model-marketplace-proof)\/|\/(?:AGENTS|CLAUDE)\.md$|project-review|verification|validation-report/;
 
-/** 返回网站发布范围与仓库首页的受版本管理 Markdown；参数为仓库根目录，不写文件。 */
+/** 返回公开范围内已跟踪与未忽略的新 Markdown；参数为仓库根目录，过滤已删除文件并去重，不写文件，供构建及链接审计共用。 */
 export function publicMarkdownSources(root) {
-  return execFileSync("git", ["ls-files", "-z", "README.md", "README.zh-CN.md", "docs", "internal", "cmd/regression"], { cwd: root, encoding: "utf8" })
+  return [...new Set(execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "README.md", "README.zh-CN.md", "docs", "internal", "cmd/regression"], { cwd: root, encoding: "utf8" })
     .split("\0")
-    .filter((source) => /\.md$/i.test(source) && !excluded.test(source))
+    .filter((source) => /\.md$/i.test(source) && !excluded.test(source) && existsSync(path.join(root, source))))]
     .sort();
 }
 
