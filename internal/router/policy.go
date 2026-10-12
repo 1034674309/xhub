@@ -11,18 +11,23 @@ import (
 
 // Allocation 表示一个稳定部署 ID 的目标权重，仅用于 traffic-split。
 type Allocation struct {
-	DeploymentID string  `json:"deployment_id"`
-	Weight       float64 `json:"weight"`
+	// 部署目录的稳定 ID，地址或定价变化不改变它；每轮从当前目录恢复执行配置，删除后失效。
+	DeploymentID string `json:"deployment_id"`
+	// traffic-split 相对权重，必须有限非负；0 排除部署，未列出默认 1。粘性时影响新会话分配。
+	Weight float64 `json:"weight"`
 }
 
 // Policy 是客户覆盖及内部执行使用的分配文档。
 type Policy struct {
-	Strategy    string       `json:"strategy"`
+	// 已校验策略名；只有 traffic-split 消费 Allocations，其他策略按其指标排序。
+	Strategy string `json:"strategy"`
+	// 稳定部署 ID 到相对权重的分配列表；空列表等权 1，显式 0 排除，未列出的部署为 1。
 	Allocations []Allocation `json:"allocations,omitempty"`
 }
 
 // DefaultWeights 是模型管理唯一的默认分配配置，仅含相对权重。
 type DefaultWeights struct {
+	// 稳定部署 ID 到相对权重的分配列表；空列表等权 1，显式 0 排除，未列出的部署为 1。
 	Allocations []Allocation `json:"allocations"`
 }
 

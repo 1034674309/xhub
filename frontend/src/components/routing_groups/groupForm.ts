@@ -1,33 +1,55 @@
+import { t } from "@/i18n";
 import type { Allocation } from "@/components/route_templates/allocationPolicy";
+/** 完整路由模板内的一条路由组定义；组别名展开成员，成员直接请求仍只使用自身部署。 */
 export type GroupConfig = {
+  /** 可作为请求 model 的唯一组别名；不能与公开模型重名，也不是供应商名称。 */
   group_name: string;
+  /** 精确公开模型成员名，每个模型在同一模板中最多属于一组，不包含部署 ID。 */
   models: string[];
+  /** 无合法会话偏好时的候选排序策略；精确模型规则优先于此组策略。 */
   routing_strategy: string;
-  routing_strategy_args?: { allocations: Allocation[] };
+  /** 仅 traffic-split 使用的组内部署权重，不叠加成员模型默认；未列出的部署权重为 1。 */
+  routing_strategy_args?: {
+    /** 使用稳定部署 ID 标识，权重 0 排除该部署。空数组表示等权。 */
+    allocations: Allocation[];
+  };
 };
+/** 编辑组时使用的公开模型目录投影，不含认证密钥或可修改的后台对象。 */
 export type CatalogModel = {
+  /** 模型管理中的公开模型名，用于校验组成员，不是上游型号。 */
   model_name: string;
-  deployments: { id: string; litellm_params?: { model?: string } }[];
+  /** 该公开模型的全部部署，供权重引用校验和上游型号展示。 */
+  deployments: {
+    /** 稳定部署 ID，与 Allocation.deployment_id 一致。 */
+    id: string;
+    /** 仅包含展示用上游型号的参数投影，不携带凭据。 */
+    litellm_params?: {
+      /** 发送给供应商的上游型号，缺失时由页面显示公开模型名。 */
+      model?: string;
+    };
+  }[];
+  /** 模型默认的各类别回退链，供表单说明；模板对应源和类别可覆盖它。 */
   fallback_policy?: Record<string, string[]>;
 };
 export const groupStrategies: Record<string, string> = {
-  "simple-shuffle": "简单随机",
-  random: "简单随机（兼容值）",
-  "least-busy": "最少并发",
-  "cost-based-routing": "最低成本",
-  "latency-based-routing": "最低延迟",
-  "usage-based-routing": "最低用量",
-  "traffic-split": "按权重分流",
+  "simple-shuffle": "pages.routeTemplates.editor.shuffle",
+  random: "pages.routeTemplates.editor.shuffle",
+  "least-busy": "pages.routeTemplates.editor.leastBusy",
+  "cost-based-routing": "pages.routeTemplates.editor.cost",
+  "latency-based-routing": "pages.routeTemplates.editor.latency",
+  "usage-based-routing": "pages.routeTemplates.editor.usage",
+  "traffic-split": "pages.routeTemplates.editor.weighted",
 };
 export const groupHints: Record<string, string> = {
-  "simple-shuffle": "兼容部署均匀随机选择；部署越多的成员获得的总流量越多。",
-  "least-busy": "优先选择当前正在处理请求最少的部署。",
-  "cost-based-routing": "比较实际费率的输入 token 单价；缺少价格的部署排在最后。",
-  "latency-based-routing": "优先选择观测延迟最低的部署；跨实例统计依赖 Redis。",
-  "usage-based-routing": "优先选择统计 token 用量最低的部署；跨实例统计依赖 Redis。",
-  "traffic-split": "按部署相对权重随机分配；零权重不参与，未设置的部署默认权重为 1。",
+  random: "pages.routeTemplates.editor.shuffleHint",
+  "simple-shuffle": "pages.routeTemplates.editor.shuffleHint",
+  "least-busy": "pages.routeTemplates.editor.busyHint",
+  "cost-based-routing": "pages.routeTemplates.editor.costHint",
+  "latency-based-routing": "pages.routeTemplates.editor.latencyHint",
+  "usage-based-routing": "pages.routeTemplates.editor.usageHint",
+  "traffic-split": "pages.routeTemplates.editor.trafficHint",
 };
-/** 校验弹窗草稿的名称、成员占用与真实部署权重；返回中文错误或空串，不修改输入。
+/** 校验弹窗草稿的名称、成员占用与真实部署权重；返回当前语言错误或空串，不修改输入。
  * 保存前调用，后台再次验证；编辑时允许保留当前名称和原有成员。 */
 export function groupFormError(
   draft: GroupConfig,
@@ -42,23 +64,23 @@ export function groupFormError(
     [...draft.group_name].length > 64 ||
     draft.group_name === "default"
   )
-    return "组名须为 1–64 个字符，不能含空白、星号或使用 default。";
+    return t("pages.routeTemplates.editor.validGroupName");
   if (
     catalog.some((row) => row.model_name === draft.group_name) ||
     (!editing && groups.some((g) => g.group_name === draft.group_name))
   )
-    return "组名已存在或与公开模型重名。";
+    return t("pages.routeTemplates.editor.groupNameConflict");
   if (!draft.models.length || new Set(draft.models).size !== draft.models.length)
-    return "请选择至少一个不重复的成员模型。";
+    return t("pages.routeTemplates.editor.uniqueMembers");
   for (const name of draft.models) {
     if (!catalog.some((row) => row.model_name === name) || name.includes("*"))
-      return "成员必须是目录中的确切公开模型。";
+      return t("pages.routeTemplates.editor.exactMembers");
     if (groups.some((g) => g.group_name !== (editing ? draft.group_name : "") && g.models.includes(name)))
-      return "成员模型已被其他路由组使用。";
+      return t("pages.routeTemplates.editor.memberUsed");
   }
-  if (!Object.hasOwn(groupStrategies, draft.routing_strategy)) return "请选择有效的路由策略。";
+  if (!Object.hasOwn(groupStrategies, draft.routing_strategy)) return t("pages.routeTemplates.editor.validStrategy");
   const args = draft.routing_strategy_args;
-  if (args && draft.routing_strategy !== "traffic-split") return "只有按权重分流可以设置部署权重。";
+  if (args && draft.routing_strategy !== "traffic-split") return t("pages.routeTemplates.editor.onlyWeighted");
   if (args) {
     const validIDs = new Set(
       catalog.filter((r) => draft.models.includes(r.model_name)).flatMap((r) => r.deployments.map((d) => d.id)),
@@ -68,9 +90,9 @@ export function groupFormError(
       new Set(rows.map((r) => r.deployment_id)).size !== rows.length ||
       rows.some((r) => !validIDs.has(r.deployment_id) || !Number.isFinite(r.weight) || r.weight < 0)
     )
-      return "权重必须非负、有限，且引用组内唯一部署。";
+      return t("pages.routeTemplates.editor.validGroupWeights");
     if (rows.length && (!rows.some((r) => r.weight > 0) || !Number.isFinite(rows.reduce((n, r) => n + r.weight, 0))))
-      return "至少一个部署的权重必须大于 0，权重总和必须有限。";
+      return t("pages.routeTemplates.editor.positiveFinite");
   }
   return "";
 }

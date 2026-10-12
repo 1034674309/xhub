@@ -14,31 +14,48 @@ import (
 var logTraceOnceRouteSettings sync.Once
 
 // RouteSettings 表示一次请求使用的模板、路由组和模型管理默认分配。
-// 策略优先级为模板模型规则、模板路由组、历史模板默认、ModelDefaults；模板回退按主模型和类别覆盖全局默认。
+// 策略优先级为模板模型规则、模板路由组、ModelDefaults；模板回退按主模型和类别覆盖全局默认。
 type RouteSettings struct {
-	Settings       map[string]any
-	ModelDefaults  map[string]any
+	// 完整模板文档；按 key→team→organization 选第一份，不逐字段拼接，不包含实时运行状态。
+	Settings map[string]any
+	// 模型管理的默认部署权重映射，traffic-split 且无显式分配时读取，组使用自己的分配。
+	ModelDefaults map[string]any
+	// 编译后的三类别回退图，结合模型默认与模板覆盖，每轮偏好必须验证该图。
 	ModelFallbacks map[string]FallbackPolicy
-	RoutingGroups  []Group
-	Policy         Policy
-	Err            error
-	TemplateID     string
-	TemplateName   string
-	// Source 为 key、team、organization、selected、draft 或 builtin。
+	// 当前模板的显式组及成员目录，组名请求展开成员，成员请求只匹配自身部署。
+	RoutingGroups []Group
+	// ForModel 得到的本模型/组策略和权重，Schedule 使用；不改变模型目录。
+	Policy Policy
+	// 模板或模型策略的解析、目录校验错误；非 nil 时执行器在发出上游前拒绝，不使用部分设置。
+	Err error
+	// 生效模板的数据库 ID，无绑定使用 builtin 时为空。
+	TemplateID string
+	// 生效模板显示名，供控制台解释选路来源，不参与调度。
+	TemplateName string
+	// 模板选择来源：key/team/organization、selected/draft（预览）或 builtin（无绑定）。
 	Source string
-	// RuleSource 为 template-model、template-default、routing-group 或 model-default，供日志和预览解释命中来源。
+	// 策略命中来源：template-model/routing-group/model-default，解释策略优先级。
 	RuleSource string
 }
 
 // ScopeRef 表示模板继承链中的一个身份范围。
-type ScopeRef struct{ Kind, ID string }
+type ScopeRef struct {
+	// 鉴权主体类型，仅 key、team、organization；RequestChain 按此顺序查第一份绑定模板。
+	Kind string
+	// 对应主体的数据库 ID，空值不加入继承链；由服务端鉴权生成，不是客户端会话 ID。
+	ID string
+}
 
 // BuiltinSource 表示当前身份没有绑定模板，直接使用模型管理默认分配。
 const BuiltinSource = "builtin"
 
 // ScopeLookup 提供范围绑定与模板读取，供请求和控制台共用同一解析顺序。
 type ScopeLookup interface {
+	// TemplateFor 查询鉴权主体 kind/id 的绑定模板 ID；无绑定返回空，不接受客户端指定的身份范围。
+	// 请求解析与控制台预览调用；实现只读取绑定，不修改主体或模板。
 	TemplateFor(kind, id string) string
+	// Load 按模板 ID 读取完整文档；不存在返回 nil，由 Resolve 采用内置设置，不拼接部分模板。
+	// 请求解析与预览调用；返回值由调用方读取，接口自身不写入持久化数据。
 	Load(id string) *iam.RouteTemplate
 }
 
@@ -98,10 +115,14 @@ func (r RouteSettings) Strategy() string {
 }
 
 // ForModel 解析公开模型或组名的策略；参数为请求 model，返回独立设置或包含解析错误的设置。
-// 请求及预览共用：模板模型规则优先于路由组和模型权重；旧文档的模板默认策略仅兼容读取。组内 traffic-split
+// 请求及预览共用：模板模型规则优先于路由组和模型权重；组内 traffic-split
 // 使用组权重，未设置部署默认为 1；模板显式权重优先于实时模型默认，不修改原始文档。
 func (r RouteSettings) ForModel(modelName string) RouteSettings {
 	if r.Err != nil {
+		return r
+	}
+	if _, exists := r.Settings["routing_strategy"]; exists {
+		r.Err = fmt.Errorf("unsupported route template field %q", "routing_strategy")
 		return r
 	}
 	rules, err := modelRouteRules(r.Settings)
@@ -111,15 +132,7 @@ func (r RouteSettings) ForModel(modelName string) RouteSettings {
 	}
 	strategy := "traffic-split"
 	r.RuleSource = "model-default"
-	if raw, exists := r.Settings["routing_strategy"]; exists {
-		value, ok := raw.(string)
-		if !ok || ValidateStrategy(value) != nil {
-			r.Err = fmt.Errorf("invalid routing_strategy")
-			return r
-		}
-		strategy = value
-		r.RuleSource = "template-default"
-	}
+
 	for _, group := range r.RoutingGroups {
 		matched := group.Name == modelName
 		for _, member := range group.Models {
@@ -191,21 +204,16 @@ func (r RouteSettings) Schedule(list []config.ModelEntry, name string, state Sta
 }
 
 // ValidateRouteTemplateDocument 校验保存或预览的模板文档，返回首个字段错误，无写入副作用。
-// routing_strategy 为可选模板默认；未提供时保留旧模板的模型默认继承语义。
+// 策略仅配置在模型规则或模板内路由组；模板顶层不接受默认策略。
 // 模型规则可保存独立部署权重；不支持执行的字段必须拒绝，防止保存成功却无效。
 func ValidateRouteTemplateDocument(settings map[string]any) error {
-	allowed := map[string]bool{"model_routes": true, "retry_policy": true, "routing_strategy": true, "routing_groups": true, "fallbacks": true, "context_window_fallbacks": true, "content_policy_fallbacks": true}
+	allowed := map[string]bool{"model_routes": true, "retry_policy": true, "routing_groups": true, "fallbacks": true, "context_window_fallbacks": true, "content_policy_fallbacks": true}
 	for key := range settings {
 		if !allowed[key] {
 			return fmt.Errorf("unsupported route template field %q", key)
 		}
 	}
-	if raw, exists := settings["routing_strategy"]; exists {
-		strategy, ok := raw.(string)
-		if !ok || ValidateStrategy(strategy) != nil {
-			return fmt.Errorf("invalid routing_strategy")
-		}
-	}
+
 	if _, err := modelRouteRules(settings); err != nil {
 		return err
 	}

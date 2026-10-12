@@ -9,7 +9,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
-// SaveModelDirectory 原子保存部署变更并清理模型默认、全局路由组及客户模板里的失效分配。
+// SaveModelDirectory 原子保存部署变更并清理模型默认及客户模板里的失效分配。
 // 参数 entry 非空表示创建/更新，deletedID 非空表示删除，directory 是变更后的完整目录（含配置文件部署）。
 // 由当前部署管理接口调用；失败整笔回滚，成功后清缓存，不修改内存目录，也不在启动时执行数据修复。
 func (s *Store) SaveModelDirectory(entry *ProxyModel, deletedID string, directory []config.ModelEntry) error {
@@ -81,30 +81,6 @@ func (s *Store) SaveModelDirectory(entry *ProxyModel, deletedID string, director
 				if _, err = tx.ID(coreIDs(row.Namespace, row.Key)).Cols("value_json").Update(&row); err != nil {
 					return err
 				}
-			}
-		}
-	}
-	var groups []configRow
-	if err := tx.Where("namespace = ?", "routing_groups").Find(&groups); err != nil {
-		return err
-	}
-	for _, row := range groups {
-		var group map[string]any
-		if err := json.Unmarshal([]byte(row.ValueJSON), &group); err != nil {
-			return err
-		}
-		doc, err := router.CleanTemplateWeights(map[string]any{"routing_groups": []any{group}}, directory)
-		if err != nil {
-			return err
-		}
-		raw, err := json.Marshal(doc["routing_groups"].([]any)[0])
-		if err != nil {
-			return err
-		}
-		if string(raw) != row.ValueJSON {
-			row.ValueJSON = string(raw)
-			if _, err = tx.ID(coreIDs(row.Namespace, row.Key)).Cols("value_json").Update(&row); err != nil {
-				return err
 			}
 		}
 	}

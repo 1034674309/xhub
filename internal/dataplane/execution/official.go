@@ -108,6 +108,15 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", field+" required")
 		return
 	}
+	plan := h.PlanRoute(r, alias, body, principal)
+	w.Header().Set("X-Session-Id", plan.SessionID)
+	if plan.SessionID != "" {
+		h.AnnotateCall(callID, dpcontract.CallNote{SessionID: plan.SessionID, SessionSource: plan.SessionSource})
+	}
+	if plan.Err != nil {
+		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", plan.Err.Error())
+		return
+	}
 	if !h.EnforceIdentityLimits(w, r.URL.Path, principal, alias, dpusage.EstimateTokens(body)) {
 		return
 	}
@@ -128,22 +137,10 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 	}
 	list := eligible(h, hit)
 	list, _ = dprouting.DropDisabled(list)
-	plan := h.PlanRoute(r, alias, body, principal)
-	if plan.Err != nil {
-		util.WriteTypedError(w, r.URL.Path, 409, "invalid_request", plan.Err.Error())
-		return
-	}
 	state := h.RouteState()
 	state.Allocations = settings.Policy.Shares()
-	pool := settings.Schedule(list, alias, state, plan.Pinned)
-	if plan.Required {
-		if state.Cooldown[plan.Pinned] || len(pool) == 0 || router.CooldownID(pool[0]) != plan.Pinned {
-			util.WriteTypedError(w, r.URL.Path, 409, "unavailable", "response deployment unavailable")
-			return
-		}
-		// 已存响应只属于原部署，重试不能换到其他供应商。
-		pool = pool[:1]
-	}
+	runtimePin := dprouting.RuntimePin(list, plan.Pinned)
+	pool := settings.Schedule(list, alias, state, runtimePin)
 	disableFallbacks, _ := body["disable_fallbacks"].(bool)
 	// 原生异步任务的创建结果可能不明确，保持禁止重放；对话创建可以按模型回退。
 	background, _ := body["background"].(bool)
@@ -151,6 +148,11 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 	fallbacks := dprouting.NewFallbackQueue(baseSettings, alias, plan.Required || disableFallbacks || !dialogueFallback)
 	if len(pool) == 0 {
 		pool, settings = fallbacks.Next("general", list, state)
+	}
+	pool, settings = fallbacks.SelectAffinity(&plan, pool, alias, list, state, settings)
+	if plan.Required && len(pool) == 0 {
+		util.WriteTypedError(w, r.URL.Path, 409, "unavailable", "response deployment unavailable")
+		return
 	}
 	if settings.Err != nil {
 		util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "fallback route unavailable")
@@ -172,13 +174,14 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		for _, rawDep := range pool {
 			// 组内尝试仍保留成员身份，错误分类及后续回退使用最后尝试成员。
 			fallbacks.UseDeployment(rawDep.ModelName)
+			plan.Target = fallbacks.Target(rawDep)
 			// 回退目标可能是另一个组；组别名与真实成员都必须通过权限和预算检查。
 			if fallbacks.PoolAlias != alias && fallbacks.PoolAlias != rawDep.ModelName && !h.EnforceIdentityLimits(w, r.URL.Path, principal, fallbacks.PoolAlias, dpusage.EstimateTokens(body)) {
 				return
 			}
-			// 必须在确定成员身份后判断重放：组名没有模型级回退，成员可以配置回退链。
-			// 专用错误已进入链时仍继续剩余目标；异步任务和固定响应部署始终禁止重放。
-			replayDialogue := dialogueFallback && !fallbacks.Disabled && (fallbacks.Current != alias || dprouting.HasFallbackTargets(baseSettings.ModelFallbacks[fallbacks.Current]))
+			// 同步对话先用完整 max_attempts 重试同一供应商，不能因未配置跨模型回退而放弃重试。
+			// disable_fallbacks 只控制跨模型队列；异步创建和固定响应归属不扩大重放范围。
+			replayDialogue := dialogueFallback && !plan.Required
 			if rawDep.ModelName != alias && !h.EnforceIdentityLimits(w, r.URL.Path, principal, rawDep.ModelName, dpusage.EstimateTokens(body)) {
 				return
 			}
@@ -227,7 +230,7 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 				if err != nil {
 					if response.Streamed {
 						h.RememberExchange(callID, r, raw, []byte(dpdiagnostics.SafeErr(err)))
-						note := dataplaneNote(hit, dep, "", time.Since(start))
+						note := dataplaneNote(hit, dep, plan.SessionID, time.Since(start))
 						applyStreamTiming(&note, response, start)
 						note.Upstream = response.Diagnostics
 						h.AnnotateCall(callID, note)
@@ -317,7 +320,7 @@ forwarded:
 		if response.Streamed {
 			responseID = response.ResponseID
 		}
-		h.CommitRoute(plan, selectedID, responseID)
+		h.CommitRoute(plan, router.DeploymentID(dep), responseID)
 	}
 	h.RememberExchange(callID, r, raw, respBody)
 	note := dataplaneNote(hit, dep, plan.SessionID, time.Since(start))

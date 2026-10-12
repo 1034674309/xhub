@@ -272,59 +272,91 @@ func (c *Client) HotSpend(id string) float64 {
 	return v
 }
 
-// SpendLog is one spend log waiting in the queue to be written to PostgreSQL.
+// SpendLog 是网关发送到 Redis 队列的单次用量载荷，消费者转换为 iam.UsageRecord 写 PostgreSQL。
+// RequestID 用于去重结算，SessionID 用于授权范围内归组，字段记录调用时事实而非刷库时配置。
 type SpendLog struct {
-	// 路径随账单队列传递，不含查询参数。
-	InboundEndpoint  string `json:"inbound_endpoint"`
+	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。
+	InboundEndpoint string `json:"inbound_endpoint"`
+	// 实际发送的上游路径，由传输层观察；未发送时为空。
 	OutboundEndpoint string `json:"outbound_endpoint"`
-
+	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool `json:"streamed"`
-	// 监控归属快照随队列传递，避免异步刷库丢失实际供应商和模型。
-	Supplier      string `json:"supplier,omitempty"`
+	// 调用时供应商连接身份快照；连接修改后不重写历史归属。
+	Supplier string `json:"supplier,omitempty"`
+	// 实际发送的上游型号快照，与公开 Model 分开保存。
 	UpstreamModel string `json:"upstream_model,omitempty"`
-	RequestID     string `json:"request_id"`
-	CallType      string `json:"call_type"`
-	Model         string `json:"model"`
-	APIKey        string `json:"api_key"`
-	// KeyID is the api_keys row id, which is what usage_events keys ownership
-	// by. APIKey stays the token hash, because that is the live-spend reference.
-	KeyID      string  `json:"key_id,omitempty"`
-	Prompt     int     `json:"prompt_tokens"`
-	Completion int     `json:"completion_tokens"`
-	Spend      float64 `json:"spend"`
-	SpendValid bool    `json:"spend_valid"`
-	Start      string  `json:"start"`
-	End        string  `json:"end"`
-	CacheHit   bool    `json:"cache_hit"`
-	Status     string  `json:"status"`
-	// HTTPStatus 是网关最终返回给调用方的状态码；Error 是失败时保留的完整原始正文。
-	// 两项随 Redis 队列一起传递，避免异步刷库丢失错误诊断信息。
-	HTTPStatus int    `json:"http_status,omitempty"`
-	Error      string `json:"error,omitempty"`
-	OwnerType  string `json:"owner_type,omitempty"`
-	TeamID     string `json:"team_id"`
-	UserID     string `json:"user_id"`
-	OrgID      string `json:"org_id"`
-	ProjectID  string `json:"project_id,omitempty"`
-	Messages   string `json:"messages,omitempty"`
-	Response   string `json:"response,omitempty"`
-	// UpstreamResponse 保存已脱敏的上游响应头和原始统计 JSON。
+	// 调用日志/账单事件唯一标识，用于关联正文及结算去重；不能用 SessionID 替代。
+	RequestID string `json:"request_id"`
+	// 执行操作类别，如 chat 或官方端点动作，用于日志及用量分类。
+	CallType string `json:"call_type"`
+	// 请求日志采用的公开模型/组别名，由 RecordSpend 的 alias 传入；实际上游型号由 UpstreamModel 单独记录。
+	Model string `json:"model"`
+	// 调用密钥哈希，供实时用量引用；不是明文凭据或 api_keys 行 ID。
+	APIKey string `json:"api_key"`
+	// 鉴权时 api_keys 行 ID 快照，用于日志权限和账单归属；会话用户可为空。
+	KeyID string `json:"key_id,omitempty"`
+	// 非负输入 token 数，无实测用量时为 0。
+	Prompt int `json:"prompt_tokens"`
+	// 非负输出 token 数，无实测用量时为 0。
+	Completion int `json:"completion_tokens"`
+	// 计算费用，单位沿用平台账单币种；失败或响应缓存命中为 0。
+	Spend float64 `json:"spend"`
+	// 费用是否已计算，区分未定价与已确认免费，影响实时费用累计。
+	SpendValid bool `json:"spend_valid"`
+	// 请求开始时间的序列化值，队列消费者用来恢复事件时间。
+	Start string `json:"start"`
+	// 请求结束时间的序列化值，队列消费者用来恢复调用耗时。
+	End string `json:"end"`
+	// 是否返回网关响应缓存；命中仍记录用量但推理费用为 0，不提交上游成功偏好。
+	CacheHit bool `json:"cache_hit"`
+	// 成功或失败分类，用于日志筛选；精确响应码见 HTTPStatus。
+	Status string `json:"status"`
+	// 最终返回客户端的 HTTP 状态码；0 表示未保存该事实。
+	HTTPStatus int `json:"http_status,omitempty"`
+	// 失败的原始错误正文，供详情诊断；成功为空，沿用现有脱敏规则。
+	Error string `json:"error,omitempty"`
+	// 鉴权时账单归属类型快照，与各层 ID 一起确定用量归属。
+	OwnerType string `json:"owner_type,omitempty"`
+	// 调用时团队 ID 快照，未归属团队时为空，不随后续成员关系变化。
+	TeamID string `json:"team_id"`
+	// 实际调用用户的 ID 快照，用于日志权限隔离和账单归属。
+	UserID string `json:"user_id"`
+	// 调用时组织 ID 快照，未归属组织时为空。
+	OrgID string `json:"org_id"`
+	// 调用时项目 ID 快照，未归属项目时为空。
+	ProjectID string `json:"project_id,omitempty"`
+	// 按提示词存储设置保留的请求内容，关闭存储时为空，不进入粘性载荷。
+	Messages string `json:"messages,omitempty"`
+	// 按提示词存储设置保留的响应内容，关闭存储时为空。
+	Response string `json:"response,omitempty"`
+	// 已脱敏的上游头和原始统计 JSON，独立于提示词存储。
 	UpstreamResponse string `json:"upstream_response,omitempty"`
-	ProxyRequest     string `json:"proxy_server_request,omitempty"`
-	TTFTMs           *int   `json:"ttft_ms,omitempty"`
-	KeyHash          string `json:"key_hash,omitempty"`
-	KeyAlias         string `json:"key_alias,omitempty"`
-	TeamAlias        string `json:"team_alias,omitempty"`
-	Provider         string `json:"provider,omitempty"`
-	CachedTokens     *int   `json:"cached_tokens,omitempty"`
-	SessionID        string `json:"session_id,omitempty"`
-	CacheKey         string `json:"cache_key,omitempty"`
-	Guardrail        string `json:"guardrail,omitempty"`
-	// PriceSnapshot is the JSON of the rates this call was actually billed at,
-	// with the quantities they applied to. Without it a log row can only be
-	// explained by recomputing from the price table of the day it is read, so
-	// the same row shows a different "original cost" after every price change.
-	// Empty means the call was never priced - not that it was free.
+	// 网关方法、路径、脱敏请求头等元数据 JSON，供详情诊断。
+	ProxyRequest string `json:"proxy_server_request,omitempty"`
+	// 流请求的首字节或非流请求的完整响应耗时，单位毫秒；nil 表示没有测量。
+	TTFTMs *int `json:"ttft_ms,omitempty"`
+	// 调用密钥哈希快照，用于定位身份，不是明文密钥。
+	KeyHash string `json:"key_hash,omitempty"`
+	// 调用时密钥显示名称快照，名称变化后不重写旧日志。
+	KeyAlias string `json:"key_alias,omitempty"`
+	// 调用时团队显示名称快照，供日志展示。
+	TeamAlias string `json:"team_alias,omitempty"`
+	// 执行供应商/适配器标识，区别于具体供应商连接 ID。
+	Provider string `json:"provider,omitempty"`
+	// 上游报告的缓存输入 token 数；nil 表示没有统计，0 表示明确没有命中。
+	CachedTokens *int `json:"cached_tokens,omitempty"`
+	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
+	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
+	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。
+	// cache_key/prompt 在日志中标为推断；不参与权限判断。空值表示未记录来源，omitempty 仅省略空 JSON 字段。
+	SessionSource string `json:"session_source,omitempty"`
+	// 明确、继承、推断或生成的会话标识，用于响应头和授权范围内日志归组；不是响应 ID，不授予历史读取权限。
+	SessionID string `json:"session_id,omitempty"`
+	// 网关响应缓存键，与会话指纹、原生 prompt_cache_key 及偏好缓存键相互独立。
+	CacheKey string `json:"cache_key,omitempty"`
+	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
+	Guardrail string `json:"guardrail,omitempty"`
+	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string `json:"price_snapshot,omitempty"`
 }
 

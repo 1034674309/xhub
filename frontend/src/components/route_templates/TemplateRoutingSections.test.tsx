@@ -1,3 +1,8 @@
+import { beforeEach, afterEach } from "vitest";
+import { setActiveLocale } from "@/i18n";
+/** 各场景使用中文断言，结束恢复默认语言；无后台数据。 */
+beforeEach(() => setActiveLocale("zh-CN"));
+afterEach(() => setActiveLocale("en"));
 import { useState } from "react";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect } from "vitest";

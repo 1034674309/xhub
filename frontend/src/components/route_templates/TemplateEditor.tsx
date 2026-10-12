@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,6 +54,7 @@ const TemplateEditor: React.FC<{
   onChange: (form: TemplateFormState) => void;
   onJsonValid: (valid: boolean) => void;
 }> = ({ name, form, deployments, onName, onChange, onJsonValid }) => {
+  const t = useT();
   const [jsonOverride, setJsonOverride] = useState<string | null>(null);
   const [jsonError, setJsonError] = useState("");
   const [activeTab, setActiveTab] = useState("basic");
@@ -75,7 +76,7 @@ const TemplateEditor: React.FC<{
     setJsonOverride(text);
     const parsed = parseDocument(text);
     if (!parsed.ok) {
-      setJsonError(t("pages.routeTemplates.jsonInvalid"));
+      setJsonError("pages.routeTemplates.jsonInvalid");
       onJsonValid(false);
       return;
     }
@@ -90,7 +91,7 @@ const TemplateEditor: React.FC<{
       .text()
       .then((text) => editJson(text))
       .catch(() => {
-        setJsonError("无法读取 JSON 文件，请重新选择。");
+        setJsonError("pages.routeTemplates.editor.fileReadError");
         onJsonValid(false);
       });
   };
@@ -124,15 +125,19 @@ const TemplateEditor: React.FC<{
 
       <div className="min-w-0">
         <Tabs orientation="horizontal" value={activeTab} onValueChange={setActiveTab} className="min-w-0">
-          <TabsList variant="line" aria-label="路由配置分区" className="h-auto w-full flex-wrap justify-start border-b">
+          <TabsList
+            variant="line"
+            aria-label={t("pages.routeTemplates.editor.tabs")}
+            className="h-auto w-full flex-wrap justify-start border-b"
+          >
             <TabsTrigger value="basic" disabled={!!jsonError} className="!h-auto !flex-none px-4 py-2">
-              负载均衡
+              {t("pages.routeTemplates.editor.balance")}
             </TabsTrigger>
             <TabsTrigger value="groups" disabled={!!jsonError}>
-              路由组
+              {t("pages.routeTemplates.editor.groups")}
             </TabsTrigger>
             <TabsTrigger value="fallbacks" disabled={!!jsonError}>
-              故障转移
+              {t("pages.routeTemplates.editor.fallbacks")}
             </TabsTrigger>
             <TabsTrigger value="json" className="!h-auto !flex-none px-4 py-2">
               {t("pages.routeTemplates.jsonTab")}
@@ -142,10 +147,8 @@ const TemplateEditor: React.FC<{
           <div className="min-w-0">
             <TabsContent value="basic" className="pt-6 space-y-6">
               <div>
-                <h3 className="text-lg font-semibold">负载均衡</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  选择需要调整策略的模型；其余模型读取模型管理中的端点权重。
-                </p>
+                <h3 className="text-lg font-semibold">{t("pages.routeTemplates.editor.balance")}</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{t("pages.routeTemplates.editor.balanceHint")}</p>
               </div>
               <ModelRoutingFields
                 rules={form.model_routes}
@@ -153,15 +156,12 @@ const TemplateEditor: React.FC<{
                 onChange={(model_routes) => patch({ model_routes })}
               />
               <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                部署地址、凭据、能力和权重在“模型与端点”中维护；模板负责选择策略。
+                {t("pages.routeTemplates.editor.catalogHint")}
               </p>
 
               <div>
-                <h3 className="font-semibold">重试、超时与被动冷却</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  先在当前公开模型的部署池中尝试；429、5xx
-                  和传输失败可以重试或切换部署。流式内容已经发出后不会重新开始响应。
-                </p>
+                <h3 className="font-semibold">{t("pages.routeTemplates.editor.reliability")}</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{t("pages.routeTemplates.editor.retryHint")}</p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <NumberField
@@ -197,9 +197,7 @@ const TemplateEditor: React.FC<{
               <TemplateFallbacks form={form} deployments={deployments} onChange={patch} />
             </TabsContent>
             <TabsContent value="json" className="space-y-3 pt-4">
-              <p className="text-xs text-muted-foreground">
-                JSON 与三个表单编辑同一份模板。导入、下载或修改 JSON 后，保存模板统一生效。
-              </p>
+              <p className="text-xs text-muted-foreground">{t("pages.routeTemplates.editor.jsonHint")}</p>
               <textarea
                 aria-label={t("pages.routeTemplates.jsonTab")}
                 className="h-96 w-full rounded-md border border-border bg-transparent p-3 font-mono text-xs"
@@ -209,7 +207,7 @@ const TemplateEditor: React.FC<{
               />
               {jsonError && (
                 <p role="alert" className="text-xs text-destructive">
-                  {jsonError} · {t("pages.routeTemplates.jsonFixHint")}
+                  {t(jsonError)} · {t("pages.routeTemplates.jsonFixHint")}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">

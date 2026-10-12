@@ -2,16 +2,25 @@ import { t } from "@/i18n";
 
 /** 数据面请求参数；调用方传入网关、虚拟密钥、标签和取消信号。 */
 interface RequestOptions {
+  /** 当前数据面网关地址；调用方选择，末尾斜线由发送函数规范化。 */
   baseUrl: string;
+  /** 已授权的虚拟密钥或会话凭据，只写鉴权头，不参与会话标识。 */
   accessToken: string;
+  /** 可选请求标签，写入日志标签头；空数组不发送。 */
   tags?: string[];
+  /** 用户停止、清空或切换端点时取消在途请求；取消错误交给调用方处理。 */
   signal?: AbortSignal;
+  /** 原生 Anthropic 入口需要额外的 x-api-key 和版本头时为 true。 */
   anthropic?: boolean;
+  /** Playground 在首轮前生成并随历史保存的会话 UUID；写 X-Session-Id，刷新复用、清空更换。
+   * 与 Responses 的 previous_response_id 不同；缺失时后端根据缓存信号或 prompt 推断。 */
+  sessionId?: string;
 }
 /** 用 fetch 调用数据面；path 为协议路径，body 为 JSON/表单，options 为鉴权配置。
  * 返回成功 Response；HTTP 错误保留状态和消息，取消传播给调用方。表单自动生成 boundary。 */
 export async function postLLMRequest(path: string, body: unknown, options: RequestOptions): Promise<Response> {
   const headers = new Headers({ Authorization: "Bearer " + options.accessToken });
+  if (options.sessionId) headers.set("X-Session-Id", options.sessionId);
   if (options.tags?.length) headers.set("x-litellm-tags", options.tags.join(","));
   if (options.anthropic) {
     headers.set("x-api-key", options.accessToken);

@@ -38,7 +38,7 @@ export const toTemplateRows = (templates: RouteTemplate[]): RouteTemplateRow[] =
 
 /**
  * summarizeTemplate 为模板库生成执行摘要；参数为正文和本地化标签函数，返回一行策略、例外数量及可靠性说明。
- * 优先显示模板默认策略；旧正文未设置默认时显示模型规则或继承，缺失可靠性字段使用展示默认值。
+ * 显示模型规则数量或模型默认说明，可靠性缺失时仅使用展示默认值。
  * 仅转换展示数据，不补写配置或调用后台。
  */
 export const summarizeTemplate = (
@@ -49,18 +49,14 @@ export const summarizeTemplate = (
     timeout: (seconds: number) => string;
     fallbacks: (value: number) => string;
     none: string;
-    models?: (value: number) => string;
+    models: (value: number) => string;
   },
 ): string => {
   const count = Array.isArray(body.model_routes) ? body.model_routes.length : 0;
   const retry =
     body.retry_policy && typeof body.retry_policy === "object" ? (body.retry_policy as Record<string, unknown>) : {};
   return [
-    typeof body.routing_strategy === "string"
-      ? labels.strategy(body.routing_strategy) + (count ? " · 模型例外 " + count + " 条" : "")
-      : count
-        ? "模型规则 " + count + " 条"
-        : "全部使用模型默认",
+    count ? labels.models(count) : labels.none,
     labels.retries(typeof retry.max_attempts === "number" ? retry.max_attempts : 1),
     labels.timeout(typeof retry.timeout_seconds === "number" ? retry.timeout_seconds : 60),
   ].join(" · ");

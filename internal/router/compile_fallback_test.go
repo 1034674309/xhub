@@ -70,7 +70,7 @@ func TestCompileFallbackPrecedence(t *testing.T) {
 // 前置纯内存快照，每例独立，无HTTP或数据库；预先已有错误应原样保留，无资源清理。
 func TestCompileFallbackFailures(t *testing.T) {
 	models := []config.ModelEntry{{ModelName: "a"}, {ModelName: "b"}}
-	for _, kind := range []string{"model_defaults", "routing_groups", "model_fallbacks"} {
+	for _, kind := range []string{"model_defaults", "model_fallbacks"} {
 		t.Run(kind, func(t *testing.T) {
 			if result := Compile(BuiltinSettings(), fallbackConfigReader{fail: kind}, models); result.Err == nil {
 				t.Fatal("存储故障被忽略")

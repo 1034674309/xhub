@@ -7,10 +7,9 @@ import (
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
-// TestRoutingGroupPrecedence 验证模板例外、组、模板默认优先级，缺省组权重不继承成员权重；内存测试无清理。
+// TestRoutingGroupPrecedence 验证模型规则、组、模型默认优先级，缺省组权重不继承成员权重；内存测试无清理。
 func TestRoutingGroupPrecedence(t *testing.T) {
 	settings := BuiltinSettings()
-	settings.Settings["routing_strategy"] = "least-busy"
 	settings.ModelDefaults = map[string]any{"a": map[string]any{"allocations": []any{map[string]any{"deployment_id": "a1", "weight": 0}, map[string]any{"deployment_id": "a2", "weight": 1}}}}
 	settings.RoutingGroups = []router.Group{{Name: "group", Models: []string{"a", "b"}, Strategy: "traffic-split"}}
 	r := settings.ForModel("a")
@@ -21,8 +20,8 @@ func TestRoutingGroupPrecedence(t *testing.T) {
 	if r := settings.ForModel("a"); r.RuleSource != "template-model" || r.Strategy() != "simple-shuffle" {
 		t.Fatalf("例外失效: %+v", r)
 	}
-	if r := settings.ForModel("other"); r.RuleSource != "template-default" || r.Strategy() != "least-busy" {
-		t.Fatal("非组成员未继承模板")
+	if r := settings.ForModel("other"); r.RuleSource != "model-default" || r.Strategy() != "traffic-split" {
+		t.Fatal("非组成员未继承模型默认")
 	}
 	settings.RoutingGroups[0].Args = &router.GroupArgs{Allocations: []router.Allocation{{DeploymentID: "a1", Weight: 0}, {DeploymentID: "b1", Weight: 1}}}
 	list := []config.ModelEntry{{ModelName: "a", LiteLLMParams: map[string]any{"model": "up-a", "deployment_id": "a1"}}, {ModelName: "b", LiteLLMParams: map[string]any{"model": "up-b", "deployment_id": "b1"}}}

@@ -62,11 +62,11 @@ func setCORS(w http.ResponseWriter, r *http.Request) {
 	// and Chrome client hints; a fixed allow-list fails that preflight.
 	allow := r.Header.Get("Access-Control-Request-Headers")
 	if allow == "" {
-		allow = "Authorization, Content-Type, x-litellm-api-key, Idempotency-Key, x-litellm-tags, x-litellm-end-user-id"
+		allow = "Authorization, Content-Type, X-Session-Id, x-litellm-api-key, Idempotency-Key, x-litellm-tags, x-litellm-end-user-id"
 	}
 	h.Set("Access-Control-Allow-Headers", allow)
 	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-	h.Set("Access-Control-Expose-Headers", "x-litellm-call-id, x-litellm-response-cost, x-litellm-model-name, Retry-After, x-litellm-cache-key, cache_hit, x-litellm-cache-hit, x-litellm-version, x-litellm-response-duration-ms")
+	h.Set("Access-Control-Expose-Headers", "X-Session-Id, x-litellm-call-id, x-litellm-response-cost, x-litellm-model-name, Retry-After, x-litellm-cache-key, cache_hit, x-litellm-cache-hit, x-litellm-version, x-litellm-response-duration-ms")
 	h.Set("Access-Control-Max-Age", "600")
 	// 127.0.0.1:3000 calling localhost:4000 is a private-network request in Chrome.
 	h.Set("Access-Control-Allow-Private-Network", "true")

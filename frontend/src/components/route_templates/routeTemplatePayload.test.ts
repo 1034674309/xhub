@@ -25,11 +25,12 @@ afterEach(() => {
  */
 
 const labels = {
+  models: (value: number) => value + " models",
   strategy: (value: string) => `strategy:${value}`,
   retries: (value: number) => `${value} retries`,
   timeout: (seconds: number) => `${seconds}s`,
   fallbacks: (value: number) => `${value} fallbacks`,
-  none: "no fallbacks",
+  none: "defaults",
 };
 
 describe("saveRouteTemplate", () => {
@@ -59,21 +60,9 @@ describe("toTemplateRows", () => {
 });
 
 describe("summarizeTemplate", () => {
-  /** 前置带默认策略的正文；验证模型例外不掩盖默认行为及空规则边界，纯函数无清理副作用。 */
-  it("shows template defaults and model exceptions", () => {
-    expect(summarizeTemplate({ routing_strategy: "cost-based-routing", model_routes: [] }, labels)).toBe(
-      "strategy:cost-based-routing · 1 retries · 60s",
-    );
-    expect(
-      summarizeTemplate(
-        { routing_strategy: "simple-shuffle", model_routes: [{ model: "a", strategy: "least-busy" }] },
-        labels,
-      ),
-    ).toBe("strategy:simple-shuffle · 模型例外 1 条 · 1 retries · 60s");
-  });
   /** 验证模型规则数量和失败策略摘要，输入为新文档，无外部清理。 */
   it("describes model rules and retry policy", () => {
-    expect(summarizeTemplate({}, labels)).toBe("全部使用模型默认 · 1 retries · 60s");
+    expect(summarizeTemplate({}, labels)).toBe("defaults · 1 retries · 60s");
     expect(
       summarizeTemplate(
         {
@@ -85,10 +74,10 @@ describe("summarizeTemplate", () => {
         },
         labels,
       ),
-    ).toBe("模型规则 2 条 · 5 retries · 90s");
+    ).toBe("2 models · 5 retries · 90s");
     expect(
       summarizeTemplate({ model_routes: [], retry_policy: { max_attempts: 1, timeout_seconds: 60 } }, labels),
-    ).toContain("全部使用模型默认");
+    ).toContain("defaults");
   });
 });
 

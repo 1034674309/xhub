@@ -72,32 +72,24 @@ func TestRouteTemplateDuplicateModelsAreRejected(t *testing.T) {
 	}
 }
 
-// TestRouteTemplateDefaultStrategyContract 验证真实接口保存、回读、整体更新和非法默认错误响应。
-// 前置隔离 schema 和管理员；创建的模板由 harness 结束时清理，不依赖供应商凭据。
-func TestRouteTemplateDefaultStrategyContract(t *testing.T) {
+// TestRouteTemplateRejectsTopLevelStrategy 验证创建、更新均拒绝顶层默认策略，拒绝后原正文不变。
+// 前置隔离数据库与管理员；合法模型规则可保存回读；harness 清理模板与身份，不依赖供应商。
+func TestRouteTemplateRejectsTopLevelStrategy(t *testing.T) {
 	h := newHarness(t)
 	admin := h.adminSession()
-	body := routeTemplateBody([]any{map[string]any{"model": "special", "strategy": "least-busy"}}, 2, 60, 3, 60)
-	body["routing_strategy"] = "simple-shuffle"
-	id := routeTemplate(t, h, admin, "default strategy", body)
-	if got := templateBody(t, h, admin, id); !reflect.DeepEqual(got, body) {
-		t.Fatalf("模板默认保存回读改变: got=%v want=%v", got, body)
-	}
-	for _, invalid := range []any{"", "unknown", nil, 1} {
-		body["routing_strategy"] = invalid
-		r := h.do(http.MethodPost, "/route_template/"+id+"/update", admin, map[string]any{"body": body})
-		if r.status != http.StatusBadRequest {
-			t.Fatalf("非法默认策略未返回 400: %s", r.describe())
+	body := routeTemplateBody([]any{}, 2, 60, 3, 60)
+	id := routeTemplate(t, h, admin, "strict strategy", body)
+	for _, raw := range []any{"simple-shuffle", "cost-based-routing", "", nil, 1} {
+		invalid := routeTemplateBody([]any{}, 2, 60, 3, 60)
+		invalid["routing_strategy"] = raw
+		for _, path := range []string{"/route_template/new", "/route_template/" + id + "/update"} {
+			r := h.do(http.MethodPost, path, admin, map[string]any{"name": "invalid", "body": invalid})
+			if r.status != http.StatusBadRequest {
+				t.Fatalf("顶层策略未返回400: %s", r.describe())
+			}
 		}
-	}
-	body["routing_strategy"] = "cost-based-routing"
-	h.ok(http.MethodPost, "/route_template/"+id+"/update", admin, map[string]any{"body": body})
-	if got := templateBody(t, h, admin, id); !reflect.DeepEqual(got, body) {
-		t.Fatalf("默认策略更新回读不一致: %v", got)
-	}
-	delete(body, "routing_strategy")
-	h.ok(http.MethodPost, "/route_template/"+id+"/update", admin, map[string]any{"body": body})
-	if got := templateBody(t, h, admin, id); !reflect.DeepEqual(got, body) {
-		t.Fatalf("未恢复旧格式继承: %v", got)
+		if got := templateBody(t, h, admin, id); !reflect.DeepEqual(got, body) {
+			t.Fatalf("拒绝写入改变正文: %v", got)
+		}
 	}
 }

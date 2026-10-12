@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { t } from "@/i18n";
+import { getActiveLocale, setActiveLocale, t } from "@/i18n";
 import { DataTable } from "@/components/shared/DataTable";
 
 import type { LogEntry } from "./columns";
@@ -335,4 +335,24 @@ describe("TTFT column", () => {
 it("renders task lifecycle badges", () => {
   renderRows(["executing", "polling", "completed", "failed"].map(status => logEntry({ request_id: status, status })));
   for (const label of ["Executing", "Polling", "Completed", "Failure"]) expect(screen.getByText(t(label))).toBeInTheDocument();
+});
+
+/** 前置两种语言及后端识别来源；验证推断标记翻译、明确会话无标记及 ID 保持原值。
+ * 表格由测试框架卸载，finally 恢复语言，避免污染其他组件测试。 */
+it.each(["en", "zh-CN"] as const)("labels inferred sessions in %s", (locale) => {
+  const originalLocale = getActiveLocale();
+  try {
+    setActiveLocale(locale);
+    renderRows([
+      logEntry({ request_id: "prompt", session_id: "prompt:v1:unchanged", session_source: "prompt" }),
+      logEntry({ request_id: "cache", session_id: "cache:v1:unchanged", session_source: "cache_key" }),
+      logEntry({ request_id: "explicit", session_id: "client-session", session_source: "explicit" }),
+    ]);
+    const label = locale === "en" ? "Inferred session" : "推断会话";
+    expect(screen.getAllByText(label)).toHaveLength(2);
+    expect(screen.getByText("client-session")).toBeInTheDocument();
+    expect(within(screen.getByText("client-session").closest("tr")!).queryByText(label)).not.toBeInTheDocument();
+  } finally {
+    setActiveLocale(originalLocale);
+  }
 });

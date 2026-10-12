@@ -172,6 +172,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
     updateAudioUI,
     updateChatImageUI,
     clearChatHistory: clearChatHistoryHook,
+    sessionId,
     clearMCPEvents,
   } = useChatHistory({ simplified });
   // codeql[js/clear-text-storage-of-sensitive-data]
@@ -914,6 +915,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
             mockTestFallbacks,
             mcpToolsets,
             streamingEnabled,
+            sessionId,
           );
         } else if (endpointType === EndpointType.IMAGE) {
           // For image generation
@@ -999,6 +1001,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
             mcpToolsets,
             streamingEnabled,
             updateTotalLatency,
+            sessionId,
           );
         } else if (endpointType === EndpointType.ANTHROPIC_MESSAGES) {
           const apiChatHistory = [
@@ -1028,6 +1031,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
             mcpServerToolRestrictions,
             mcpToolsets,
             streamingEnabled,
+            sessionId,
           );
         } else if (endpointType === EndpointType.EMBEDDINGS) {
           await makeOpenAIEmbeddingsRequest(
@@ -1156,12 +1160,20 @@ const ChatUI: React.FC<ChatUIProps> = ({
   };
 
   const requestContext = [
-    selectedModel,
-    endpointPath,
     apiKeySource,
     apiKeySource === "session" ? accessToken : apiKey,
     customProxyBaseUrl,
   ].join("\n");
+  // 模型或端点变化保持对话身份，只清理不可跨入口使用的响应游标并取消旧请求。
+  const routeContext = selectedModel + "\n" + endpointPath;
+  const previousRoute = useRef(routeContext);
+  useEffect(() => {
+    if (previousRoute.current !== routeContext) {
+      previousRoute.current = routeContext;
+      handleCancelRequest();
+      setResponsesSessionId(null);
+    }
+  }, [routeContext]);
   const previousContext = useRef(requestContext);
   useEffect(() => {
     if (previousContext.current !== requestContext) {

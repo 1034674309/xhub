@@ -58,7 +58,7 @@ describe("route template workflow", () => {
   it("creates from the builtin document", async () => {
     const user = setup();
     const editor = await openCreate(user);
-    await user.click(within(editor).getByRole("tab", { name: "负载均衡" }));
+    await user.click(within(editor).getByRole("tab", { name: "Load balancing" }));
     expect(within(editor).getByLabelText("Timeout (seconds)")).toHaveValue(60);
     await user.type(within(editor).getByLabelText("Name"), "  Custom  ");
     fireEvent.change(within(editor).getByLabelText("Timeout (seconds)"), { target: { value: "30" } });
@@ -69,7 +69,10 @@ describe("route template workflow", () => {
         expect.objectContaining({
           name: "Custom",
           body: {
-            routing_groups: [], fallbacks: [], context_window_fallbacks: [], content_policy_fallbacks: [],
+            routing_groups: [],
+            fallbacks: [],
+            context_window_fallbacks: [],
+            content_policy_fallbacks: [],
             model_routes: [],
             retry_policy: { max_attempts: 1, timeout_seconds: 30, failure_threshold: 3, cooldown_seconds: 60 },
           },
@@ -94,7 +97,7 @@ describe("route template workflow", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Copy" }));
     const editor = screen.getByRole("region", { name: "New template" });
     expect(within(editor).getByLabelText("Name")).toHaveValue("Fast copy");
-    await user.click(within(editor).getByRole("tab", { name: "负载均衡" }));
+    await user.click(within(editor).getByRole("tab", { name: "Load balancing" }));
     expect(within(editor).getByLabelText("Timeout (seconds)")).toHaveValue(20);
     await user.click(within(editor).getByRole("button", { name: "Cancel" }));
     expect(createRouteTemplateCall).not.toHaveBeenCalled();
@@ -106,7 +109,7 @@ describe("route template workflow", () => {
     const user = setup();
     const editor = await openCreate(user);
     await user.type(within(editor).getByLabelText("Name"), "Form template");
-    await user.click(within(editor).getByRole("tab", { name: "负载均衡" }));
+    await user.click(within(editor).getByRole("tab", { name: "Load balancing" }));
     fireEvent.change(within(editor).getByLabelText("Timeout (seconds)"), { target: { value: "90" } });
     await user.click(within(editor).getByRole("tab", { name: "JSON" }));
     const json = within(editor).getByRole("textbox", { name: "JSON" });
@@ -147,7 +150,7 @@ describe("route template workflow", () => {
     });
     const input = within(editor).getByLabelText("Upload JSON");
     fireEvent.change(input, { target: { files: [file] } });
-    expect(await within(editor).findByRole("alert")).toHaveTextContent("无法读取 JSON 文件");
+    expect(await within(editor).findByRole("alert")).toHaveTextContent("Cannot read the JSON file");
     expect(within(editor).getByRole("button", { name: "保存模板" })).toBeDisabled();
     expect(createRouteTemplateCall).not.toHaveBeenCalled();
   });
@@ -170,14 +173,20 @@ describe("route template workflow", () => {
   it("opens complete JSON documentation without changing drafts", async () => {
     const user = setup();
     await screen.findByText("Fast");
-    await user.click(screen.getByRole("button", { name: translate("en", "pages.routeTemplates.jsonGuide.openButton") }));
+    await user.click(
+      screen.getByRole("button", { name: translate("en", "pages.routeTemplates.jsonGuide.openButton") }),
+    );
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("cell", { name: "routing_groups" })).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabExamples") }));
-    expect(within(dialog).getByRole("region", { name: translate("en", "pages.routeTemplates.jsonGuide.exampleTitle") })).toHaveTextContent(
-      '"routing_strategy": "cost-based-routing"',
+    await user.click(
+      within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabExamples") }),
     );
-    await user.click(within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabStrategies") }));
+    expect(
+      within(dialog).getByRole("region", { name: translate("en", "pages.routeTemplates.jsonGuide.exampleTitle") }),
+    ).toHaveTextContent('"routing_strategy": "cost-based-routing"');
+    await user.click(
+      within(dialog).getByRole("tab", { name: translate("en", "pages.routeTemplates.jsonGuide.tabStrategies") }),
+    );
     expect(within(dialog).getByText("cost-based-routing", { selector: "code" })).toBeInTheDocument();
     expect(createRouteTemplateCall).not.toHaveBeenCalled();
   });
@@ -186,12 +195,16 @@ describe("route template workflow", () => {
   it("contains all three routing sections in each template", async () => {
     const user = setup();
     const editor = await openCreate(user);
-    expect(within(editor).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["负载均衡", "路由组", "故障转移", "JSON"]);
+    expect(
+      within(editor)
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Load balancing", "Routing groups", "Fallbacks", "JSON"]);
     expect(within(editor).queryByLabelText("默认路由策略")).not.toBeInTheDocument();
     expect(within(editor).queryByRole("complementary")).not.toBeInTheDocument();
-    await user.click(within(editor).getByRole("tab", {name: "故障转移"}));
-    expect(within(editor).getByRole("button", {name: "添加故障转移"})).toBeInTheDocument();
-    await user.click(within(editor).getByRole("button", {name: "Cancel"}));
+    await user.click(within(editor).getByRole("tab", { name: "Fallbacks" }));
+    expect(within(editor).getByRole("button", { name: "Add fallback" })).toBeInTheDocument();
+    await user.click(within(editor).getByRole("button", { name: "Cancel" }));
     expect(createRouteTemplateCall).not.toHaveBeenCalled();
   });
 

@@ -71,6 +71,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		return
 	}
 	plan := h.PlanRoute(r, alias, body, p)
+	w.Header().Set("X-Session-Id", plan.SessionID)
+	h.AnnotateCall(callID, dpcontract.CallNote{SessionID: plan.SessionID, SessionSource: plan.SessionSource})
 	if plan.Err != nil {
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", plan.Err.Error())
 		return
@@ -197,14 +199,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	// 诊断保留匹配、兼容与可用三个阶段；只读计算不推进调度状态，不改变既有回退顺序。
 	diagnosis := dprouting.DiagnoseRoute(cfg.ModelList, models, alias, providercapability.EndpointForOp(op), routeCfg, state, &dialogue, dpdialogue.CallerProtocol(op) != "")
 	diagnosis.Log(r.URL.Path, callID, alias, routeCfg)
-	pool := routeCfg.Schedule(models, alias, state, plan.Pinned)
-	if plan.Required && (state.Cooldown[plan.Pinned] || len(pool) == 0 || router.CooldownID(pool[0]) != plan.Pinned) {
-		util.WriteTypedError(w, r.URL.Path, 409, "continuation_unavailable", "original deployment is unavailable")
-		return
-	}
-	if plan.Required {
-		pool = pool[:1]
-	}
+	runtimePin := dprouting.RuntimePin(models, plan.Pinned)
+	pool := routeCfg.Schedule(models, alias, state, runtimePin)
 	disableFallbacks, _ := body["disable_fallbacks"].(bool)
 	fallbacks := dprouting.NewFallbackQueue(baseRouteCfg, alias, plan.Required || disableFallbacks)
 	if len(pool) == 0 {
@@ -220,6 +216,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				dprouting.DiagnoseRoute(cfg.ModelList, models, target, providercapability.EndpointForOp(op), settings, targetState, &dialogue, dpdialogue.CallerProtocol(op) != "").Log(r.URL.Path, callID, target, settings)
 			}
 		}
+	}
+	pool, routeCfg = fallbacks.SelectAffinity(&plan, pool, alias, models, state, routeCfg)
+	if plan.Required && len(pool) == 0 {
+		util.WriteTypedError(w, r.URL.Path, 409, "continuation_unavailable", "original deployment is unavailable")
+		return
 	}
 	if routeCfg.Err != nil {
 		util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "fallback route unavailable")
@@ -252,6 +253,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		for _, rawDep := range pool {
 			// 组耗尽后采用最后尝试成员的回退链，保留原组名的初始权限检查。
 			fallbacks.UseDeployment(rawDep.ModelName)
+			plan.Target = fallbacks.Target(rawDep)
 			// 回退目标可能是另一个组；组别名与真实成员都必须通过权限和预算检查。
 			if fallbacks.PoolAlias != alias && fallbacks.PoolAlias != rawDep.ModelName && !h.EnforceIdentityLimits(w, r.URL.Path, p, fallbacks.PoolAlias, est) {
 				return
@@ -410,7 +412,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						commit := func(result llmdialogue.DialogueResult) {
 							if op == "responses" {
 								plan.History = dpdialogue.ResponseHistory(dialogue, body, result)
-								h.CommitRoute(plan, did, result.ID)
+								h.CommitRoute(plan, router.DeploymentID(rawDep), result.ID)
 							}
 						}
 						wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogue(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), commit)
@@ -446,7 +448,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 							SessionID: plan.SessionID,
 						})
 						if resp.StatusCode < 400 && op != "responses" {
-							h.CommitRoute(plan, depID, dpstream.ResponseID(streamed))
+							h.CommitRoute(plan, router.DeploymentID(rawDep), dpstream.ResponseID(streamed))
 						}
 						h.RecordSpend(w, p, callID, alias, op, usage, start, false, resp.StatusCode, depID)
 						return
@@ -496,7 +498,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					SessionID: plan.SessionID,
 				})
 				if resp.StatusCode < 400 {
-					h.CommitRoute(plan, depID, dpstream.ResponseID(respBody))
+					h.CommitRoute(plan, router.DeploymentID(rawDep), dpstream.ResponseID(respBody))
 				}
 				h.WriteChatJSON(w, p, callID, alias, ck, op, "", respBody, resp.StatusCode, start, depID)
 				return

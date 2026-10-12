@@ -78,17 +78,13 @@ describe("路由模板文档", () => {
     expect(deploymentsFromInfo([null, {}])).toEqual([]);
   });
 
-  /** 验证默认策略往返、旧模板继承和数值类型边界；纯内存无需清理。 */
-  it("默认策略严格校验并保留旧模板继承", () => {
+  /** 验证顶层策略一律拒绝、模型默认继承和数值边界；内存对象无需清理。 */
+  it("拒绝顶层策略且保留模型默认继承", () => {
     const body = bodyFromForm(emptyForm());
     expect(body.ok && parseDocument(JSON.stringify(body.body))).toMatchObject({ ok: true });
     if (!body.ok) throw new Error("新建模板应合法");
-    for (const strategy of ["", "invalid", null, 1])
+    for (const strategy of ["", "invalid", "simple-shuffle", "traffic-split", null, 1])
       expect(parseDocument(JSON.stringify({ ...body.body, routing_strategy: strategy }))).toEqual({ ok: false });
-    expect(bodyFromForm({ ...emptyForm(), routing_strategy: "invalid" })).toEqual({
-      ok: false,
-      field: "routing_strategy",
-    });
     expect(bodyFromForm(formFromBody({ model_routes: [], retry_policy: body.body.retry_policy }))).toEqual({
       ok: true,
       body: { model_routes: [], retry_policy: body.body.retry_policy },

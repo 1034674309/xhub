@@ -16,9 +16,14 @@ import (
 func TestDialogueRequestBodyRemovesConsumedProxyFields(t *testing.T) {
 	body := map[string]any{
 		"model": "public", "messages": []any{map[string]any{"role": "user", "content": "[手机号已隐藏]"}},
-		"guardrails": []any{"redact"}, "litellm_trace_id": "trace-1", "unknown_capability": true,
+		"session_id": "conversation", "prompt_cache_key": "native-cache", "guardrails": []any{"redact"}, "litellm_trace_id": "trace-1", "unknown_capability": true,
 	}
 	clean := DialogueRequestBody(body)
+	for _, key := range []string{"session_id", "prompt_cache_key"} {
+		if clean[key] != nil || body[key] == nil {
+			t.Fatalf("会话字段未剥离或原正文被修改: %s", key)
+		}
+	}
 	if _, ok := clean["guardrails"]; ok {
 		t.Fatal("guardrails 仍进入统一协议转换")
 	}

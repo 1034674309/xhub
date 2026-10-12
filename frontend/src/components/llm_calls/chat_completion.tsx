@@ -61,6 +61,7 @@ export async function makeOpenAIChatCompletionRequest(
   mockTestFallbacks?: boolean,
   mcpToolsets?: MCPToolset[],
   streamingEnabled: boolean = true,
+  sessionId?: string,
 ) {
   // base url should be the current base_url
   const isLocal = process.env.NODE_ENV === "development";
@@ -146,7 +147,7 @@ export async function makeOpenAIChatCompletionRequest(
         stream: streamingEnabled,
         ...(streamingEnabled ? { stream_options: { include_usage: true } } : {}),
       },
-      { baseUrl: proxyBaseUrl, accessToken, tags, signal },
+      { baseUrl: proxyBaseUrl, accessToken, tags, signal, sessionId },
     );
     servedFromResponseCache = !streamingEnabled && httpResponse.headers.has("x-litellm-cache-key");
     const response = streamingEnabled

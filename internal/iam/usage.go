@@ -13,55 +13,83 @@ import (
 
 var logTraceOnceUsage sync.Once
 
-// UsageEvent is one inference call, with the ownership it had at the time.
-// Nothing here is a foreign key: a member who leaves a team does not move the
-// spend they already produced, and deleting a team does not erase history.
+// UsageEvent 是 usage_events 中一条推理用量和调用日志事实，由刷库链写入、授权查询读取。
+// 身份与供应商字段是调用时快照，成员离队或配置删除不改变历史费用；SessionID 只用于归组。
 type UsageEvent struct {
-	// 入站及出站路径独立于提示词存储。
-	InboundEndpoint  string `xorm:"inbound_endpoint" json:"inbound_endpoint"`
+	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。
+	InboundEndpoint string `xorm:"inbound_endpoint" json:"inbound_endpoint"`
+	// 实际发送的上游路径，由传输层观察；未发送时为空。
 	OutboundEndpoint string `xorm:"outbound_endpoint" json:"outbound_endpoint"`
-
+	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool `xorm:"streamed" json:"streamed"`
-	// Supplier 和 UpstreamModel 保存调用时的供应商连接与实际模型，不随配置变化重写。
-	Supplier      string `xorm:"'supplier'" json:"supplier"`
+	// 调用时供应商连接身份快照；连接修改后不重写历史归属。
+	Supplier string `xorm:"'supplier'" json:"supplier"`
+	// 实际发送的上游型号快照，与公开 Model 分开保存。
 	UpstreamModel string `xorm:"'upstream_model'" json:"upstream_model"`
-	// TaskSettled 是原异步请求的持久化结算标记；防止重复或并发轮询二次扣费。
-	TaskSettled    bool      `xorm:"'task_settled'" json:"-"`
-	ID             int64     `xorm:"pk autoincr 'id'" json:"-"`
-	RequestID      string    `xorm:"'request_id'" json:"request_id"`
-	TS             time.Time `xorm:"'ts'" json:"ts"`
-	KeyID          string    `xorm:"'key_id'" json:"key_id"`
-	OwnerType      string    `xorm:"'owner_type'" json:"owner_type"`
-	UserID         string    `xorm:"'user_id'" json:"user_id"`
-	TeamID         string    `xorm:"'team_id'" json:"team_id"`
-	ProjectID      string    `xorm:"'project_id'" json:"project_id"`
-	OrganizationID string    `xorm:"'organization_id'" json:"organization_id"`
-	Model          string    `xorm:"'model'" json:"model"`
-	CallType       string    `xorm:"'call_type'" json:"call_type"`
-	Status         string    `xorm:"'status'" json:"status"`
-	// HTTPStatus 保存网关最终返回给调用方的 HTTP 状态，供日志列表和详情展示。
-	HTTPStatus       int        `xorm:"'http_status'" json:"http_status,omitempty"`
-	PromptTokens     int        `xorm:"'prompt_tokens'" json:"prompt_tokens"`
-	CompletionTokens int        `xorm:"'completion_tokens'" json:"completion_tokens"`
-	Cost             float64    `xorm:"'cost'" json:"cost"`
-	DurationMS       int        `xorm:"'duration_ms'" json:"duration_ms"`
-	EndedAt          *time.Time `xorm:"'ended_at'" json:"ended_at,omitempty"`
-	TTFTMs           *int       `xorm:"'ttft_ms'" json:"ttft_ms,omitempty"`
-	CacheHit         bool       `xorm:"'cache_hit'" json:"cache_hit"`
-	KeyHash          string     `xorm:"'key_hash'" json:"key_hash"`
-	KeyAlias         string     `xorm:"'key_alias'" json:"key_alias"`
-	TeamAlias        string     `xorm:"'team_alias'" json:"team_alias"`
-	Provider         string     `xorm:"'provider'" json:"provider"`
-	CachedTokens     *int       `xorm:"'cached_tokens'" json:"cached_tokens,omitempty"`
-	SessionID        string     `xorm:"'session_id'" json:"session_id"`
-	CacheKey         string     `xorm:"'cache_key'" json:"cache_key"`
-	// Guardrail is the JSON array the logs drawer reads as guardrail monitoring.
-	// Empty means this call was not checked.
+	// 原异步请求的持久化结算标记，防止并发或重复轮询二次收费。
+	TaskSettled bool `xorm:"'task_settled'" json:"-"`
+	// usage_events 自增内部行号；API 日志关联使用 RequestID。
+	ID int64 `xorm:"pk autoincr 'id'" json:"-"`
+	// 调用日志/账单事件唯一标识，用于关联正文及结算去重；不能用 SessionID 替代。
+	RequestID string `xorm:"'request_id'" json:"request_id"`
+	// 请求开始时间，不使用异步刷库时刻，避免账单按错误日期归属。
+	TS time.Time `xorm:"'ts'" json:"ts"`
+	// 鉴权时 api_keys 行 ID 快照，用于日志权限和账单归属；会话用户可为空。
+	KeyID string `xorm:"'key_id'" json:"key_id"`
+	// 鉴权时账单归属类型快照，与各层 ID 一起确定用量归属。
+	OwnerType string `xorm:"'owner_type'" json:"owner_type"`
+	// 实际调用用户的 ID 快照，用于日志权限隔离和账单归属。
+	UserID string `xorm:"'user_id'" json:"user_id"`
+	// 调用时团队 ID 快照，未归属团队时为空，不随后续成员关系变化。
+	TeamID string `xorm:"'team_id'" json:"team_id"`
+	// 调用时项目 ID 快照，未归属项目时为空。
+	ProjectID string `xorm:"'project_id'" json:"project_id"`
+	// 调用时组织 ID 快照，异步刷库时不重新查成员关系。
+	OrganizationID string `xorm:"'organization_id'" json:"organization_id"`
+	// 请求日志采用的公开模型/组别名，由 RecordSpend 的 alias 传入；实际上游型号由 UpstreamModel 单独记录。
+	Model string `xorm:"'model'" json:"model"`
+	// 执行操作类别，如 chat 或官方端点动作，用于日志及用量分类。
+	CallType string `xorm:"'call_type'" json:"call_type"`
+	// 成功或失败分类，用于日志筛选；精确响应码见 HTTPStatus。
+	Status string `xorm:"'status'" json:"status"`
+	// 最终返回客户端的 HTTP 状态码；0 表示未保存该事实。
+	HTTPStatus int `xorm:"'http_status'" json:"http_status,omitempty"`
+	// 归一化输入 token 数，由上游用量产生，无实测时为 0。
+	PromptTokens int `xorm:"'prompt_tokens'" json:"prompt_tokens"`
+	// 归一化输出 token 数，由上游用量产生，无实测时为 0。
+	CompletionTokens int `xorm:"'completion_tokens'" json:"completion_tokens"`
+	// 持久化费用，单位沿用平台账单币种；零费用调用也保留日志。
+	Cost float64 `xorm:"'cost'" json:"cost"`
+	// 从请求开始到结束的耗时，单位毫秒，不等同于首字延迟。
+	DurationMS int `xorm:"'duration_ms'" json:"duration_ms"`
+	// 请求结束时间，未取得结束事实时为空或零值，由写库逻辑处理。
+	EndedAt *time.Time `xorm:"'ended_at'" json:"ended_at,omitempty"`
+	// 流请求的首字节或非流请求的完整响应耗时，单位毫秒；nil 表示没有测量。
+	TTFTMs *int `xorm:"'ttft_ms'" json:"ttft_ms,omitempty"`
+	// 是否返回网关响应缓存；命中仍记录用量但推理费用为 0，不提交上游成功偏好。
+	CacheHit bool `xorm:"'cache_hit'" json:"cache_hit"`
+	// 调用密钥哈希快照，用于定位身份，不是明文密钥。
+	KeyHash string `xorm:"'key_hash'" json:"key_hash"`
+	// 调用时密钥显示名称快照，名称变化后不重写旧日志。
+	KeyAlias string `xorm:"'key_alias'" json:"key_alias"`
+	// 调用时团队显示名称快照，供日志展示。
+	TeamAlias string `xorm:"'team_alias'" json:"team_alias"`
+	// 执行供应商/适配器标识，区别于具体供应商连接 ID。
+	Provider string `xorm:"'provider'" json:"provider"`
+	// 上游报告的缓存输入 token 数；nil 表示没有统计，0 表示明确没有命中。
+	CachedTokens *int `xorm:"'cached_tokens'" json:"cached_tokens,omitempty"`
+	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
+	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
+	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。
+	// cache_key/prompt 在日志中标为推断；不参与权限判断。空值表示未记录来源；JSON 和入库行为由当前载体字段标签决定。
+	SessionSource string `xorm:"'session_source'" json:"session_source"`
+	// 明确、继承、推断或生成的会话标识，用于响应头和授权范围内日志归组；不是响应 ID，不授予历史读取权限。
+	SessionID string `xorm:"'session_id'" json:"session_id"`
+	// 网关响应缓存键，与会话指纹、原生 prompt_cache_key 及偏好缓存键相互独立。
+	CacheKey string `xorm:"'cache_key'" json:"cache_key"`
+	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
 	Guardrail string `xorm:"'guardrail'" json:"-"`
-	// PriceSnapshot is the rates this call was billed at, as catalog.Snapshot
-	// wrote them. The log detail reads it instead of recomputing from the
-	// current price table, so a price change cannot rewrite history. Empty means
-	// the call was never priced, which is not the same as costing nothing.
+	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string `xorm:"'price_snapshot'" json:"price_snapshot,omitempty"`
 }
 
@@ -117,55 +145,89 @@ type UsageDaily struct {
 // 测试：无直接单测
 func (UsageDaily) TableName() string { return "usage_daily" }
 
-// UsageRecord is one call to be persisted. Ownership is the snapshot taken when
-// the request was authorized, not a fresh lookup: a call must be attributed to
-// the identity that actually made it, not to whatever the hierarchy looks like
-// by the time the batch is flushed.
+// UsageRecord 是等待持久化的一次调用，由网关或 Redis 消费者交给 RecordUsage。
+// 身份采用鉴权时快照，刷库不重新解析层级关系；正文、费用和会话来源分别保留各自记录规则。
 type UsageRecord struct {
-	// 端点快照随账单事务写入。
-	InboundEndpoint  string
+	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。
+	InboundEndpoint string
+	// 实际发送的上游路径，由传输层观察；未发送时为空。
 	OutboundEndpoint string
-
+	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool
-	// 供应商和实际模型的调用归属快照随账单原子写入。
-	Supplier         string
-	UpstreamModel    string
-	RequestID        string
-	TS               time.Time
-	KeyID            string
-	OwnerType        string
-	UserID           string
-	TeamID           string
-	ProjectID        string
-	OrganizationID   string
-	Model            string
-	CallType         string
-	Status           string
-	HTTPStatus       int
-	PromptTokens     int
+	// 调用时供应商连接身份快照；连接修改后不重写历史归属。
+	Supplier string
+	// 实际发送的上游型号快照，与公开 Model 分开保存。
+	UpstreamModel string
+	// 调用日志/账单事件唯一标识，用于关联正文及结算去重；不能用 SessionID 替代。
+	RequestID string
+	// 请求开始时间，不使用异步刷库时刻，避免账单按错误日期归属。
+	TS time.Time
+	// 鉴权时 api_keys 行 ID 快照，用于日志权限和账单归属；会话用户可为空。
+	KeyID string
+	// 鉴权时账单归属类型快照，与各层 ID 一起确定用量归属。
+	OwnerType string
+	// 实际调用用户的 ID 快照，用于日志权限隔离和账单归属。
+	UserID string
+	// 调用时团队 ID 快照，未归属团队时为空，不随后续成员关系变化。
+	TeamID string
+	// 调用时项目 ID 快照，未归属项目时为空。
+	ProjectID string
+	// 调用时组织 ID 快照，异步刷库时不重新查成员关系。
+	OrganizationID string
+	// 请求日志采用的公开模型/组别名，由 RecordSpend 的 alias 传入；实际上游型号由 UpstreamModel 单独记录。
+	Model string
+	// 执行操作类别，如 chat 或官方端点动作，用于日志及用量分类。
+	CallType string
+	// 成功或失败分类，用于日志筛选；精确响应码见 HTTPStatus。
+	Status string
+	// 最终返回客户端的 HTTP 状态码；0 表示未保存该事实。
+	HTTPStatus int
+	// 归一化输入 token 数，由上游用量产生，无实测时为 0。
+	PromptTokens int
+	// 归一化输出 token 数，由上游用量产生，无实测时为 0。
 	CompletionTokens int
-	Cost             float64
-	DurationMS       int
-	RequestBody      string
-	ResponseBody     string
-	Error            string
-	// UpstreamResponse 是已脱敏的传输事实 JSON，随请求日志持久化。
+	// 持久化费用，单位沿用平台账单币种；零费用调用也保留日志。
+	Cost float64
+	// 从请求开始到结束的耗时，单位毫秒，不等同于首字延迟。
+	DurationMS int
+	// 受提示词存储及脱敏规则控制的请求正文快照。
+	RequestBody string
+	// 受提示词存储及脱敏规则控制的响应正文快照。
+	ResponseBody string
+	// 失败的原始错误正文，供详情诊断；成功为空，沿用现有脱敏规则。
+	Error string
+	// 已脱敏的上游头和原始统计 JSON，独立于提示词存储。
 	UpstreamResponse string
-	ProxyRequest     string
-	EndedAt          time.Time
-	TTFTMs           *int
-	CacheHit         bool
-	KeyHash          string
-	KeyAlias         string
-	TeamAlias        string
-	Provider         string
-	CachedTokens     *int
-	SessionID        string
-	CacheKey         string
-	Guardrail        string
-	// PriceSnapshot is the JSON of the rates this call was billed at. It is what
-	// makes a historical log row explainable without recomputing from the price
-	// table of the day it is read.
+	// 网关方法、路径、脱敏请求头等元数据 JSON，供详情诊断。
+	ProxyRequest string
+	// 请求结束时间，未取得结束事实时为空或零值，由写库逻辑处理。
+	EndedAt time.Time
+	// 流请求的首字节或非流请求的完整响应耗时，单位毫秒；nil 表示没有测量。
+	TTFTMs *int
+	// 是否返回网关响应缓存；命中仍记录用量但推理费用为 0，不提交上游成功偏好。
+	CacheHit bool
+	// 调用密钥哈希快照，用于定位身份，不是明文密钥。
+	KeyHash string
+	// 调用时密钥显示名称快照，名称变化后不重写旧日志。
+	KeyAlias string
+	// 调用时团队显示名称快照，供日志展示。
+	TeamAlias string
+	// 执行供应商/适配器标识，区别于具体供应商连接 ID。
+	Provider string
+	// 上游报告的缓存输入 token 数；nil 表示没有统计，0 表示明确没有命中。
+	CachedTokens *int
+	// 明确、继承、推断或生成的会话标识，用于响应头和授权范围内日志归组；不是响应 ID，不授予历史读取权限。
+	SessionID string
+	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
+	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
+	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。
+	// cache_key/prompt 在日志中标为推断；不参与权限判断。空值表示未记录来源；JSON 和入库行为由当前载体字段标签决定。
+	SessionSource string
+	// 网关响应缓存键，与会话指纹、原生 prompt_cache_key 及偏好缓存键相互独立。
+	CacheKey string
+	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
+	Guardrail string
+	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string
 }
 
@@ -234,14 +296,14 @@ func insertEvent(s *xorm.Session, r UsageRecord) (bool, error) {
         (request_id, ts, key_id, owner_type, user_id, team_id, project_id, organization_id,
 		 model, call_type, status, http_status, prompt_tokens, completion_tokens, cost, duration_ms,
          ended_at, ttft_ms, cache_hit, key_hash, key_alias, team_alias, provider,
-         cached_tokens, session_id, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cached_tokens, session_id, session_source, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (request_id) DO NOTHING`,
 		r.RequestID, stamp(r.TS), r.KeyID, ownerType(r), r.UserID, r.TeamID, r.ProjectID,
 		r.OrganizationID, r.Model, r.CallType, status(r), r.HTTPStatus,
 		r.PromptTokens, r.CompletionTokens, r.Cost, r.DurationMS,
 		ended, r.TTFTMs, r.CacheHit, r.KeyHash, r.KeyAlias, r.TeamAlias, r.Provider,
-		r.CachedTokens, r.SessionID, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint)
+		r.CachedTokens, r.SessionID, r.SessionSource, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint)
 	if err != nil {
 		return false, mapErr(err)
 	}

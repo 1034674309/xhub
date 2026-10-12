@@ -202,7 +202,7 @@ func TestNativeBypassStreamingFlushAndMergedUsage(t *testing.T) {
 	}
 }
 
-// TestNativeCreateServerErrorIsNotReplayed 验证创建操作返回 5xx 后不会因路由重试设置生成第二个付费任务。
+// TestNativeCreateServerErrorIsNotReplayed 验证异步创建操作返回 5xx 后不会因路由重试设置生成第二个付费任务。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
 func TestNativeCreateServerErrorIsNotReplayed(t *testing.T) {
@@ -218,7 +218,7 @@ func TestNativeCreateServerErrorIsNotReplayed(t *testing.T) {
 		"model_routes": []any{},
 		"retry_policy": map[string]any{"max_attempts": 3, "timeout_seconds": 60, "failure_threshold": 3, "cooldown_seconds": 0},
 	}
-	rec := h.call(t, "POST", "/bypass/openai/v1/responses", `{"model":"public"}`)
+	rec := h.call(t, "POST", "/bypass/openai/v1/responses", `{"model":"public","background":true}`)
 	if rec.Code != 503 || calls != 1 || h.spend[0].usage != nil {
 		t.Fatal(rec.Code, calls, h.spend)
 	}

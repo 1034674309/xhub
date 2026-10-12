@@ -17,6 +17,8 @@ test("Responses incremental continuation SSE", async ({ page }) => {
     const headers = { Authorization: "Bearer " + await sessionBearer(page) };
     let previous = "";
     let finalCall = "";
+    const sessionId = await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"));
+    expect(sessionId).toBeTruthy();
     for (let turn = 1; turn <= 3; turn++) {
       if (turn === 3) {
         await expect.poll(() => page.evaluate(() => sessionStorage.getItem("chatHistory"))).toContain("history-ok-2");
@@ -35,6 +37,8 @@ test("Responses incremental continuation SSE", async ({ page }) => {
       const response = await pending;
       // SSE 响应由页面持续读取，统一从页面状态取得已解析的 response ID，避免二次读取 Chromium 响应体。
       expect(response.status(), "Responses 续接请求应成功返回").toBe(200);
+      expect(response.request().headers()["x-session-id"]).toBe(sessionId);
+      expect(response.headers()["x-session-id"]).toBe(sessionId);
       const body = response.request().postDataJSON();
       expect(body.stream).toBe(stream);
       expect(body.input, "浏览器必须只发送本轮消息").toHaveLength(1);
@@ -55,6 +59,8 @@ test("Responses incremental continuation SSE", async ({ page }) => {
       }).toBeCloseTo(0.000012, 10);
       const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + call, { headers });
       const log = await detail.json();
+      expect(log.session_id).toBe(sessionId);
+      expect(log.session_source).toBe(turn === 1 ? "explicit" : "parent");
       expect(log.cache_hit, "提示词缓存不得变成整段响应缓存命中").toBe("false");
       expect(log.metadata.cached_tokens).toBe(turn === 1 ? 0 : 4);
       expect(log.metadata.upstream_response).toMatchObject({
@@ -97,6 +103,8 @@ test("Responses incremental continuation JSON", async ({ page }) => {
     const headers = { Authorization: "Bearer " + await sessionBearer(page) };
     let previous = "";
     let finalCall = "";
+    const sessionId = await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"));
+    expect(sessionId).toBeTruthy();
     for (let turn = 1; turn <= 3; turn++) {
       if (turn === 3) {
         await expect.poll(() => page.evaluate(() => sessionStorage.getItem("chatHistory"))).toContain("history-ok-2");
@@ -115,6 +123,8 @@ test("Responses incremental continuation JSON", async ({ page }) => {
       const response = await pending;
       // SSE 响应由页面持续读取，统一从页面状态取得已解析的 response ID，避免二次读取 Chromium 响应体。
       expect(response.status(), "Responses 续接请求应成功返回").toBe(200);
+      expect(response.request().headers()["x-session-id"]).toBe(sessionId);
+      expect(response.headers()["x-session-id"]).toBe(sessionId);
       const body = response.request().postDataJSON();
       expect(body.stream).toBe(stream);
       expect(body.input, "浏览器必须只发送本轮消息").toHaveLength(1);
@@ -135,6 +145,8 @@ test("Responses incremental continuation JSON", async ({ page }) => {
       }).toBeCloseTo(0.000012, 10);
       const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + call, { headers });
       const log = await detail.json();
+      expect(log.session_id).toBe(sessionId);
+      expect(log.session_source).toBe(turn === 1 ? "explicit" : "parent");
       expect(log.cache_hit, "提示词缓存不得变成整段响应缓存命中").toBe("false");
       expect(log.metadata.cached_tokens).toBe(turn === 1 ? 0 : 4);
       expect(log.metadata.upstream_response).toMatchObject({

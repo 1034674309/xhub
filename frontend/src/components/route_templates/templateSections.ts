@@ -26,7 +26,7 @@ export function validateSections(body: Record<string, unknown>): string {
         g.group_name === "default" ||
         names.has(g.group_name) ||
         typeof g.routing_strategy !== "string" ||
-        !Object.hasOwn({ ...groupStrategies, random: "随机" }, g.routing_strategy) ||
+        !Object.hasOwn(groupStrategies, g.routing_strategy) ||
         !Array.isArray(g.models) ||
         !g.models.length
       )

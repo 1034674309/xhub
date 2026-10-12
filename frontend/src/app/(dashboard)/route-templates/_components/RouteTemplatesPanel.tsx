@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { t, useT } from "@/i18n";
 import { formatTemplateStrategyLabel } from "@/components/route_templates/strategyLabel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,6 +83,7 @@ const scopeLabel = (scope: RouteTemplateUsage["scope_type"]) => {
  * 非法 JSON 禁止保存，绑定中的模板拒绝删除；未绑定模板不影响数据面。
  */
 const RouteTemplatesPanel: React.FC<{ accessToken: string | null }> = ({ accessToken }) => {
+  const t = useT();
   const { userId, userRole } = useAuthorized();
   const [deployments, setDeployments] = useState<SplitDeployment[]>([]);
   const [catalogError, setCatalogError] = useState("");
@@ -134,9 +135,9 @@ const RouteTemplatesPanel: React.FC<{ accessToken: string | null }> = ({ accessT
       timeout: (seconds: number) => t("pages.routeTemplates.timeoutSummary", { seconds }),
       fallbacks: (value: number) => t("pages.routeTemplates.fallbacksSummary", { count: value }),
       models: (value: number) => t("pages.routeTemplates.modelsSummary", { count: value }),
-      none: t("no fallbacks"),
+      none: t("pages.routeTemplates.platformDefault"),
     }),
-    [],
+    [t],
   );
 
   /** startCreate 创建可编辑草稿；无参数，无返回值，只重置本地状态，保存前不影响请求。 */
@@ -248,7 +249,7 @@ const RouteTemplatesPanel: React.FC<{ accessToken: string | null }> = ({ accessT
         )}
       </div>
 
-      <RouteTemplateGuide compact />
+      <RouteTemplateGuide />
       {catalogError && (
         <p role="alert" className="text-destructive">
           {catalogError}

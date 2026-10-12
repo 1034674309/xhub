@@ -7,6 +7,32 @@ describe("useChatHistory", () => {
     sessionStorage.clear();
   });
 
+  /** 前置空存储；验证首请求前保存 ID、重挂载复用、清空立即换 ID，结束清除会话存储。 */
+  it("会话 ID 刷新复用且清空重新生成", () => {
+    const first = renderHook(() => useChatHistory({ simplified: false }));
+    const id = first.result.current.sessionId;
+    expect(id).toMatch(/^[a-f0-9-]{36}$/);
+    expect(sessionStorage.getItem("playgroundSessionId")).toBe(id);
+    first.unmount();
+    const restored = renderHook(() => useChatHistory({ simplified: false }));
+    expect(restored.result.current.sessionId).toBe(id);
+    act(() => restored.result.current.clearChatHistory());
+    expect(restored.result.current.sessionId).not.toBe(id);
+    expect(sessionStorage.getItem("playgroundSessionId")).toBe(restored.result.current.sessionId);
+    restored.unmount();
+    sessionStorage.clear();
+  });
+  /** 前置已有主页面 ID；简化调试独立生成 ID 且不覆盖页面存储，结束清除存储。 */
+  it("简化调试独立会话不持久化", () => {
+    sessionStorage.setItem("playgroundSessionId", "main-conversation");
+    const hook = renderHook(() => useChatHistory({ simplified: true }));
+    expect(hook.result.current.sessionId).not.toBe("main-conversation");
+    act(() => hook.result.current.clearChatHistory());
+    expect(sessionStorage.getItem("playgroundSessionId")).toBe("main-conversation");
+    hook.unmount();
+    sessionStorage.clear();
+  });
+
   describe("updateTextUI", () => {
     it("should create a new assistant message when chat is empty", () => {
       const { result } = renderHook(() => useChatHistory({ simplified: false }));

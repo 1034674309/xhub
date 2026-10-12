@@ -208,7 +208,13 @@ func (s *Server) AnnotateCall(callID string, note dpcontract.CallNote) {
 	if s.callNotes == nil {
 		s.callNotes = map[string]dpcontract.CallNote{}
 	}
-	// 业务附注不得覆盖传输诊断；重试的非空诊断替换旧响应。
+	// 会话身份与来源保持；业务附注保留传输诊断，重试的非空诊断替换旧响应。
+	if note.SessionID == "" {
+		note.SessionID = s.callNotes[callID].SessionID
+	}
+	if note.SessionSource == "" {
+		note.SessionSource = s.callNotes[callID].SessionSource
+	}
 	if note.Upstream == nil {
 		note.Upstream = s.callNotes[callID].Upstream
 	}

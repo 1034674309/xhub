@@ -303,6 +303,7 @@ func eventRows(events []iam.UsageEvent) []map[string]any {
 			"cache_hit":           cacheHit,
 			"cache_key":           e.CacheKey,
 			"session_id":          e.SessionID,
+			"session_source":      e.SessionSource,
 			"status":              e.Status,
 			"owner_type":          e.OwnerType,
 			"project_id":          e.ProjectID,

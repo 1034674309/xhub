@@ -5,7 +5,7 @@ import { pageDescriptionsZhCN } from "./pageDescriptions.zh-CN";
 import { routeTemplatesZhCN } from "./routeTemplates.zh-CN";
 
 export const zhCN = {
- session: { logoutFailed: "退出失败，请重试。" },
+ session: { inferred: "推断会话", logoutFailed: "退出失败，请重试。" },
  requestMetrics: {endpoints: "端点", inbound: "入站端点", outbound: "出站端点", duration: "总时间（秒）", ttft: "TTFT（秒）", tps: "TPS（Token/秒）", definition: "TTFT 为上游首个响应字节耗时；TPS = 总 Token 数 ÷（总时间 − TTFT），流式与非流式统一计算。"},
  monitor: {
   "title": "模型监控",

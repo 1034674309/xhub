@@ -6,7 +6,7 @@ package dialogue
 func StripGatewayFields(body map[string]any) {
 	for _, key := range []string{
 		"api_key", "api_base", "api_version", "custom_llm_provider", "litellm_credential_name",
-		"rpm", "tpm", "guardrails", "litellm_trace_id", "litellm_session_id", "disable_fallbacks",
+		"rpm", "tpm", "guardrails", "litellm_trace_id", "session_id", "disable_fallbacks",
 	} {
 		delete(body, key)
 	}

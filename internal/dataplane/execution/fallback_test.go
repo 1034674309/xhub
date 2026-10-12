@@ -116,7 +116,7 @@ func (h *fallbackServeHost) EnforceIdentityLimits(w http.ResponseWriter, _ strin
 // PlanRoute 返回单测固定部署约束；参数为请求及身份，返回固定计划，无外部会话写入。
 func (h *fallbackServeHost) PlanRoute(*http.Request, string, map[string]any, *auth.Principal) dpcontract.RoutePlan {
 	if h.required {
-		return dpcontract.RoutePlan{Required: true, Pinned: router.CooldownID(h.cfg.ModelList[0])}
+		return dpcontract.RoutePlan{Required: true, Pinned: router.DeploymentID(h.cfg.ModelList[0]), Target: dpcontract.RouteTarget{DeploymentID: router.DeploymentID(h.cfg.ModelList[0]), Model: "a", Pool: "a"}}
 	}
 	return dpcontract.RoutePlan{}
 }
@@ -233,6 +233,62 @@ func TestNativeGroupMemberFallback(t *testing.T) {
 			ServeBypass(h, w, req, hit)
 			if w.Code != tc.want || strings.Join(calls, ",") != tc.calls {
 				t.Fatalf("组成员回退: 状态%d 调用%v 正文%s", w.Code, calls, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestNativeRetriesPreserveSupplier 验证同步原生对话不依赖跨模型回退配置即可在同一部署重试。
+// 前置本地受控上游和 max_attempts=3；覆盖短暂失败恢复、持续失败耗尽、普通参数错误和异步不重放。
+// 断言真实上游次数和 HTTP 结果；每个子测试由 Cleanup 关闭服务，无持久化数据。
+func TestNativeRetriesPreserveSupplier(t *testing.T) {
+	for _, tc := range []struct {
+		name                          string // 场景名称，区分恢复、耗尽和不允许重放的边界。
+		status                        int    // 首次或持续失败的上游状态码。
+		recover, disabled, background bool   // 是否在重试后恢复、禁用跨模型回退或使用异步创建。
+		wantStatus, wantCalls         int    // 网关最终状态与同一部署应收到的总调用次数。
+	}{
+		{"recover-without-fallback", 500, true, false, false, 200, 2},
+		{"recover-with-fallback-disabled", 500, true, true, false, 200, 2},
+		{"exhaust-same-deployment", 503, false, false, false, 503, 3},
+		{"rate-limit-recovery", 429, true, false, false, 200, 2},
+		{"ordinary-parameter-error", 400, false, false, false, 400, 1},
+		{"background-not-replayed", 500, true, false, true, 500, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if body["model"] != "supplier-a" {
+					t.Errorf("重试更换了上游型号: %v", body["model"])
+				}
+				w.Header().Set("Content-Type", "application/json")
+				if !tc.recover || calls == 1 {
+					w.WriteHeader(tc.status)
+					io.WriteString(w, "{\"error\":{\"code\":\"api_error\"}}")
+					return
+				}
+				io.WriteString(w, "{\"id\":\"ok\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}")
+			}))
+			t.Cleanup(up.Close)
+			settings := prefs.BuiltinSettings()
+			settings.Settings["retry_policy"].(map[string]any)["max_attempts"] = 3
+			// 失败阈值为 1，当前请求仍应完成预算，不能因第一次失败触发冷却而提前放弃供应商。
+			settings.Settings["retry_policy"].(map[string]any)["failure_threshold"] = 1
+			h := &fallbackNativeHost{logicHost: officialHost(up, Deployment("public-a", "supplier-a", "key", up.URL, "bypass_openai_responses", nil)), policy: settings}
+			req := httptest.NewRequest("POST", "/bypass/openai/v1/responses", strings.NewReader(fmt.Sprintf("{\"model\":\"public-a\",\"input\":\"Explain caching\",\"disable_fallbacks\":%t,\"background\":%t}", tc.disabled, tc.background)))
+			hit, ok := providerregistry.Match("POST", req.URL.Path)
+			if !ok {
+				t.Fatal("原生入口未注册")
+			}
+			w := httptest.NewRecorder()
+			ServeBypass(h, w, req, hit)
+			if w.Code != tc.wantStatus || calls != tc.wantCalls {
+				t.Fatalf("同供应商重试: 状态=%d 次数=%d，期望=%d/%d，正文=%s", w.Code, calls, tc.wantStatus, tc.wantCalls, w.Body.String())
 			}
 		})
 	}

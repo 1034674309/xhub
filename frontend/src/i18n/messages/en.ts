@@ -4,7 +4,7 @@ import { pageDescriptionsEn } from "./pageDescriptions.en";
 import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
- session: { logoutFailed: "Unable to sign out. Please try again." },
+ session: { inferred: "Inferred session", logoutFailed: "Unable to sign out. Please try again." },
  requestMetrics: {endpoints: "Endpoints", inbound: "Inbound", outbound: "Outbound", duration: "Total time (s)", ttft: "TTFT (s)", tps: "TPS (tokens/s)", definition: "TTFT measures the first upstream response byte. TPS = total tokens / (total time − TTFT), for streaming and synchronous requests."},
  monitor: {
   "title": "Model Monitor",

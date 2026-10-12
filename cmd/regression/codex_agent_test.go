@@ -40,7 +40,7 @@ func TestCodexAgentConversation(t *testing.T) {
 	h.ok("POST", "/credentials", admin, map[string]any{"credential_name": "codex-upstream", "credential_info": map[string]any{"custom_llm_provider": "openai"}, "credential_values": map[string]any{"api_base": upstream.URL + "/v1", "api_key": "sk-fake"}})
 	h.ok("POST", "/model/new", admin, map[string]any{"model_name": dep.ModelName, "litellm_params": dep.LiteLLMParams, "model_info": dep.ModelInfo})
 	owner := h.openScope(t, admin, "codex-agent")
-	headers := map[string]string{"User-Agent": "codex_cli_rs/0.1.0 (xhub acceptance simulator)", "Session_id": "codex-regression", "Originator": "codex_cli_rs"}
+	headers := map[string]string{"User-Agent": "codex_cli_rs/0.1.0 (xhub acceptance simulator)", "X-Session-Id": "codex-regression", "Originator": "codex_cli_rs"}
 	previous := ""
 	ids := map[string]bool{}
 	prompts := []string{"Remember project-alpha", "Recall the project", "Confirm the project"}
@@ -54,6 +54,9 @@ func TestCodexAgentConversation(t *testing.T) {
 			t.Fatalf("Codex 第 %d 轮失败：%s", index+1, reply.describe())
 		}
 		answer := reply.json()
+		if reply.headers.Get("X-Session-Id") != "codex-regression" {
+			t.Fatalf("Codex 第 %d 轮响应会话头错误：%s", index+1, reply.describe())
+		}
 		next := stringField(answer, "id")
 		if next == "" || next == previous || answer["status"] != "completed" {
 			t.Fatalf("Codex 响应契约错误：%v", answer)
@@ -81,7 +84,7 @@ func TestCodexAgentConversation(t *testing.T) {
 		ids[callID] = true
 		h.flushSpend()
 		bill := h.ok("GET", "/spend/logs/ui/"+callID, admin, nil).json()
-		for field, want := range map[string]string{"session_id": "codex-regression", "api_key": owner.keyID, "user": owner.userID, "team_id": owner.teamID, "project_id": owner.projectID, "organization_id": owner.orgID} {
+		for field, want := range map[string]string{"model": "codex-model", "session_id": "codex-regression", "api_key": owner.keyID, "user": owner.userID, "team_id": owner.teamID, "project_id": owner.projectID, "organization_id": owner.orgID} {
 			if bill[field] != want {
 				t.Fatalf("Codex 第 %d 轮归属 %s 错误：%v", index+1, field, bill)
 			}

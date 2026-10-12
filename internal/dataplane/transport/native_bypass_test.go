@@ -1,6 +1,10 @@
 package transport
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"mime/multipart"
 	"testing"
 
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
@@ -29,5 +33,64 @@ func TestNativeSupplierURLs(t *testing.T) {
 				t.Errorf("model = %s, want %s", got, spec.wantModel)
 			}
 		})
+	}
+}
+
+// TestBypassSessionFields 验证原生 JSON 和 multipart 在选路后移除 session_id，保留原生缓存键和文件。
+// 前置内存载荷，检查解析投影仍含会话信号、重建正文不泄露网关字段；非法 JSON 返回错误，无外部数据。
+func TestBypassSessionFields(t *testing.T) {
+	raw := []byte(`{"model":"public","session_id":"session","prompt_cache_key":"native-cache","extra":true}`)
+	body, err := ParseBypassBody(raw, "application/json")
+	if err != nil || body.Fields["session_id"] != "session" {
+		t.Fatalf("JSON 会话投影丢失: %v", err)
+	}
+	encoded, err := body.Payload("model", "upstream", false)
+	var doc map[string]any
+	if err != nil || json.Unmarshal(encoded, &doc) != nil {
+		t.Fatalf("JSON 重建失败: %v", err)
+	}
+	if _, exists := doc["session_id"]; exists {
+		t.Fatal("JSON 泄露网关会话字段")
+	}
+	if doc["model"] != "upstream" || doc["prompt_cache_key"] != "native-cache" || doc["extra"] != true {
+		t.Fatalf("原生字段被改写: %v", doc)
+	}
+	var payload bytes.Buffer
+	writer := multipart.NewWriter(&payload)
+	_ = writer.WriteField("model", "public")
+	_ = writer.WriteField("session_id", "session")
+	_ = writer.WriteField("prompt_cache_key", "native-cache")
+	file, _ := writer.CreateFormFile("file", "sample.bin")
+	_, _ = file.Write([]byte{0, 1, 255})
+	_ = writer.Close()
+	body, err = ParseBypassBody(payload.Bytes(), writer.FormDataContentType())
+	if err != nil || body.Fields["session_id"] != "session" {
+		t.Fatalf("表单会话投影丢失: %v", err)
+	}
+	encoded, err = body.Payload("model", "upstream", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(encoded), body.Boundary)
+	fields := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(part)
+		fields[part.FormName()] = string(data)
+	}
+	if _, exists := fields["session_id"]; exists {
+		t.Fatal("表单泄露网关会话字段")
+	}
+	if fields["model"] != "upstream" || fields["prompt_cache_key"] != "native-cache" || fields["file"] != string([]byte{0, 1, 255}) {
+		t.Fatalf("表单原生字段或文件被改写: %v", fields)
+	}
+	if _, err := ParseBypassBody([]byte("{"), "application/json"); err == nil {
+		t.Fatal("非法 JSON 未拒绝")
 	}
 }

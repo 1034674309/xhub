@@ -16,8 +16,12 @@ func Schedule(list []config.ModelEntry, alias, strategy string, st State, pinned
 			if CooldownID(e) == pinned {
 				out := make([]config.ModelEntry, 0, len(pool))
 				out = append(out, e)
-				out = append(out, pool[:i]...)
-				out = append(out, pool[i+1:]...)
+				rest := append(append([]config.ModelEntry(nil), pool[:i]...), pool[i+1:]...)
+				// 只有一个剩余目标时已无需排序，避免为已确定的粘性首选消耗随机抽样。
+				if len(rest) > 1 {
+					rest = Order(rest, alias, strategy, st)
+				}
+				out = append(out, rest...)
 				return out
 			}
 		}

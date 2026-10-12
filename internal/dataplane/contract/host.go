@@ -93,15 +93,15 @@ type RequestHost interface {
 	// 调用：dataplane/execution/official.go、dataplane/execution/serve.go、gateway/wire.go
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	RouteState() router.State
-	// PlanRoute 在选部署之前解析会话，并取回已经钉在这个会话上的部署。
-	// 参数 r：读会话头。alias：对外模型名。body：读 metadata.user_id 和消息。p：用来隔离租户。
-	// 返回：RoutePlan。Pinned 非空时 Serve 把该部署放在候选第一位。
+	// PlanRoute 在选部署之前解析会话，并读取动态部署偏好或固定父响应归属。
+	// 参数 r：读会话头。alias：对外模型名。body：读标准 session_id、父响应和稳定 prompt。p：用来隔离租户。
+	// 返回：RoutePlan。Pinned 非空时两类执行器验证当前资格后优先复用；Required 只允许父响应原目标。
 	// 调用：Serve。测试：gateway/affinity/affinity_test.go。
 	PlanRoute(r *http.Request, alias string, body map[string]any, p *auth.Principal) RoutePlan
 	// CommitRoute 把这次真正用到的部署记到会话上，供下一轮继续打到同一上游。
-	// 参数 plan：PlanRoute 的结果。deploymentID：api_base|model。responseID：响应里的 id，可空。
+	// 参数 plan：PlanRoute 的结果。deploymentID：稳定部署 ID。responseID：响应里的 id，可空。
 	// 返回：无。
-	// 调用：Serve 在流式或非流式成功之后。测试：affinity_test.go TestAffinityPinIsReused。
+	// 调用：Serve 在流式或非流式成功之后。测试：affinity_test.go TestConcurrentClaimAndLateCommit。
 	CommitRoute(plan RoutePlan, deploymentID, responseID string)
 	// AttachCredential 按部署上的凭据名补上 api_key 和 api_base。没有凭据名时原样返回。
 	// 参数 dep：路由选出的一行模型。
@@ -249,21 +249,62 @@ type Bypass interface {
 	SpendLog
 }
 
-// RoutePlan 是选部署之前决定的会话钉。
+// RoutePlan 是选部署前生成的请求私有计划，普通偏好可动态重选，父响应归属必须保持。
 // Alias 是对外模型名。SessionID 写入用量行，把同一会话的请求收成一组。
 // Caller 是密钥哈希或用户 id，避免不同租户共用一根钉。
-// Pinned 是上一次部署 id。非空时 Serve 把该部署放在候选第一位。Bypass 不使用 Pinned。
+// 适配和原生入口均重新验证候选，成功后才比较更新偏好；不是持久化强绑定。
 type RoutePlan struct {
-	// History 是按调用方、模型和响应 ID 隔离的一小时续接上下文，不代表上游 store。
+	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
+	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
+	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。
+	// cache_key/prompt 在日志中标为推断；不参与权限判断。空值表示未记录来源；本字段通过日志载体序列化。
+	SessionSource string
+	// 本轮读取或实际执行的部署、模型池及回退路径；执行前重新验证当前配置中的资格。
+	Target RouteTarget
+	// 无偏好时原子申请候选并返回并发赢家；nil 表示不协调。只协调缓存，不锁上游执行。
+	Claim func(RouteTarget) RouteTarget
+	// 成功后比较更新本轮读取的版本并续期；nil 表示不写偏好，迟到结果不能覆盖已变化的记录。
+	Save func(RouteTarget)
+	// 调用方、请求模型和 responses 入口隔离的一小时临时上下文；执行器追加本轮输入和成功结果，不是原厂长期 store。
 	History []llmdialogue.Turn
-	// Endpoint、Required、Err 隔离入口并阻止不存在的响应继续请求回退。
-	Endpoint  string
-	Required  bool
-	Err       error
-	Alias     string
+	// 能力目录中的入口标识，作为缓存范围隔离不同协议；不是供应商地址。
+	Endpoint string
+	// 父响应已确定原部署时为 true；只允许该部署，不能进入普通跨目标回退。
+	Required bool
+	// 身份冲突、非法信号或父响应/上下文不可用等计划错误，执行器必须在上游调用前拒绝。
+	Err error
+	// 客户端请求的公开模型或路由组；回退时保持原值，用作动态偏好范围。
+	Alias string
+	// 明确、继承、推断或生成的会话标识，用于响应头和授权范围内日志归组；不是响应 ID，不授予历史读取权限。
 	SessionID string
-	Caller    string
-	Pinned    string
+	// 鉴权生成的 key:<hash> 或 user:<id>，用于隔离调用方；客户端不能指定，空值不建立偏好。
+	Caller string
+	// 候选稳定 deployment_id，执行器从当前目录转换为运行 ID；普通请求优先复用，Required 请求只允许该目标。
+	Pinned string
+}
+
+// RouteStep 是实际回退路径的一条边，每轮按当前模板验证。
+type RouteStep struct {
+	// 回退失败源的公开模型或组；没有显式组链时可以是实际成员名。
+	From string `json:"from"`
+	// 对应错误类别回退列表中的目标公开模型或组，发送前仍检查权限、能力与预算。
+	To string `json:"to"`
+	// 回退类别：general（429/5xx/可重放网络错误）、context（上下文超限）、content（上游内容拒绝）。
+	Kind string `json:"kind"`
+}
+
+// RouteTarget 保存动态偏好；Pool 是展开的模型或组，Revision 防止比较更新出现 ABA。
+type RouteTarget struct {
+	// 部署目录的稳定 ID，地址或定价变化不改变它；每轮从当前目录恢复执行配置，删除后失效。
+	DeploymentID string `json:"deployment_id"`
+	// 实际部署所属公开模型；组调用和回退时可以不同于客户端请求别名，上游型号另行保存。
+	Model string `json:"model"`
+	// 实际选中部署的公开模型池或显式组，决定当前策略、权重及回退源。
+	Pool string `json:"pool"`
+	// 原请求别名到实际模型池的有序回退边，每轮按当前模板验证；直接命中时为空，不能作为授权。
+	Path []RouteStep `json:"path,omitempty"`
+	// 每次缓存写入生成的随机版本，避免比较更新的 ABA 问题；不是时间戳或排序编号。
+	Revision string `json:"revision"`
 }
 
 // CallNote 是写进用量行的事实。由 AnnotateCall 暂存，RecordSpend 取走。
@@ -272,22 +313,35 @@ type RoutePlan struct {
 // CacheKey 是响应缓存键。CacheHit 为 true 时扣费金额为 0。
 // SessionID 与 RoutePlan.SessionID 相同。部署身份由 RecordSpend 的 depID 参数传递。
 type CallNote struct {
-	// Streamed 区分实测流与非流整次响应，供性能统计使用。
+	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool
-	// Upstream 保存转换前的响应头与原始统计，由转发观察器填充。
+	// 传输观察器产生的脱敏响应头及原始用量诊断；nil 表示没有上游观察事实。
 	Upstream *dpdiagnostics.UpstreamDiagnostics
-	// TaskRequestID、TaskStatus 关联原始异步请求及生命周期；TaskInitial 区分创建，TaskSettlement 表示成功实测结算。
-	TaskRequestID  string
-	TaskStatus     string
-	TaskInitial    bool
+	// 异步任务创建时的原请求 ID，轮询仍使用自己的 callID，供更新原任务日志。
+	TaskRequestID string
+	// 上游任务生命周期状态，用于更新创建日志，不决定同步重试策略。
+	TaskStatus string
+	// 是否为异步任务创建事件，创建成功时实际费用可能尚未确定。
+	TaskInitial bool
+	// 查询取得成功实测结果时为 true，通知账单原子结算原任务并防止重复收费。
 	TaskSettlement bool
-	// SettlementID overrides persisted RequestID, never the metadata callID.
+	// 指定账单落在原任务请求上，不改变暂存诊断使用的 callID。
 	SettlementID string
-	// SkipRouteUsage excludes async task queries from synchronous route TPM.
+	// 查询不计入同步路由 TPM 时为 true，避免反复轮询放大 token 用量。
 	SkipRouteUsage bool
-	TTFTMs         *int
-	Provider       string
-	CacheKey       string
-	CacheHit       bool
-	SessionID      string
+	// 流请求的首字节或非流请求的完整响应耗时，单位毫秒；nil 表示没有测量。
+	TTFTMs *int
+	// 执行供应商/适配器标识，区别于具体供应商连接 ID。
+	Provider string
+	// 网关响应缓存键，与会话指纹、原生 prompt_cache_key 及偏好缓存键相互独立。
+	CacheKey string
+	// 是否返回网关响应缓存；命中仍记录用量但推理费用为 0，不提交上游成功偏好。
+	CacheHit bool
+	// 明确、继承、推断或生成的会话标识，用于响应头和授权范围内日志归组；不是响应 ID，不授予历史读取权限。
+	SessionID string
+	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
+	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
+	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。
+	// cache_key/prompt 在日志中标为推断；不参与权限判断。空值表示未记录来源；本字段通过日志载体序列化。
+	SessionSource string
 }

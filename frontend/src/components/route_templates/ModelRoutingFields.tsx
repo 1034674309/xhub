@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/i18n";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,26 +19,25 @@ export default function ModelRoutingFields({
   deployments: SplitDeployment[];
   onChange: (rules: ModelRoutingRule[]) => void;
 }) {
+  const t = useT();
   const [model, setModel] = useState("");
   const configured = new Set(rules.map((rule) => rule.model));
   const names = [...new Set(deployments.map((row) => row.model_name))].filter((name) => !configured.has(name)).sort();
 
   return (
-    <section className="space-y-4" aria-label="模型规则">
+    <section className="space-y-4" aria-label={t("pages.routeTemplates.editor.modelRules")}>
       <div>
-        <h3 className="font-semibold">模型负载均衡规则</h3>
-        <p className="text-sm text-muted-foreground">
-          只添加需要不同策略的公开模型；其余模型继承模型管理中的端点权重。每个模型在自己的兼容部署之间分配请求。
-        </p>
+        <h3 className="font-semibold">{t("pages.routeTemplates.editor.modelRulesTitle")}</h3>
+        <p className="text-sm text-muted-foreground">{t("pages.routeTemplates.editor.modelHint")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <select
-          aria-label="公开模型"
+          aria-label={t("pages.routeTemplates.editor.publicModel")}
           className="rounded border bg-background p-2"
           value={model}
           onChange={(event) => setModel(event.target.value)}
         >
-          <option value="">选择公开模型</option>
+          <option value="">{t("pages.routeTemplates.editor.chooseModel")}</option>
           {names.map((name) => (
             <option key={name} value={name}>
               {name}
@@ -52,26 +52,26 @@ export default function ModelRoutingFields({
             setModel("");
           }}
         >
-          添加模型规则
+          {t("pages.routeTemplates.editor.addModel")}
         </Button>
       </div>
       {rules.map((rule, index) => (
         <section
           key={rule.model}
           className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
-          aria-label={"模型规则 " + rule.model}
+          aria-label={t("pages.routeTemplates.editor.ruleFor", { model: rule.model })}
         >
           <div>
             <h4 className="font-semibold">{rule.model}</h4>
             {rule.strategy === "traffic-split" && (
-              <p className="text-sm text-muted-foreground">可继承模型默认权重，也可在当前模板中单独配置。</p>
+              <p className="text-sm text-muted-foreground">{t("pages.routeTemplates.editor.inheritOrOverride")}</p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2">
-              路由逻辑
+              {t("pages.routeTemplates.editor.routingLogic")}
               <select
-                aria-label={rule.model + " 路由逻辑"}
+                aria-label={t("pages.routeTemplates.editor.logicFor", { model: rule.model })}
                 className="rounded border bg-background p-2"
                 value={rule.strategy}
                 onChange={(event) =>
@@ -96,21 +96,21 @@ export default function ModelRoutingFields({
               >
                 {Object.entries(strategyLabels).map(([id, label]) => (
                   <option key={id} value={id}>
-                    {label}
+                    {t(label)}
                   </option>
                 ))}
               </select>
             </label>
             <Button type="button" variant="ghost" onClick={() => onChange(rules.filter((_, i) => i !== index))}>
-              删除规则
+              {t("pages.routeTemplates.editor.deleteRule")}
             </Button>
           </div>
           {rule.strategy === "traffic-split" && (
             <div className="w-full space-y-3 border-t pt-4">
               <label className="flex flex-wrap items-center gap-3">
-                权重来源
+                {t("pages.routeTemplates.editor.weightSource")}
                 <select
-                  aria-label={rule.model + " 权重来源"}
+                  aria-label={t("pages.routeTemplates.editor.sourceFor", { model: rule.model })}
                   className="rounded border bg-background p-2"
                   value={rule.allocations === undefined ? "inherit" : "custom"}
                   onChange={(e) =>
@@ -130,15 +130,13 @@ export default function ModelRoutingFields({
                     )
                   }
                 >
-                  <option value="custom">自定义权重</option>
-                  <option value="inherit">继承默认权重</option>
+                  <option value="custom">{t("pages.routeTemplates.editor.customWeights")}</option>
+                  <option value="inherit">{t("pages.routeTemplates.editor.inheritWeights")}</option>
                 </select>
               </label>
               {rule.allocations !== undefined ? (
                 <>
-                  <p className="text-sm text-muted-foreground">
-                    仅当前模板生效。3 / 7 表示约 30% / 70%；0 排除部署；未列出的部署权重为 1。
-                  </p>
+                  <p className="text-sm text-muted-foreground">{t("pages.routeTemplates.editor.customWeightHint")}</p>
                   {[
                     ...new Set([
                       ...deployments
@@ -156,7 +154,7 @@ export default function ModelRoutingFields({
                           min="0"
                           step="any"
                           className="w-28 shrink-0"
-                          aria-label={"模板部署 " + id + " 权重"}
+                          aria-label={t("pages.routeTemplates.editor.templateWeight", { id })}
                           value={Number.isNaN(weight) ? "" : weight}
                           onChange={(e) =>
                             onChange(
@@ -182,9 +180,7 @@ export default function ModelRoutingFields({
                   })}
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  实时继承模型管理的默认权重；切换自定义后由模板独立控制。
-                </p>
+                <p className="text-sm text-muted-foreground">{t("pages.routeTemplates.editor.inheritHint")}</p>
               )}
             </div>
           )}
@@ -192,7 +188,7 @@ export default function ModelRoutingFields({
       ))}
       {rules.length === 0 && (
         <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          尚未配置模型负载均衡规则，所有模型读取模型管理中的端点权重。
+          {t("pages.routeTemplates.editor.emptyRules")}
         </p>
       )}
     </section>

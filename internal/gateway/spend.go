@@ -193,7 +193,7 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		Messages: ex.messages, Response: ex.response, ProxyRequest: ex.proxy,
 		UpstreamResponse: requestlog.DiagnosticJSON(note.Upstream, usage),
 		Streamed:         note.Streamed, TTFTMs: note.TTFTMs, Provider: note.Provider, CacheKey: note.CacheKey,
-		SessionID: note.SessionID, CachedTokens: cachedColumn(usage),
+		SessionID: note.SessionID, SessionSource: note.SessionSource, CachedTokens: cachedColumn(usage),
 		Guardrail:     guardrail,
 		PriceSnapshot: catalog.SnapshotUsage(charge, billed, okc),
 	}
@@ -353,7 +353,7 @@ func usageFromSpend(row live.SpendLog, spend float64, messages, response, proxy 
 		EndedAt:          end, TTFTMs: row.TTFTMs, CacheHit: row.CacheHit,
 		KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
 		Provider: row.Provider, CachedTokens: row.CachedTokens,
-		SessionID: row.SessionID, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
+		SessionID: row.SessionID, SessionSource: row.SessionSource, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
 		PriceSnapshot: row.PriceSnapshot,
 	}
 }

@@ -12,14 +12,21 @@ export const ROUTE_TEMPLATE_EXAMPLE = routeTemplateExample;
 const fieldRows = [
   ["model_routes", "fieldModelRoutes"],
   ["retry_policy", "fieldRetryPolicyRequired"],
-  ["routing_strategy", "fieldLegacyStrategy"],
   ["routing_groups", "fieldRoutingGroups"],
   ["fallbacks", "fieldFallbackShape"],
   ["context_window_fallbacks", "fieldContextFallbacks"],
   ["content_policy_fallbacks", "fieldContentFallbacks"],
 ] as const;
 
-const strategies = ["random", "simple-shuffle", "traffic-split", "least-busy", "cost-based-routing", "latency-based-routing", "usage-based-routing"] as const;
+const strategies = [
+  "random",
+  "simple-shuffle",
+  "traffic-split",
+  "least-busy",
+  "cost-based-routing",
+  "latency-based-routing",
+  "usage-based-routing",
+] as const;
 
 /** JsonExample 显示并复制严格结构示例；失败时给出本地化反馈，不更新模板草稿或后台数据。 */
 function JsonExample() {
@@ -41,10 +48,14 @@ function JsonExample() {
     <section aria-label={t("pages.routeTemplates.jsonGuide.exampleTitle")} className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="font-medium">{t("pages.routeTemplates.jsonGuide.exampleTitle")}</h4>
-        <Button variant="outline" size="sm" onClick={() => void copy()}>{t("pages.routeTemplates.jsonGuide.copy")}</Button>
+        <Button variant="outline" size="sm" onClick={() => void copy()}>
+          {t("pages.routeTemplates.jsonGuide.copy")}
+        </Button>
       </div>
       <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-4 text-xs leading-5">{json}</pre>
-      <p role="status" className="text-xs text-muted-foreground">{status}</p>
+      <p role="status" className="text-xs text-muted-foreground">
+        {status}
+      </p>
     </section>
   );
 }
@@ -70,10 +81,18 @@ export default function RouteTemplateJsonGuide() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <caption className="sr-only">{t("pages.routeTemplates.jsonGuide.referenceTitle")}</caption>
-              <thead className="border-b"><tr><th className="p-2">{t("pages.routeTemplates.jsonGuide.field")}</th><th className="p-2">{t("pages.routeTemplates.jsonGuide.behavior")}</th></tr></thead>
+              <thead className="border-b">
+                <tr>
+                  <th className="p-2">{t("pages.routeTemplates.jsonGuide.field")}</th>
+                  <th className="p-2">{t("pages.routeTemplates.jsonGuide.behavior")}</th>
+                </tr>
+              </thead>
               <tbody>
                 {fieldRows.map(([field, key]) => (
-                  <tr key={field} className="border-b align-top"><td className="break-words p-2 font-mono">{field}</td><td className="p-2">{t("pages.routeTemplates.jsonGuide." + key)}</td></tr>
+                  <tr key={field} className="border-b align-top">
+                    <td className="break-words p-2 font-mono">{field}</td>
+                    <td className="p-2">{t("pages.routeTemplates.jsonGuide." + key)}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -83,7 +102,13 @@ export default function RouteTemplateJsonGuide() {
 
         <TabsContent value="strategies" className="space-y-4 pt-3">
           <p>{t("pages.routeTemplates.jsonGuide.strategiesHint")}</p>
-          <ul className="grid gap-2 sm:grid-cols-2">{strategies.map((strategy) => <li key={strategy}><code>{strategy}</code></li>)}</ul>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {strategies.map((strategy) => (
+              <li key={strategy}>
+                <code>{strategy}</code>
+              </li>
+            ))}
+          </ul>
           <p>{t("pages.routeTemplates.jsonGuide.fieldRoutingStrategyArgs")}</p>
         </TabsContent>
 

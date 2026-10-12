@@ -40,6 +40,7 @@ export async function makeAnthropicMessagesRequest(
   mcpServerToolRestrictions?: Record<string, string[]>,
   mcpToolsets?: MCPToolset[],
   streamingEnabled: boolean = true,
+  sessionId?: string,
 ) {
   if (!accessToken) {
     throw new Error(t("Virtual Key is required"));
@@ -82,6 +83,7 @@ export async function makeAnthropicMessagesRequest(
       tags,
       signal,
       anthropic: true,
+      sessionId,
     });
     if (!streamingEnabled) {
       const message = await httpResponse.json();

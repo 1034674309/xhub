@@ -13,19 +13,28 @@ import (
 // bypassPart 保存 multipart 原始分段，模型替换不改变文件字节与 MIME 头。
 // Header 是完整分段头；Name 是字段名；Data 是未经编码转换的正文。
 type bypassPart struct {
+	// 原始分段 MIME 头，重建时保留文件名称、类型及扩展头，不包含整个 HTTP 请求头。
 	Header textproto.MIMEHeader
-	Name   string
-	Data   []byte
+	// 表单字段名，用于识别 model 和网关控制字段；文件字段也保留名称。
+	Name string
+	// 原始分段字节；文件不做文本转换，session_id 控制字段不转发给上游。
+	Data []byte
 }
 
 // bypassBody 同时保存透传字节和用于路由、用量提取的字段投影。
 // Raw 是原始载荷；Fields 是非文件字段；Media、Boundary 保留协议类型与原始边界。
 // Parts 保存原始文件和字段顺序，替换模型时只修改对应字段。
 type bypassBody struct {
-	Raw             []byte
-	Fields          map[string]any
-	Media, Boundary string
-	Parts           []bypassPart
+	// 客户端原始正文；模型替换或控制字段过滤时构建新的正文，不原地改写观测内容。
+	Raw []byte
+	// 路由、会话识别与用量检查的字段投影；JSON 保留类型，multipart 非文件字段为字符串。
+	Fields map[string]any
+	// 解析后的媒体类型，支持 JSON 和 multipart；空 Content-Type 按 JSON 处理。
+	Media string
+	// multipart 原始边界，重建分段时复用；JSON 时为空。
+	Boundary string
+	// 按原始顺序保存的分段；网关字段可移除，其余字段和文件保持原协议。
+	Parts []bypassPart
 }
 
 // parseBypassBody 解析路由和计价需要的字段，同时保留原始 JSON 与 multipart 文件。
@@ -79,7 +88,7 @@ func ParseBypassBody(raw []byte, contentType string) (bypassBody, error) {
 // 返回 []byte、error：可发送的原生请求体或序列化错误。JSON 大整数、未知参数、文件字节与边界均保留。
 // 调用：serveBypassCreate。测试：TestNativeBypassJSONAndUsage、TestNativeImageEditMultipart。
 func (b bypassBody) Payload(field, model string, pathModel bool) ([]byte, error) {
-	if field == "" && !pathModel && b.Fields["disable_fallbacks"] == nil {
+	if field == "" && !pathModel && b.Fields["disable_fallbacks"] == nil && b.Fields["session_id"] == nil {
 		return b.Raw, nil
 	}
 	if pathModel {
@@ -95,6 +104,7 @@ func (b bypassBody) Payload(field, model string, pathModel bool) ([]byte, error)
 		}
 		// 回退开关属于网关，不能泄露为供应商的未知请求字段。
 		delete(fields, "disable_fallbacks")
+		delete(fields, "session_id")
 		if pathModel {
 			delete(fields, field)
 		} else if field != "" {
@@ -103,7 +113,7 @@ func (b bypassBody) Payload(field, model string, pathModel bool) ([]byte, error)
 		return json.Marshal(fields)
 	}
 	if b.Media == "multipart/form-data" {
-		if b.Fields[field] == model && !pathModel && b.Fields["disable_fallbacks"] == nil {
+		if b.Fields[field] == model && !pathModel && b.Fields["disable_fallbacks"] == nil && b.Fields["session_id"] == nil {
 			return b.Raw, nil
 		}
 		var out bytes.Buffer
@@ -112,7 +122,7 @@ func (b bypassBody) Payload(field, model string, pathModel bool) ([]byte, error)
 			return nil, err
 		}
 		for _, part := range b.Parts {
-			if part.Name == "disable_fallbacks" {
+			if part.Name == "disable_fallbacks" || part.Name == "session_id" {
 				continue
 			}
 			data := part.Data

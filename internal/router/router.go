@@ -30,20 +30,21 @@ func All(list []config.ModelEntry, alias string) []config.ModelEntry {
 	return matchDeployments(list, alias)
 }
 
-// State is the runtime snapshot the router sees. The zero value uses only in-process Busy and does not read cooldown or latency.
-// State is the Redis-backed view of deployments. Zero values keep the old
-// in-process behavior (busy map only).
+// State 是本轮选路的运行状态快照，由网关从 Redis 和本机并发计数构建。
+// 映射以 CooldownID 运行身份索引，Allocations 以稳定 DeploymentID 索引；不包含会话历史。
+// 零值表示没有外部运行指标；调度只读取，不修改共享快照。
 type State struct {
 	// ModelNames 仅在请求显式组名时展开成员，保留真实部署身份。
 	ModelNames []string
-	Busy       map[string]int
-	Cooldown   map[string]bool
-	Latency    map[string]float64
-	Usage      map[string]float64
-	// Now is the instant a time-aware strategy should price at. A window-priced
-	// deployment costs twice as much during its peak hours, so the cost strategy
-	// needs to know which hour it is choosing for. Zero means time.Now(), which
-	// is right for a live request and wrong for a test.
+	// 各部署当前在途请求数，least-busy 排序使用；缺失视为零，发送和结束分别增减。
+	Busy map[string]int
+	// 各部署是否处于失败冷却，true 时所有策略均排除；键缺失表示未冷却。
+	Cooldown map[string]bool
+	// 各部署最近观测的延迟，单位毫秒，latency-based-routing 使用；缺失指标按策略默认处理。
+	Latency map[string]float64
+	// 各部署运行窗口中的 token 用量，usage-based-routing 使用；不是持久化账单费用。
+	Usage map[string]float64
+	// 本轮比价时间，供分时定价选择费率；零值使用当前时间，测试可固定以避免时段漂移。
 	Now time.Time
 	// Allocations 仅按稳定部署 ID 记录相对权重分流，不读取部署旧权重。
 	Allocations map[string]float64

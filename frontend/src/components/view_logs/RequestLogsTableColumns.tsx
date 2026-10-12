@@ -142,7 +142,15 @@ export const getRequestLogsTableColumns = ({
     header: t("Session ID"),
     size: 120,
     enableSorting: false,
-    cell: ({ row }) => <IdCell value={row.original.session_id} onClick={() => onSessionClick(row.original)} />,
+    // 会话列展示推断来源；行来自真实费用日志，点击保持原会话详情行为。
+    cell: ({ row }) => (
+      <div>
+        <IdCell value={row.original.session_id} onClick={() => onSessionClick(row.original)} />
+        {(row.original.session_source === "prompt" || row.original.session_source === "cache_key") && (
+          <span className="text-xs text-muted-foreground">{t("session.inferred")}</span>
+        )}
+      </div>
+    ),
   },
   {
     id: "request_id",

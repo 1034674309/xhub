@@ -70,7 +70,8 @@ Ark Seedance → FAL Seedance → Kling，前阶段失败后不会继续创建�
 
 GPT 按组织继承、团队继承、Fenno 单供应商、七牛单供应商各选一把代表，
 共 4 个 Codex 类型三轮会话（12 次请求）；81 把成员密钥保留作数据基线。GLM
-另有一个三轮会话。两者使用 `/v1/responses`、Codex 客户端头和固定会话 ID，
+另有一个三轮会话。两者使用 `/v1/responses`、Codex 客户端身份头及标准 `X-Session-Id`
+传递固定会话 ID（旧 `Session_id` 不参与网关会话识别），逐轮核对响应会话头和账单归属，
 只发送当前输入并通过 `previous_response_id` 续接；后两轮必须记住第一轮的
 随机项目标记。逐轮检查完整上游历史、路由粘滞、usage、五级账单归属和金额。
 `report.json` 的 `agent_conversations` 保存原始增量请求和三轮回执；复验时

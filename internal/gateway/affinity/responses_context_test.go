@@ -11,12 +11,14 @@ import (
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
-// TestResponsesContextIsolationAndExpiry 验证续接历史往返、跨身份/型号/入口隔离及过期失败。
-// 参数 t 为测试上下文；前置内存 Server，检查工具字段不丢失；对象由测试释放，无外部数据。
+// TestResponsesContextIsolationAndExpiry 验证续接历史往返、工具字段保留及范围隔离。
+// 参数 t 为测试上下文，无返回值；前置独立内存 State，发布带工具调用的成功历史和归属。
+// 断言其他身份/模型/入口无法读取，损坏或过期历史拒绝续接，过期记录被清除。
+// 不依赖 Redis 或供应商，测试结束释放内存夹具，不访问或覆盖用户历史。
 func TestResponsesContextIsolationAndExpiry(t *testing.T) {
 	s := &State{}
 	history := []llmdialogue.Turn{{Role: "user", Text: "first"}, {Role: "assistant", Calls: []llmdialogue.Turn{{ID: "call", Name: "lookup", Arguments: "{}"}}}}
-	plan := dpcontract.RoutePlan{Alias: "a", Caller: "user:alice", Endpoint: "responses", History: history}
+	plan := dpcontract.RoutePlan{Alias: "a", Caller: "user:alice", Endpoint: "responses", SessionID: "conversation", History: history}
 	s.CommitRoute(plan, "dep", "chatcmpl-id")
 	body := map[string]any{"previous_response_id": "chatcmpl-id"}
 	req := httptest.NewRequest("POST", "/responses", nil)

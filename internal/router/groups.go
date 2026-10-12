@@ -14,14 +14,19 @@ import (
 // Group 是可直接作为 API model 使用的显式路由组；成员请求也继承组策略。
 // Args 仅包含已实现的部署相对权重，不接受没有执行能力的 LiteLLM 参数。
 type Group struct {
-	Name     string     `json:"group_name"`
-	Models   []string   `json:"models"`
-	Strategy string     `json:"routing_strategy"`
-	Args     *GroupArgs `json:"routing_strategy_args,omitempty"`
+	// 显式路由组公开名，可以用作 API model；不得与已有模型名冲突。
+	Name string `json:"group_name"`
+	// 组内公开模型名列表；组请求展开这些真实部署，仍保留成员计费和权限身份。
+	Models []string `json:"models"`
+	// 已校验策略名；只有 traffic-split 消费 Allocations，其他策略按其指标排序。
+	Strategy string `json:"routing_strategy"`
+	// 可选 traffic-split 组分配；nil 时组内等权，不叠加成员默认权重。
+	Args *GroupArgs `json:"routing_strategy_args,omitempty"`
 }
 
 // GroupArgs 提供流量分流的表单化部署权重；缺省时所有候选权重为一。
 type GroupArgs struct {
+	// 稳定部署 ID 到相对权重的分配列表；空列表等权 1，显式 0 排除，未列出的部署为 1。
 	Allocations []Allocation `json:"allocations"`
 }
 

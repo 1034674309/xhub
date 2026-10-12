@@ -90,6 +90,7 @@ export async function makeOpenAIResponsesRequest(
   mcpToolsets?: MCPToolset[],
   streamingEnabled: boolean = true,
   onTotalLatency?: (latency: number) => void,
+  sessionId?: string,
 ) {
   if (!accessToken) {
     throw new Error(t("Virtual Key is required"));
@@ -199,6 +200,7 @@ export async function makeOpenAIResponsesRequest(
       "responses",
       { ...requestBody, stream: streamingEnabled },
       {
+        sessionId,
         baseUrl: proxyBaseUrl,
         accessToken,
         tags,

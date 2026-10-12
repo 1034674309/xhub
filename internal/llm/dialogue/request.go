@@ -25,7 +25,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		}
 	}
 	allowed := map[string]bool{}
-	for _, k := range []string{"model", "stream", "stream_options", "tools", "tool_choice", "max_tokens", "max_completion_tokens", "max_output_tokens", "temperature", "top_p", "metadata", "user", "litellm_session_id", "prompt_cache_key"} {
+	for _, k := range []string{"model", "stream", "stream_options", "tools", "tool_choice", "max_tokens", "max_completion_tokens", "max_output_tokens", "temperature", "top_p"} {
 		allowed[k] = true
 	}
 	switch protocol {
@@ -35,10 +35,6 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		allowed["input"], allowed["instructions"] = true, true
 	case "anthropic-messages":
 		allowed["messages"], allowed["system"] = true, true
-	}
-	// 不可转换的附加参数必须明确拒绝；会话标签由网关单独读取。
-	for _, key := range []string{"metadata", "user", "prompt_cache_key"} {
-		delete(allowed, key)
 	}
 	if value, exists := body["stream_options"]; exists {
 		if err := dialogueFields(dialogueMap(value), "include_usage"); err != nil {

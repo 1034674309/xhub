@@ -52,9 +52,13 @@ class ChatCases:
             if previous:
                 body["previous_response_id"] = previous
             start = len(self.observer.rows) if self.observer else 0
+            # Codex 身份头继续保留；会话归组必须使用网关标准头，旧 Session_id 不参与会话识别。
             answer, headers = self.api(config["endpoint"], body, token=key["key"], request_headers={
-                "User-Agent": config["user_agent"], "Session_id": session, "Originator": "codex_cli_rs"})
+                "User-Agent": config["user_agent"], "X-Session-Id": session, "Originator": "codex_cli_rs"})
             call_id = header_value(headers, "x-litellm-call-id")
+            if header_value(headers, "x-session-id") != session:
+                raise AssertionError("Codex 第 %d 轮响应会话头错误：call_id=%s，预期=%r，实际=%r" %
+                                     (index, call_id, session, header_value(headers, "x-session-id")))
             if (not call_id or not answer.get("id")
                     or any(row["call_id"] == call_id or row["response_id"] == answer["id"]
                            for row in conversation["turns"])):
@@ -107,14 +111,16 @@ class ChatCases:
         proxy = bill.get("proxy_server_request", {})
         body = proxy.get("body", {})
         headers = proxy.get("headers", {})
-        if bill.get("session_id") != conversation["session_id"] or bill.get("model") != key["call_model"]:
-            raise AssertionError("Codex 会话或模型归属错误")
+        for field, expected in (("session_id", conversation["session_id"]), ("model", key["call_model"])):
+            if bill.get(field) != expected:
+                raise AssertionError("Codex 第 %d 轮账单归属错误：call_id=%s，字段=%s，预期=%r，实际=%r" %
+                                     (turn["turn"], turn["call_id"], field, expected, bill.get(field)))
         if response.get("id") != turn["response_id"] or response.get("status") != "completed" or conversation["marker"] not in text or response.get("error"):
             raise AssertionError("Codex 第 %d 轮响应未完成或无法记住前轮项目标记：status=%s，response_id=%s，text=%s" %
                                  (turn["turn"], response.get("status"), response.get("id"), text[:160]))
         if answer is not None and answer != response:
             raise AssertionError("Codex 持久化响应与客户端收到的响应不一致")
-        if not str(header_value(headers, "user-agent") or "").startswith("codex_cli_rs/") or header_value(headers, "session_id") != conversation["session_id"] or header_value(headers, "originator") != "codex_cli_rs":
+        if not str(header_value(headers, "user-agent") or "").startswith("codex_cli_rs/") or header_value(headers, "x-session-id") != conversation["session_id"] or header_value(headers, "originator") != "codex_cli_rs":
             raise AssertionError("Codex 客户端身份或稳定会话头缺失")
         request = turn.get("request_body", {})
         if (request.get("input") != [{"role": "user", "content": turn["prompt"]}]

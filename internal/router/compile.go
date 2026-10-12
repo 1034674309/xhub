@@ -1,10 +1,6 @@
 package router
 
-import (
-	"fmt"
-
-	"github.com/sunqirui1987/xhub/internal/config"
-)
+import "github.com/sunqirui1987/xhub/internal/config"
 
 // ConfigReader 是路由配置的只读存储边界，网关传入持久化仓库；解析器不负责HTTP和身份鉴权。
 type ConfigReader interface {
@@ -31,23 +27,6 @@ func Compile(selected RouteSettings, store ConfigReader, models []config.ModelEn
 		return fail(err)
 	}
 	selected.RoutingGroups = groups
-	// 模板未配置组时使用当前全局组；显式空数组表示隔离全局组，并非旧数据迁移。
-	if _, local := selected.Settings["routing_groups"]; !local {
-		globalGroups, err := store.ListConfig("routing_groups")
-		if err != nil {
-			return fail(err)
-		}
-		for name, raw := range globalGroups {
-			group, err := ParseGroup(raw)
-			if err != nil {
-				return fail(err)
-			}
-			if group.Name != name {
-				return fail(fmt.Errorf("invalid routing group identity"))
-			}
-			selected.RoutingGroups = append(selected.RoutingGroups, group)
-		}
-	}
 	raw, err := store.ListConfig("model_fallbacks")
 	if err != nil {
 		return fail(err)

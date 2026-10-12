@@ -1,8 +1,7 @@
-// affinity.go pins a caller to one deployment. Chat sessions use a one-hour
-// TTL so repeated turns hit the same upstream. Official task ids (video and
-// other bypass creates) use a seven-day TTL and a separate key, so a later
-// poll does not depend on the chat pin expiring.
-
+// Package affinity 管理跨请求的会话偏好、响应续接上下文及官方异步任务归属。
+// 会话偏好可随配置和成功回退更新；响应与任务归属用于找回创建目标，不被普通动态选路替换。
+// 阅读顺序：State/New 定义依赖，session.go 识别会话，route.go 构建与提交计划，cache.go 管理存储。
+// 本包不负责鉴权、部署资格检查或费用计算，由网关及数据面执行链完成。
 package affinity
 
 import (
@@ -10,118 +9,52 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/auth"
-	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
-	"github.com/sunqirui1987/xhub/internal/gateway/family"
-	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
-	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
+// affinityTTL 为偏好、响应归属和历史保留一小时；读取不续期，成功写入重新设置。
 const affinityTTL = time.Hour
 
-// PlanRoute 解析会话与部署归属，并在统一 Responses 续接时恢复临时历史。
-// 参数 r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文；alias（string）：对外模型名，用来选部署和记用量；body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项；p（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 返回 RoutePlan：响应 ID 优先确定部署；历史按调用方、型号、入口隔离，未知或过期时 Err 非空。
-// 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
-// 测试：bypass_logic_test.go、failure_log_test.go、log_completeness_test.go
-func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p *auth.Principal) dpcontract.RoutePlan {
-	endpoint := ""
-	if r != nil && r.URL != nil {
-		endpoint = providercapability.EndpointForOp(family.InferenceOp(r.URL.Path))
-		if hit, ok := providerregistry.Match(r.Method, r.URL.Path); ok {
-			endpoint = hit.Transport.EndpointID
-		}
-	}
-	plan := dpcontract.RoutePlan{Alias: alias, Caller: callerScope(p), Endpoint: endpoint}
-	if body != nil {
-		if prev := strings.TrimSpace(asString(body["previous_response_id"])); prev != "" {
-			if id := s.affinityGet(responsePinKey(alias, plan.Caller, prev, plan.Endpoint)); id != "" {
-				plan.Pinned = id
-				if plan.Endpoint == "responses" {
-					raw := s.affinityGet(responseContextKey(alias, plan.Caller, prev, plan.Endpoint))
-					if json.Unmarshal([]byte(raw), &plan.History) != nil || len(plan.History) == 0 {
-						plan.Err = fmt.Errorf("response context is unavailable or expired; submit full history")
-					}
-				}
-			} else {
-				plan.Err = fmt.Errorf("response ownership is unknown; submit full history")
-			}
-			plan.Required = true
-		}
-	}
-	plan.SessionID = sessionID(r, body)
-	if plan.Pinned == "" && plan.SessionID != "" && plan.Caller != "" {
-		plan.Pinned = s.affinityGet(sessionPinKey(alias, plan.Caller, plan.SessionID, plan.Endpoint))
-	}
-	return plan
-}
-
-// CommitRoute 保存成功请求的会话、响应归属及统一 Responses 的临时历史。
-// 参数 plan（dataplane.RoutePlan）：提交路由使用的RoutePlan；deploymentID（string）：部署 id。空串表示当前没有钉住的部署；responseID（string）：提交路由使用的响应标识。空串表示调用方没有提供这项。
-// 返回：无。History 随响应归属一小时过期，与原厂 store 无关；部署 id 为空时不写。
-// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
-// 测试：bypass_logic_test.go、failure_log_test.go、log_completeness_test.go
-func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID string) {
-	if deploymentID == "" {
-		return
-	}
-	if plan.SessionID != "" && plan.Caller != "" {
-		s.affinitySet(sessionPinKey(plan.Alias, plan.Caller, plan.SessionID, plan.Endpoint), deploymentID)
-	}
-	if responseID != "" && plan.Caller != "" {
-		// 先保存上下文再发布归属，避免完成事件后的下一轮读到只有归属的半成品。
-		if plan.Endpoint == "responses" && len(plan.History) > 0 {
-			raw, err := json.Marshal(plan.History)
-			if err != nil {
-				return
-			}
-			s.affinitySet(responseContextKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw))
-		}
-		s.affinitySet(responsePinKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), deploymentID)
-	}
-}
-
-// responseContextKey 为统一 Responses 的临时历史生成隔离键。
-// 参数为公开型号、调用方、响应 ID 和入口；返回无明文身份的缓存键。
-// PlanRoute/CommitRoute 使用，与归属相同一小时 TTL，过期后需要完整历史。
+// responseContextKey 为统一 responses 的临时历史构造键，供 PlanRoute 读取、CommitRoute 发布。
+// 参数 alias 为请求公开模型或组，caller 为鉴权范围，responseID 为响应 ID，endpoint 为协议入口。
+// 返回与归属使用相同摘要、但命名空间为 history 的键，使隔离范围一致且不互相覆盖。
+// 不读写缓存、不校验参数、不返回错误；有效期由缓存操作决定。
 func responseContextKey(alias, caller, responseID, endpoint string) string {
-	return strings.Replace(responsePinKey(alias, caller, responseID, endpoint), "deployment_affinity:v4:response:", "response_context:v1:", 1)
+	return strings.Replace(responsePinKey(alias, caller, responseID, endpoint), "session_route:v1:response:", "session_route:v1:history:", 1)
 }
 
-// responsePinKey isolates continuation IDs by caller and public model.
-// 参数 alias、caller、responseID：模型、调用方范围和响应 id。
-// 返回：不含原始调用方凭据的缓存键。
-// 调用：PlanRoute、CommitRoute。测试：affinity_test.go。
+// responsePinKey 为父响应归属构造隔离键，供 PlanRoute/CommitRoute 使用。
+// 参数 alias 为请求公开别名，caller 为鉴权范围，responseID 为响应标识，endpoint 为可选入口列表。
+// 返回 response 命名空间下的完整 SHA256 摘要，不保留输入明文，不访问缓存或授予权限。
+// JSON 数组保留字段边界和顺序，避免分隔符拼接歧义；字符串数组编码不会因业务输入失败。
+// 不传 endpoint 与传入一个空 endpoint 的键不同，读写双方必须使用相同参数。
 func responsePinKey(alias, caller, responseID string, endpoint ...string) string {
 	raw, _ := json.Marshal(append([]string{alias, caller, responseID}, endpoint...))
 	sum := sha256.Sum256(raw)
-	return "deployment_affinity:v4:response:" + hex.EncodeToString(sum[:])
+	return "session_route:v1:response:" + hex.EncodeToString(sum[:])
 }
 
-// 用完整 SHA256 哈希隔离模型、调用方与会话，避免分隔符碰撞及原始标识泄露。
-// 参数 alias（string）：对外模型名；caller（string）：调用方范围，一般是密钥哈希或用户 id，用来隔离粘滞键；sessionID（string）：会话 id。相同会话应钉在同一上游部署。
-// 返回 string（string）：会话粘滞的 Redis 键，含对外名、调用方哈希和会话 id。
-// 调用：仅在 affinity.go 内使用
-// 测试：affinity_test.go
+// sessionPinKey 为动态偏好构造隔离键，供 PlanRoute 读取及其 Claim/Save 回调比较更新。
+// 参数 alias 为原请求别名，caller 为鉴权范围，sessionID 为会话 ID，endpoint 为可选入口列表。
+// 返回 preference 命名空间下的完整 SHA256 摘要，不含输入明文，不读写缓存或校验空参数。
+// JSON 数组保留字段边界；入口数量和顺序也参与摘要，读写双方必须一致。
+// 这里只隔离缓存，不保证会话必须使用某部署；动态偏好每轮仍需通过数据面资格检查。
 func sessionPinKey(alias, caller, sessionID string, endpoint ...string) string {
 	raw, _ := json.Marshal(append([]string{alias, caller, sessionID}, endpoint...))
 	sum := sha256.Sum256(raw)
-	return "deployment_affinity:v3:session:" + hex.EncodeToString(sum[:])
+	return "session_route:v1:preference:" + hex.EncodeToString(sum[:])
 }
 
-// 确定粘滞键里的调用方范围，优先密钥哈希，其次用户。
-// 参数 p（*auth.Principal）：已经解析的调用方，含用户、团队和密钥。
-// 返回 string（string）：调用方范围。有密钥哈希时用密钥，否则用用户。没有身份时为空串。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
+// callerScope 从鉴权结果提取缓存范围，供 PlanRoute 构建 Caller。
+// 参数 p 可为 nil；返回 key:<hash>（密钥优先）、user:<id>（无密钥时）或空字符串（无身份）。
+// 密钥优先让同一用户的不同密钥拥有独立状态，前缀区分密钥和用户两类标识。
+// 不使用客户端正文、团队 ID 或会话 ID 补足身份，不执行鉴权；无范围时不安装偏好回调。
 func callerScope(p *auth.Principal) string {
 	if p == nil {
 		return ""
@@ -135,176 +68,27 @@ func callerScope(p *auth.Principal) string {
 	return ""
 }
 
-// sessionID is the stable conversation id. The order follows sub2api: a client session wins, then a cache key, then the previous response, then a hash of the prompt prefix that stays the same across turns.
-// 参数 r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文；body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项。
-// 返回 string（string）：稳定的会话 id。客户端会话头优先，其次缓存键、上一次响应、提示前缀哈希。都没有时为空串。
-// 调用：仅在 affinity.go 内使用
-// 测试：affinity_test.go
-func sessionID(r *http.Request, body map[string]any) string {
-	if r != nil {
-		for _, name := range []string{
-			"Session-Id", "Session_id", "Conversation_id",
-			"X-Session-Affinity", "X-Session-Id", "X-Opencode-Session", "X-Conversation-Id",
-		} {
-			if v := strings.TrimSpace(r.Header.Get(name)); v != "" {
-				return v
-			}
-		}
-	}
-	if body == nil {
-		return ""
-	}
-	if meta, ok := body["metadata"].(map[string]any); ok {
-		if v := claudeSession(asString(meta["user_id"])); v != "" {
-			return v
-		}
-		if v := firstString(meta, "session_id", "litellm_session_id", "prompt_cache_key"); v != "" {
-			return v
-		}
-	}
-	if v := firstString(body, "prompt_cache_key", "litellm_session_id"); v != "" {
-		return v
-	}
-	if prev := strings.TrimSpace(asString(body["previous_response_id"])); strings.HasPrefix(prev, "resp_") {
-		return "prev:" + prev
-	}
-	return contentSessionID(body)
-}
-
-// claudeSession reads the session uuid Claude Code puts in metadata.user_id.
-// 参数 raw（string）：claude会话使用的原始内容。空串表示调用方没有提供这项。
-// 返回 string（string）：metadata.user_id 里的 Claude Code 会话 uuid。不是这种格式或为空时返回空串。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
-func claudeSession(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if strings.HasPrefix(raw, "{") {
-		var doc struct {
-			SessionID string `json:"session_id"`
-		}
-		if json.Unmarshal([]byte(raw), &doc) == nil && doc.SessionID != "" {
-			return doc.SessionID
-		}
-	}
-	return ""
-}
-
-// 在请求没有会话 id 时，用模型、指令、工具和首条用户文本算出一个稳定 id。
-// 参数 body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项。
-// 返回 string（string）：从正文算出的会话 id。相同对话内容得到相同 id，用来钉住上游。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
-func contentSessionID(body map[string]any) string {
-	var b strings.Builder
-	b.WriteString(asString(body["model"]))
-	b.WriteByte('\n')
-	b.WriteString(asString(body["instructions"]))
-	b.WriteByte('\n')
-	if tools, ok := body["tools"].([]any); ok {
-		for _, tool := range tools {
-			m, _ := tool.(map[string]any)
-			b.WriteString(asString(m["name"]))
-			if fn, ok := m["function"].(map[string]any); ok {
-				b.WriteString(asString(fn["name"]))
-			}
-			b.WriteByte(',')
-		}
-	}
-	b.WriteByte('\n')
-	b.WriteString(firstUserText(body["messages"]))
-	if strings.Trim(firstUserText(body["messages"]), "\n") == "" {
-		b.WriteString(firstUserText(body["input"]))
-	}
-	if b.Len() == 0 || strings.Trim(b.String(), "\n,") == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(b.String()))
-	return "content:" + hex.EncodeToString(sum[:16])
-}
-
-// 取出第一条用户消息的文本，系统消息单独留下。
-// 参数 messages（any）：对话消息。元素是带角色和内容的对象。
-// 返回 string（string）：拼出的用户文本。没有文本时为空串。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
-func firstUserText(messages any) string {
-	list, _ := messages.([]any)
-	var system string
-	for _, item := range list {
-		m, _ := item.(map[string]any)
-		role := asString(m["role"])
-		text := messageText(m["content"])
-		if (role == "system" || role == "developer") && system == "" {
-			system = text
-		}
-		if role == "user" && text != "" {
-			return system + "\n" + text
-		}
-	}
-	return system
-}
-
-// 把消息内容收成纯文本。字符串原样返回，多段内容只拼接文本段。
-// 参数 content（any）：消息内容。可以是字符串，也可以是多段内容数组。
-// 返回 string（string）：拼出的用户文本。没有文本时为空串。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
-func messageText(content any) string {
-	if s, ok := content.(string); ok {
-		return s
-	}
-	parts, _ := content.([]any)
-	var b strings.Builder
-	for _, part := range parts {
-		switch p := part.(type) {
-		case string:
-			b.WriteString(p)
-		case map[string]any:
-			if t := asString(p["text"]); t != "" {
-				b.WriteString(t)
-			}
-		}
-	}
-	return b.String()
-}
-
-// 按键的顺序从优先表和备用表里取第一个非空字符串。
-// 参数 m（map[string]any）：已经解析的 JSON 对象，键是上游或配置里的字段名；keys（...string）：首个字符串使用的string。
-// 返回 string（string）：按字符串读出的值。不是字符串或没有该键时为空串，不 panic。
-// 调用：仅在 affinity.go 内使用。
-// 测试：无直接单测
-func firstString(m map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if v := strings.TrimSpace(asString(m[key])); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// 把动态值当成字符串读取。不是字符串时为空串。
-// 参数 v（any）：JSON 里读出的动态值。数字、字符串和对象都要接住，类型不符时按零值而不是 panic。
-// 返回 string（string）：按字符串读出的值。不是字符串或没有该键时为空串，不 panic。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
+// asString 安全读取动态字符串，供 stableContent/contentSessionID 检查角色、类型和媒体字段。
+// 参数 v 可为任意值；字符串原样返回，nil 或其他类型返回空字符串，不转换类型或修改输入。
+// 不报错，空返回值无法区分缺失、类型错误和真实空串；严格会话信号改用 sessionSignal。
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
 }
 
+// affinityPin 是本机缓存条目，统一保存序列化载荷及绝对到期时间；由 affinityMu 保护。
 type affinityPin struct {
+	// 缓存序列化值；会话存 RouteTarget JSON、响应存归属/历史 JSON，任务存运行部署标识。
 	deployment string
-	until      time.Time
+	// 本机绝对过期时刻；读取到期即清除，成功比较写入时续期。
+	until time.Time
 }
 
-// 读取粘滞键。有 Redis 时读 Redis，否则读进程内表。
-// 参数 key（string）：缓存或配置表的键。
-// 返回 string（string）：读到的字符串。键不存在时为空串，调用方要把空串当成没有钉住。
-// 调用：gateway/wire.go
-// 测试：affinity_test.go
+// affinityGet 宽松读取缓存，主要供 OfficialDeployment/OfficialContext 恢复任务信息。
+// 参数 key 为完整键；返回载荷，nil 接收者、空键或无有效记录返回空字符串。
+// 优先 GetString 读取共享存储，未取得值（未命中或故障）再读本机副本；不区分两种原因，
+// 因而不能用于严格的父响应续接，后者使用 cacheRead。共享读取不持锁、不在此设置超时。
+// 本机读取持 affinityMu，过期时删除，读取不续期。
 func (s *State) affinityGet(key string) string {
 	if s == nil || key == "" {
 		return ""
@@ -324,46 +108,47 @@ func (s *State) affinityGet(key string) string {
 	return pin.deployment
 }
 
-// 按聊天会话的一小时有效期写入粘滞部署。
-// 参数 key（string）：缓存或配置表的键；deployment（string）：部署 id。空串表示当前没有钉住的部署。
-// 返回：无。聊天会话的粘滞部署已按一小时有效期写下。
-// 调用：仅在 affinity.go 内使用
-// 测试：affinity_test.go
+// affinitySet 以一小时 TTL 无条件写缓存，供无 Redis 时的 cacheWrite 及内部夹具使用。
+// 参数 key 为完整键，deployment 实际可为归属、历史等任意非空载荷，不限于部署 ID。
+// 无返回值；委托 affinitySetFor，nil 接收者、空键或空载荷不写，也不删除旧值。
+// 不做比较更新；动态偏好使用 cacheCompare，避免覆盖并发赢家。
 func (s *State) affinitySet(key, deployment string) {
 	s.affinitySetFor(key, deployment, affinityTTL)
 }
 
+// officialPinTTL 为官方任务部署和计费上下文保留七天，覆盖创建后的多次轮询。
 const officialPinTTL = 7 * 24 * time.Hour
 
-// 把官方任务 id 钉到创建时的部署，有效期七天。
-// 参数 taskID（string）：官方任务 id。后续查询和计费靠它找回创建时的部署；deploymentID（string）：部署 id。空串表示当前没有钉住的部署。
-// 返回：无。官方任务已钉到创建时的部署，有效期七天。
-// 调用：dataplane/contract/host.go、dataplane/execution/official.go
-// 测试：affinity_pin_test.go、bypass_logic_test.go、failure_log_test.go
+// PinOfficial 保存异步任务创建时的运行部署，供 official 执行器后续找回原部署。
+// 参数 taskID 在生产中是执行器按调用方、协议及任务 ID 构造的作用域，deploymentID 是运行部署 ID。
+// 本方法只添加 official_task 命名空间，不自行隔离租户；调用方必须提供有效任务作用域。
+// 无返回值；七天 TTL 写共享存储（如有）及本机，同键重复写会覆盖及续期。
+// nil 接收者或空部署不写；不单独拒绝空 taskID。共享写入不报告错误，返回不代表持久化成功。
+// 任务授权和部署可用性由执行器检查；这里不重新调度任务。
 func (s *State) PinOfficial(taskID, deploymentID string) {
 	s.affinitySetFor("official_task:v1:"+taskID, deploymentID, officialPinTTL)
 }
 
-// 按官方任务 id 取回创建时的部署。没有钉时为空串。
-// 参数 taskID（string）：官方任务 id。后续查询和计费靠它找回创建时的部署。
-// 返回 string（string）：读到的字符串。键不存在时为空串，调用方要把空串当成没有钉住。
-// 调用：dataplane/contract/host.go、dataplane/execution/official.go
-// 测试：affinity_pin_test.go、bypass_logic_test.go、failure_log_test.go
+// OfficialDeployment 按任务作用域取回运行部署，供 official 执行器查询、轮询及取消使用。
+// 参数 taskID 必须与 PinOfficial 完全相同；返回部署 ID，无记录、过期或 nil 接收者返回空串。
+// 通过 affinityGet 共享优先、本机降级，不续期、不执行鉴权、不重新选路。
+// 非空作用域缺失时记日志，可能由未知任务、过期或存储故障导致。
 func (s *State) OfficialDeployment(taskID string) string {
 	dep := s.affinityGet("official_task:v1:" + taskID)
 	if dep == "" && taskID != "" {
-		// A poll for a task nobody pinned is worth a line: it is either a task
-		// that expired after seven days, or an id that never came from here.
+		// 保留归属缺失的诊断；GetString 无错误返回，不能在此确定具体缺失原因。
 		util.Debug("official task has no pinned deployment task=%s", taskID)
 	}
 	return dep
 }
 
-// 按给定的有效期写入粘滞键。键或部署为空时不做任何事。
-// 参数 key（string）：缓存或配置表的键；deployment（string）：部署 id。空串表示当前没有钉住的部署；ttl（time.Duration）：一段时间。零值表示改用调用方约定的默认时长，例如会话一小时、官方任务七天。
-// 返回：无。粘滞键已按给定有效期写下。有 Redis 时写 Redis，否则只留在进程内。键或部署为空时不写。
-// 调用：仅在 affinity.go 内使用
-// 测试：无直接单测
+// affinitySetFor 无条件保存载荷和有效期，供 affinitySet/PinOfficial/PinOfficialContext 使用。
+// 参数 key 为完整键，deployment 为非空载荷，ttl 为明确指定的有效期；无返回值。
+// nil 接收者、空键或空载荷不写且不删除旧值。ttl 原样传给 Redis，本机到期时刻为 now+ttl；
+// 零或负值不会改用默认有效期，本机记录立即到期。
+// 有 Redis 时先尝试共享写入，再无条件保存本机副本；SetString 不报告错误。
+// 网络访问不持本机锁；本机写入持 affinityMu，清理过期和超容量记录，同键覆盖重新计时。
+// 不可替代偏好原子比较，也不可替代有 Redis 时必须报告发布错误的 cacheWrite。
 func (s *State) affinitySetFor(key, deployment string, ttl time.Duration) {
 	if s == nil || key == "" || deployment == "" {
 		return
@@ -373,22 +158,15 @@ func (s *State) affinitySetFor(key, deployment string, ttl time.Duration) {
 	}
 	s.affinityMu.Lock()
 	defer s.affinityMu.Unlock()
-	if s.affinity == nil {
-		s.affinity = map[string]affinityPin{}
-	}
-	for oldKey, pin := range s.affinity {
-		if time.Now().After(pin.until) {
-			delete(s.affinity, oldKey)
-		}
-	}
+	s.pruneLocal(time.Now())
 	s.affinity[key] = affinityPin{deployment: deployment, until: time.Now().Add(ttl)}
 }
 
-// PinOfficialContext keeps only creation-time billing facts, with the task pin TTL.
-// 参数 scope（string）：任务作用域键；facts（provider.TaskContext）：创建时的计费事实。
-// 返回：无。
-// 调用：数据面的官方任务创建流程。
-// 测试：affinity_pin_test.go。
+// PinOfficialContext 保存创建时计费事实，供 official 执行器轮询后结算使用。
+// 参数 scope 是已隔离的任务作用域，应与任务部署作用域一致；facts 是创建时间和计价依据等快照。
+// 不计算费用、不按轮询时的新配置重建事实；无返回值，编码成功后以七天 TTL 写共享存储及本机。
+// 编码失败不写，空 scope 不单独拒绝，nil 接收者由 affinitySetFor 忽略。
+// 同键可覆盖，共享写入不报告错误；“创建后保持不变”是调用方约定，不是写一次约束。
 func (s *State) PinOfficialContext(scope string, facts providercontract.TaskContext) {
 	raw, err := json.Marshal(facts)
 	if err == nil {
@@ -396,11 +174,10 @@ func (s *State) PinOfficialContext(scope string, facts providercontract.TaskCont
 	}
 }
 
-// OfficialContext reads creation-time facts for a pinned official task.
-// 参数 scope（string）：任务作用域键。
-// 返回 provider.TaskContext：保存的事实；缺失时为零值。
-// 调用：数据面的官方任务轮询结算流程。
-// 测试：affinity_pin_test.go。
+// OfficialContext 恢复创建时计费快照，供 official 执行器轮询结算及用量记录使用。
+// 参数 scope 必须与 PinOfficialContext 一致；返回 TaskContext，不更新费用或缓存有效期。
+// 通过 affinityGet 共享优先、本机降级；缺失或 nil 接收者得到零值。JSON 错误被忽略，
+// 语法损坏通常得到零值，字段类型错误可能留下部分解析字段；调用方须结合 Known 等字段判断可用性。
 func (s *State) OfficialContext(scope string) providercontract.TaskContext {
 	var facts providercontract.TaskContext
 	_ = json.Unmarshal([]byte(s.affinityGet("official_context:v1:"+scope)), &facts)
@@ -409,18 +186,42 @@ func (s *State) OfficialContext(scope string) providercontract.TaskContext {
 
 // Redis 是会话归属所需的最小共享存储接口，不暴露预算或计费队列。
 type Redis interface {
+	// ReadAffinity 供 cacheRead 严格读取，参数为带超时的上下文及完整键。
+	// 返回载荷或真实存储错误，不存在/过期返回空串和 nil，不写入、不续期。
+	// 必须区分故障与未命中，避免父响应续接在故障时重新选路。
+	ReadAffinity(context.Context, string) (string, error)
+	// CompareAffinity 供 cacheCompare 原子比较写入，参数依次为上下文、键、完整旧值、新值和 TTL。
+	// 当前值等于旧值才写入并续期，缺失按空串比较；比较和写入必须原子完成。
+	// 返回实际缓存值和错误，不匹配返回当前赢家和 nil，不写或续期。
+	CompareAffinity(context.Context, string, string, string, time.Duration) (string, error)
+	// WriteAffinity 供 cacheWrite 发布历史及归属，参数为上下文、完整键、载荷和 TTL。
+	// 无条件写入并设置有效期，返回真实错误，以便历史失败时停止发布归属。
+	// 不承诺多个键的事务原子性，不强制键只写一次。
+	WriteAffinity(context.Context, string, string, time.Duration) error
+	// GetString 供 affinityGet 读取官方任务，参数为上下文及完整键。
+	// 返回字符串和是否取得值，未命中或故障均可能为 false，不暴露错误原因。
+	// 不能用于要求严格归属的父响应续接。
 	GetString(context.Context, string) (string, bool)
+	// SetString 供 affinitySetFor 保存任务，参数为上下文、完整键、载荷和 TTL。
+	// 无条件写入，无返回值，无法据此确认共享写入成功；State 另行保存本机副本。
+	// 不用于偏好原子比较或需要错误反馈的响应发布。
 	SetString(context.Context, string, string, time.Duration)
 }
 
-// State 拥有会话、响应上下文及异步任务归属；零值支持进程内存储。
-// affinityMu 只保护本模块状态，不与网关配置锁交叉。
+// State 持有可选共享存储和本机 TTL 缓存，零值可直接用于纯内存存储。
+// 实例可服务多个请求，本机 map 由 affinityMu 保护；使用后不应复制包含锁的 State。
+// 网络访问及上游执行不持本机锁，不与网关配置锁交叉，不启动后台清理协程。
+// 本机记录受容量限制、读写时清理，重启会丢失；跨实例共享需要 Redis。
 type State struct {
-	redis      Redis
-	affinity   map[string]affinityPin
+	// 可选共享存储；nil 使用进程内缓存，普通故障可降级，响应归属故障拒绝续接。
+	redis Redis
+	// 本机 TTL 缓存，存放偏好、响应上下文及任务归属；写入受容量限制，非持久化数据库。
+	affinity map[string]affinityPin
+	// 仅保护本机缓存的互斥锁，不跨上游调用持锁，也不与网关配置锁交叉。
 	affinityMu sync.Mutex
 }
 
-// New 创建会话状态；参数 redis 可为 nil，返回独立状态。
-// 网关组装时注入共享存储；无网络调用，不启动后台任务。
+// New 为网关组装创建独立状态，参数 redis 为共享缓存实现，nil 表示仅使用本机。
+// 返回非 nil 的 *State，本机 map 首次写入时初始化，不同 New 调用的本机缓存和锁各自独立。
+// 不连接或探测 Redis、不启动任务，不保证注入存储可用；故障由实际读写处理。
 func New(redis Redis) *State { return &State{redis: redis} }

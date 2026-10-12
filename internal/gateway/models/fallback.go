@@ -15,9 +15,6 @@ import (
 // 参数为宿主、公开名与部署 ID；返回冲突或存储错误，调用方持有模型锁。
 // 保留同名其他部署时允许修改；存在源策略或目标引用时要求先清除配置，避免跨表部分更新。
 func checkFallbackRemoval(s Host, name, id string) error {
-	if err := checkRoutingAllocationRemoval(s, id); err != nil {
-		return err
-	}
 	for _, dep := range *s.ModelTable() {
 		if dep.ModelName == name && str(dep.ModelInfo["id"]) != id && !nonModelEntry(dep) {
 			return nil

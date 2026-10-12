@@ -11,8 +11,11 @@ import (
 
 // FallbackPolicy 保存公开模型的三类有序回退目标，空列表表示不跨模型回退。
 type FallbackPolicy struct {
-	Fallbacks     []string `json:"fallbacks"`
+	// general 类错误的有序公开模型或组目标；池内候选耗尽后使用，空列表停止该类跨模型回退。
+	Fallbacks []string `json:"fallbacks"`
+	// context 类上游上下文超限的有序目标；不隐式混用通用回退列表。
 	ContextWindow []string `json:"context_window_fallbacks"`
+	// content 类上游内容策略拒绝的有序目标；本地护栏拒绝不触发，空列表直接返回原错误。
 	ContentPolicy []string `json:"content_policy_fallbacks"`
 }
 

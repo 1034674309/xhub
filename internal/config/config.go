@@ -24,11 +24,17 @@ type Config struct {
 	GeneralRaw map[string]any `yaml:"-"`
 }
 
-// ModelEntry is one deployment. ModelName is the public model name and LiteLLMParams are the upstream parameters.
+// ModelEntry 是目录中的一条真实部署，由配置加载、模型管理和两类数据面共同使用。
+// 多条部署可以共享公开模型名，稳定部署 ID 与运行时地址/型号身份分开，权重和粘性不能补足端点能力。
 type ModelEntry struct {
-	ModelName     string         `yaml:"model_name"`
+	// 客户端可请求的公开模型名；组展开和跨模型回退仍保留真实成员名，区别于上游型号。
+	ModelName string `yaml:"model_name"`
+	// 执行参数：model 为上游型号，api_base/api_key 或 litellm_credential_name 定义连接，deployment_id 为稳定部署 ID。
+	// 每轮从当前目录读取，不把地址、凭据或价格作为会话标识；缺少稳定 ID 时不建立动态偏好或响应归属。
 	LiteLLMParams map[string]any `yaml:"litellm_params"`
-	ModelInfo     map[string]any `yaml:"model_info"`
+	// 部署元数据：transport/endpoint_types 决定可执行协议及入口，disabled 控制停用，其余字段供目录与计费读取。
+	// 权重和回退由公开模型/路由模板配置，不通过会话缓存改写该元数据；修改后下一轮重新校验资格。
+	ModelInfo map[string]any `yaml:"model_info"`
 }
 
 // Disabled reports whether this deployment is excluded from model discovery and runtime routing.

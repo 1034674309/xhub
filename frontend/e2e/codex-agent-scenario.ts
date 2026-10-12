@@ -51,6 +51,11 @@ test("Codex agent simulator three turns and browser logs", async ({ page }) => {
       expect(detail.status()).toBe(200);
       const bill = await detail.json();
       expect(bill.session_id).toBe(session.session_id);
+      // 三轮必须保留标准会话头；仅 HTTP 成功或 prompt 推断归组不能证明显式会话已生效。
+      const storedHeaders = Object.fromEntries(Object.entries(bill.proxy_server_request.headers)
+        .map(([name, value]) => [name.toLowerCase(), value]));
+      expect(storedHeaders["x-session-id"]).toBe(session.session_id);
+      expect(bill.model).toBe(session.model);
       expect(bill.api_key).toBe(key.token_id);
       expect(bill.prompt_tokens).toBe(8);
       expect(bill.completion_tokens).toBe(2);

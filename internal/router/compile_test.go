@@ -77,7 +77,7 @@ func TestCompileFailures(t *testing.T) {
 			t.Fatalf("非法合并未拒绝: %v", fields)
 		}
 	}
-	for _, name := range []string{"model_defaults", "routing_groups", "model_fallbacks"} {
+	for _, name := range []string{"model_defaults", "model_fallbacks"} {
 		store.err = name
 		if Compile(RouteSettings{Settings: map[string]any{}}, store, models).Err == nil {
 			t.Fatalf("存储错误未传播: %s", name)
@@ -89,16 +89,19 @@ func TestCompileFailures(t *testing.T) {
 	}
 }
 
-// TestCompileGroupIsolation 验证新模板组为独立文档、旧模板兼容全局组；两者均只读，无外部清理。
+// TestCompileGroupIsolation 验证省略组或空组均不会读取独立全局组；残留配置和存储错误不影响当前模板。
+// 前置内存配置，只有模板声明的组生效；不修改存储，无需清理。
 func TestCompileGroupIsolation(t *testing.T) {
 	models := []config.ModelEntry{{ModelName: "a"}}
-	group := map[string]any{"group_name": "legacy", "models": []string{"a"}, "routing_strategy": "random"}
-	store := compileStore{data: map[string]map[string]any{"routing_groups": {"legacy": group}}}
-	if got := Compile(RouteSettings{Settings: map[string]any{}}, store, models); got.Err != nil || len(got.RoutingGroups) != 1 {
-		t.Fatalf("旧模板兼容失败: %+v", got)
+	store := compileStore{data: map[string]map[string]any{"routing_groups": {"obsolete": "invalid"}}, err: "routing_groups"}
+	for _, fields := range []map[string]any{{}, {"routing_groups": []any{}}} {
+		if got := Compile(RouteSettings{Settings: fields}, store, models); got.Err != nil || len(got.RoutingGroups) != 0 {
+			t.Fatalf("模板读取了全局组: %+v", got)
+		}
 	}
-	if got := Compile(RouteSettings{Settings: map[string]any{"routing_groups": []any{}}}, store, models); got.Err != nil || len(got.RoutingGroups) != 0 {
-		t.Fatalf("新模板泄漏全局组: %+v", got)
+	doc := map[string]any{"routing_groups": []any{map[string]any{"group_name": "local", "models": []string{"a"}, "routing_strategy": "least-busy"}}}
+	if got := Compile(RouteSettings{Settings: compileDoc(t, doc)}, store, models); got.Err != nil || len(got.RoutingGroups) != 1 || got.RoutingGroups[0].Name != "local" {
+		t.Fatalf("模板自身路由组未生效: %+v", got)
 	}
 }
 

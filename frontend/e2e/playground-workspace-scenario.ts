@@ -163,6 +163,21 @@ test("single workspace has no comparison controls and preserves bilingual chat",
     expect(response.request().postDataJSON().messages).toEqual([{ role: "user", content: prompt }]);
     await expect(page.getByText("e2e-ok", { exact: true })).toBeVisible();
     await expect(input).toHaveValue("");
+    // 校验真实请求和响应使用客户端会话 ID，刷新及切换入口不拆分会话。
+    const sessionId = await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"));
+    expect(sessionId).toBeTruthy();
+    expect(response.request().headers()["x-session-id"]).toBe(sessionId);
+    expect(response.headers()["x-session-id"]).toBe(sessionId);
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem("chatHistory"))).toContain(prompt);
+    await page.reload();
+    await expect(page.getByText("e2e-ok", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"))).toBe(sessionId);
+    await page.getByRole("button", { name: "中文", exact: true }).click();
+    await selectChat(page, "gpt-4o-mini");
+    await page.getByPlaceholder(t("Select an endpoint"), { exact: true }).click();
+    await page.getByRole("option").filter({ hasText: /\/v1\/responses$/ }).click();
+    expect(await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"))).toBe(sessionId);
+    await selectChat(page, name);
     const callId = response.headers()["x-litellm-call-id"];
     expect(callId).toBeTruthy();
     await expect
@@ -171,10 +186,24 @@ test("single workspace has no comparison controls and preserves bilingual chat",
         return detail.ok() ? (await detail.json()).model : "";
       })
       .toBe(name);
-    await page.getByRole("button", { name: "中文", exact: true }).click();
     await expect(page.getByText("e2e-ok", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("Clear Chat"), exact: true }).click();
     await expect(page.getByText("e2e-ok", { exact: true })).toHaveCount(0);
+    const nextSessionId = await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"));
+    expect(nextSessionId).toBeTruthy();
+    expect(nextSessionId).not.toBe(sessionId);
+    // 相同输入在清空后应建立新日志组，并确认会话头贯穿页面、网关和记录。
+    await page.getByPlaceholder(t("Type your message... (Shift+Enter for new line)")).fill(prompt);
+    const nextPending = page.waitForResponse(r => /chat\/completions$/.test(new URL(r.url()).pathname) && r.request().method() === "POST");
+    await page.getByRole("button", { name: t("Send message"), exact: true }).click();
+    const nextResponse = await nextPending;
+    expect(nextResponse.status()).toBe(200);
+    expect(nextResponse.request().headers()["x-session-id"]).toBe(nextSessionId);
+    expect(nextResponse.headers()["x-session-id"]).toBe(nextSessionId);
+    await expect.poll(async () => {
+      const log = await page.request.get(GATEWAY + "/spend/logs/ui/" + nextResponse.headers()["x-litellm-call-id"], { headers });
+      return log.ok() ? (await log.json()).session_id : "";
+    }).toBe(nextSessionId);
   } finally {
     expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id } })).status()).toBe(200);
   }

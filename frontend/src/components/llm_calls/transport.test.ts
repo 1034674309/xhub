@@ -34,7 +34,7 @@ describe("fetch 数据面传输", () => {
     await postLLMRequest(
       "/v1/messages",
       { model: "claude" },
-      { baseUrl: "http://test///", accessToken: "key", tags: ["a", "b"], signal, anthropic: true },
+      { baseUrl: "http://test///", accessToken: "key", tags: ["a", "b"], signal, anthropic: true, sessionId: "conversation-1" },
     );
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe("http://test/v1/messages");
@@ -44,6 +44,7 @@ describe("fetch 数据面传输", () => {
     expect(options.headers.get("x-litellm-tags")).toBe("a,b");
     expect(JSON.parse(options.body)).toEqual({ model: "claude" });
     expect(options.signal).toBe(signal);
+    expect(options.headers.get("x-session-id")).toBe("conversation-1");
   });
   /** 前置真实 FormData；验证浏览器可生成 boundary，文件不丢失；恢复 fetch。 */
   it("表单不覆盖 multipart boundary", async () => {
@@ -54,6 +55,7 @@ describe("fetch 数据面传输", () => {
     await postLLMRequest("audio/transcriptions", form, { baseUrl: "http://test", accessToken: "key" });
     expect(fetch.mock.calls[0][1].body).toBe(form);
     expect(fetch.mock.calls[0][1].headers.has("content-type")).toBe(false);
+    expect(fetch.mock.calls[0][1].headers.has("x-session-id")).toBe(false);
   });
   /** 前置不同供应商错误正文；验证 HTTP 状态和可观察错误；恢复 fetch。 */
   it.each(['{"error":{"message":"quota"}}', '{"error":"quota"}', "quota", "null"])(

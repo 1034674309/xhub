@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     provider          TEXT NOT NULL DEFAULT '',
     cached_tokens     INT,
     session_id        TEXT NOT NULL DEFAULT '',
+    session_source    TEXT NOT NULL DEFAULT '',
     cache_key         TEXT NOT NULL DEFAULT '',
     guardrail         TEXT NOT NULL DEFAULT '',
     price_snapshot    TEXT NOT NULL DEFAULT '',

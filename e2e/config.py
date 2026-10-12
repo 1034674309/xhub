@@ -48,6 +48,9 @@ if live:
                 "api_key": env[prefix + "_KEY"], "custom_llm_provider": "openai",
                 "deployment_id": deployment["id"], "max_tokens": 128},
                 "model_info": {"transport": "bypass_openai_chat", "endpoint_types": ["chat"], "id": deployment["id"]}})
+# 配置部署必须声明稳定身份；续接归属与会话偏好复用此 ID，不能使用含地址/价格的运行标识。
+for index, deployment in enumerate(models):
+    deployment["litellm_params"].setdefault("deployment_id", "e2e-deployment-" + str(index))
 config = {"model_list": models,
     "router_settings": {"routing_strategy": "simple-shuffle", "num_retries": 1, "timeout": 90 if live else 15},
     "general_settings": {"master_key": env["E2E_MASTER_KEY"], "admin_email": "admin", "admin_name": "admin",

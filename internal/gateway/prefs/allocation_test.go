@@ -83,33 +83,22 @@ func TestStrictRouteTemplateDocument(t *testing.T) {
 	}
 }
 
-// TestTemplateDefaultStrategyAndOverride 验证模板默认、模型例外和旧格式继承优先级。
-// 前置内存文档及模型权重；正常输入生效，非法默认拒绝，无外部数据清理。
-func TestTemplateDefaultStrategyAndOverride(t *testing.T) {
-	settings := RouteSettings{Settings: BuiltinDocument(), ModelDefaults: map[string]any{}}
-	settings.Settings["routing_strategy"] = "simple-shuffle"
+// TestTemplateRejectsTopLevelStrategy 验证顶层默认策略在保存和运行时均被拒绝，包括曾经有效的值。
+// 前置内存模板；合法模型规则仍优先于模型默认；不访问外部服务，无需清理。
+func TestTemplateRejectsTopLevelStrategy(t *testing.T) {
+	settings := RouteSettings{Settings: BuiltinDocument()}
 	settings.Settings["model_routes"] = []any{map[string]any{"model": "special", "strategy": "least-busy"}}
-	if err := ValidateRouteTemplateDocument(settings.Settings); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct{ model, strategy, source string }{{"normal", "simple-shuffle", "template-default"}, {"special", "least-busy", "template-model"}} {
-		got := settings.ForModel(tc.model)
-		if got.Err != nil || got.Strategy() != tc.strategy || got.RuleSource != tc.source {
-			t.Fatalf("默认及例外优先级错误: %+v", got)
-		}
-	}
-	for _, raw := range []any{"", "unknown", nil, 1} {
+	for _, raw := range []any{"simple-shuffle", "least-busy", "", "unknown", nil, 1} {
 		settings.Settings["routing_strategy"] = raw
-		if ValidateRouteTemplateDocument(settings.Settings) == nil {
-			t.Fatalf("接受非法默认策略: %v", raw)
-		}
-		if settings.ForModel("normal").Err == nil {
-			t.Fatalf("运行时未拒绝非法默认策略: %v", raw)
+		if ValidateRouteTemplateDocument(settings.Settings) == nil || settings.ForModel("special").Err == nil {
+			t.Fatalf("顶层策略未被拒绝: %v", raw)
 		}
 	}
 	delete(settings.Settings, "routing_strategy")
-	got := settings.ForModel("normal")
-	if got.Strategy() != "traffic-split" || got.RuleSource != "model-default" {
-		t.Fatalf("旧模板继承失效: %+v", got)
+	for _, tc := range []struct{ model, strategy, source string }{{"normal", "traffic-split", "model-default"}, {"special", "least-busy", "template-model"}} {
+		got := settings.ForModel(tc.model)
+		if got.Err != nil || got.Strategy() != tc.strategy || got.RuleSource != tc.source {
+			t.Fatalf("策略来源错误: %+v", got)
+		}
 	}
 }

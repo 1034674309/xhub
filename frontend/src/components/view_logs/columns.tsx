@@ -38,6 +38,10 @@ export type LogEntry = {
   response: string | any[] | Record<string, any>;
   proxy_server_request?: string | any[] | Record<string, any>;
   session_id?: string;
+  /** 后端 PlanRoute 识别会话的来源：explicit（标准 ID）、parent（父响应）、
+   * cache_key（缓存键哈希）、prompt（稳定首轮指纹）、generated（随机 UUID）。
+   * 日志表仅对 cache_key/prompt 显示推断标记；空值表示没有来源事实，不代表供应商。 */
+  session_source?: string;
   status?: string;
   /** 完整错误正文；即使关闭提示词存储也可用于请求失败诊断。 */
   error?: string | null;

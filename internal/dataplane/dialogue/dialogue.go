@@ -181,6 +181,9 @@ func DialogueRequestBody(body map[string]any) map[string]any {
 	delete(out, "guardrails")
 	delete(out, "litellm_trace_id")
 	delete(out, "disable_fallbacks")
+	// 会话身份已由 PlanRoute 读取；统一对话没有原厂缓存键的跨协议表示。
+	delete(out, "session_id")
+	delete(out, "prompt_cache_key")
 	return out
 }
 

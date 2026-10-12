@@ -5,6 +5,7 @@
 | 添加供应商 / 新协议 | [完整 Go 注册示例](provider-catalog.md) |
 | 修改模型表单 / 端点 | [模型与端点](model-endpoints.md)、[认证表单](provider-credential-forms.md) |
 | 修改路由 | [模板 JSON 与执行规则](routing.md)、[路由组](routing-groups.md) |
+| 修改会话保持 / 供应商粘性 / 日志归组 | [推荐设计](session-affinity-design.md) |
 | 修改权限 / 限额 | [权限](permissions.md)、[额度链](quota-chain.md) |
 | 修改费用 / 护栏 | [计价](pricing.md)、[XGo 示例](guardrails.md) |
 | 查 HTTP 入口 | [接口与源码](api-reference.md) |

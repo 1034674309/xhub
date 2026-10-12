@@ -7,17 +7,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useT } from "@/i18n";
 import RouteTemplateJsonGuide from "./RouteTemplateJsonGuide";
 
-/** RouteTemplateGuide 返回完整配置说明弹窗；可选参数兼容已有调用。
+/** RouteTemplateGuide 返回完整配置说明弹窗；无参数，返回指南入口与弹窗。
  * 模板库和编辑页共用；打开关闭只改变展示状态，不修改草稿或后台数据。 */
-export default function RouteTemplateGuide(_props: { compact?: boolean }) {
+export default function RouteTemplateGuide() {
   const [open, setOpen] = useState(false);
   const t = useT();
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3">
-        <p className="text-sm text-muted-foreground">
-          {t("pages.routeTemplates.jsonGuide.openSummary")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("pages.routeTemplates.jsonGuide.openSummary")}</p>
         <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
           <BookOpen />
           {t("pages.routeTemplates.jsonGuide.openButton")}
