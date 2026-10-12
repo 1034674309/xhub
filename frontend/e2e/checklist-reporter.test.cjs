@@ -1,6 +1,22 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const Reporter = require('./checklist-reporter.cjs');
+/** 目的：全局启动失败必须可见且不暴露凭据；前置内存错误对象，验证普通/空错误及敏感值，finally 恢复输出，无外部副作用。 */
+test('启动错误可见且隐藏连接串和凭据', () => {
+  const messages = [];
+  const original = console.error;
+  console.error = message => messages.push(message);
+  try {
+    const reporter = new Reporter();
+    reporter.onError({message: 'Timed out waiting 180000ms from config.webServer.\nprivate stack'});
+    reporter.onError({message: 'Failed postgres://user:password@host/db Bearer session-secret sk-private-key'});
+    reporter.onError(undefined);
+    assert.match(messages[0], /Timed out waiting 180000ms/);
+    assert.doesNotMatch(messages[0], /private stack/);
+    assert.doesNotMatch(messages[1], /password|session-secret|sk-private-key/);
+    assert.match(messages[2], /Unknown runner error/);
+  } finally { console.error = original; }
+});
 /** 目的：执行前列出完整业务清单且跳过/超时不能显示通过；前置内存测试树，断言编号和全部结果类型，finally 恢复输出，无外部数据。 */
 test('逐项显示业务内容并区分通过、失败与未执行', () => {
   const logs = [];
@@ -25,4 +41,53 @@ test('逐项显示业务内容并区分通过、失败与未执行', () => {
     empty.onBegin({}, {allTests: () => []});
     assert.equal(logs.length, count);
   } finally { console.log = original; }
+});
+
+/** 目的：完整运行缺失业务时返回失败并落盘固定分母；前置临时目录/内存测试树，finally 恢复环境并删除证据。 */
+test('完整门禁不能用过滤运行缩小业务分母', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhub-scenario-reporter-'));
+  const oldRun = process.env.E2E_RUN_DIR;
+  const oldFull = process.env.E2E_FULL_COVERAGE;
+  const original = console.log;
+  try {
+    console.log = () => {};
+    process.env.E2E_RUN_DIR = dir;
+    process.env.E2E_FULL_COVERAGE = '1';
+    const reporter = new Reporter();
+    reporter.onBegin({rootDir: __dirname}, {allTests: () => []});
+    assert.deepEqual(reporter.onEnd({status:'passed'}), {status:'failed'});
+    const report = JSON.parse(fs.readFileSync(path.join(dir,'scenario-coverage.json'),'utf8'));
+    assert.equal(report.total, require('./scenario-catalog.json').length);
+    assert.equal(report.passed, 0);
+    assert.equal(report.unmet.length, report.total);
+    assert.ok(report.unmet.every(row => row.state === 'missing'));
+  } finally {
+    console.log = original;
+    if (oldRun === undefined) delete process.env.E2E_RUN_DIR; else process.env.E2E_RUN_DIR = oldRun;
+    if (oldFull === undefined) delete process.env.E2E_FULL_COVERAGE; else process.env.E2E_FULL_COVERAGE = oldFull;
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+/** 目的：共享注册函数不能把文件清单绑定到 helper；前置模拟文件 suite，验证精确 .test.ts、标题与一次通过；finally 删除临时报告。 */
+test('共享 helper 注册仍绑定独立测试文件', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const {reportCoverage} = require('./scenario-coverage.cjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'xhub-file-binding-'));
+  const file = path.join(__dirname,'scenarios/example.test.ts');
+  const fileSuite = {type:'file',location:{file},parent:null};
+  const nested = {type:'describe',parent:fileSuite};
+  try {
+    const report = reportCoverage([{id:'a',file:'e2e/scenarios/example.test.ts',title:'独立业务'}], [{title:'独立业务',location:{file:path.join(__dirname,'example-helper.ts')},parent:nested,results:[{status:'passed'}]}], path.join(dir,'report.json'));
+    assert.equal(report.passed,1);
+    assert.deepEqual(report.unregistered,[]);
+    const duplicate = reportCoverage([{id:'a',file:'e2e/scenarios/example.test.ts',title:'独立业务'}], [{title:'独立业务',location:{file},parent:fileSuite,results:[{status:'failed'},{status:'passed'}]}],path.join(dir,'retry.json'));
+    assert.equal(duplicate.passed,0);
+    assert.equal(duplicate.unmet[0].state,'retried');
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });

@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderWithProviders, screen, waitFor } from "../../tests/test-utils";
 import Navbar from "./navbar";
 
@@ -129,6 +129,7 @@ Object.defineProperty(window, "location", {
 });
 
 describe("Navbar", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
   const defaultProps = {
     accessToken: "test-token",
     isPublicPage: false,
@@ -281,7 +282,10 @@ describe("Navbar", () => {
     mockGetLocalStorageItemImpl = (key: string) => null;
   });
 
-  it("should handle logout functionality", async () => {
+  /** 已登录用户从导航栏退出，真实请求撤销当前会话后清理并跳转；mock 随用例恢复，无业务数据。 */
+  it("should revoke the session before clearing credentials", async () => {
+    const request = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", request);
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar {...defaultProps} />);
@@ -296,7 +300,10 @@ describe("Navbar", () => {
     await user.click(screen.getByText("Logout"));
 
     const cookieUtils = vi.mocked(await import("@/utils/cookieUtils"));
-    expect(cookieUtils.clearTokenCookies).toHaveBeenCalled();
+    await waitFor(() => expect(cookieUtils.clearTokenCookies).toHaveBeenCalled());
+    expect(request).toHaveBeenCalledWith("http://localhost:4000/auth/logout", {
+      method: "POST", headers: { Authorization: "Bearer test-token" },
+    });
     await waitFor(() => {
       expect(window.location.href).toBe("https://example.com/logout");
     });

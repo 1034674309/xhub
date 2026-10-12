@@ -82,6 +82,7 @@ def continuation_usage(req: dict) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
+    request_count = 0
     ark_tasks: dict[str, dict] = {}
     fal_tasks: dict[str, dict] = {}
 
@@ -149,6 +150,9 @@ class Handler(BaseHTTPRequestHandler):
         参数：无，使用当前 HTTP 请求；返回：无，写入目录或 404 响应。
         调用：浏览器模型配置 E2E；不访问外部服务，服务器结束即清理。
         """
+        if self.path == "/e2e/request-count":
+            self._json({"requests": Handler.request_count})
+            return
         if self.path.rstrip("/") == "/v1/market/models":
             # 确定性市场数据覆盖公开、私有、退役、多模态与完整价格，测试进程结束回收。
             rows = []
@@ -194,6 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         参数：无；返回：无，写 HTTP 响应；非法 JSON 按空对象处理。
         Ark 任务由 _ark 保存；原生图片和 Google 用例校验字段与上游鉴权，进程结束清理数据。
         """
+        Handler.request_count += 1
         n = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(n)
         try:

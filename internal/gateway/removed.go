@@ -24,14 +24,15 @@ func IsRemovedColumn(path string) bool {
 	return removedColumnRoute(path)
 }
 
-// 按路径判断是不是已删除列。花费标签和个别保留路径返回假。
+// 按路径判断是不是已删除列。花费标签、企业认证回调和个别保留路径返回假。
 // 参数 path（string）：URL 路径，用来匹配路由或选择错误包络。
 // 返回 bool（bool）：这条路径属于已经删除的控制台列，应当拒绝时为真。
 // 调用：gateway/ingress.go
-// 测试：无直接单测
+// 测试：removed_test.go 的 TestEnterpriseCallbackIsLive 与 TestRemovedColumnsStayUnregistered
 func removedColumnRoute(path string) bool {
 	p := strings.ToLower(strings.TrimSuffix(path, "/"))
-	if p == "" || p == "/v1/tool/spend" || p == "/spend/tags" {
+	// 企业登录回调是真实认证入口，必须在通用旧日志 callback 退役规则之前保留。
+	if p == "" || p == "/v1/tool/spend" || p == "/spend/tags" || p == "/auth/enterprise/callback" {
 		return false
 	}
 	if strings.HasPrefix(p, "/access_group/") && strings.HasSuffix(p, "/budget") {

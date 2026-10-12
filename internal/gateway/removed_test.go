@@ -4,6 +4,21 @@ import (
 	"testing"
 )
 
+// TestEnterpriseCallbackIsLive 验证企业登录回调不被旧日志回调退役规则误删。
+// 参数 t 为运行器，返回无；正常路径和尾斜线保留，近似拼写及旧回调仍退役；纯函数无需清理。
+func TestEnterpriseCallbackIsLive(t *testing.T) {
+	for _, path := range []string{"/auth/enterprise/callback", "/auth/enterprise/callback/"} {
+		if IsRemovedColumn(path) {
+			t.Errorf("企业登录回调被退役: %s", path)
+		}
+	}
+	for _, path := range []string{"/auth/other/callback", "/team/t1/callback", "/auth/enterprise/callback/extra"} {
+		if !IsRemovedColumn(path) {
+			t.Errorf("旧回调或非认证子路径不应恢复: %s", path)
+		}
+	}
+}
+
 func TestRemovedColumnsStayUnregistered(t *testing.T) {
 	removed := []string{"/v1/mcp", "/v1/mcp/oauth/token", "/tools", "/public/agent_hub", "/cloudzero/settings", "/cloudzero/export", "/email/event_settings", "/email/event_settings/reset", "/config/cost_discount_config", "/config/cost_margin_config", "/config/block_requests_for_models_without_pricing", "/cost/estimate", "/cost/predict-cache", "/config_overrides/hashicorp_vault", "/config_overrides/cyberark", "/get/sso_settings", "/update/sso_settings", "/sso/key/generate", "/get/allowed_ips", "/add/allowed_ip", "/Users", "/Groups", "/alerting/settings", "/callbacks/list", "/config/callback/delete", "/team/t1/callback", "/usage/ai/chat"}
 	for _, path := range removed {

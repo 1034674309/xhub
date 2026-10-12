@@ -244,6 +244,16 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 								t.Fatalf("客户回复协议错误：%s %v", response.describe(), err)
 							}
 						}
+
+						h.flushSpend()
+						id := response.header("x-litellm-call-id")
+						log := h.ok("GET", "/spend/logs/ui/"+id, admin, nil).json()
+						if log["inbound_endpoint"] != path || log["outbound_endpoint"] == "" || log["ttft_ms"] == nil || log["request_duration_ms"] == nil {
+							t.Fatalf("五协议日志端点或首字节计时丢失：%s -> %s: %v", target, source, log)
+						}
+						if log["outbound_endpoint"].(string) != expectedLogEndpoint(source, stream) {
+							t.Fatal("实际出站路径错误", log)
+						}
 						if !h.moneyOf(t, owner).grewBy(before, 0.000012) {
 							t.Fatalf("跨协议计费不等于8输入2输出：%s", target)
 						}
@@ -333,4 +343,13 @@ func endpointStreamFrames(source string) []string {
 		return []string{`{"candidates":[{"content":{"parts":[{"text":"matrix-ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":2}}`}
 	}
 	return nil
+}
+
+// expectedLogEndpoint 返回矩阵本地供应商实际路径，参数为协议及流式标记，无副作用。
+func expectedLogEndpoint(protocol string, stream bool) string {
+	path := map[string]string{"openai-chat": "/v1/chat/completions", "openai-responses": "/v1/responses", "anthropic-messages": "/v1/messages", "gemini": "/v1beta/models/real:generateContent", "vertex": "/models/real:generateContent"}[protocol]
+	if stream {
+		path = strings.Replace(path, ":generateContent", ":streamGenerateContent", 1)
+	}
+	return path
 }

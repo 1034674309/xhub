@@ -169,6 +169,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
     organization_id   TEXT NOT NULL DEFAULT '',
     model             TEXT NOT NULL DEFAULT '',
     call_type         TEXT NOT NULL DEFAULT '',
+    supplier          TEXT NOT NULL DEFAULT '',
+    upstream_model    TEXT NOT NULL DEFAULT '',
+    streamed          BOOLEAN NOT NULL DEFAULT false,
+    inbound_endpoint TEXT NOT NULL DEFAULT '',
+    outbound_endpoint TEXT NOT NULL DEFAULT '',
     status            TEXT NOT NULL DEFAULT '',
     http_status       INT NOT NULL DEFAULT 0,
     prompt_tokens     INT NOT NULL DEFAULT 0,
@@ -276,3 +281,34 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     detail      JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS audit_logs_ts ON audit_logs (ts);
+
+-- 15 分钟桶准确支持现行民用时区，保留原始授权归属，查询无需扫描账单。
+CREATE TABLE IF NOT EXISTS model_monitor_buckets (
+    bucket_start TIMESTAMPTZ NOT NULL,
+    organization_id TEXT NOT NULL DEFAULT '',
+    team_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL DEFAULT '',
+    key_id TEXT NOT NULL DEFAULT '',
+    owner_type TEXT NOT NULL,
+    supplier TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    requests BIGINT NOT NULL DEFAULT 0,
+    failed_requests BIGINT NOT NULL DEFAULT 0,
+    prompt_tokens BIGINT NOT NULL DEFAULT 0,
+    completion_tokens BIGINT NOT NULL DEFAULT 0,
+    cost NUMERIC NOT NULL DEFAULT 0,
+    tps_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+    tps_samples BIGINT NOT NULL DEFAULT 0,
+    ttft_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+    ttft_samples BIGINT NOT NULL DEFAULT 0,
+    latency_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+    latency_samples BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket_start, organization_id, team_id, project_id, user_id, key_id, owner_type, supplier, model)
+);
+CREATE INDEX IF NOT EXISTS model_monitor_team_time ON model_monitor_buckets (team_id, bucket_start);
+CREATE INDEX IF NOT EXISTS model_monitor_user_time ON model_monitor_buckets (user_id, bucket_start);
+CREATE INDEX IF NOT EXISTS model_monitor_org_time ON model_monitor_buckets (organization_id, bucket_start);
+CREATE INDEX IF NOT EXISTS model_monitor_key_time ON model_monitor_buckets (key_id, bucket_start);
+CREATE INDEX IF NOT EXISTS model_monitor_project_time ON model_monitor_buckets (project_id, bucket_start);
+CREATE INDEX IF NOT EXISTS model_monitor_supplier_time ON model_monitor_buckets (supplier, model, bucket_start);

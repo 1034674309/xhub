@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"time"
 )
 
 // UpstreamDiagnostics 保存协议转换前的响应事实，与响应缓存及计费用量独立。
 // Headers 保留所有名称和多值；UsageReported 区分未上报与明确的零值。
 type UpstreamDiagnostics struct {
+	// Endpoint 为实际出站路径，不含凭据及查询参数；FirstByteAt 记录首个 HTTP 响应字节。
+	Endpoint      string         `json:"endpoint"`
+	FirstByteAt   time.Time      `json:"-"`
 	StatusCode    int            `json:"status_code"`
 	Headers       http.Header    `json:"headers"`
 	Trailers      http.Header    `json:"trailers,omitempty"`
@@ -18,6 +23,18 @@ type UpstreamDiagnostics struct {
 	UsageReported bool           `json:"usage_reported"`
 	ParseError    string         `json:"usage_parse_error,omitempty"`
 	BillingUsage  map[string]any `json:"billing_usage,omitempty"`
+}
+
+// TraceFirstByte 为实际 HTTP 请求安装首响应字节计时，参数 req 为出站请求。
+// 返回带追踪的请求与时间指针；转发器在 Do 完成后读取，不发送额外请求或暴露凭据。
+func TraceFirstByte(req *http.Request) (*http.Request, *time.Time) {
+	first := new(time.Time)
+	trace := &httptrace.ClientTrace{GotFirstResponseByte: func() {
+		if first.IsZero() {
+			*first = time.Now()
+		}
+	}}
+	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace)), first
 }
 
 // upstreamObserver 透明观察读取的字节，不改变读取结果。
@@ -38,6 +55,9 @@ type upstreamObserver struct {
 // 调用：适配及原生转发；不修改响应头，不负责关闭正文。
 func ObserveUpstream(resp *http.Response) *UpstreamDiagnostics {
 	diagnostics := &UpstreamDiagnostics{StatusCode: resp.StatusCode, Headers: resp.Header.Clone()}
+	if resp.Request != nil && resp.Request.URL != nil {
+		diagnostics.Endpoint = resp.Request.URL.EscapedPath()
+	}
 	resp.Body = &upstreamObserver{ReadCloser: resp.Body, response: resp, diagnostics: diagnostics,
 		stream: strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream")}
 	return diagnostics
@@ -48,6 +68,9 @@ func ObserveUpstream(resp *http.Response) *UpstreamDiagnostics {
 // 错误和超限不影响传输；未读完时不伪造完整统计。
 func (o *upstreamObserver) Read(p []byte) (int, error) {
 	n, err := o.ReadCloser.Read(p)
+	if n > 0 && o.diagnostics.FirstByteAt.IsZero() {
+		o.diagnostics.FirstByteAt = time.Now()
+	}
 	if o.stream {
 		for _, b := range p[:n] {
 			if b == 10 {

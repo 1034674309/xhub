@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { translate } from "../src/i18n/translate";
+import { requirePageSuccess } from "./assertions";
 
 export const t = (key: string) => translate("zh-CN", key);
 
@@ -63,16 +64,15 @@ export async function stableGoto(page: Page, path: string) {
         await page.waitForTimeout(300);
         continue;
       }
-      if (!page.url().includes("/login") || path === "/login") return;
+      requirePageSuccess(response?.status(), path, page.url());
+      return;
     } catch (err) {
       last = err;
       await page.waitForLoadState("domcontentloaded").catch(() => undefined);
-      if (page.url().includes(path) && !page.url().includes("/login")) return;
       const message = err instanceof Error ? err.message : String(err);
       if (!message.includes("interrupted") && attempt === 2) throw err;
     }
   }
-  if (page.url().includes(path) && !page.url().includes("/login")) return;
   throw last ?? new Error(`navigation to ${path} ended on ${page.url()}`);
 }
 

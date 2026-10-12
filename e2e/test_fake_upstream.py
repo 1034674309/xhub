@@ -9,6 +9,15 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_permission_probe_counts_success_and_failure(self):
+        """目的：权限探针读操作不增加计数，成功和失败推理均增加；前置本地服务，tearDown 回收线程及状态。"""
+        before = self.request("/e2e/request-count")["requests"]
+        self.assertEqual(self.request("/e2e/request-count")["requests"], before)
+        self.request("/v1/chat/completions", {"model":"normal-model"})
+        with self.assertRaises(HTTPError):
+            self.request("/v1/chat/completions", {"model":"e2e-fallback-429-probe"})
+        self.assertEqual(self.request("/e2e/request-count")["requests"], before + 2)
+
     def test_native_image_size_and_preview(self):
         """前置本地图片服务；验证空尺寸和渠道不支持尺寸400、合法尺寸返回真实 PNG 与用量、缺鉴权401；tearDown关闭服务清理。"""
         body = {"model": "e2e-native-real-image_generation", "prompt": "hello", "n": 1}

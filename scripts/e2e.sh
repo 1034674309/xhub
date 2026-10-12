@@ -9,10 +9,13 @@ export E2E_UP_PORT="${E2E_UP_PORT:-4110}"
 export E2E_MASTER_KEY="${E2E_MASTER_KEY:-sk-e2e-enterprise-test-master-key-32}"
 export E2E_GATEWAY="http://127.0.0.1:$E2E_GW_PORT"
 export E2E_UPSTREAM="http://127.0.0.1:$E2E_UP_PORT"
-export E2E_RUN_DIR="$ROOT/.e2e/current"
+# 每轮运行使用专属证据目录，迟到的清理进程不能读取下一轮的 schema 文件。
+export E2E_RUN_DIR="${E2E_RUN_DIR:-$ROOT/.e2e/run-$$-$RANDOM}"
 export E2E_BUILD_DIR=.next-e2e
 # 完整浏览器套件包含 Responses 三轮续接场景，始终装载其本地离线模型夹具。
 export E2E_RESPONSES_CONTINUATION=1
+# HTTPS 身份与官方 Kodo SDK 协议夹具仅编入测试程序。
+export E2E_ENTERPRISE_FIXTURE=1
 export XHUB_GATEWAY_ORIGIN="$E2E_GATEWAY"
 export NEXT_PUBLIC_BASE_URL="$E2E_GATEWAY"
 LOCK="$ROOT/.e2e/browser.lock"
@@ -36,7 +39,7 @@ PYCLEAN
       local schema
       schema="$(cat "$E2E_RUN_DIR/schema.txt")"
       if [[ "$schema" =~ ^e2e_[0-9]+_[0-9]+$ ]]; then
-        docker exec xhub-postgres psql -X -U xhub -d xhub -v ON_ERROR_STOP=1 -q -c "DROP SCHEMA IF EXISTS $schema CASCADE" >"$E2E_RUN_DIR/cleanup.log" 2>&1 || true
+        docker exec xhub-postgres psql -X -U xhub -d xhub -v ON_ERROR_STOP=1 -q -c "DROP SCHEMA IF EXISTS $schema CASCADE" >"$E2E_RUN_DIR/cleanup.log" 2>&1 || exit_code=1
       fi
     fi
   fi
@@ -44,7 +47,7 @@ PYCLEAN
   if [[ -n "${E2E_BROWSER_REPORT_DIR:-}" ]]; then
     mkdir -p "$E2E_BROWSER_REPORT_DIR"
     local artifact
-    for artifact in results.json junit.xml; do
+    for artifact in results.json junit.xml scenario-coverage.json; do
       if [[ -f "$E2E_RUN_DIR/$artifact" ]]; then
         cp "$E2E_RUN_DIR/$artifact" "$E2E_BROWSER_REPORT_DIR/$artifact" || exit_code=1
       fi

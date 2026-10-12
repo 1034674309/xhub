@@ -62,6 +62,8 @@ interface OrgSettingsFormProps {
   patchOrganization?: (organizationId: string, body: OrgPatchBody) => Promise<unknown>;
 }
 
+/** 组织设置表单：接收组织快照、身份及保存/取消回调，返回可编辑表单。
+ * 管理员页面调用；仅提交实际修改字段，非法输入不提交，保存失败保留输入。 */
 export const OrgSettingsForm = ({
   organizationId,
   org,
@@ -72,7 +74,8 @@ export const OrgSettingsForm = ({
 }: OrgSettingsFormProps) => {
   const queryClient = useQueryClient();
   const form = useZodForm(orgSettingsSchema, { defaultValues: orgToForm(org) });
-  const { isDirty } = form.formState;
+  // RHF 按读取字段订阅状态；渲染时订阅 dirtyFields，避免连续编辑多个字段后只提交部分修改项。
+  const { isDirty, dirtyFields } = form.formState;
 
   const mutation = useMutation({
     mutationFn: (body: OrgPatchBody) => patchOrganization(organizationId, body),
@@ -85,8 +88,9 @@ export const OrgSettingsForm = ({
       toast.fromError(error instanceof Error ? error.message : t("Failed to update organization settings")),
   });
 
+  // 校验成功后将当前脏字段转换为接口补丁，清空限额转换为 null，未编辑字段保持原值。
   const onSubmit = form.handleSubmit((values) => {
-    mutation.mutate(buildOrgPatch(pickDirty(values, form.formState.dirtyFields)));
+    mutation.mutate(buildOrgPatch(pickDirty(values, dirtyFields)));
   });
 
   return (

@@ -348,8 +348,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				client.Timeout = 0
 				// 明确地址不跟随重定向，防止凭据被转发到未配置的连接。
 				client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+				req, firstByte := dpdiagnostics.TraceFirstByte(req)
 				resp, err := client.Do(req)
 				if err != nil {
+					// 即使未收到响应，也保存本次尝试的实际出站路径，便于失败日志定位。
+					h.AnnotateCall(callID, dpcontract.CallNote{Upstream: &dpdiagnostics.UpstreamDiagnostics{Endpoint: req.URL.EscapedPath()}})
 					cancelAttempt()
 					h.DecBusy(did)
 					lastErr = err
@@ -358,7 +361,12 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					continue
 				}
 				// 先观察原始响应，再执行错误重试和协议转换。
-				h.AnnotateCall(callID, dpcontract.CallNote{Upstream: dpdiagnostics.ObserveUpstream(resp)})
+				resp.Request = req
+				diagnostic := dpdiagnostics.ObserveUpstream(resp)
+				if !firstByte.IsZero() {
+					diagnostic.FirstByteAt = *firstByte
+				}
+				h.AnnotateCall(callID, dpcontract.CallNote{Upstream: diagnostic})
 				if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
 					// 重试前保存完整错误正文；若所有候选都失败，最终日志必须能还原最后一次上游响应。
 					lastResponse, _ = io.ReadAll(resp.Body)
@@ -417,7 +425,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						util.Error("upstream stream path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(streamErr))
 						if wrote {
 							h.RememberExchange(callID, r, raw, streamed)
-							h.AnnotateCall(callID, dpcontract.CallNote{TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck, SessionID: plan.SessionID})
+							h.AnnotateCall(callID, dpcontract.CallNote{Streamed: true, TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck, SessionID: plan.SessionID})
 							h.RecordSpend(w, p, callID, alias, op, usage, start, false, http.StatusBadGateway, did)
 							return
 						}
@@ -434,7 +442,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						depID := did
 						h.RememberExchange(callID, r, raw, streamed)
 						h.AnnotateCall(callID, dpcontract.CallNote{
-							TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck,
+							Streamed: true, TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck,
 							SessionID: plan.SessionID,
 						})
 						if resp.StatusCode < 400 && op != "responses" {

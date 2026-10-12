@@ -87,3 +87,10 @@ it("routes the documentation namespace without swallowing similar API paths", ()
   expect(dashboardAppPath("/v1/models")).toBeNull();
   expect(appPageWritePath("POST", "/docs")).toBeNull();
 });
+
+/** 前置模型监控页面已注册，验证直达和 /ui 别名均交给页面、统计 API 仍交后台；纯路径检查无需清理。 */
+it("routes model monitor pages separately from monitor API", () => {
+  expect(dashboardAppPath("/model-monitor")).toBe("/model-monitor");
+  expect(dashboardAppPath("/ui/model-monitor/")).toBe("/model-monitor");
+  expect(dashboardAppPath("/models/monitor")).toBeNull();
+});

@@ -5,9 +5,44 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+// TestTraceFirstByteAndEndpoint 前置本地 HTTP 服务延迟发送正文，验证首个响应字节被追踪且出站端点只保留路径。
+// 参数 t 为测试上下文；服务由 httptest 自动关闭，不访问外部网络，不留下持久化数据。
+func TestTraceFirstByteAndEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(20 * time.Millisecond)
+		_, _ = w.Write([]byte("{\\\"usage\\\":{\\\"prompt_tokens\\\":2,\\\"completion_tokens\\\":3}}"))
+	}))
+	defer server.Close()
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/v1/responses?api_key=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, first := TraceFirstByte(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Request = req
+	diagnostic := ObserveUpstream(resp)
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if first.IsZero() || diagnostic.FirstByteAt.IsZero() || diagnostic.Endpoint != "/v1/responses" {
+		t.Fatalf("首字节或端点记录错误: first=%v diagnostic=%v endpoint=%q", first, diagnostic.FirstByteAt, diagnostic.Endpoint)
+	}
+}
 
 // diagnosticBrokenBody 模拟读取错误及关闭错误，供透明传输失败路径测试使用。
 type diagnosticBrokenBody struct{ cause error }

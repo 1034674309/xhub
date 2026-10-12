@@ -17,6 +17,14 @@ var logTraceOnceUsage sync.Once
 // Nothing here is a foreign key: a member who leaves a team does not move the
 // spend they already produced, and deleting a team does not erase history.
 type UsageEvent struct {
+	// 入站及出站路径独立于提示词存储。
+	InboundEndpoint  string `xorm:"inbound_endpoint" json:"inbound_endpoint"`
+	OutboundEndpoint string `xorm:"outbound_endpoint" json:"outbound_endpoint"`
+
+	Streamed bool `xorm:"streamed" json:"streamed"`
+	// Supplier 和 UpstreamModel 保存调用时的供应商连接与实际模型，不随配置变化重写。
+	Supplier      string `xorm:"'supplier'" json:"supplier"`
+	UpstreamModel string `xorm:"'upstream_model'" json:"upstream_model"`
 	// TaskSettled 是原异步请求的持久化结算标记；防止重复或并发轮询二次扣费。
 	TaskSettled    bool      `xorm:"'task_settled'" json:"-"`
 	ID             int64     `xorm:"pk autoincr 'id'" json:"-"`
@@ -114,6 +122,14 @@ func (UsageDaily) TableName() string { return "usage_daily" }
 // the identity that actually made it, not to whatever the hierarchy looks like
 // by the time the batch is flushed.
 type UsageRecord struct {
+	// 端点快照随账单事务写入。
+	InboundEndpoint  string
+	OutboundEndpoint string
+
+	Streamed bool
+	// 供应商和实际模型的调用归属快照随账单原子写入。
+	Supplier         string
+	UpstreamModel    string
 	RequestID        string
 	TS               time.Time
 	KeyID            string
@@ -176,6 +192,7 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 		r.TS = stamp(r.TS)
 	}
 	return db.tx(ctx, func(s *xorm.Session) error {
+		monitor := map[monitorKey]monitorDelta{}
 		for _, r := range records {
 			if err := settleBudgetHold(s, r); err != nil {
 				return err
@@ -187,6 +204,7 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 			if !fresh {
 				continue
 			}
+			accumulateMonitor(monitor, r, 1)
 			if err := putRequestLog(s, r); err != nil {
 				return err
 			}
@@ -197,7 +215,7 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 				return err
 			}
 		}
-		return nil
+		return flushMonitor(s, monitor)
 	})
 }
 
@@ -216,14 +234,14 @@ func insertEvent(s *xorm.Session, r UsageRecord) (bool, error) {
         (request_id, ts, key_id, owner_type, user_id, team_id, project_id, organization_id,
 		 model, call_type, status, http_status, prompt_tokens, completion_tokens, cost, duration_ms,
          ended_at, ttft_ms, cache_hit, key_hash, key_alias, team_alias, provider,
-         cached_tokens, session_id, cache_key, guardrail, price_snapshot)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cached_tokens, session_id, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (request_id) DO NOTHING`,
 		r.RequestID, stamp(r.TS), r.KeyID, ownerType(r), r.UserID, r.TeamID, r.ProjectID,
 		r.OrganizationID, r.Model, r.CallType, status(r), r.HTTPStatus,
 		r.PromptTokens, r.CompletionTokens, r.Cost, r.DurationMS,
 		ended, r.TTFTMs, r.CacheHit, r.KeyHash, r.KeyAlias, r.TeamAlias, r.Provider,
-		r.CachedTokens, r.SessionID, r.CacheKey, r.Guardrail, r.PriceSnapshot)
+		r.CachedTokens, r.SessionID, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint)
 	if err != nil {
 		return false, mapErr(err)
 	}

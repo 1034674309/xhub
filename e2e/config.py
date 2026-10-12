@@ -48,6 +48,9 @@ config = {"model_list": models,
     "general_settings": {"master_key": env["E2E_MASTER_KEY"], "admin_email": "admin", "admin_name": "admin",
         "admin_password": env["E2E_MASTER_KEY"],
         "database_url": "postgres://xhub:xhub_dev_password@127.0.0.1:5433/xhub?sslmode=disable&search_path=" + env["E2E_SCHEMA"]}}
+# 调用方可提供专属 Redis，验证队列到数据库的真实写入；未指定时保持直接落库。
+if env.get("E2E_REDIS_URL"):
+    config["general_settings"]["redis_url"] = env["E2E_REDIS_URL"]
 target = Path(env["E2E_RUN_DIR"]) / "c.yaml"
 fd = os.open(target, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
 os.chmod(target, 0o600)

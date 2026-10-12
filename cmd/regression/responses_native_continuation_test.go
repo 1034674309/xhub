@@ -109,7 +109,8 @@ func TestResponsesFailedStreamCannotContinue(t *testing.T) {
 	dep := chatDeployment("failed-continuation")
 	dep.LiteLLMParams["api_base"] = upstream.URL
 	h := newHarness(t, dep)
-	admin := h.adminSession()
+	// 本用例先准备个人计费来源，以到达真实上游并验证截断流的续接归属。
+	admin := h.personalBillingSession()
 	failed := h.ok("POST", "/responses", admin, map[string]any{"model": dep.ModelName, "input": "first", "stream": true})
 	if !strings.Contains(string(failed.body), "response.failed") || strings.Contains(string(failed.body), "response.completed") {
 		t.Fatalf("截断流被标记成功: %s", failed.describe())

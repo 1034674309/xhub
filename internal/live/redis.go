@@ -274,10 +274,18 @@ func (c *Client) HotSpend(id string) float64 {
 
 // SpendLog is one spend log waiting in the queue to be written to PostgreSQL.
 type SpendLog struct {
-	RequestID string `json:"request_id"`
-	CallType  string `json:"call_type"`
-	Model     string `json:"model"`
-	APIKey    string `json:"api_key"`
+	// 路径随账单队列传递，不含查询参数。
+	InboundEndpoint  string `json:"inbound_endpoint"`
+	OutboundEndpoint string `json:"outbound_endpoint"`
+
+	Streamed bool `json:"streamed"`
+	// 监控归属快照随队列传递，避免异步刷库丢失实际供应商和模型。
+	Supplier      string `json:"supplier,omitempty"`
+	UpstreamModel string `json:"upstream_model,omitempty"`
+	RequestID     string `json:"request_id"`
+	CallType      string `json:"call_type"`
+	Model         string `json:"model"`
+	APIKey        string `json:"api_key"`
 	// KeyID is the api_keys row id, which is what usage_events keys ownership
 	// by. APIKey stays the token hash, because that is the live-spend reference.
 	KeyID      string  `json:"key_id,omitempty"`

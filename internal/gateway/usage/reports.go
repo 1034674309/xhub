@@ -236,11 +236,23 @@ func parseDayEnd(v string) time.Time {
 	return from.Add(24*time.Hour - time.Nanosecond)
 }
 
-// eventRows renders the stored events in the shape the console's table reads. The field names are the LiteLLM ones the table already binds to.
-// 参数 events（[]iam.UsageEvent）：事件行使用的用量事件。
-// 返回 []map[string]any（[]map[string]any）：一组map[string]any。没有匹配时为空切片，不是 nil 分页。
-// 调用：仅在 reports.go 内使用
-// 测试：cost_breakdown_test.go、log_guardrail_test.go
+// logTPS 按统一日志口径计算总 Token /（总耗时 − 首字节耗时）。
+// 参数 e 为授权读取的账单，返回可空速度；缓存、失败或零分母返回 nil，列表及详情共用。
+func logTPS(e iam.UsageEvent) *float64 {
+	switch e.Status {
+	case "", "success", "succeeded", "completed":
+	default:
+		return nil
+	}
+	if e.CacheHit || e.HTTPStatus >= 400 || e.TTFTMs == nil || *e.TTFTMs < 0 || e.DurationMS <= *e.TTFTMs || e.PromptTokens+e.CompletionTokens <= 0 {
+		return nil
+	}
+	v := float64(e.PromptTokens+e.CompletionTokens) * 1000 / float64(e.DurationMS-*e.TTFTMs)
+	return &v
+}
+
+// eventRows 将授权后的事件转换为日志列表和详情共用的数据。
+// 参数 events 为用量事件；返回非 nil 切片，附带端点、首字节耗时和 TPS，无持久化副作用。
 func eventRows(events []iam.UsageEvent) []map[string]any {
 	out := make([]map[string]any, 0, len(events))
 	for _, e := range events {
@@ -282,6 +294,11 @@ func eventRows(events []iam.UsageEvent) []map[string]any {
 			"startTime":           e.TS.UTC().Format(time.RFC3339Nano),
 			"endTime":             end.UTC().Format(time.RFC3339Nano),
 			"request_duration_ms": e.DurationMS,
+			"inbound_endpoint":    e.InboundEndpoint,
+			"outbound_endpoint":   e.OutboundEndpoint,
+			"streamed":            e.Streamed,
+			"ttft_ms":             e.TTFTMs,
+			"tps":                 logTPS(e),
 			"user":                e.UserID,
 			"cache_hit":           cacheHit,
 			"cache_key":           e.CacheKey,

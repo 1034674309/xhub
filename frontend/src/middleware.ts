@@ -17,6 +17,7 @@ const APP_PAGES = new Set([
   "/price-data",
   "/guardrails",
   "/usage",
+  "/model-monitor",
   "/logs",
   "/audit-logs",
   "/guardrails-monitor",

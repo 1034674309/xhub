@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	dpdiagnostics "github.com/sunqirui1987/xhub/internal/dataplane/diagnostics"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
@@ -21,6 +22,7 @@ type ForwardResponse struct {
 	StatusCode  int
 	Header      http.Header
 	Body        []byte
+	FirstByteAt time.Time // 首个 SSE data 行到达时刻；同步响应不产生此样本。
 	Streamed    bool
 	Usage       map[string]any
 	ResponseID  string // 成功原生流的存储响应归属，非流由正文读取。
@@ -67,11 +69,18 @@ func ForwardOfficial(upstreamClient *http.Client, r *http.Request, method, addre
 	if _, deadline := r.Context().Deadline(); deadline {
 		client.Timeout = 0
 	}
+	req, firstByte := dpdiagnostics.TraceFirstByte(req)
 	resp, err := client.Do(req)
 	if err != nil {
+		// 网络失败没有响应对象，仍保留已选择的实际出站路径供失败日志展示。
+		result.Diagnostics = &dpdiagnostics.UpstreamDiagnostics{Endpoint: req.URL.EscapedPath()}
 		return result, err
 	}
+	resp.Request = req
 	result.Diagnostics = dpdiagnostics.ObserveUpstream(resp)
+	if !firstByte.IsZero() {
+		result.Diagnostics.FirstByteAt = *firstByte
+	}
 	defer resp.Body.Close()
 	result.StatusCode = resp.StatusCode
 	result.Header = resp.Header.Clone()
@@ -87,6 +96,9 @@ func ForwardOfficial(upstreamClient *http.Client, r *http.Request, method, addre
 		request, _ := ParseBypassBody(body, in.Get("Content-Type"))
 		for scanner.Scan() {
 			line := scanner.Bytes()
+			if result.FirstByteAt.IsZero() && bytes.HasPrefix(line, []byte("data:")) {
+				result.FirstByteAt = time.Now()
+			}
 			if _, err = w.Write(line); err != nil {
 				return result, err
 			}

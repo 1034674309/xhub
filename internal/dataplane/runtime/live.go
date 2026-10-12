@@ -114,33 +114,7 @@ func Flush(h Runtime) {
 	head := raw[0]
 	records := make([]iam.UsageRecord, 0, len(logs))
 	for _, row := range logs {
-		start, err := time.Parse(time.RFC3339Nano, row.Start)
-		if err != nil {
-			start = time.Now()
-		}
-		end, err := time.Parse(time.RFC3339Nano, row.End)
-		if err != nil {
-			end = time.Now()
-		}
-		spend := 0.0
-		if row.SpendValid {
-			spend = row.Spend
-		}
-		rec := iam.UsageRecord{
-			RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
-			UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
-			Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
-			PromptTokens: row.Prompt, CompletionTokens: row.Completion, Cost: spend,
-			DurationMS:  int(end.Sub(start).Milliseconds()),
-			RequestBody: row.Messages, ResponseBody: row.Response, Error: row.Error, ProxyRequest: row.ProxyRequest,
-			UpstreamResponse: row.UpstreamResponse,
-			EndedAt:          end, TTFTMs: row.TTFTMs, CacheHit: row.CacheHit,
-			KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
-			Provider: row.Provider, CachedTokens: row.CachedTokens,
-			SessionID: row.SessionID, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
-			PriceSnapshot: row.PriceSnapshot,
-		}
-		records = append(records, rec)
+		records = append(records, queuedUsageRecord(row))
 	}
 	if len(records) == 0 {
 		_ = redis.AckFlushed(nil, n, head)
@@ -151,6 +125,39 @@ func Flush(h Runtime) {
 		return
 	}
 	_ = redis.AckFlushed(hotDeltas(logs), n, head)
+}
+
+// queuedUsageRecord 将队列日志转换为数据库账单；参数 row 为 Redis 日志，返回完整的用量快照。
+// Flush 调用，无外部副作用；非法时间回退当前时间，未实测费用保持零，端点不受正文保存开关影响。
+func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
+	start, err := time.Parse(time.RFC3339Nano, row.Start)
+	if err != nil {
+		start = time.Now()
+	}
+	end, err := time.Parse(time.RFC3339Nano, row.End)
+	if err != nil {
+		end = time.Now()
+	}
+	spend := 0.0
+	if row.SpendValid {
+		spend = row.Spend
+	}
+	return iam.UsageRecord{
+		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
+		Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
+		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
+		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
+		Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
+		PromptTokens: row.Prompt, CompletionTokens: row.Completion, Cost: spend,
+		DurationMS:  int(end.Sub(start).Milliseconds()),
+		RequestBody: row.Messages, ResponseBody: row.Response, Error: row.Error, ProxyRequest: row.ProxyRequest,
+		UpstreamResponse: row.UpstreamResponse,
+		EndedAt:          end, TTFTMs: row.TTFTMs, CacheHit: row.CacheHit,
+		KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
+		Provider: row.Provider, CachedTokens: row.CachedTokens,
+		SessionID: row.SessionID, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
+		PriceSnapshot: row.PriceSnapshot,
+	}
 }
 
 // hotDeltas 把一批花费日志按密钥、团队、用户、组织和项目拆成要回写的热计数。

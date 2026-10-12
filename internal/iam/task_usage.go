@@ -46,7 +46,12 @@ func (db *DB) RecordTaskUsage(ctx context.Context, r UsageRecord, initial, settl
 			if err := putRequestLog(s, r); err != nil {
 				return err
 			}
-			return bumpDaily(s, r)
+			if err := bumpDaily(s, r); err != nil {
+				return err
+			}
+			monitor := map[monitorKey]monitorDelta{}
+			accumulateMonitor(monitor, r, 1)
+			return flushMonitor(s, monitor)
 		}
 		if old.KeyID != r.KeyID || old.UserID != r.UserID || old.Model != r.Model {
 			return fmt.Errorf("task request ownership mismatch")
@@ -62,7 +67,15 @@ func (db *DB) RecordTaskUsage(ctx context.Context, r UsageRecord, initial, settl
 		}
 		// 所有归属与开始时间沿用原请求，不能由后续调用重写账单归属。
 		r.TS, r.OrganizationID, r.TeamID, r.ProjectID, r.OwnerType = old.TS, old.OrganizationID, old.TeamID, old.ProjectID, old.OwnerType
-		if _, err := s.Exec("UPDATE usage_events SET status = ?, http_status = ?, ended_at = ?, duration_ms = ? WHERE request_id = ?", r.Status, r.HTTPStatus, r.EndedAt, r.DurationMS, r.RequestID); err != nil {
+		r.Supplier, r.UpstreamModel, r.CallType = old.Supplier, old.UpstreamModel, old.CallType
+		// 未结算状态不接受轮询携带的推测用量；终态修正使用完整原始贡献作差。
+		if !settle {
+			r.Cost, r.PromptTokens, r.CompletionTokens = old.Cost, old.PromptTokens, old.CompletionTokens
+		}
+		monitor := map[monitorKey]monitorDelta{}
+		accumulateMonitor(monitor, UsageRecord{TS: old.TS, OrganizationID: old.OrganizationID, TeamID: old.TeamID, ProjectID: old.ProjectID, UserID: old.UserID, KeyID: old.KeyID, OwnerType: old.OwnerType, Supplier: old.Supplier, UpstreamModel: old.UpstreamModel, CallType: old.CallType, Status: old.Status, HTTPStatus: old.HTTPStatus, Cost: old.Cost, PromptTokens: old.PromptTokens, CompletionTokens: old.CompletionTokens, DurationMS: old.DurationMS, TTFTMs: old.TTFTMs, Streamed: old.Streamed, CacheHit: old.CacheHit}, -1)
+		accumulateMonitor(monitor, r, 1)
+		if _, err := s.Exec("UPDATE usage_events SET status = ?, http_status = ?, ended_at = ?, duration_ms = ?, ttft_ms = ?, streamed = ?, cache_hit = ? WHERE request_id = ?", r.Status, r.HTTPStatus, r.EndedAt, r.DurationMS, r.TTFTMs, r.Streamed, r.CacheHit, r.RequestID); err != nil {
 			return err
 		}
 		errorBody := ""
@@ -76,7 +89,7 @@ func (db *DB) RecordTaskUsage(ctx context.Context, r UsageRecord, initial, settl
 			return err
 		}
 		if !settle {
-			return nil
+			return flushMonitor(s, monitor)
 		}
 		if _, err := s.Exec("UPDATE usage_events SET task_settled = true, cost = ?, prompt_tokens = ?, completion_tokens = ?, price_snapshot = ? WHERE request_id = ?", r.Cost, r.PromptTokens, r.CompletionTokens, r.PriceSnapshot, r.RequestID); err != nil {
 			return err
@@ -87,6 +100,9 @@ func (db *DB) RecordTaskUsage(ctx context.Context, r UsageRecord, initial, settl
 			r.Cost, r.PromptTokens, r.CompletionTokens, day(old.TS), old.OrganizationID, old.TeamID, old.ProjectID, old.UserID, old.KeyID, ownerType(r), old.Model); err != nil {
 			return err
 		}
-		return addScopeSpend(s, r)
+		if err := addScopeSpend(s, r); err != nil {
+			return err
+		}
+		return flushMonitor(s, monitor)
 	})
 }

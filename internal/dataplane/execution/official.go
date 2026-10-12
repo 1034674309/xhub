@@ -228,6 +228,7 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 					if response.Streamed {
 						h.RememberExchange(callID, r, raw, []byte(dpdiagnostics.SafeErr(err)))
 						note := dataplaneNote(hit, dep, "", time.Since(start))
+						applyStreamTiming(&note, response, start)
 						note.Upstream = response.Diagnostics
 						h.AnnotateCall(callID, note)
 						h.RecordSpend(w, principal, callID, alias, hit.Transport.ID+":"+hit.Action.Name, nil, start, false, 502, selectedID)
@@ -241,6 +242,7 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 					// 创建响应丢失时，上游可能已受理付费任务；结果不明确的创建请求不能重放。
 					h.RememberExchange(callID, r, raw, []byte(dpdiagnostics.SafeErr(err)))
 					note := dataplaneNote(hit, dep, plan.SessionID, time.Since(start))
+					applyStreamTiming(&note, response, start)
 					note.Upstream = response.Diagnostics
 					h.AnnotateCall(callID, note)
 					h.RecordSpend(w, principal, callID, alias, hit.Transport.ID+":"+hit.Action.Name, nil, start, false, http.StatusBadGateway, selectedID)
@@ -323,6 +325,7 @@ forwarded:
 		note.TaskRequestID, note.TaskInitial = taskRequestID, true
 		note.TaskStatus = officialTaskStatus(status, doc, true)
 	}
+	applyStreamTiming(&note, response, start)
 	note.Upstream = response.Diagnostics
 	h.AnnotateCall(callID, note)
 	var usage map[string]any
@@ -419,6 +422,7 @@ func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 				errorStart = facts.StartedAt
 			}
 		}
+		applyStreamTiming(&note, response, start)
 		note.Upstream = response.Diagnostics
 		h.AnnotateCall(callID, note)
 		h.RecordSpend(w, principal, callID, dep.ModelName, hit.Transport.ID+":"+hit.Action.Name, nil, errorStart, false, http.StatusBadGateway, depID)
@@ -465,6 +469,7 @@ func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 	}
 	note.SettlementID = settlementID
 	note.SkipRouteUsage = true
+	applyStreamTiming(&note, response, start)
 	note.Upstream = response.Diagnostics
 	h.AnnotateCall(callID, note)
 	h.RecordSpend(w, principal, callID, dep.ModelName, hit.Transport.ID+":"+hit.Action.Name, usage, billingStart, false, status, depID)
@@ -671,4 +676,16 @@ func rewriteQueueURLs(hit providercontract.Hit, doc map[string]any, raw []byte) 
 		return raw
 	}
 	return out
+}
+
+// applyStreamTiming 将实测 SSE 首数据时间写入调用备注；参数 note 为待更新快照、response 为转发结果、start 为开始时间。
+// 原生调用计费前调用，无返回值；非流式保持原备注，未收到 SSE 数据时不产生性能样本。
+func applyStreamTiming(note *dpcontract.CallNote, response dptransport.ForwardResponse, start time.Time) {
+	note.Streamed = response.Streamed
+	if response.Streamed {
+		note.TTFTMs = nil
+		if !response.FirstByteAt.IsZero() {
+			note.TTFTMs = dpusage.TtftMillis(response.FirstByteAt.Sub(start))
+		}
+	}
 }

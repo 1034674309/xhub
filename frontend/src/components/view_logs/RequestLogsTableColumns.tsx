@@ -54,6 +54,11 @@ export const getRequestLogsTableColumns = ({
     cell: ({ row }) => <DateCell value={row.original.startTime} />,
   },
   {
+    id: "endpoints", header: t("requestMetrics.endpoints"), size: 230, enableSorting: false,
+    // 每条日志均展示实际路径；未调用上游时保留占位，不按协议名猜测。
+    cell: ({ row }) => <div className="space-y-1 text-xs"><div>{t("requestMetrics.inbound")}: <span className="font-mono">{row.original.inbound_endpoint || "—"}</span></div><div>{t("requestMetrics.outbound")}: <span className="font-mono">{row.original.outbound_endpoint || "—"}</span></div></div>,
+  },
+  {
     id: "type",
     header: t("Type"),
     size: 90,
@@ -192,7 +197,7 @@ export const getRequestLogsTableColumns = ({
   {
     id: "request_duration_ms",
     accessorKey: "request_duration_ms",
-    header: ({ column }) => <DataTableSortHeader column={column} title="Duration (s)" variant="dropdown-tristate" />,
+    header: ({ column }) => <DataTableSortHeader column={column} title={t("requestMetrics.duration")} variant="dropdown-tristate" />,
     enableSorting: true,
     meta: { numeric: true },
     cell: ({ row }) => {
@@ -201,7 +206,7 @@ export const getRequestLogsTableColumns = ({
       return (
         <CellTooltip
           content={`${ms}ms`}
-          trigger={<span className="max-w-[15ch] truncate inline-block">{(ms / 1000).toFixed(2)}</span>}
+          trigger={<span className="max-w-[15ch] truncate inline-block">{(ms / 1000).toFixed(2)}s</span>}
         />
       );
     },
@@ -209,23 +214,17 @@ export const getRequestLogsTableColumns = ({
   {
     id: "ttft_ms",
     accessorKey: "completionStartTime",
-    header: ({ column }) => <DataTableSortHeader column={column} title="TTFT (s)" variant="dropdown-tristate" />,
+    header: ({ column }) => <DataTableSortHeader column={column} title={t("requestMetrics.ttft")} variant="dropdown-tristate" />,
     enableSorting: true,
     meta: { numeric: true },
     cell: ({ row }) => {
-      const log = row.original;
-      const completionStartTime = log.completionStartTime;
-      if (!completionStartTime) return <span>-</span>;
-      if (completionStartTime === log.endTime) return <span>-</span>;
-      const ttftMs = new Date(completionStartTime).getTime() - new Date(log.startTime).getTime();
-      if (ttftMs <= 0) return <span>-</span>;
-      return (
-        <CellTooltip
-          content={`${ttftMs}ms`}
-          trigger={<span className="max-w-[15ch] truncate inline-block">{(ttftMs / 1000).toFixed(2)}</span>}
-        />
-      );
+      const ms = row.original.ttft_ms;
+      return <span title={t("requestMetrics.definition")}>{ms != null && ms >= 0 ? (ms / 1000).toFixed(2) + "s" : "—"}</span>;
     },
+  },
+  {
+    id: "tps", header: t("requestMetrics.tps"), enableSorting: false, meta: { numeric: true },
+    cell: ({ row }) => <span title={t("requestMetrics.definition")}>{row.original.tps != null ? row.original.tps.toFixed(2) : "—"}</span>,
   },
   {
     id: "team_alias",

@@ -129,6 +129,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: "new_usage", page: "new_usage", route: "usage", label: "nav.usage", icon: <BarChart3 {...ICON} /> },
       { key: "logs", page: "logs", label: "nav.logs", icon: <Activity {...ICON} /> },
+      { key: "model-monitor", page: "model-monitor", label: "nav.modelMonitor", icon: <BarChart3 {...ICON} /> },
       {
         key: "guardrails-monitor",
         page: "guardrails-monitor",

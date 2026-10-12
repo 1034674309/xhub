@@ -53,6 +53,17 @@ func TestEnterpriseIndependentHTTP(t *testing.T) {
 	}
 	input := map[string]any{"organization_id": org.ID, "name": "Login only", "issuer": "https://identity.example.com", "client_id": "xhub", "client_secret": "independent-secret", "redirect_uri": "https://console.example.com/auth/enterprise/callback", "return_uri": "https://console.example.com/ui/login", "identity_claim": "sub", "enabled": false}
 	request("", http.MethodGet, path, nil, 401)
+	// 通过完整路由验证回调确实挂载：无 state 必须是认证拒绝，不能退化为路由 404。
+	callback := request("", http.MethodGet, "/auth/enterprise/callback", nil, 401)
+	var failure struct {
+		Error struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(callback, &failure); err != nil || failure.Error.Type != "auth_error" || failure.Error.Code != "401" {
+		t.Fatalf("企业回调认证契约错误: %s %v", callback, err)
+	}
 	request(userSession, http.MethodPost, path, input, 403)
 	status, out := authed(t, srv.URL, session, http.MethodPost, path, []byte("{} {}"))
 	if status != 400 {

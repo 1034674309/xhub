@@ -27,6 +27,8 @@ func Module(h mountHost) util.Module {
 
 	traceModule("usage")
 	return util.Bind("usage", func(reg util.Registrar) {
+		// 模型监控复用用量授权，只读取事务内维护的预聚合性能与费用桶。
+		reg.Handle("GET /models/monitor", func(w http.ResponseWriter, r *http.Request) { ModelMonitor(h, w, r) })
 		reg.Handle("GET /global/spend/teams", func(w http.ResponseWriter, r *http.Request) { SpendTeams(h, w, r) })
 		reg.Handle("GET /guardrails/usage/overview", func(w http.ResponseWriter, r *http.Request) { GuardrailOverview(h, w, r) })
 		reg.Handle("GET /guardrails/usage/detail/{guardrail_id}", func(w http.ResponseWriter, r *http.Request) { GuardrailDetail(h, w, r) })

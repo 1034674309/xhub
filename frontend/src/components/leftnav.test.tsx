@@ -302,3 +302,9 @@ describe("Sidebar (leftnav)", () => {
     });
   });
 });
+
+/** 前置菜单定义，验证所有观测入口包含模型监控并生成翻译面包屑；不写外部数据，无清理需求。 */
+it("includes model monitor in observability", () => {
+  expect(menuGroups.find(group => group.groupLabel === "nav.groups.observability")?.items.some(item => item.key === "model-monitor")).toBe(true);
+  expect(getBreadcrumb("/ui/model-monitor").title).toBe(t("nav.modelMonitor"));
+});

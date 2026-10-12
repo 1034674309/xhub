@@ -49,3 +49,14 @@ func TestUpstreamDiagnosticsPersistence(t *testing.T) {
 		t.Fatal("持久化转换丢失诊断")
 	}
 }
+
+// TestUsageMonitorSnapshot 验证直接写库的队列转换保存供应商、实际模型与流计时；正常和缺失身份均无外部数据。
+func TestUsageMonitorSnapshot(t *testing.T) {
+	for _, supplier := range []string{"supplier-a", ""} {
+		ttft := 15
+		row := usageFromSpend(live.SpendLog{Supplier: supplier, UpstreamModel: "actual", Streamed: true, TTFTMs: &ttft}, 0.25, "", "", "", time.Now(), time.Now())
+		if row.Supplier != supplier || row.UpstreamModel != "actual" || !row.Streamed || row.TTFTMs == nil || *row.TTFTMs != 15 {
+			t.Fatalf("监控快照转换丢失: %+v", row)
+		}
+	}
+}

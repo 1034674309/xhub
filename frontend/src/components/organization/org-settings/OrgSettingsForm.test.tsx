@@ -93,6 +93,17 @@ const renderForm = (overrides?: { patchOrganization?: Mock; onSaved?: () => void
 };
 
 describe("OrgSettingsForm", () => {
+  /** 目的：连续修改 RPM/TPM 不丢字段；前置已有两个限额，验证一次提交包含两项；组件测试自动卸载，无持久化数据。 */
+  it("submits both rate edits in the same patch", async () => {
+    const user = userEvent.setup();
+    const { patchOrganization } = renderForm();
+    fireEvent.change(screen.getByLabelText("Requests per minute Limit (RPM)"), { target: { value: "75" } });
+    fireEvent.change(screen.getByLabelText("Tokens per minute Limit (TPM)"), { target: { value: "1500" } });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(patchOrganization).toHaveBeenCalledTimes(1));
+    expect(patchOrganization).toHaveBeenCalledWith("org-1", { rpm_limit: 75, tpm_limit: 1500 });
+  });
+
   it("disables Save while the form is pristine", () => {
     renderForm();
 

@@ -163,6 +163,17 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		tokens = 0
 	}
 	note := s.takeNote(callID)
+	outbound := ""
+	if note.Upstream != nil {
+		outbound = note.Upstream.Endpoint
+		// 所有协议统一按首个 HTTP 响应字节到达时间计算 TTFT。
+		if !note.Upstream.FirstByteAt.IsZero() {
+			ms := int(note.Upstream.FirstByteAt.Sub(start).Milliseconds())
+			if ms >= 0 {
+				note.TTFTMs = &ms
+			}
+		}
+	}
 	guardrail := s.takeGuardrail(callID)
 	if !cacheHit && tokens > 0 && !note.SkipRouteUsage {
 		s.noteUsage(depID, tokens)
@@ -172,6 +183,7 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		keyID = p.KeyID
 	}
 	row := live.SpendLog{
+		InboundEndpoint: ex.inbound, OutboundEndpoint: outbound,
 		RequestID: callID, CallType: callType, Model: alias, APIKey: hash,
 		KeyID:  keyID,
 		Prompt: pt, Completion: ct, Spend: spend, SpendValid: true,
@@ -180,10 +192,15 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		TeamID: teamID, UserID: userID, OrgID: orgID, ProjectID: projectID,
 		Messages: ex.messages, Response: ex.response, ProxyRequest: ex.proxy,
 		UpstreamResponse: requestlog.DiagnosticJSON(note.Upstream, usage),
-		TTFTMs:           note.TTFTMs, Provider: note.Provider, CacheKey: note.CacheKey,
+		Streamed:         note.Streamed, TTFTMs: note.TTFTMs, Provider: note.Provider, CacheKey: note.CacheKey,
 		SessionID: note.SessionID, CachedTokens: cachedColumn(usage),
 		Guardrail:     guardrail,
 		PriceSnapshot: catalog.SnapshotUsage(charge, billed, okc),
+	}
+	// 快照保存连接名称而非仅协议名；同协议的多家供应商不会合并。
+	row.Supplier = ""
+	if dep, found := s.FindDeployment(depID); found {
+		row.Supplier, row.UpstreamModel = dep.MonitorIdentity()
 	}
 	if status >= 400 {
 		// 失败正文是排障证据，不能受提示词保存开关影响。请求正文仍按原开关处理。
@@ -324,6 +341,8 @@ func sessionLogBinding(ownerType, teamID, orgID string, memberships []iam.Member
 // 测试：无直接单测
 func usageFromSpend(row live.SpendLog, spend float64, messages, response, proxy string, start, end time.Time) iam.UsageRecord {
 	return iam.UsageRecord{
+		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
+		Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
 		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
 		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
 		Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
@@ -353,6 +372,8 @@ func deref(s *string) string {
 
 // promptExchange is the request and response saved on one spend log. Empty strings mean prompt storage was off.
 type promptExchange struct {
+	// 入站路径独立于正文保存开关。
+	inbound  string
 	messages string
 	response string
 	proxy    string
@@ -395,6 +416,9 @@ func (s *Server) rememberExchange(callID string, r *http.Request, reqBody, respB
 		return
 	}
 	ex := promptExchange{rawResponse: string(respBody)}
+	if r != nil && r.URL != nil {
+		ex.inbound = r.URL.EscapedPath()
+	}
 	if s.promptsEnabled() {
 		ex.messages, ex.response, ex.proxy = requestlog.Encode(r, reqBody, respBody)
 	}

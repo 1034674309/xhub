@@ -473,11 +473,7 @@ function BatchResultsSection({ logEntry, metadata }: { logEntry: LogEntry; metad
 
 /** 展示实测指标；参数为日志和元数据，返回指标视图。由详情组件调用，缓存统计缺失保留未知状态。 */
 function MetricsSection({ logEntry, metadata }: { logEntry: LogEntry; metadata: Record<string, any> }) {
-  const completionStartTime = logEntry.completionStartTime;
-  const ttftMs =
-    completionStartTime && completionStartTime !== logEntry.endTime
-      ? new Date(completionStartTime).getTime() - new Date(logEntry.startTime).getTime()
-      : null;
+  const ttftMs = logEntry.ttft_ms;
 
   const responseCacheValue = String(logEntry.cache_hit ?? "").toLowerCase();
   const responseCacheKey = logEntry.cache_key && logEntry.cache_key !== "Cache OFF" ? logEntry.cache_key : undefined;
@@ -518,11 +514,14 @@ function MetricsSection({ logEntry, metadata }: { logEntry: LogEntry; metadata: 
               <DescriptionItem label={t("Reasoning Tokens")}>{formatNumberWithCommas(reasoningTokens)}</DescriptionItem>
             )}
             <DescriptionItem label={t("Cost")}>${formatNumberWithCommas(logEntry.spend || 0, 8)}</DescriptionItem>
-            <DescriptionItem label={t("Duration")}>
+            <DescriptionItem label={t("requestMetrics.inbound")}>{logEntry.inbound_endpoint || "—"}</DescriptionItem>
+ <DescriptionItem label={t("requestMetrics.outbound")}>{logEntry.outbound_endpoint || "—"}</DescriptionItem>
+ <DescriptionItem label={t("requestMetrics.tps")}>{logEntry.tps != null ? logEntry.tps.toFixed(2) : "—"}</DescriptionItem>
+ <DescriptionItem label={t("requestMetrics.duration")}>
               {logEntry.request_duration_ms != null ? (logEntry.request_duration_ms / 1000).toFixed(3) : "-"} s
             </DescriptionItem>
-            {ttftMs != null && ttftMs > 0 && (
-              <DescriptionItem label={t("Time to First Token")}>{(ttftMs / 1000).toFixed(3)} s</DescriptionItem>
+            {ttftMs != null && ttftMs >= 0 && (
+              <DescriptionItem label={t("requestMetrics.ttft")}>{(ttftMs / 1000).toFixed(2)} s</DescriptionItem>
             )}
 
             {showResponseCache && (

@@ -1,0 +1,2517 @@
+[
+  {
+    "id": "SC-001",
+    "file": "e2e/scenarios/legacy/acceptance-surfaces/sc-001.test.ts",
+    "title": "护栏真实拦截、脱敏和标记后在监控总览、详情与日志可见",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-002",
+    "file": "e2e/scenarios/legacy/acceptance-surfaces/sc-002.test.ts",
+    "title": "大模型广场身份明确且部署添加、下架失败、恢复可用走真实数据面",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-003",
+    "file": "e2e/scenarios/legacy/benchmark/sc-003.test.ts",
+    "title": "基准工具使用页面创建密钥并验证并发用量与清理",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-004",
+    "file": "e2e/scenarios/legacy/codex-agent/sc-004.test.ts",
+    "title": "Codex agent simulator three turns and browser logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-005",
+    "file": "e2e/scenarios/legacy/coverage/sc-005.test.ts",
+    "title": "discovers every page.tsx route",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-006",
+    "file": "e2e/scenarios/legacy/coverage/sc-006.test.ts",
+    "title": "fresh isolated user sees empty chat usage and logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-007",
+    "file": "e2e/scenarios/legacy/coverage/sc-007.test.ts",
+    "title": "model hubs require login then allow searching the public price catalog",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-008",
+    "file": "e2e/scenarios/legacy/coverage/sc-008.test.ts",
+    "title": "a created user can sign in with the initial password",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-009",
+    "file": "e2e/scenarios/legacy/coverage/sc-009.test.ts",
+    "title": "an administrator resets a password and the account signs in with it",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-010",
+    "file": "e2e/scenarios/legacy/coverage/sc-010.test.ts",
+    "title": "chat shows the fake upstream assistant text",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-011",
+    "file": "e2e/scenarios/legacy/coverage/sc-011.test.ts",
+    "title": "ui create is visible from the live gateway and chat returns e2e-ok",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-012",
+    "file": "e2e/scenarios/legacy/coverage/sc-012.test.ts",
+    "title": "live gateway catalog sweep",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-013",
+    "file": "e2e/scenarios/legacy/curl-i18n/sc-013.test.ts",
+    "title": "provider and image playground translate completely with executable curl",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-014",
+    "file": "e2e/scenarios/legacy/docs-center/sc-014.test.ts",
+    "title": "provider help loads locale-specific screenshots through real console routes",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-015",
+    "file": "e2e/scenarios/legacy/docs-center/sc-015.test.ts",
+    "title": "documentation guides a real gateway request in both languages",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-016",
+    "file": "e2e/scenarios/legacy/docs-center/sc-016.test.ts",
+    "title": "documentation supports anonymous deep links and console aliases",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-017",
+    "file": "e2e/scenarios/legacy/docs-center/sc-017.test.ts",
+    "title": "expanded documentation exposes tools, billing examples and API schemas",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-018",
+    "file": "e2e/scenarios/legacy/docs-center/sc-018.test.ts",
+    "title": "API navigation separates images and video queue protocols",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-019",
+    "file": "e2e/scenarios/legacy/docs-center/sc-019.test.ts",
+    "title": "native protocol endpoints have dedicated guides and runners",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-020",
+    "file": "e2e/scenarios/legacy/error-logs/sc-020.test.ts",
+    "title": "错误日志详情完整显示上游正文并可返回普通日志",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-021",
+    "file": "e2e/scenarios/legacy/error-logs/sc-021.test.ts",
+    "title": "退役接口不进入模型日志且真实推理错误继续可见",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-022",
+    "file": "e2e/scenarios/legacy/error-logs/sc-022.test.ts",
+    "title": "错误日志独立记录并显示诊断：text",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-023",
+    "file": "e2e/scenarios/legacy/error-logs/sc-023.test.ts",
+    "title": "错误日志独立记录并显示诊断：network",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-024",
+    "file": "e2e/scenarios/legacy/error-logs/sc-024.test.ts",
+    "title": "错误日志独立记录并显示诊断：rejected",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-025",
+    "file": "e2e/scenarios/legacy/fallback-acceptance/sc-025.test.ts",
+    "title": "acceptance fallback excludes both shared-model healthy deployments",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-026",
+    "file": "e2e/scenarios/legacy/guardrails/sc-026.test.ts",
+    "title": "花园展示创建入口、支持状态和提交护栏空态",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-027",
+    "file": "e2e/scenarios/legacy/guardrails/sc-027.test.ts",
+    "title": "关键词正则完成草稿调试、保存、编辑、真实拦截与删除",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-028",
+    "file": "e2e/scenarios/legacy/guardrails/sc-028.test.ts",
+    "title": "默认启用规则拦截请求，并拒绝非法 RE2 保存",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-029",
+    "file": "e2e/scenarios/legacy/guardrails/sc-029.test.ts",
+    "title": "XGo 编辑器展示 primitives，并完成脚本调试、保存和真实转发",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-030",
+    "file": "e2e/scenarios/legacy/interactions/sc-030.test.ts",
+    "title": "click every internal sidebar destination",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-031",
+    "file": "e2e/scenarios/legacy/interactions/sc-031.test.ts",
+    "title": "click each top level tab on /models-and-endpoints",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-032",
+    "file": "e2e/scenarios/legacy/interactions/sc-032.test.ts",
+    "title": "click each top level tab on /guardrails",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-033",
+    "file": "e2e/scenarios/legacy/interactions/sc-033.test.ts",
+    "title": "click each top level tab on /usage",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-034",
+    "file": "e2e/scenarios/legacy/interactions/sc-034.test.ts",
+    "title": "click each top level tab on /logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-035",
+    "file": "e2e/scenarios/legacy/interactions/sc-035.test.ts",
+    "title": "click each top level tab on /price-data",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-036",
+    "file": "e2e/scenarios/legacy/interactions/sc-036.test.ts",
+    "title": "click each top level tab on /route-templates",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-037",
+    "file": "e2e/scenarios/legacy/interactions/sc-037.test.ts",
+    "title": "click each top level tab on /admin-panel",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-038",
+    "file": "e2e/scenarios/legacy/interactions/sc-038.test.ts",
+    "title": "model search, pagination boundaries and cancelled create",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-039",
+    "file": "e2e/scenarios/legacy/interactions/sc-039.test.ts",
+    "title": "key create cancellation leaves no saved resource",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-040",
+    "file": "e2e/scenarios/legacy/interactions/sc-040.test.ts",
+    "title": "account menu opens and logout invalidates the browser session",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-041",
+    "file": "e2e/scenarios/legacy/interactions/sc-041.test.ts",
+    "title": "retired API routes reject writes and remain absent from navigation",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-042",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-042.test.ts",
+    "title": "Virtual Keys shows named table and Create Key",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-043",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-043.test.ts",
+    "title": "Create New Key issues a secret and lists the alias",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-044",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-044.test.ts",
+    "title": "Models page lists the configured model",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-045",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-045.test.ts",
+    "title": "Playground shows a model picker",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-046",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-046.test.ts",
+    "title": "Internal Users lists the logged-in admin",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-047",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-047.test.ts",
+    "title": "Create Team lists the new alias",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-048",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-048.test.ts",
+    "title": "Create User adds an account with a password",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-049",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-049.test.ts",
+    "title": "Playground sends a chat turn",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-050",
+    "file": "e2e/scenarios/legacy/keys-playground/sc-050.test.ts",
+    "title": "Organizations create lists the new org",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-051",
+    "file": "e2e/scenarios/legacy/log-key-hash/sc-051.test.ts",
+    "title": "日志密钥 Hash 仅展示且删除密钥后仍可查看日志：普通日志",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-052",
+    "file": "e2e/scenarios/legacy/log-key-hash/sc-052.test.ts",
+    "title": "日志密钥 Hash 仅展示且删除密钥后仍可查看日志：错误日志",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-053",
+    "file": "e2e/scenarios/legacy/login/sc-053.test.ts",
+    "title": "配置的 SSO 在登录页按启用状态展示并支持语言切换",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-054",
+    "file": "e2e/scenarios/legacy/login/sc-054.test.ts",
+    "title": "empty password shows validation",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-055",
+    "file": "e2e/scenarios/legacy/login/sc-055.test.ts",
+    "title": "wrong password shows error",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-056",
+    "file": "e2e/scenarios/legacy/login/sc-056.test.ts",
+    "title": "admin + master key lands on Virtual Keys",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-057",
+    "file": "e2e/scenarios/legacy/login/sc-057.test.ts",
+    "title": "unauthenticated dashboard redirects to login",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-058",
+    "file": "e2e/scenarios/legacy/login/sc-058.test.ts",
+    "title": "password login does not offer SSO",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-059",
+    "file": "e2e/scenarios/legacy/mine-models/sc-059.test.ts",
+    "title": "my models exposes prices, access, executable API examples and call guide",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-060",
+    "file": "e2e/scenarios/legacy/mine-models/sc-060.test.ts",
+    "title": "my models explains unavailable endpoint configuration",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-061",
+    "file": "e2e/scenarios/legacy/model-access-without-schema/sc-061.test.ts",
+    "title": "视频模型无需公共接口定义即可创建查询任务：/api/v3/contents/generations/tasks",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-062",
+    "file": "e2e/scenarios/legacy/model-access-without-schema/sc-062.test.ts",
+    "title": "视频模型无需公共接口定义即可创建查询任务：/v3/contents/generations/tasks",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-063",
+    "file": "e2e/scenarios/legacy/model-credential-protocol/sc-063.test.ts",
+    "title": "official Ark credential saves edits and calls its native task model",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-064",
+    "file": "e2e/scenarios/legacy/model-deployment-acceptance/sc-064.test.ts",
+    "title": "真实验收按部署行核对单入口和 chat · responses 并完成浏览器调用计费",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-065",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-065.test.ts",
+    "title": "model discovery unregistered-relay saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-066",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-066.test.ts",
+    "title": "model discovery registered-full-list saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-067",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-067.test.ts",
+    "title": "model discovery registered-failure saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-068",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-068.test.ts",
+    "title": "model discovery root-to-v1 saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-069",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-069.test.ts",
+    "title": "model discovery v1-to-root saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-070",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-070.test.ts",
+    "title": "model discovery both-missing saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-071",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-071.test.ts",
+    "title": "model discovery website-to-v1 saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-072",
+    "file": "e2e/scenarios/legacy/model-discovery/sc-072.test.ts",
+    "title": "model discovery both-invalid saves and invokes a deployment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-073",
+    "file": "e2e/scenarios/legacy/model-editor-presentation/sc-073.test.ts",
+    "title": "model editor presents endpoints clearly and saves a path model with a safe alias",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-074",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-074.test.ts",
+    "title": "unbound model explains configuration and valid model restores a callable endpoint",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-075",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-075.test.ts",
+    "title": "native gemini saves exact protocol and executes in Playground",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-076",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-076.test.ts",
+    "title": "native vertex saves exact protocol and executes in Playground",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-077",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-077.test.ts",
+    "title": "native image_generation saves exact protocol and executes in Playground",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-078",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-078.test.ts",
+    "title": "native image_edit saves exact protocol and executes in Playground",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-079",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-079.test.ts",
+    "title": "provider directory omits fixed relay accounts while protocol directory keeps custom Qiniu transports",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-080",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-080.test.ts",
+    "title": "editing retains the saved chat declaration when endpoint directory is delayed",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-081",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-081.test.ts",
+    "title": "editing retains the saved chat declaration when endpoint directory is failed",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-082",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-082.test.ts",
+    "title": "switching supplier clears selection and isolates the model directory",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-083",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-083.test.ts",
+    "title": "unknown upstream model persists a manually declared chat endpoint and price",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-084",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-084.test.ts",
+    "title": "model connection test shows a localized upstream failure",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-085",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-085.test.ts",
+    "title": "template editor document saves and executes a customer Responses request",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-086",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-086.test.ts",
+    "title": "upstream-only chat automatically exposes all customer dialogue APIs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-087",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-087.test.ts",
+    "title": "upstream-only responses automatically exposes all customer dialogue APIs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-088",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-088.test.ts",
+    "title": "upstream-only claude automatically exposes all customer dialogue APIs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-089",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-089.test.ts",
+    "title": "upstream-only gemini automatically exposes all customer dialogue APIs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-090",
+    "file": "e2e/scenarios/legacy/model-endpoints/sc-090.test.ts",
+    "title": "upstream-only vertex automatically exposes all customer dialogue APIs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-091",
+    "file": "e2e/scenarios/legacy/model-fallback/sc-091.test.ts",
+    "title": "per-model fallback editor and data plane",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-092",
+    "file": "e2e/scenarios/legacy/model-fallback/sc-092.test.ts",
+    "title": "fallback modal rejects cycles and preserves independent policies - desktop",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-093",
+    "file": "e2e/scenarios/legacy/model-fallback/sc-093.test.ts",
+    "title": "fallback modal rejects cycles and preserves independent policies - mobile",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-094",
+    "file": "e2e/scenarios/legacy/model-monitor/sc-094.test.ts",
+    "title": "supplier model monitor displays real billing and switches chart and language",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-095",
+    "file": "e2e/scenarios/legacy/pages/sc-095.test.ts",
+    "title": "nav groups and Virtual Keys home",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-096",
+    "file": "e2e/scenarios/legacy/pages/sc-096.test.ts",
+    "title": "all dashboard pages stay in the shell",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-097",
+    "file": "e2e/scenarios/legacy/pages/sc-097.test.ts",
+    "title": "chat shell is not admin sidebar",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-098",
+    "file": "e2e/scenarios/legacy/pagination/sc-098.test.ts",
+    "title": "日志分页完整流程：会话合并后翻页",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-099",
+    "file": "e2e/scenarios/legacy/pagination/sc-099.test.ts",
+    "title": "日志分页完整流程：失败请求逐条翻页",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-100",
+    "file": "e2e/scenarios/legacy/pagination/sc-100.test.ts",
+    "title": "共享分页覆盖密钥、项目、项目密钥和审计",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-101",
+    "file": "e2e/scenarios/legacy/personal-keys/sc-101.test.ts",
+    "title": "personal keys remain owned by the signed-in user through create, lookup, use and delete",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-102",
+    "file": "e2e/scenarios/legacy/personal-keys/sc-102.test.ts",
+    "title": "ordinary user with a team creates and uses a personal key without choosing a team",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-103",
+    "file": "e2e/scenarios/legacy/personal-keys/sc-103.test.ts",
+    "title": "ordinary user without a team creates and uses a personal key without choosing a team",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-104",
+    "file": "e2e/scenarios/legacy/playground-transport/sc-104.test.ts",
+    "title": "Playground fetch chat/completions SSE",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-105",
+    "file": "e2e/scenarios/legacy/playground-transport/sc-105.test.ts",
+    "title": "Playground fetch v1/messages SSE",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-106",
+    "file": "e2e/scenarios/legacy/playground-transport/sc-106.test.ts",
+    "title": "Playground fetch chat/completions JSON",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-107",
+    "file": "e2e/scenarios/legacy/playground-transport/sc-107.test.ts",
+    "title": "Playground fetch v1/messages JSON",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-108",
+    "file": "e2e/scenarios/legacy/playground-workspace/sc-108.test.ts",
+    "title": "chat explains missing credentials and unavailable deployment, then recovers",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-109",
+    "file": "e2e/scenarios/legacy/playground-workspace/sc-109.test.ts",
+    "title": "single workspace has no comparison controls and preserves bilingual chat",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-110",
+    "file": "e2e/scenarios/legacy/playground-workspace/sc-110.test.ts",
+    "title": "cancel and clear ignore delayed real responses; mobile chat remains usable",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-111",
+    "file": "e2e/scenarios/legacy/price-feed/sc-111.test.ts",
+    "title": "market refresh preserves local records and listing state",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-112",
+    "file": "e2e/scenarios/legacy/price-model-selects/sc-112.test.ts",
+    "title": "price model classifications use dropdowns and persist selections",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-113",
+    "file": "e2e/scenarios/legacy/product-fixes/sc-113.test.ts",
+    "title": "browser cache flush restores a billed miss after a free hit",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-114",
+    "file": "e2e/scenarios/legacy/product-fixes/sc-114.test.ts",
+    "title": "team session inheritance and explicitly bound key preview match inference without consuming rpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-115",
+    "file": "e2e/scenarios/legacy/product-fixes/sc-115.test.ts",
+    "title": "dashboard language switch updates key navigation in both locales",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-116",
+    "file": "e2e/scenarios/legacy/provider-forms/sc-116.test.ts",
+    "title": "provider editor uses current API protocol without repairing display-name identities",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-117",
+    "file": "e2e/scenarios/legacy/provider-forms/sc-117.test.ts",
+    "title": "provider forms switch and persist DeepSeek credentials",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-118",
+    "file": "e2e/scenarios/legacy/provider-forms/sc-118.test.ts",
+    "title": "OpenAI compatible form saves a provider and invokes its model",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-119",
+    "file": "e2e/scenarios/legacy/provider-forms/sc-119.test.ts",
+    "title": "Custom provider explicitly selects and invokes a Qiniu compatible transport",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-120",
+    "file": "e2e/scenarios/legacy/responses-continuation/sc-120.test.ts",
+    "title": "Responses incremental continuation SSE",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-121",
+    "file": "e2e/scenarios/legacy/responses-continuation/sc-121.test.ts",
+    "title": "Responses incremental continuation JSON",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-122",
+    "file": "e2e/scenarios/legacy/route-diagnostic/sc-122.test.ts",
+    "title": "deployment deletion clears stale weights and preserves public inference",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-123",
+    "file": "e2e/scenarios/legacy/routing-groups/sc-123.test.ts",
+    "title": "complete routing template drives real group routing and fallbacks",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-124",
+    "file": "e2e/scenarios/budgets/allocation-overflow.test.ts",
+    "title": "层级预算 allocation-overflow",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-125",
+    "file": "e2e/scenarios/budgets/detached-recovery.test.ts",
+    "title": "层级预算 detached-recovery",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-126",
+    "file": "e2e/scenarios/budgets/guide.test.ts",
+    "title": "层级预算 guide",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-127",
+    "file": "e2e/scenarios/budgets/member-recovery.test.ts",
+    "title": "层级预算 member-recovery",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-128",
+    "file": "e2e/scenarios/budgets/reserved-key.test.ts",
+    "title": "层级预算 reserved-key",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-129",
+    "file": "e2e/scenarios/budgets/single-team.test.ts",
+    "title": "层级预算 single-team",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-130",
+    "file": "e2e/scenarios/columns/budgets-create.test.ts",
+    "title": "通用页面 /budgets 创建",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-131",
+    "file": "e2e/scenarios/columns/budgets-update.test.ts",
+    "title": "通用页面 /budgets 更新",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-132",
+    "file": "e2e/scenarios/columns/caching-flush.test.ts",
+    "title": "通用页面 /caching 清空",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-133",
+    "file": "e2e/scenarios/columns/caching-save.test.ts",
+    "title": "通用页面 /caching 保存",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-134",
+    "file": "e2e/scenarios/columns/policies-create.test.ts",
+    "title": "通用页面 /policies 创建",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-135",
+    "file": "e2e/scenarios/columns/prompts-create.test.ts",
+    "title": "通用页面 /prompts 创建",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-136",
+    "file": "e2e/scenarios/columns/prompts-delete.test.ts",
+    "title": "通用页面 /prompts 删除",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-137",
+    "file": "e2e/scenarios/columns/prompts-test.test.ts",
+    "title": "通用页面 /prompts 测试",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-138",
+    "file": "e2e/scenarios/columns/prompts-update.test.ts",
+    "title": "通用页面 /prompts 更新",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-139",
+    "file": "e2e/scenarios/columns/search-tools-connection.test.ts",
+    "title": "通用页面 /search-tools 测试连接",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-140",
+    "file": "e2e/scenarios/columns/search-tools-create.test.ts",
+    "title": "通用页面 /search-tools 创建",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-141",
+    "file": "e2e/scenarios/columns/search-tools-delete.test.ts",
+    "title": "通用页面 /search-tools 删除",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-142",
+    "file": "e2e/scenarios/columns/search-tools-update.test.ts",
+    "title": "通用页面 /search-tools 更新",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-143",
+    "file": "e2e/scenarios/columns/tag-management-unsupported.test.ts",
+    "title": "通用页面 /tag-management 不支持",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-144",
+    "file": "e2e/scenarios/columns/transform-request-transform.test.ts",
+    "title": "通用页面 /transform-request 转换",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-145",
+    "file": "e2e/scenarios/columns/ui-theme-save.test.ts",
+    "title": "通用页面 /ui-theme 保存",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-146",
+    "file": "e2e/scenarios/columns/ui-theme-upload.test.ts",
+    "title": "通用页面 /ui-theme 上传",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-147",
+    "file": "e2e/scenarios/columns/vector-stores-create.test.ts",
+    "title": "通用页面 /vector-stores 创建",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-149",
+    "file": "e2e/scenarios/directory/archive-queue.test.ts",
+    "title": "归档调度配置驱动真实计费入队并保留停用积压",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-150",
+    "file": "e2e/scenarios/directory/assignment.test.ts",
+    "title": "目录独立场景 assignment",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-151",
+    "file": "e2e/scenarios/directory/credential.test.ts",
+    "title": "目录独立场景 credential",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-152",
+    "file": "e2e/scenarios/directory/delete.test.ts",
+    "title": "目录独立场景 delete",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-153",
+    "file": "e2e/scenarios/directory/keyboard.test.ts",
+    "title": "目录独立场景 keyboard",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-154",
+    "file": "e2e/scenarios/directory/locale-layout.test.ts",
+    "title": "目录独立场景 locale-layout",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-155",
+    "file": "e2e/scenarios/directory/sso-config.test.ts",
+    "title": "目录独立场景 sso-config",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-157",
+    "file": "e2e/scenarios/enterprise/archive-retry.test.ts",
+    "title": "归档浏览器闭环 失败重试",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-158",
+    "file": "e2e/scenarios/enterprise/archive-roundtrip.test.ts",
+    "title": "归档浏览器闭环 上传读回",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-159",
+    "file": "e2e/scenarios/enterprise/sso-nonce.test.ts",
+    "title": "SSO 浏览器闭环 nonce",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-160",
+    "file": "e2e/scenarios/enterprise/sso-unknown.test.ts",
+    "title": "SSO 浏览器闭环 unknown",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-161",
+    "file": "e2e/scenarios/enterprise/sso-valid.test.ts",
+    "title": "SSO 浏览器闭环 valid",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-162",
+    "file": "e2e/scenarios/pages/admin-panel.test.ts",
+    "title": "页面可用 /admin-panel",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-163",
+    "file": "e2e/scenarios/pages/api-keys.test.ts",
+    "title": "页面可用 /api-keys",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-164",
+    "file": "e2e/scenarios/pages/api-reference.test.ts",
+    "title": "页面可用 /api-reference",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-165",
+    "file": "e2e/scenarios/pages/audit-logs.test.ts",
+    "title": "页面可用 /audit-logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-166",
+    "file": "e2e/scenarios/pages/budgets.test.ts",
+    "title": "页面可用 /budgets",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-167",
+    "file": "e2e/scenarios/pages/caching.test.ts",
+    "title": "页面可用 /caching",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-168",
+    "file": "e2e/scenarios/pages/chat-api-keys.test.ts",
+    "title": "页面可用 /chat/api-keys",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-169",
+    "file": "e2e/scenarios/pages/chat-credentials.test.ts",
+    "title": "页面可用 /chat/credentials",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-170",
+    "file": "e2e/scenarios/pages/chat-integrations.test.ts",
+    "title": "页面可用 /chat/integrations",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-171",
+    "file": "e2e/scenarios/pages/chat-logs.test.ts",
+    "title": "页面可用 /chat/logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-172",
+    "file": "e2e/scenarios/pages/chat-usage.test.ts",
+    "title": "页面可用 /chat/usage",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-173",
+    "file": "e2e/scenarios/pages/chat.test.ts",
+    "title": "页面可用 /chat",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-174",
+    "file": "e2e/scenarios/pages/connect.test.ts",
+    "title": "页面可用 /connect",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-175",
+    "file": "e2e/scenarios/pages/docs-api-chat-completions.test.ts",
+    "title": "页面可用 /docs/api/chat-completions",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-176",
+    "file": "e2e/scenarios/pages/docs-product-quickstart.test.ts",
+    "title": "页面可用 /docs/product/quickstart",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-177",
+    "file": "e2e/scenarios/pages/docs.test.ts",
+    "title": "页面可用 /docs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-178",
+    "file": "e2e/scenarios/pages/guardrails-monitor.test.ts",
+    "title": "页面可用 /guardrails-monitor",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-179",
+    "file": "e2e/scenarios/pages/guardrails.test.ts",
+    "title": "页面可用 /guardrails",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-180",
+    "file": "e2e/scenarios/pages/home.test.ts",
+    "title": "页面可用 /",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-181",
+    "file": "e2e/scenarios/pages/logs.test.ts",
+    "title": "页面可用 /logs",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-182",
+    "file": "e2e/scenarios/pages/mcp-oauth-callback.test.ts",
+    "title": "页面可用 /mcp/oauth/callback",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-183",
+    "file": "e2e/scenarios/pages/mine-models.test.ts",
+    "title": "页面可用 /mine-models",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-184",
+    "file": "e2e/scenarios/pages/model-hub-table.test.ts",
+    "title": "页面可用 /model_hub_table",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-185",
+    "file": "e2e/scenarios/pages/model-hub.test.ts",
+    "title": "页面可用 /model_hub",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-186",
+    "file": "e2e/scenarios/pages/model-monitor.test.ts",
+    "title": "页面可用 /model-monitor",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-187",
+    "file": "e2e/scenarios/pages/model-providers.test.ts",
+    "title": "页面可用 /model-providers",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-188",
+    "file": "e2e/scenarios/pages/models-and-endpoints-catalog.test.ts",
+    "title": "页面可用 /models-and-endpoints/catalog",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-189",
+    "file": "e2e/scenarios/pages/models-and-endpoints-mine.test.ts",
+    "title": "页面可用 /models-and-endpoints/mine",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-190",
+    "file": "e2e/scenarios/pages/models-and-endpoints.test.ts",
+    "title": "页面可用 /models-and-endpoints",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-191",
+    "file": "e2e/scenarios/pages/old-usage.test.ts",
+    "title": "页面可用 /old-usage",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-192",
+    "file": "e2e/scenarios/pages/organizations.test.ts",
+    "title": "页面可用 /organizations",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-193",
+    "file": "e2e/scenarios/pages/playground.test.ts",
+    "title": "页面可用 /playground",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-194",
+    "file": "e2e/scenarios/pages/policies.test.ts",
+    "title": "页面可用 /policies",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-195",
+    "file": "e2e/scenarios/pages/price-data.test.ts",
+    "title": "页面可用 /price-data",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-196",
+    "file": "e2e/scenarios/pages/projects.test.ts",
+    "title": "页面可用 /projects",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-197",
+    "file": "e2e/scenarios/pages/prompts.test.ts",
+    "title": "页面可用 /prompts",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-198",
+    "file": "e2e/scenarios/pages/route-templates.test.ts",
+    "title": "页面可用 /route-templates",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-199",
+    "file": "e2e/scenarios/pages/router-settings.test.ts",
+    "title": "页面可用 /router-settings",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-200",
+    "file": "e2e/scenarios/pages/search-tools.test.ts",
+    "title": "页面可用 /search-tools",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-201",
+    "file": "e2e/scenarios/pages/tag-management.test.ts",
+    "title": "页面可用 /tag-management",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-202",
+    "file": "e2e/scenarios/pages/teams.test.ts",
+    "title": "页面可用 /teams",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-203",
+    "file": "e2e/scenarios/pages/transform-request.test.ts",
+    "title": "页面可用 /transform-request",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-204",
+    "file": "e2e/scenarios/pages/ui-theme.test.ts",
+    "title": "页面可用 /ui-theme",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-205",
+    "file": "e2e/scenarios/pages/usage.test.ts",
+    "title": "页面可用 /usage",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-206",
+    "file": "e2e/scenarios/pages/users.test.ts",
+    "title": "页面可用 /users",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-207",
+    "file": "e2e/scenarios/pages/vector-stores.test.ts",
+    "title": "页面可用 /vector-stores",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-208",
+    "file": "e2e/scenarios/permissions/member-audit.test.ts",
+    "title": "权限链独立场景 member audit",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-209",
+    "file": "e2e/scenarios/permissions/member-create.test.ts",
+    "title": "权限链独立场景 member create",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-210",
+    "file": "e2e/scenarios/permissions/member-other-user.test.ts",
+    "title": "权限链独立场景 member other-user",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-211",
+    "file": "e2e/scenarios/permissions/member-page.test.ts",
+    "title": "权限链独立场景 member page",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-212",
+    "file": "e2e/scenarios/permissions/member-picker.test.ts",
+    "title": "权限链独立场景 member picker",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-213",
+    "file": "e2e/scenarios/permissions/member-usage.test.ts",
+    "title": "权限链独立场景 member usage",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-214",
+    "file": "e2e/scenarios/permissions/member-visibility.test.ts",
+    "title": "权限链独立场景 member visibility",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-215",
+    "file": "e2e/scenarios/permissions/organization-allocation.test.ts",
+    "title": "权限链独立场景 organization allocation",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-216",
+    "file": "e2e/scenarios/permissions/organization-foreign-budget.test.ts",
+    "title": "权限链独立场景 organization foreign-budget",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-217",
+    "file": "e2e/scenarios/permissions/organization-foreign-rpm.test.ts",
+    "title": "权限链独立场景 organization foreign-rpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-218",
+    "file": "e2e/scenarios/permissions/organization-foreign-tpm.test.ts",
+    "title": "权限链独立场景 organization foreign-tpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-219",
+    "file": "e2e/scenarios/permissions/organization-models.test.ts",
+    "title": "权限链独立场景 organization models",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-220",
+    "file": "e2e/scenarios/permissions/organization-status.test.ts",
+    "title": "权限链独立场景 organization status",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-221",
+    "file": "e2e/scenarios/permissions/organization-visibility.test.ts",
+    "title": "权限链独立场景 organization visibility",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-222",
+    "file": "e2e/scenarios/permissions/password-admin-reset.test.ts",
+    "title": "权限链独立场景 password admin-reset",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-223",
+    "file": "e2e/scenarios/permissions/password-deny-foreign.test.ts",
+    "title": "权限链独立场景 password deny-foreign",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-224",
+    "file": "e2e/scenarios/permissions/password-deny-organization.test.ts",
+    "title": "权限链独立场景 password deny-organization",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-225",
+    "file": "e2e/scenarios/permissions/password-reset.test.ts",
+    "title": "权限链独立场景 password reset",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-226",
+    "file": "e2e/scenarios/permissions/platform-visibility.test.ts",
+    "title": "权限链独立场景 platform visibility",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-227",
+    "file": "e2e/scenarios/permissions/team-budget.test.ts",
+    "title": "权限链独立场景 team budget",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-228",
+    "file": "e2e/scenarios/permissions/team-models.test.ts",
+    "title": "权限链独立场景 team models",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-229",
+    "file": "e2e/scenarios/permissions/team-rpm.test.ts",
+    "title": "权限链独立场景 team rpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-230",
+    "file": "e2e/scenarios/permissions/team-tpm.test.ts",
+    "title": "权限链独立场景 team tpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-231",
+    "file": "e2e/scenarios/permissions/team-visibility.test.ts",
+    "title": "权限链独立场景 team visibility",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-233",
+    "file": "e2e/scenarios/rates/fixed-tpm.test.ts",
+    "title": "层级限流 fixed-tpm",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-234",
+    "file": "e2e/scenarios/rates/guide.test.ts",
+    "title": "层级限流 guide",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-235",
+    "file": "e2e/scenarios/rates/rpm-rollback.test.ts",
+    "title": "层级限流 rpm-rollback",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-236",
+    "file": "e2e/scenarios/rates/tpm-rollback.test.ts",
+    "title": "层级限流 tpm-rollback",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-237",
+    "file": "e2e/scenarios/rates/zero-recovery.test.ts",
+    "title": "层级限流 zero-recovery",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-238",
+    "file": "e2e/scenarios/legacy/supplier-catalog/sc-238.test.ts",
+    "title": "supplier directory qiniu binds Seedance and Fal to implemented video capabilities",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-239",
+    "file": "e2e/scenarios/legacy/supplier-catalog/sc-239.test.ts",
+    "title": "supplier directory fennoai binds Seedance and Fal to implemented video capabilities",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-240",
+    "file": "e2e/scenarios/legacy/task-request-logs/sc-240.test.ts",
+    "title": "异步任务原日志展示生命周期且轮询不增加日志：完成",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-241",
+    "file": "e2e/scenarios/legacy/task-request-logs/sc-241.test.ts",
+    "title": "异步任务原日志展示生命周期且轮询不增加日志：失败",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-242",
+    "file": "e2e/scenarios/legacy/team-usage/sc-242.test.ts",
+    "title": "team usage displays recorded calls without requesting the removed Agent endpoint",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-243",
+    "file": "e2e/scenarios/legacy/team-usage/sc-243.test.ts",
+    "title": "usage views reconcile stored successes, failures, dimensions, filters and CSV",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-244",
+    "file": "e2e/scenarios/legacy/testdata-seed/sc-244.test.ts",
+    "title": "testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模型",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-245",
+    "file": "e2e/scenarios/legacy/user-edit/sc-245.test.ts",
+    "title": "users can be edited and their team access follows membership changes",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-246",
+    "file": "e2e/scenarios/legacy/view-only/sc-246.test.ts",
+    "title": "成员创建模型明确拒绝且无数据或上游副作用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-247",
+    "file": "e2e/scenarios/legacy/weighted-routing/sc-247.test.ts",
+    "title": "deployment deletion clears default and template weights for inherited routing",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-248",
+    "file": "e2e/scenarios/legacy/wizards/sc-248.test.ts",
+    "title": "Add Model creates a deployment that lists",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-249",
+    "file": "e2e/scenarios/legacy/wizards/sc-249.test.ts",
+    "title": "Create Project lists after a team exists",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-250",
+    "file": "e2e/scenarios/legacy/wizards/sc-250.test.ts",
+    "title": "invalid guardrail is rejected without saving",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-251",
+    "file": "e2e/scenarios/legacy/wizards/sc-251.test.ts",
+    "title": "Add Guardrail persists, blocks, and redacts after editing",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-252",
+    "file": "e2e/scenarios/legacy/writes/sc-252.test.ts",
+    "title": "密钥页面编辑持久化且真实调用可用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-253",
+    "file": "e2e/scenarios/legacy/writes/sc-253.test.ts",
+    "title": "模型页面改名持久化且真实调用可用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-254",
+    "file": "e2e/scenarios/legacy/writes/sc-254.test.ts",
+    "title": "team member add is listed",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-255",
+    "file": "e2e/scenarios/legacy/writes/sc-255.test.ts",
+    "title": "router fallback update lists the mapping",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-256",
+    "file": "e2e/scenarios/legacy/writes/sc-256.test.ts",
+    "title": "admin panel saves prompt storage and hides the unused settings",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-257",
+    "file": "e2e/scenarios/legacy/xgo-guardrails/sc-257.test.ts",
+    "title": "XGo editor executes, persists, reloads, and edits real scripts",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-258",
+    "file": "e2e/scenarios/legacy/xgo-guardrails/sc-258.test.ts",
+    "title": "XGo JSON input rejects invalid payloads and recovers with a request example",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-259",
+    "file": "e2e/scenarios/legacy/xgo-guardrails/sc-259.test.ts",
+    "title": "invalid XGo fails compilation and cannot create a saved guardrail",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "GAP-003-REVOKE",
+    "file": "e2e/scenarios/auth/session-continuity.test.ts",
+    "title": "连续导航与刷新保持会话，撤销后跳转并重新登录",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "auth"
+  },
+  {
+    "id": "GAP-004",
+    "file": "e2e/scenarios/auth/logout-token-replay.test.ts",
+    "title": "退出后旧 token 后台拒绝及页面恢复",
+    "kind": "implemented",
+    "environment": "expand-existing",
+    "subsystem": "auth"
+  },
+  {
+    "id": "GAP-007",
+    "file": "e2e/scenarios/auth/tenant-export.test.ts",
+    "title": "跨租户列表、详情、CSV 与日志无泄露",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "auth"
+  },
+  {
+    "id": "GAP-008",
+    "file": "e2e/scenarios/directory/scim-rotation.test.ts",
+    "title": "SCIM token 轮换后旧 token 失效",
+    "kind": "implemented",
+    "environment": "split-existing",
+    "subsystem": "directory"
+  },
+  {
+    "id": "GAP-010",
+    "file": "e2e/scenarios/directory/scim-conflict.test.ts",
+    "title": "SCIM 重复/冲突/失败不留半成品并恢复",
+    "kind": "implemented",
+    "environment": "expand-existing",
+    "subsystem": "directory"
+  },
+  {
+    "id": "GAP-012",
+    "file": "e2e/scenarios/archive/retry-deduplicate.test.ts",
+    "title": "归档失败重试不覆盖冲突对象、不重复成功上传",
+    "kind": "required-gap",
+    "environment": "local-storage",
+    "subsystem": "archive"
+  },
+  {
+    "id": "GAP-013",
+    "file": "e2e/scenarios/archive/probe-cleanup.test.ts",
+    "title": "探测上传/删除失败可见并回收临时对象",
+    "kind": "required-gap",
+    "environment": "local-storage",
+    "subsystem": "archive"
+  },
+  {
+    "id": "GAP-014",
+    "file": "e2e/scenarios/archive/live-kodo.test.ts",
+    "title": "真实 Kodo 配置、权限、上传及删除闭环",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "archive"
+  },
+  {
+    "id": "GAP-015",
+    "file": "e2e/scenarios/keys/expiry-boundary.test.ts",
+    "title": "到期前可用、到期后拒绝、页面与日志一致",
+    "kind": "required-gap",
+    "environment": "controlled-clock",
+    "subsystem": "keys"
+  },
+  {
+    "id": "GAP-016",
+    "file": "e2e/scenarios/keys/rotation-secret.test.ts",
+    "title": "轮换旧密钥拒绝、新密钥成功且日志身份不变",
+    "kind": "implemented",
+    "environment": "split-expand",
+    "subsystem": "keys"
+  },
+  {
+    "id": "GAP-017",
+    "file": "e2e/scenarios/budget/concurrent-reservation.test.ts",
+    "title": "并发不超售、失败释放保留额、页面一致",
+    "kind": "required-gap",
+    "environment": "fault-injection",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-018",
+    "file": "e2e/scenarios/budget/period-reset.test.ts",
+    "title": "预算周期重置前后恢复及页面余额",
+    "kind": "required-gap",
+    "environment": "controlled-clock",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-019",
+    "file": "e2e/scenarios/billing/queue-recovery.test.ts",
+    "title": "持久化失败、重试、重启后唯一结算及日志",
+    "kind": "required-gap",
+    "environment": "fault-injection",
+    "subsystem": "billing"
+  },
+  {
+    "id": "GAP-020",
+    "file": "e2e/scenarios/billing/stream-cancel.test.ts",
+    "title": "SSE 中断与取消最终账单及状态可见",
+    "kind": "required-gap",
+    "environment": "fault-injection",
+    "subsystem": "billing"
+  },
+  {
+    "id": "GAP-021",
+    "file": "e2e/scenarios/billing/task-owner.test.ts",
+    "title": "任务创建身份、跨用户轮询拒绝、唯一结算",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "billing"
+  },
+  {
+    "id": "GAP-022",
+    "file": "e2e/scenarios/protocol/malformed-terminal.test.ts",
+    "title": "无效正文或 SSE 终帧显示错误、不发布续接身份",
+    "kind": "required-gap",
+    "environment": "fault-injection",
+    "subsystem": "protocol"
+  },
+  {
+    "id": "GAP-023",
+    "file": "e2e/scenarios/protocol/native-tools.test.ts",
+    "title": "原生工具续接与失败会话不可续接浏览器闭环",
+    "kind": "required-gap",
+    "environment": "offline",
+    "subsystem": "protocol"
+  },
+  {
+    "id": "GAP-024",
+    "file": "e2e/scenarios/routing/weighted-visible.test.ts",
+    "title": "权重实际分布、零权重与禁用部署结果",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "routing"
+  },
+  {
+    "id": "GAP-025",
+    "file": "e2e/scenarios/routing/cooldown-recovery.test.ts",
+    "title": "超时或无效响应冷却及恢复，页面诊断一致",
+    "kind": "required-gap",
+    "environment": "fault-injection",
+    "subsystem": "routing"
+  },
+  {
+    "id": "GAP-026",
+    "file": "e2e/scenarios/routing/preview-no-spend.test.ts",
+    "title": "诊断预览不消耗额度或制造日志独立场景",
+    "kind": "required-gap",
+    "environment": "split-existing",
+    "subsystem": "routing"
+  },
+  {
+    "id": "GAP-027",
+    "file": "e2e/scenarios/guardrails/external-failure.test.ts",
+    "title": "外部护栏配置、超时、失败及可观察降级",
+    "kind": "required-gap",
+    "environment": "local-fixture",
+    "subsystem": "guardrails"
+  },
+  {
+    "id": "GAP-028",
+    "file": "e2e/scenarios/guardrails/order-disable.test.ts",
+    "title": "多规则顺序、禁用/删除实际放行与日志",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "guardrails"
+  },
+  {
+    "id": "GAP-029",
+    "file": "e2e/scenarios/usage/timezone-boundary.test.ts",
+    "title": "UTC/本地日边界、筛选/分页/导出与账单对账",
+    "kind": "required-gap",
+    "environment": "controlled-clock",
+    "subsystem": "usage"
+  },
+  {
+    "id": "GAP-030",
+    "file": "e2e/scenarios/usage/empty-error-recovery.test.ts",
+    "title": "空态、延迟、读取失败后恢复分别独立",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "usage"
+  },
+  {
+    "id": "GAP-031",
+    "file": "e2e/scenarios/docs/dynamic-route.test.ts",
+    "title": "有效动态文档路径返回 200 及真实正文",
+    "kind": "implemented",
+    "environment": "strengthen-existing",
+    "subsystem": "docs"
+  },
+  {
+    "id": "GAP-032",
+    "file": "e2e/scenarios/fixtures/seed-isolated.test.ts",
+    "title": "独立建数、资源可见、无推理、报告和 schema 清理",
+    "kind": "required-gap",
+    "environment": "existing-opt-in",
+    "subsystem": "fixtures"
+  },
+  {
+    "id": "GAP-033",
+    "file": "e2e/scenarios/fixtures/unbound-endpoint.test.ts",
+    "title": "不可调用部署原因及切回可用部署",
+    "kind": "required-gap",
+    "environment": "existing-opt-in",
+    "subsystem": "fixtures"
+  },
+  {
+    "id": "GAP-034",
+    "file": "e2e/scenarios/quality/coverage-denominator.test.ts",
+    "title": "必需场景缺失/失败/跳过使覆盖门禁失败",
+    "kind": "required-gap",
+    "environment": "runner-integration",
+    "subsystem": "quality"
+  },
+  {
+    "id": "GAP-035",
+    "file": "e2e/scenarios/quality/cleanup.test.ts",
+    "title": "失败后清理仍执行并核对删除结果",
+    "kind": "required-gap",
+    "environment": "runner-integration",
+    "subsystem": "quality"
+  },
+  {
+    "id": "GAP-036",
+    "file": "e2e/scenarios/quality/ci-tiers.test.ts",
+    "title": "变更触发单元/后台/E2E 并上传报告",
+    "kind": "required-gap",
+    "environment": "ci-config",
+    "subsystem": "quality"
+  },
+  {
+    "id": "GAP-037",
+    "file": "e2e/scenarios/limits/organization-rpm.test.ts",
+    "title": "organization RPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-038",
+    "file": "e2e/scenarios/limits/organization-tpm.test.ts",
+    "title": "organization TPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-039",
+    "file": "e2e/scenarios/limits/team-rpm.test.ts",
+    "title": "team RPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-040",
+    "file": "e2e/scenarios/limits/team-tpm.test.ts",
+    "title": "team TPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-041",
+    "file": "e2e/scenarios/limits/user-rpm.test.ts",
+    "title": "user RPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-042",
+    "file": "e2e/scenarios/limits/user-tpm.test.ts",
+    "title": "user TPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-043",
+    "file": "e2e/scenarios/limits/key-rpm.test.ts",
+    "title": "key RPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-044",
+    "file": "e2e/scenarios/limits/key-tpm.test.ts",
+    "title": "key TPM 页面配置、真实拒绝、修正恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "limits"
+  },
+  {
+    "id": "GAP-045",
+    "file": "e2e/scenarios/budget/organization-exhaust.test.ts",
+    "title": "organization 预算耗尽、拒绝归因、补配恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-046",
+    "file": "e2e/scenarios/budget/team-exhaust.test.ts",
+    "title": "team 预算耗尽、拒绝归因、补配恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-047",
+    "file": "e2e/scenarios/budget/project-exhaust.test.ts",
+    "title": "project 预算耗尽、拒绝归因、补配恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-048",
+    "file": "e2e/scenarios/budget/personal-exhaust.test.ts",
+    "title": "personal 预算耗尽、拒绝归因、补配恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-049",
+    "file": "e2e/scenarios/budget/key-exhaust.test.ts",
+    "title": "key 预算耗尽、拒绝归因、补配恢复",
+    "kind": "required-gap",
+    "environment": "split-expand",
+    "subsystem": "budget"
+  },
+  {
+    "id": "GAP-050",
+    "file": "e2e/scenarios/permissions/platform-admin.test.ts",
+    "title": "platform-admin 可见范围、写权限与直接 API 越权契约",
+    "kind": "required-gap",
+    "environment": "split-strengthen",
+    "subsystem": "permissions"
+  },
+  {
+    "id": "GAP-051",
+    "file": "e2e/scenarios/permissions/organization-admin.test.ts",
+    "title": "organization-admin 可见范围、写权限与直接 API 越权契约",
+    "kind": "required-gap",
+    "environment": "split-strengthen",
+    "subsystem": "permissions"
+  },
+  {
+    "id": "GAP-052",
+    "file": "e2e/scenarios/permissions/team-admin.test.ts",
+    "title": "team-admin 可见范围、写权限与直接 API 越权契约",
+    "kind": "required-gap",
+    "environment": "split-strengthen",
+    "subsystem": "permissions"
+  },
+  {
+    "id": "GAP-053",
+    "file": "e2e/scenarios/permissions/member.test.ts",
+    "title": "member 可见范围、写权限与直接 API 越权契约",
+    "kind": "required-gap",
+    "environment": "split-strengthen",
+    "subsystem": "permissions"
+  },
+  {
+    "id": "GAP-054",
+    "file": "e2e/scenarios/surfaces/policies.test.ts",
+    "title": "policies 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-055",
+    "file": "e2e/scenarios/surfaces/search-tools.test.ts",
+    "title": "search-tools 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-056",
+    "file": "e2e/scenarios/surfaces/vector-stores.test.ts",
+    "title": "vector-stores 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-057",
+    "file": "e2e/scenarios/surfaces/budgets.test.ts",
+    "title": "budgets 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-058",
+    "file": "e2e/scenarios/surfaces/caching.test.ts",
+    "title": "caching 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-059",
+    "file": "e2e/scenarios/surfaces/prompts.test.ts",
+    "title": "prompts 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-060",
+    "file": "e2e/scenarios/surfaces/transform-request.test.ts",
+    "title": "transform-request 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-061",
+    "file": "e2e/scenarios/surfaces/ui-theme.test.ts",
+    "title": "ui-theme 当前支持操作、非法输入、真实业务结果与删除",
+    "kind": "required-gap",
+    "environment": "split-expand-capability-dependent",
+    "subsystem": "surfaces"
+  },
+  {
+    "id": "GAP-062",
+    "file": "e2e/scenarios/i18n/column-write.test.ts",
+    "title": "column-write 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-063",
+    "file": "e2e/scenarios/i18n/directory.test.ts",
+    "title": "directory 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-064",
+    "file": "e2e/scenarios/i18n/keys.test.ts",
+    "title": "keys 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-065",
+    "file": "e2e/scenarios/i18n/models.test.ts",
+    "title": "models 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-066",
+    "file": "e2e/scenarios/i18n/playground.test.ts",
+    "title": "playground 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-067",
+    "file": "e2e/scenarios/i18n/guardrails.test.ts",
+    "title": "guardrails 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-068",
+    "file": "e2e/scenarios/i18n/usage.test.ts",
+    "title": "usage 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-069",
+    "file": "e2e/scenarios/i18n/login.test.ts",
+    "title": "login 中英文动态参数、错误状态、英文示例及用户原文",
+    "kind": "required-gap",
+    "environment": "expand-existing",
+    "subsystem": "i18n"
+  },
+  {
+    "id": "GAP-070",
+    "file": "e2e/scenarios/live/openai-compatible.test.ts",
+    "title": "openai-compatible 真服务正常/流式或任务结果、计费与清理",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "live"
+  },
+  {
+    "id": "GAP-071",
+    "file": "e2e/scenarios/live/anthropic.test.ts",
+    "title": "anthropic 真服务正常/流式或任务结果、计费与清理",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "live"
+  },
+  {
+    "id": "GAP-072",
+    "file": "e2e/scenarios/live/gemini-vertex.test.ts",
+    "title": "gemini-vertex 真服务正常/流式或任务结果、计费与清理",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "live"
+  },
+  {
+    "id": "GAP-073",
+    "file": "e2e/scenarios/live/qiniu-seedance-fal.test.ts",
+    "title": "qiniu-seedance-fal 真服务正常/流式或任务结果、计费与清理",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "live"
+  },
+  {
+    "id": "GAP-074",
+    "file": "e2e/scenarios/live/fennoai.test.ts",
+    "title": "fennoai 真服务正常/流式或任务结果、计费与清理",
+    "kind": "required-gap",
+    "environment": "opt-in-live",
+    "subsystem": "live"
+  },
+  {
+    "id": "SC-232-1",
+    "file": "e2e/scenarios/rates/organization-edit.test.ts",
+    "title": "层级限流 organization-edit",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-232-2",
+    "file": "e2e/scenarios/rates/team-edit.test.ts",
+    "title": "层级限流 team-edit",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-232-3",
+    "file": "e2e/scenarios/rates/member-edit.test.ts",
+    "title": "层级限流 member-edit",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-156-1",
+    "file": "e2e/scenarios/directory/discovery.test.ts",
+    "title": "目录独立场景 discovery",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-156-2",
+    "file": "e2e/scenarios/directory/user-update.test.ts",
+    "title": "目录独立场景 user-update",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-156-3",
+    "file": "e2e/scenarios/directory/revocation.test.ts",
+    "title": "目录独立场景 revocation",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-148-1",
+    "file": "e2e/scenarios/directory/archive-validation.test.ts",
+    "title": "目录独立场景 archive-validation",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-148-2",
+    "file": "e2e/scenarios/directory/archive-persistence.test.ts",
+    "title": "目录独立场景 archive-persistence",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-148-3",
+    "file": "e2e/scenarios/directory/archive-schedule.test.ts",
+    "title": "目录独立场景 archive-schedule",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-152-cancel",
+    "file": "e2e/scenarios/directory/delete-cancel.test.ts",
+    "title": "目录独立场景 delete-cancel",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "GAP-031-invalid",
+    "file": "e2e/scenarios/docs/invalid-route.test.ts",
+    "title": "无效动态文档路径返回明确 404 且无业务正文",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "docs"
+  },
+  {
+    "id": "SC-246-organization",
+    "file": "e2e/scenarios/legacy/view-only/sc-246-organization.test.ts",
+    "title": "成员创建组织明确拒绝且无数据或上游副作用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-246-user",
+    "file": "e2e/scenarios/legacy/view-only/sc-246-user.test.ts",
+    "title": "成员创建用户明确拒绝且无数据或上游副作用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-252-block",
+    "file": "e2e/scenarios/legacy/writes/sc-252-block.test.ts",
+    "title": "密钥页面封禁立即拒绝且不调用上游",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-252-unblock",
+    "file": "e2e/scenarios/legacy/writes/sc-252-unblock.test.ts",
+    "title": "密钥页面解封恢复真实调用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-252-delete",
+    "file": "e2e/scenarios/legacy/writes/sc-252-delete.test.ts",
+    "title": "密钥页面删除立即撤销且无残留",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-252-rotation",
+    "file": "e2e/scenarios/legacy/writes/sc-252-rotation.test.ts",
+    "title": "旧密钥生命周期轮换验证凭据撤销和日志身份",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-253-connection",
+    "file": "e2e/scenarios/legacy/writes/sc-253-connection.test.ts",
+    "title": "模型页面连接测试成功且不修改部署",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-253-disable",
+    "file": "e2e/scenarios/legacy/writes/sc-253-disable.test.ts",
+    "title": "模型页面禁用持久化且不调用上游",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-253-enable",
+    "file": "e2e/scenarios/legacy/writes/sc-253-enable.test.ts",
+    "title": "模型页面启用恢复真实调用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-253-delete",
+    "file": "e2e/scenarios/legacy/writes/sc-253-delete.test.ts",
+    "title": "模型页面删除部署且不可调用",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "GAP-003",
+    "file": "e2e/scenarios/auth/session-expiry.test.ts",
+    "title": "自然会话到期后页面明确跳转并恢复登录",
+    "kind": "required-gap",
+    "environment": "default offline"
+  },
+  {
+    "id": "GAP-002-EXPIRED",
+    "file": "e2e/scenarios/auth/oidc-expired.test.ts",
+    "title": "SSO 浏览器闭环 expired",
+    "kind": "implemented",
+    "environment": "local-idp",
+    "subsystem": "auth"
+  },
+  {
+    "id": "GAP-002-REJECTED",
+    "file": "e2e/scenarios/auth/oidc-rejected.test.ts",
+    "title": "SSO 浏览器闭环 rejected",
+    "kind": "implemented",
+    "environment": "local-idp",
+    "subsystem": "auth"
+  },
+  {
+    "id": "GAP-002-REPLAY",
+    "file": "e2e/scenarios/auth/oidc-replay.test.ts",
+    "title": "SSO 浏览器闭环 replay",
+    "kind": "implemented",
+    "environment": "local-idp",
+    "subsystem": "auth"
+  }
+]

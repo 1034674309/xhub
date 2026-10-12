@@ -41,6 +41,12 @@ export type LogEntry = {
   status?: string;
   /** 完整错误正文；即使关闭提示词存储也可用于请求失败诊断。 */
   error?: string | null;
+  /** 调用时保存的端点与首字节计时，TPS 由后台统一计算。 */
+  inbound_endpoint?: string;
+  outbound_endpoint?: string;
+  streamed?: boolean;
+  ttft_ms?: number | null;
+  tps?: number | null;
   completionStartTime?: string;
   request_duration_ms?: number;
   session_total_count?: number;

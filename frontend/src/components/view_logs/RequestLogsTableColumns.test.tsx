@@ -323,10 +323,11 @@ describe("TTFT column", () => {
         startTime: "2026-07-07T09:50:13Z",
         endTime: "2026-07-07T09:50:16Z",
         completionStartTime: "2026-07-07T09:50:14Z",
+        ttft_ms: 1000,
       }),
     ]);
 
-    expect(screen.getByText("1.00")).toBeInTheDocument();
+    expect(screen.getByText("1.00s")).toBeInTheDocument();
   });
 });
 
