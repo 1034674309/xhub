@@ -6,7 +6,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type Cha
 import { cn } from "@/lib/cva.config";
 import { ValueTooltip, type ChartTooltipComponent } from "./chart_tooltip";
 import { categoryFills, type ChartColor } from "./colors";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type AreaChartProps<TDatum extends Record<string, unknown>> = {
   data: readonly TDatum[];
@@ -39,6 +39,7 @@ export function AreaChart<TDatum extends Record<string, unknown>>({
   className,
   style,
 }: AreaChartProps<TDatum>) {
+  const t = useT();
   const gradientId = React.useId().replace(/:/g, "");
 
   if (data.length === 0) {

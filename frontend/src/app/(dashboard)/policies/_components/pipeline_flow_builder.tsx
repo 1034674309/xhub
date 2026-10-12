@@ -23,7 +23,7 @@ import {
 } from "@/components/networking";
 import { getComplianceDatasetPrompts, getFrameworks } from "@/data/compliancePrompts";
 import type { CompliancePrompt } from "@/data/compliancePrompts";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const TEST_SOURCE_QUICK = "quick_chat";
 const TEST_SOURCE_ALL = "__all__";
@@ -36,10 +36,10 @@ function getPromptsForTestSource(source: string): CompliancePrompt[] {
 }
 
 const ACTION_OPTIONS = [
-  { label: t("Next Step"), value: "next" },
-  { label: t("Allow"), value: "allow" },
-  { label: t("Block"), value: "block" },
-  { label: t("Custom Response"), value: "modify_response" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Next Step"); }, value: "next" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Allow"); }, value: "allow" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Block"); }, value: "block" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Custom Response"); }, value: "modify_response" },
 ];
 
 const ACTION_LABELS: Record<string, string> = {
@@ -108,7 +108,7 @@ function derivePipelineFromPolicy(policy: Policy | null | undefined): GuardrailP
 // Icons (matching the reference image)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GuardrailIcon: React.FC = () => (
+const GuardrailIcon: React.FC = () => { const t = useT(); return ((
   <div
     style={{
       width: 28,
@@ -136,9 +136,9 @@ const GuardrailIcon: React.FC = () => (
       <path d="M12 8v4" />
     </svg>
   </div>
-);
+)); };
 
-const PlayIcon: React.FC = () => (
+const PlayIcon: React.FC = () => { const t = useT(); return ((
   <div
     style={{
       width: 28,
@@ -162,9 +162,9 @@ const PlayIcon: React.FC = () => (
       <polygon points="6,3 20,12 6,21" />
     </svg>
   </div>
-);
+)); };
 
-const PassIcon: React.FC = () => (
+const PassIcon: React.FC = () => { const t = useT(); return ((
   <svg
     width="14"
     height="14"
@@ -179,9 +179,9 @@ const PassIcon: React.FC = () => (
     <circle cx="12" cy="12" r="10" />
     <path d="M9 12l2 2 4-4" />
   </svg>
-);
+)); };
 
-const FailIcon: React.FC = () => (
+const FailIcon: React.FC = () => { const t = useT(); return ((
   <svg
     width="14"
     height="14"
@@ -195,9 +195,9 @@ const FailIcon: React.FC = () => (
   >
     <circle cx="12" cy="12" r="10" />
   </svg>
-);
+)); };
 
-const ApiFailureIcon: React.FC = () => (
+const ApiFailureIcon: React.FC = () => { const t = useT(); return ((
   <svg
     width="14"
     height="14"
@@ -213,7 +213,7 @@ const ApiFailureIcon: React.FC = () => (
     <line x1="12" y1="9" x2="12" y2="13" />
     <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
-);
+)); };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Connector
@@ -223,7 +223,7 @@ interface ConnectorProps {
   onInsert: () => void;
 }
 
-const Connector: React.FC<ConnectorProps> = ({ onInsert }) => (
+const Connector: React.FC<ConnectorProps> = ({ onInsert }) => { const t = useT(); return ((
   <div className="flex flex-col items-center" style={{ height: 56 }}>
     <div style={{ width: 1, flex: 1, backgroundColor: "var(--color-border)" }} />
     <button
@@ -252,7 +252,7 @@ const Connector: React.FC<ConnectorProps> = ({ onInsert }) => (
     </button>
     <div style={{ width: 1, flex: 1, backgroundColor: "var(--color-border)" }} />
   </div>
-);
+)); };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step Card (editable)
@@ -280,6 +280,7 @@ const StepCard: React.FC<StepCardProps> = ({
   onDelete,
   availableGuardrails,
 }) => {
+  const t = useT();
   const guardrailOptions = availableGuardrails.map((g) => ({
     label: g.guardrail_name || g.guardrail_id,
     value: g.guardrail_name || g.guardrail_id,
@@ -530,6 +531,7 @@ interface PipelineFlowBuilderProps {
 }
 
 const PipelineFlowBuilder: React.FC<PipelineFlowBuilderProps> = ({ pipeline, onChange, availableGuardrails }) => {
+  const t = useT();
   const handleInsertStep = (atIndex: number) => {
     onChange({ ...pipeline, steps: insertStep(pipeline.steps, atIndex) });
   };
@@ -674,7 +676,7 @@ interface PipelineInfoDisplayProps {
   pipeline: GuardrailPipeline;
 }
 
-export const PipelineInfoDisplay: React.FC<PipelineInfoDisplayProps> = ({ pipeline }) => (
+export const PipelineInfoDisplay: React.FC<PipelineInfoDisplayProps> = ({ pipeline }) => { const t = useT(); return ((
   <div className="flex flex-col items-center" style={{ padding: "16px 0" }}>
     {/* Trigger */}
     <div
@@ -771,7 +773,7 @@ export const PipelineInfoDisplay: React.FC<PipelineInfoDisplayProps> = ({ pipeli
       </React.Fragment>
     ))}
   </div>
-);
+)); };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pipeline Test Panel (right drawer)
@@ -822,12 +824,13 @@ function complianceMatchExpected(expected: "pass" | "fail", terminalAction: stri
 }
 
 const testSourceOptions = [
-  { value: TEST_SOURCE_QUICK, label: t("Quick chat (custom message)") },
+  { value: TEST_SOURCE_QUICK, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Quick chat (custom message)"); } },
   ...getFrameworks().map((f) => ({ value: f.name, label: f.name })),
-  { value: TEST_SOURCE_ALL, label: t("All compliance datasets") },
+  { value: TEST_SOURCE_ALL, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("All compliance datasets"); } },
 ];
 
 const PipelineTestPanel: React.FC<PipelineTestPanelProps> = ({ pipeline, accessToken, onClose }) => {
+  const t = useT();
   const [testSource, setTestSource] = useState<string>(TEST_SOURCE_QUICK);
   const [testMessage, setTestMessage] = useState("Hello, can you help me?");
   const [isRunning, setIsRunning] = useState(false);
@@ -1257,6 +1260,7 @@ const PolicyVersionsSidebar: React.FC<PolicyVersionsSidebarProps> = ({
   onPublish,
   onPromoteToProduction,
 }) => {
+  const t = useT();
   const canPublish = editingVersionStatus === "draft" && onPublish;
   const canPromote = editingVersionStatus === "published" && onPromoteToProduction;
 
@@ -1481,6 +1485,7 @@ export const FlowBuilderPage: React.FC<FlowBuilderPageProps> = ({
   onSelectVersion,
   onVersionStatusUpdated,
 }) => {
+  const t = useT();
   const isEditing = !!editingPolicy?.policy_id;
   const showVersionsSidebar = !!editingPolicy?.policy_name;
 

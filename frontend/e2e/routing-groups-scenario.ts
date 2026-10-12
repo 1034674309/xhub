@@ -42,7 +42,7 @@ export function registerSC123() {
         expect(r.status(), await r.text()).toBe(200);
       }
       await stableGoto(page, "/route-templates");
-      await page.getByRole("button", { name: /新建模板|New template/, exact: true }).click();
+      await page.getByRole("button", { name: /新建模板|New template/, exact: true }).first().click();
       const editor = page.getByRole("region", { name: /新建模板|New template/ });
       await editor.getByLabel(/^(名称|Name)$/).fill(name);
       await expect(editor.getByText("设置模板默认策略")).toHaveCount(0);
@@ -107,6 +107,31 @@ export function registerSC123() {
         data: { scope: "key", scope_id: mintedBody.token_id || mintedBody.key_id, route_template_id: templateID },
       });
       expect(binding.status(), await binding.text()).toBe(200);
+      // 适配入口的组回退成功响应可缓存；命中前仍复核实际备用成员权限。
+      const cachedRequest = { model: group, session_id: "group-cache-" + suffix, messages: [{ role: "user", content: "Reply only OK. group cache" }] };
+      for (let round = 0; round < 2; round++) {
+        const beforeCache = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
+        const result = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: cachedRequest });
+        expect(result.status(), await result.text()).toBe(200);
+        expect(result.headers()["cache_hit"] === "true").toBe(round > 0);
+        expect((await result.json()).model).toBe(group);
+        const afterCache = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
+        expect(afterCache - beforeCache).toBe(round === 0 ? 3 : 0);
+        await expect.poll(async () => {
+          const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + result.headers()["x-litellm-call-id"], { headers });
+          if (!detail.ok()) return false;
+          const log = await detail.json();
+          return round === 0 ? Number(log.spend) > 0 : Number(log.spend) === 0 && log.cache_hit === "true";
+        }).toBe(true);
+      }
+      expect((await page.request.post(GATEWAY + "/key/update", { headers, data: { key, models: [group, models[0]] } })).status()).toBe(200);
+      const beforeDeniedCache = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
+      const deniedCache = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key }, data: cachedRequest });
+      expect(deniedCache.status(), await deniedCache.text()).toBe(401);
+      expect((await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests).toBe(beforeDeniedCache);
+      expect((await page.request.post(GATEWAY + "/key/update", { headers, data: { key, models: [] } })).status()).toBe(200);
+      // 单工作进程和私有上游的计数器区分首次重试/回退与后续粘性复用。
+      const before = await (await page.request.get(UPSTREAM + "/e2e/request-count")).json();
       const call = await page.request.post(GATEWAY + "/bypass/openai/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key, "X-Session-Id": "session-" + suffix },
         data: { model: group, messages: [{ role: "user", content: "real group fallback" }] },
@@ -114,6 +139,8 @@ export function registerSC123() {
       expect(call.status(), await call.text()).toBe(200);
       expect((await call.json()).model).toBe(upstreams[1]);
       expect(call.headers()["x-session-id"]).toBe("session-" + suffix);
+      const afterFirst = await (await page.request.get(UPSTREAM + "/e2e/request-count")).json();
+      expect(afterFirst.requests - before.requests, "首次应为主部署两次加备用一次").toBe(3);
       // 同一会话下一轮复用已成功的回退目标，撤销回退链后必须立即失效。
       const reused = await page.request.post(GATEWAY + "/bypass/openai/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key, "X-Session-Id": "session-" + suffix },
@@ -121,6 +148,16 @@ export function registerSC123() {
       });
       expect(reused.status(), await reused.text()).toBe(200);
       expect((await reused.json()).model).toBe(upstreams[1]);
+      const afterReused = await (await page.request.get(UPSTREAM + "/e2e/request-count")).json();
+      expect(afterReused.requests - afterFirst.requests, "下一轮只调用成功备用部署").toBe(1);
+      for (const result of [call, reused]) {
+        await expect.poll(async () => {
+          const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + result.headers()["x-litellm-call-id"], { headers });
+          if (!detail.ok()) return null;
+          const log = await detail.json();
+          return [log.model, log.session_id, log.session_source];
+        }).toEqual([group, "session-" + suffix, "explicit"]);
+      }
       const callID = call.headers()["x-litellm-call-id"];
       expect(callID).toBeTruthy();
       await expect
@@ -154,6 +191,8 @@ export function registerSC123() {
         data: { model: group, messages: [{ role: "user", content: "disabled" }] },
       });
       expect(disabled.status()).toBeGreaterThanOrEqual(400);
+      const afterDisabled = await (await page.request.get(UPSTREAM + "/e2e/request-count")).json();
+      expect(afterDisabled.requests - afterReused.requests, "撤销回退后只重试主部署两次").toBe(2);
       await page.getByRole("button", { name: "完整 JSON 配置指南" }).click();
       const guide = page.getByRole("dialog", { name: "完整 JSON 配置指南" });
       await expect(guide.getByRole("cell", { name: "routing_groups", exact: true })).toBeVisible();

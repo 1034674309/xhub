@@ -8,7 +8,7 @@ import { cn } from "@/lib/cva.config";
 import { enableClaudeCodePlugin, disableClaudeCodePlugin } from "../networking";
 import { toast } from "@/lib/toast";
 import { Plugin } from "./types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const stepTitles = () => [t("Select Skills"), t("Confirm")];
 
@@ -27,6 +27,7 @@ const MakeSkillPublicForm: React.FC<MakeSkillPublicFormProps> = ({
   skillsList,
   onSuccess,
 }) => {
+  const t = useT();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

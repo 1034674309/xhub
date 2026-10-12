@@ -8,7 +8,7 @@ import { cn } from "@/lib/cva.config";
 import { makeMCPPublicCall } from "../../networking";
 import { toast } from "@/lib/toast";
 import { MCPServerData } from "@/components/AIHub/MCPHubTableColumns";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const stepTitles = () => [t("Select Servers"), t("Confirm")];
 
@@ -37,6 +37,7 @@ const MakeMCPPublicForm: React.FC<MakeMCPPublicFormProps> = ({
   mcpHubData,
   onSuccess,
 }) => {
+  const t = useT();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedServers, setSelectedServers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

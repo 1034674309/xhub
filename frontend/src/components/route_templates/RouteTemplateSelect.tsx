@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   getRouteTemplateBindingCall,
@@ -34,6 +34,7 @@ const RouteTemplateSelect: React.FC<{
   scopeId?: string;
   disabled?: boolean;
 }> = ({ accessToken, value, onChange, scope, scopeId, disabled }) => {
+  const t = useT();
   const [options, setOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [effective, setEffective] = useState<EffectiveRouteTemplate | null>(null);

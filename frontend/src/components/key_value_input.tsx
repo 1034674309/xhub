@@ -3,7 +3,7 @@ import { Minus, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type KeyValuePair = readonly [string, string];
 
@@ -13,6 +13,7 @@ interface KeyValueInputProps {
 }
 
 const KeyValueInput: React.FC<KeyValueInputProps> = ({ value = [], onChange }) => {
+  const t = useT();
   const handleAdd = () => onChange?.([...value, ["", ""]]);
 
   const handleRemove = (index: number) => onChange?.(value.filter((_, i) => i !== index));

@@ -7,7 +7,7 @@ import { CellTooltip, IdentityCell, StatusBadge, type StatusTone } from "@/compo
 import { Badge } from "@/components/ui/badge";
 import { getProviderLogoAndName } from "@/components/provider_info_helpers";
 import { PUBLIC_MODEL_HUB_SORTABLE_FIELDS } from "@/components/publicModelHub/publicModelHubFilters";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface ModelGroupInfo {
   model_group: string;
@@ -112,6 +112,7 @@ const HEALTH_TONES: Record<string, StatusTone> = {
 };
 
 function ProviderChips({ providers }: { providers: string[] }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap gap-1">
       {providers.map((provider) => {
@@ -137,6 +138,7 @@ function ProviderChips({ providers }: { providers: string[] }) {
 }
 
 function OverflowChips({ items }: { items: string[] }) {
+  const t = useT();
   if (items.length === 0) {
     return <span className="text-xs text-muted-foreground">-</span>;
   }

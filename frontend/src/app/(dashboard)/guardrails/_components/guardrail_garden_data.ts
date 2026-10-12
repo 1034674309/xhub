@@ -25,8 +25,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_denied_financial",
     name: "Denied Financial Advice",
-    description:
-      t("Detects requests for personalized financial advice, investment recommendations, or financial planning."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects requests for personalized financial advice, investment recommendations, or financial planning."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -42,7 +41,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_denied_insults",
     name: "Insults & Personal Attacks",
-    description: t("Detects insults, name-calling, and personal attacks directed at the chatbot, staff, or other people."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects insults, name-calling, and personal attacks directed at the chatbot, staff, or other people."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -58,7 +57,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_denied_legal",
     name: "Denied Legal Advice",
-    description: t("Detects requests for unauthorized legal advice, case analysis, or legal recommendations."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects requests for unauthorized legal advice, case analysis, or legal recommendations."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -67,7 +66,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_denied_medical",
     name: "Denied Medical Advice",
-    description: t("Detects requests for medical diagnosis, treatment recommendations, or health advice."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects requests for medical diagnosis, treatment recommendations, or health advice."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -76,7 +75,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_harmful_violence",
     name: "Harmful Violence",
-    description: t("Detects content related to violence, criminal planning, attacks, and violent threats."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects content related to violence, criminal planning, attacks, and violent threats."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -85,7 +84,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_harmful_self_harm",
     name: "Harmful Self-Harm",
-    description: t("Detects content related to self-harm, suicide, and dangerous self-destructive behavior."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects content related to self-harm, suicide, and dangerous self-destructive behavior."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -94,7 +93,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_harmful_child_safety",
     name: "Harmful Child Safety",
-    description: t("Detects content that could endanger child safety or exploit minors."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects content that could endanger child safety or exploit minors."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -103,7 +102,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_harmful_illegal_weapons",
     name: "Harmful Illegal Weapons",
-    description: t("Detects content related to illegal weapons manufacturing, distribution, or acquisition."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects content related to illegal weapons manufacturing, distribution, or acquisition."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -112,7 +111,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_bias_gender",
     name: "Bias: Gender",
-    description: t("Detects gender-based discrimination, stereotypes, and biased language."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects gender-based discrimination, stereotypes, and biased language."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -121,7 +120,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_bias_racial",
     name: "Bias: Racial",
-    description: t("Detects racial discrimination, stereotypes, and racially biased content."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects racial discrimination, stereotypes, and racially biased content."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -130,7 +129,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_bias_religious",
     name: "Bias: Religious",
-    description: t("Detects religious discrimination, intolerance, and religiously biased content."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects religious discrimination, intolerance, and religiously biased content."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -139,7 +138,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_bias_sexual_orientation",
     name: "Bias: Sexual Orientation",
-    description: t("Detects discrimination based on sexual orientation and related biased content."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects discrimination based on sexual orientation and related biased content."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -148,7 +147,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_prompt_injection_jailbreak",
     name: "Prompt Injection: Jailbreak",
-    description: t("Detects jailbreak attempts designed to bypass AI safety guidelines and restrictions."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects jailbreak attempts designed to bypass AI safety guidelines and restrictions."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -157,7 +156,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_prompt_injection_data_exfil",
     name: "Prompt Injection: Data Exfiltration",
-    description: t("Detects attempts to extract sensitive data through prompt manipulation."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects attempts to extract sensitive data through prompt manipulation."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -166,7 +165,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_prompt_injection_sql",
     name: "Prompt Injection: SQL",
-    description: t("Detects SQL injection attempts embedded in prompts."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects SQL injection attempts embedded in prompts."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -175,7 +174,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_prompt_injection_malicious_code",
     name: "Prompt Injection: Malicious Code",
-    description: t("Detects attempts to inject malicious code through prompts."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects attempts to inject malicious code through prompts."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -184,7 +183,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_prompt_injection_system_prompt",
     name: "Prompt Injection: System Prompt",
-    description: t("Detects attempts to extract or override system prompts."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects attempts to extract or override system prompts."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -193,7 +192,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_toxic_abuse",
     name: "Toxic & Abusive Language",
-    description: t("Detects toxic, abusive, and hateful language across multiple languages (EN, AU, DE, ES, FR)."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects toxic, abusive, and hateful language across multiple languages (EN, AU, DE, ES, FR)."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -202,8 +201,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_patterns",
     name: "Pattern Matching",
-    description:
-      t("Detect and block sensitive data patterns like SSNs, credit card numbers, API keys, and custom regex patterns."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detect and block sensitive data patterns like SSNs, credit card numbers, API keys, and custom regex patterns."); },
     category: "litellm",
     subcategory: "Patterns",
     logo: litellmContentFilterLogo,
@@ -212,8 +210,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_keywords",
     name: "Keyword Blocking",
-    description:
-      t("Block or mask content containing specific keywords or phrases. Upload custom word lists or add individual terms."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Block or mask content containing specific keywords or phrases. Upload custom word lists or add individual terms."); },
     category: "litellm",
     subcategory: "Keywords",
     logo: litellmContentFilterLogo,
@@ -222,8 +219,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "block_code_execution",
     name: "Block Code Execution",
-    description:
-      t("Detects markdown fenced code blocks in requests and responses. Block or mask executable code (e.g. Python, JavaScript, Bash) by language with configurable confidence."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Detects markdown fenced code blocks in requests and responses. Block or mask executable code (e.g. Python, JavaScript, Bash) by language with configurable confidence."); },
     category: "litellm",
     subcategory: "Code Safety",
     logo: litellmContentFilterLogo,
@@ -232,8 +228,7 @@ export const LITELLM_CONTENT_FILTER_CARDS: GuardrailCardInfo[] = [
   {
     id: "cf_competitor_intent",
     name: "Competitor Name Blocking",
-    description:
-      t("Block or reframe competitor comparison and ranking intent. Detect when users ask to compare or recommend competitors (airline or generic competitor lists)."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Block or reframe competitor comparison and ranking intent. Detect when users ask to compare or recommend competitors (airline or generic competitor lists)."); },
     category: "litellm",
     subcategory: "Content Category",
     logo: litellmContentFilterLogo,
@@ -245,8 +240,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "presidio",
     name: "Presidio PII",
-    description:
-      t("Microsoft Presidio for PII detection and anonymization. Supports 30+ entity types with configurable actions."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Microsoft Presidio for PII detection and anonymization. Supports 30+ entity types with configurable actions."); },
     category: "partner",
     logo: guardrailLogoMap["Presidio PII"],
     tags: ["PII", "Microsoft"],
@@ -255,7 +249,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "bedrock",
     name: "Bedrock Guardrail",
-    description: t("AWS Bedrock Guardrails for content filtering, topic avoidance, and sensitive information detection."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AWS Bedrock Guardrails for content filtering, topic avoidance, and sensitive information detection."); },
     category: "partner",
     logo: guardrailLogoMap["Bedrock Guardrail"],
     tags: ["AWS", "Content Safety"],
@@ -264,7 +258,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "lakera",
     name: "Lakera",
-    description: t("AI security platform protecting against prompt injections, data leakage, and harmful content."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI security platform protecting against prompt injections, data leakage, and harmful content."); },
     category: "partner",
     logo: guardrailLogoMap["Lakera"],
     tags: ["Security", "Prompt Injection"],
@@ -273,7 +267,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "openai_moderation",
     name: "OpenAI Moderation",
-    description: t("OpenAI's content moderation API for detecting harmful content across multiple categories."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("OpenAI's content moderation API for detecting harmful content across multiple categories."); },
     category: "partner",
     logo: guardrailLogoMap["OpenAI Moderation"],
     tags: ["Content Moderation", "OpenAI"],
@@ -281,7 +275,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "google_model_armor",
     name: "Google Cloud Model Armor",
-    description: t("Google Cloud's model protection service for safe and responsible AI deployments."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Google Cloud's model protection service for safe and responsible AI deployments."); },
     category: "partner",
     logo: guardrailLogoMap["Google Cloud Model Armor"],
     tags: ["Google Cloud", "Safety"],
@@ -289,7 +283,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "guardrails_ai",
     name: "Guardrails AI",
-    description: t("Open-source framework for adding structural, type, and quality guarantees to LLM outputs."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Open-source framework for adding structural, type, and quality guarantees to LLM outputs."); },
     category: "partner",
     logo: guardrailLogoMap["Guardrails AI"],
     tags: ["Open Source", "Validation"],
@@ -297,7 +291,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "zscaler",
     name: "Zscaler AI Guard",
-    description: t("Enterprise AI security from Zscaler for monitoring and protecting AI/ML workloads."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Enterprise AI security from Zscaler for monitoring and protecting AI/ML workloads."); },
     category: "partner",
     logo: guardrailLogoMap["Zscaler AI Guard"],
     tags: ["Enterprise", "Security"],
@@ -305,7 +299,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "panw",
     name: "PANW Prisma AIRS",
-    description: t("Palo Alto Networks Prisma AI Runtime Security for securing AI applications in production."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Palo Alto Networks Prisma AI Runtime Security for securing AI applications in production."); },
     category: "partner",
     logo: guardrailLogoMap["PANW Prisma AIRS"],
     tags: ["Enterprise", "Security"],
@@ -313,8 +307,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "cisco_ai_defense",
     name: "Cisco AI Defense",
-    description:
-      t("Cisco AI Defense Inspection API for runtime protection: prompt injection, PII/PCI/PHI, harassment, hate speech, profanity, violence, and code detection."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Cisco AI Defense Inspection API for runtime protection: prompt injection, PII/PCI/PHI, harassment, hate speech, profanity, violence, and code detection."); },
     category: "partner",
     logo: guardrailLogoMap["Cisco AI Defense"],
     tags: ["Enterprise", "Security", "Prompt Injection", "PII"],
@@ -323,7 +316,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "noma",
     name: "Noma Security",
-    description: t("AI security platform for detecting and preventing AI-specific threats and vulnerabilities."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI security platform for detecting and preventing AI-specific threats and vulnerabilities."); },
     category: "partner",
     logo: guardrailLogoMap["Noma Security"],
     tags: ["Security", "Threat Detection"],
@@ -331,7 +324,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "aporia",
     name: "Aporia AI",
-    description: t("Real-time AI guardrails for hallucination detection, topic control, and policy enforcement."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Real-time AI guardrails for hallucination detection, topic control, and policy enforcement."); },
     category: "partner",
     logo: guardrailLogoMap["Aporia AI"],
     tags: ["Hallucination", "Policy"],
@@ -339,7 +332,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "aim",
     name: "AIM Guardrail",
-    description: t("AIM Security guardrails for comprehensive AI threat detection and mitigation."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AIM Security guardrails for comprehensive AI threat detection and mitigation."); },
     category: "partner",
     logo: guardrailLogoMap["AIM Guardrail"],
     tags: ["Security", "Threat Detection"],
@@ -347,7 +340,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "cato_networks",
     name: "Cato Networks Guardrail",
-    description: t("Cato Networks guardrails for comprehensive AI threat detection and mitigation."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Cato Networks guardrails for comprehensive AI threat detection and mitigation."); },
     category: "partner",
     logo: guardrailLogoMap["Cato Networks Guardrail"],
     tags: ["Security", "Threat Detection"],
@@ -355,7 +348,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "prompt_security",
     name: "Prompt Security",
-    description: t("Protect against prompt injection attacks, data leakage, and other LLM security threats."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Protect against prompt injection attacks, data leakage, and other LLM security threats."); },
     category: "partner",
     logo: guardrailLogoMap["Prompt Security"],
     tags: ["Prompt Injection", "Security"],
@@ -363,7 +356,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "lasso",
     name: "Lasso Guardrail",
-    description: t("Content moderation and safety guardrails for responsible AI deployments."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Content moderation and safety guardrails for responsible AI deployments."); },
     category: "partner",
     logo: guardrailLogoMap["Lasso Guardrail"],
     tags: ["Content Moderation"],
@@ -371,7 +364,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "pangea",
     name: "Pangea Guardrail",
-    description: t("Pangea's AI guardrails for secure, compliant, and trustworthy AI applications."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Pangea's AI guardrails for secure, compliant, and trustworthy AI applications."); },
     category: "partner",
     logo: guardrailLogoMap["Pangea Guardrail"],
     tags: ["Compliance", "Security"],
@@ -379,7 +372,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "enkryptai",
     name: "EnkryptAI",
-    description: t("AI security and governance platform for enterprise AI safety and compliance."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI security and governance platform for enterprise AI safety and compliance."); },
     category: "partner",
     logo: guardrailLogoMap["EnkryptAI"],
     tags: ["Enterprise", "Governance"],
@@ -387,7 +380,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "javelin",
     name: "Javelin Guardrails",
-    description: t("AI gateway with built-in guardrails for secure and compliant AI operations."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI gateway with built-in guardrails for secure and compliant AI operations."); },
     category: "partner",
     logo: guardrailLogoMap["Javelin Guardrails"],
     tags: ["Gateway", "Security"],
@@ -395,7 +388,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "pillar",
     name: "Pillar Guardrail",
-    description: t("AI safety platform for monitoring, testing, and securing AI systems."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI safety platform for monitoring, testing, and securing AI systems."); },
     category: "partner",
     logo: guardrailLogoMap["Pillar Guardrail"],
     tags: ["Monitoring", "Safety"],
@@ -403,7 +396,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "akto",
     name: "Akto Guardrail",
-    description: t("AI security platform from Akto.io with automatic monitoring and guardrails for AI/ML applications."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI security platform from Akto.io with automatic monitoring and guardrails for AI/ML applications."); },
     category: "partner",
     logo: guardrailLogoMap["Akto"],
     tags: ["Security", "Safety", "Monitoring"],
@@ -411,8 +404,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "promptguard",
     name: "PromptGuard",
-    description:
-      t("AI security gateway with prompt injection detection, PII redaction, topic filtering, entity blocklists, and hallucination detection. Self-hostable with drop-in proxy integration."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("AI security gateway with prompt injection detection, PII redaction, topic filtering, entity blocklists, and hallucination detection. Self-hostable with drop-in proxy integration."); },
     category: "partner",
     logo: guardrailLogoMap["PromptGuard"],
     tags: ["Security", "Prompt Injection", "PII"],
@@ -428,8 +420,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "xecguard",
     name: "XecGuard",
-    description:
-      t("CyCraft XecGuard AI security gateway. Multi-policy scanning (prompt injection, harmful content, PII, system-prompt enforcement) plus RAG context grounding."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("CyCraft XecGuard AI security gateway. Multi-policy scanning (prompt injection, harmful content, PII, system-prompt enforcement) plus RAG context grounding."); },
     category: "partner",
     logo: guardrailLogoMap["XecGuard"],
     tags: ["Security", "Policy", "Grounding", "RAG"],
@@ -438,8 +429,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "deepkeep",
     name: "DeepKeep AI Firewall",
-    description:
-      t("DeepKeep AI Firewall for comprehensive LLM security — prompt injection detection, PII protection, content moderation, and policy enforcement with configurable guardrail pipelines."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("DeepKeep AI Firewall for comprehensive LLM security — prompt injection detection, PII protection, content moderation, and policy enforcement with configurable guardrail pipelines."); },
     category: "partner",
     logo: guardrailLogoMap["DeepKeep AI Firewall"],
     tags: ["Security", "Prompt Injection", "PII", "Firewall"],
@@ -448,8 +438,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "repelloai",
     name: "RepelloAI Argus",
-    description:
-      t("RepelloAI Argus scans prompts and responses against policies configured per asset in the Repello dashboard."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("RepelloAI Argus scans prompts and responses against policies configured per asset in the Repello dashboard."); },
     category: "partner",
     logo: guardrailLogoMap["RepelloAI Argus"],
     tags: ["Security", "Policy", "Prompt Injection"],
@@ -458,8 +447,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "straiker",
     name: "Straiker",
-    description:
-      t("Defend AI Agentic Guardrails: Indirect/Direct Prompt Injection, Tool Misuse, Malicious MCP and Skills"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Defend AI Agentic Guardrails: Indirect/Direct Prompt Injection, Tool Misuse, Malicious MCP and Skills"); },
     category: "partner",
     logo: guardrailLogoMap["Straiker"],
     tags: ["Agentic", "Prompt Injection", "Tool Misuse", "MCP", "Skills"],
@@ -468,8 +456,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "alice",
     name: "Alice",
-    description:
-      t("Policy-based guardrails for prompts and model responses, evaluated per application so one proxy can enforce a different policy set per team or product."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Policy-based guardrails for prompts and model responses, evaluated per application so one proxy can enforce a different policy set per team or product."); },
     category: "partner",
     logo: guardrailLogoMap["Alice"],
     tags: ["Content Moderation", "Prompt Injection", "PII", "Policy"],
@@ -478,8 +465,7 @@ export const PARTNER_GUARDRAIL_CARDS: GuardrailCardInfo[] = [
   {
     id: "conduct",
     name: "Conduct Guard",
-    description:
-      t("Conduct Guard evaluates prompts against workspace rules before the model call: prompt injection, PII, and custom policies, with block, warning, and approval verdicts."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Conduct Guard evaluates prompts against workspace rules before the model call: prompt injection, PII, and custom policies, with block, warning, and approval verdicts."); },
     category: "partner",
     logo: guardrailLogoMap["Conduct Guard"],
     tags: ["Security", "Prompt Injection", "PII", "Policy"],

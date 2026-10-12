@@ -3,7 +3,7 @@ import useCan from "@/app/(dashboard)/hooks/useCan";
 import { Policy } from "./types";
 import { getPoliciesList } from "../networking";
 import { MultiSelect } from "@/components/shared/MultiSelect";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /** Prefix for policy version IDs in request body; must match backend POLICY_VERSION_ID_PREFIX. */
 export const POLICY_VERSION_ID_PREFIX = "policy_";
@@ -53,6 +53,7 @@ const PolicySelector: React.FC<PolicySelectorProps> = ({
   disabled,
   onPoliciesLoaded,
 }) => {
+  const t = useT();
   const canViewPolicies = useCan("viewPolicies");
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(false);

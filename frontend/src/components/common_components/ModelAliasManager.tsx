@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import ModelSelector from "./ModelSelector";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelAliasManagerProps {
   accessToken: string;
@@ -27,6 +27,7 @@ const ModelAliasManager: React.FC<ModelAliasManagerProps> = ({
   onAliasUpdate,
   showExampleConfig = true,
 }) => {
+  const t = useT();
   const [aliases, setAliases] = useState<AliasItem[]>([]);
   const [newAlias, setNewAlias] = useState<{ aliasName: string; targetModel: string | null }>({
     aliasName: "",

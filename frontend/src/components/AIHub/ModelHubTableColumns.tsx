@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface ModelHubData {
   model_group: string;
@@ -61,6 +61,7 @@ interface ModelHubRowActionsProps {
 }
 
 function ModelHubRowActions({ model, onModelClick }: ModelHubRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

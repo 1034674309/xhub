@@ -7,7 +7,7 @@ import { DEFAULT_PROXY_ADMIN_USER_ID } from "@/utils/sentinels";
 
 import { IdCell } from "./id_cell";
 import { IdentityCell } from "./identity_cell";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const ENTITY_CELL_TITLE_CLASSES = "font-mono text-xs font-normal";
 
@@ -19,6 +19,7 @@ interface UserPopoverCellProps {
 }
 
 export function UserPopoverCell({ userAlias, userEmail, userId, width }: UserPopoverCellProps) {
+  const t = useT();
   const displayValue = userAlias || userEmail || userId;
   const isDefaultAdmin = userId === DEFAULT_PROXY_ADMIN_USER_ID;
 

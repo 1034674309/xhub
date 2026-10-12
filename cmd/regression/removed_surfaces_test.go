@@ -50,8 +50,8 @@ func TestRemovedSurfacesStayGone(t *testing.T) {
 	if alerts, _ := callbacks["alerts"].([]any); len(alerts) != 0 {
 		t.Fatalf("callbacks still advertise alerts: %s", mustJSON(callbacks["alerts"]))
 	}
-	if _, ok := callbacks["router_settings"].(map[string]any); !ok {
-		t.Fatalf("router settings disappeared with the alerts: %s", mustJSON(callbacks))
+	if _, ok := callbacks["router_settings"]; ok {
+		t.Fatalf("callbacks still advertise retired router settings: %s", mustJSON(callbacks))
 	}
 
 	c := h.openScope(t, admin, "kept")

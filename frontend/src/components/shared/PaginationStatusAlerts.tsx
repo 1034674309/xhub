@@ -2,7 +2,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/shared/Alert";
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PaginationStatusAlertsProps {
   isFetchingMore: boolean;
@@ -18,7 +18,7 @@ const PaginationStatusAlerts = ({
   progress,
   cancel,
   subject = "spend data",
-}: PaginationStatusAlertsProps) => (
+}: PaginationStatusAlertsProps) => { const t = useT(); return ((
   <>
     {isFetchingMore && (
       <Alert variant="warning" className="mb-2">
@@ -45,6 +45,6 @@ const PaginationStatusAlerts = ({
       </Alert>
     )}
   </>
-);
+)); };
 
 export default PaginationStatusAlerts;

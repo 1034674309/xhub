@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/compone
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PolicyAttachment } from "@/components/policies/types";
 import { estimateAttachmentImpactCall } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ImpactResult {
   affected_keys_count: number;
@@ -19,6 +19,7 @@ const ImpactPopover: React.FC<{ attachment: PolicyAttachment; accessToken: strin
   attachment,
   accessToken,
 }) => {
+  const t = useT();
   const [impact, setImpact] = useState<ImpactResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);

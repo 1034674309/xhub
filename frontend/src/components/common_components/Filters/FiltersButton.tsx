@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cva.config";
 import { Filter } from "lucide-react";
 import React from "react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface FiltersButtonProps {
   onClick: () => void;
@@ -17,6 +17,7 @@ export const FiltersButton: React.FC<FiltersButtonProps> = ({
   hasActiveFilters,
   label = t("Filters"),
 }) => {
+  const t = useT();
   return (
     <span className="relative inline-flex">
       <Button variant="outline" onClick={onClick} className={cn(active && "bg-muted")}>

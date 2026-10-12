@@ -9,85 +9,6 @@
       "count": 1
     }
   },
-  "src/app/(dashboard)/agents/_components/add_agent_form.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "max-lines": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 3
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/agents/_components/agent_card_discovery.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "react-hooks/refs": {
-      "count": 3
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/agent_cost_view.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/agent_form_fields.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/agent_info.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "local/no-complex-jsx-arrow": {
-      "count": 1
-    },
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/agent_virtual_keys.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/cost_config_fields.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/agents/_components/dynamic_agent_form_fields.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/budgets/_components/budget_modal.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/budgets/_components/budget_panel.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/budgets/_components/edit_budget_modal.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
   "src/app/(dashboard)/caching/_components/cache_dashboard.tsx": {
     "local/filename-pascal-case": {
       "count": 1
@@ -389,11 +310,6 @@
       "count": 2
     }
   },
-  "src/app/(dashboard)/hooks/router/useRouterFields.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/app/(dashboard)/hooks/storeModelInDB/useStoreModelInDB.ts": {
     "no-restricted-syntax": {
       "count": 1
@@ -412,160 +328,6 @@
   "src/app/(dashboard)/hooks/useTeams.tsx": {
     "local/filename-pascal-case": {
       "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/CreateMCPServer.tsx": {
-    "max-lines": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/MCPNetworkSettings.tsx": {
-    "react-hooks/immutability": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/MCPSubmissionsTab.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/MCPToolsetsTab.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/OAuthFormFields.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/OpenAPIFormSection.tsx": {
-    "local/no-complex-jsx-arrow": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/OpenAPIQuickPicker.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/ToolTestPanel.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/UserEnvVarsModal.tsx": {
-    "no-nested-ternary": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/index.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_connect.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "react-hooks/static-components": {
-      "count": 4
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_connection_status.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 3
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_discovery.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "local/no-complex-jsx-arrow": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_server_cost_config.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_server_cost_display.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_server_edit.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "max-lines": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_server_view.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_servers.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "local/no-complex-jsx-arrow": {
-      "count": 3
-    },
-    "no-nested-ternary": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_tool_configuration.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/mcp_tools.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "local/no-complex-jsx-arrow": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
-  "src/app/(dashboard)/mcp-servers/_components/utils.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/models-and-endpoints/components/ModelRetrySettingsTab.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/models-and-endpoints/utils/modelDataTransformer.ts": {
-    "prefer-const": {
-      "count": 6
     }
   },
   "src/app/(dashboard)/old-usage/_components/usage.tsx": {
@@ -978,16 +740,6 @@
       "count": 1
     }
   },
-  "src/app/(dashboard)/skills/_components/ClaudeCodePluginsPanel.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/app/(dashboard)/skills/_components/add_plugin_form.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
   "src/app/(dashboard)/tag-management/_components/index.tsx": {
     "local/filename-pascal-case": {
       "count": 1
@@ -1094,17 +846,6 @@
       "count": 1
     }
   },
-  "src/app/(dashboard)/workflows/WorkflowRuns.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "src/app/chat/page.tsx": {
     "no-nested-ternary": {
       "count": 1
@@ -1197,21 +938,6 @@
       "count": 1
     }
   },
-  "src/components/Settings/RouterSettings/Fallbacks/AddFallbacks.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/components/Settings/RouterSettings/Fallbacks/FallbackSelectionForm.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/components/Settings/RouterSettings/Fallbacks/Fallbacks.tsx": {
-    "prefer-const": {
-      "count": 2
-    }
-  },
   "src/components/Teams.test.tsx": {
     "max-nested-callbacks": {
       "count": 4
@@ -1254,70 +980,9 @@
       "count": 1
     }
   },
-  "src/components/add_model/AddModelForm.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/RouterConfigBuilder.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/add_auto_router_tab.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/add_model_modes.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/advanced_settings.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/auto_router_connection_test.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
   "src/components/add_model/cache_control_settings.tsx": {
     "local/filename-pascal-case": {
       "count": 1
-    }
-  },
-  "src/components/add_model/conditional_public_model_name.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/handle_add_auto_router_submit.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/handle_add_model_submit.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/litellm_model_name.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/components/add_model/model_connection_test.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "no-nested-ternary": {
-      "count": 2
     }
   },
   "src/components/add_model/provider_specific_fields.tsx": {
@@ -1329,11 +994,6 @@
     },
     "react-hooks/immutability": {
       "count": 3
-    }
-  },
-  "src/components/add_pass_through.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
     }
   },
   "src/components/agent_management/AgentSelector.tsx": {
@@ -1453,14 +1113,6 @@
       "count": 1
     }
   },
-  "src/components/edit_auto_router/edit_auto_router_modal.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
   "src/components/key_info_utils.tsx": {
     "local/filename-pascal-case": {
       "count": 1
@@ -1559,14 +1211,6 @@
       "count": 1
     }
   },
-  "src/components/model_group_alias_settings.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "src/components/model_info_view.tsx": {
     "local/filename-pascal-case": {
       "count": 1
@@ -1613,11 +1257,6 @@
       "count": 1
     }
   },
-  "src/components/onboarding_link.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
   "src/components/organisms/create_key_button.tsx": {
     "local/filename-pascal-case": {
       "count": 1
@@ -1640,11 +1279,6 @@
   "src/components/page_utils.test.ts": {
     "max-nested-callbacks": {
       "count": 3
-    }
-  },
-  "src/components/pass_through_info.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
     }
   },
   "src/components/per_user_usage.tsx": {
@@ -1690,27 +1324,6 @@
   },
   "src/components/route_preview.tsx": {
     "local/filename-pascal-case": {
-      "count": 1
-    }
-  },
-  "src/components/router_settings/ReliabilityRetriesSection.tsx": {
-    "no-nested-ternary": {
-      "count": 1
-    }
-  },
-  "src/components/router_settings/index.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "prefer-const": {
-      "count": 2
-    }
-  },
-  "src/components/routing_groups/index.tsx": {
-    "local/filename-pascal-case": {
-      "count": 1
-    },
-    "react-hooks/preserve-manual-memoization": {
       "count": 1
     }
   },

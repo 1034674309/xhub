@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getProviderLogoAndName } from "../provider_info_helpers";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VectorStoreContent {
   text: string;
@@ -33,6 +33,7 @@ interface VectorStoreViewerProps {
 }
 
 export function VectorStoreViewer({ data }: VectorStoreViewerProps) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
 

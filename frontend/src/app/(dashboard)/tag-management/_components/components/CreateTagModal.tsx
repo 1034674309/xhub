@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const labelWithHint = (label: React.ReactNode, hint: string): React.ReactNode => (
   <>
@@ -38,7 +38,7 @@ interface ModelInfo {
 }
 
 const createTagShape = {
-  tag_name: z.string().min(1, t("Please input a tag name")),
+  tag_name: z.string().min(1, { error: () => t("Please input a tag name") }),
   description: z.string().optional(),
   allowed_llms: z.array(z.string()).optional(),
   max_budget: z.string().optional(),
@@ -57,6 +57,7 @@ interface CreateTagModalProps {
 }
 
 const CreateTagModal: React.FC<CreateTagModalProps> = ({ visible, onCancel, onSubmit, availableModels }) => {
+  const t = useT();
   const [budgetSectionOpen, setBudgetSectionOpen] = React.useState(false);
   const form = useZodForm(createTagSchema, { defaultValues: { tag_name: "" } });
 

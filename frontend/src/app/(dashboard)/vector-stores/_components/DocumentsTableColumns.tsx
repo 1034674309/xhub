@@ -14,13 +14,13 @@ import {
 import { DocumentUpload } from "@/components/vector_store_management/types";
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const STATUS_CONFIG: Record<DocumentUpload["status"], { tone: StatusTone; label: string }> = {
-  uploading: { tone: "info", label: t("Uploading") },
-  done: { tone: "success", label: t("Ready") },
-  error: { tone: "error", label: t("Error") },
-  removed: { tone: "neutral", label: t("Removed") },
+  uploading: { tone: "info", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Uploading"); } },
+  done: { tone: "success", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Ready"); } },
+  error: { tone: "error", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Error"); } },
+  removed: { tone: "neutral", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Removed"); } },
 };
 
 function formatFileSize(bytes?: number): string {
@@ -31,6 +31,7 @@ function formatFileSize(bytes?: number): string {
 }
 
 function DocumentRowActions({ document, onRemove }: { document: DocumentUpload; onRemove: (uid: string) => void }) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

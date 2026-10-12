@@ -2,11 +2,12 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const AUTOROUTER_CLASSIFIER_ORIGIN = "autorouter_classifier";
 
 export function ClassifyTag({ origin, className }: { origin?: string | null; className?: string }) {
+  const t = useT();
   if (origin !== AUTOROUTER_CLASSIFIER_ORIGIN) return null;
   return (
     <Badge

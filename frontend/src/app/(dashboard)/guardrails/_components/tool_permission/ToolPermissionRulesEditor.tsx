@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export type ToolPermissionDecision = "allow" | "deny";
 export type ToolPermissionDefaultAction = "allow" | "deny";
@@ -35,13 +35,13 @@ interface ToolPermissionRulesEditorProps {
 }
 
 const DECISION_ITEMS = [
-  { value: "allow", label: t("Allow") },
-  { value: "deny", label: t("Deny") },
+  { value: "allow", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Allow"); } },
+  { value: "deny", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Deny"); } },
 ] as const;
 
 const ON_DISALLOWED_ITEMS = [
-  { value: "block", label: t("Block") },
-  { value: "rewrite", label: t("Rewrite") },
+  { value: "block", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Block"); } },
+  { value: "rewrite", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Rewrite"); } },
 ] as const;
 
 const DEFAULT_CONFIG: ToolPermissionConfig = {
@@ -58,6 +58,7 @@ const ensureConfig = (config?: ToolPermissionConfig): ToolPermissionConfig => ({
 });
 
 const ToolPermissionRulesEditor: React.FC<ToolPermissionRulesEditorProps> = ({ value, onChange, disabled = false }) => {
+  const t = useT();
   const config = ensureConfig(value);
 
   const updateConfig = (partial: Partial<ToolPermissionConfig>) => {

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import ViewUserSpend from "@/components/view_user_spend";
 import { ProxySettings } from "@/app/(dashboard)/hooks/proxySettings/useProxySettings";
 import AdvancedDatePicker from "@/components/shared/advanced_date_picker";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Combobox,
@@ -40,7 +39,7 @@ import TopKeyView from "@/components/UsagePage/components/EntityUsage/TopKeyView
 import { MoneyCell } from "@/components/shared/table_cells";
 import { hasCapability } from "@/utils/capabilities";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UsagePageProps {
   accessToken: string | null;
@@ -73,6 +72,7 @@ const isAdminOrAdminViewer = (role: string | null): boolean => {
 };
 
 const TeamSpendBarList: React.FC<{ data: TeamSpendTotal[] }> = ({ data }) => {
+  const t = useT();
   const max = Math.max(0, ...data.map((team) => team.value));
 
   return (
@@ -95,6 +95,7 @@ const TeamSpendBarList: React.FC<{ data: TeamSpendTotal[] }> = ({ data }) => {
 };
 
 const UsagePage: React.FC<UsagePageProps> = ({ accessToken, token, userRole, userID, keys, premiumUser }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const canViewGlobalSpend = hasCapability(userRole, "viewGlobalSpend");
   const currentDate = new Date();

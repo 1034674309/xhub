@@ -27,8 +27,10 @@ class RoutingCases:
             first_id = self.deployment(definition, provider, model, temporary=True, route_tag="weight-a")
             second_id = self.deployment(definition, provider, model, temporary=True, route_tag="weight-b")
             deployment_ids.extend((first_id, second_id))
+            excluded_ids = [row["id"] for row in self.state["deployments"]
+                            if row["public_name"] == model and row["id"] not in deployment_ids]
             initial = weighted_acceptance_route(model, first_id, second_id,
-                                                weights["initial_weights"], timeout)
+                                                weights["initial_weights"], timeout, excluded_ids)
             route, _ = self.api("/route_template/new", {
                 "name": "real-acceptance-cache-weight-" + self.run, "body": initial})
             route_id = route["id"]
@@ -39,7 +41,7 @@ class RoutingCases:
                 temporary_keys.append({**key, **created, "profile": "logic-chain", "call_model": model})
             primary, isolated = temporary_keys
             marker = "cache-weight-" + self.run
-            body = {"model": model, "messages": [{"role": "user",
+            body = {"model": model, "session_id": marker, "messages": [{"role": "user",
                     "content": "Reply only OK. " + marker}], "max_tokens": 32}
 
             before = len(self.observer.rows)
@@ -85,7 +87,7 @@ class RoutingCases:
             self.api("/key/unblock", {"key": primary["key"]})
 
             updated = weighted_acceptance_route(model, first_id, second_id,
-                                                weights["updated_weights"], timeout)
+                                                weights["updated_weights"], timeout, excluded_ids)
             self.api("/route_template/" + route_id + "/update", {"body": updated})
             before = len(self.observer.rows)
             switched, switched_headers, _, switched_call = self.chat_request(primary, body)
@@ -116,7 +118,7 @@ class RoutingCases:
                 self.save()
 
     def verify_fallback_policy_chain(self, key):
-        """用途：组合验证 429 跨真实模型回退、重复请求禁用缓存、回退目标白名单复核及 disable_fallbacks；参数为基线密钥，返回无；临时故障部署、模板和密钥均 finally 删除。"""
+        """用途：组合验证 429 跨真实模型回退、成功正文缓存及零费用、目标白名单复核和 disable_fallbacks；参数为基线密钥，返回无；临时故障部署、模板和密钥均 finally 删除。"""
         model = self.state["chat_models"]["fennoai"]
         # chat_models 记录两家供应商共用的公开模型，不能作为跨模型回退目标；
         # 使用清单中独立的七牛 GLM 模型，并把主模型两家的健康部署全部排除。
@@ -127,12 +129,14 @@ class RoutingCases:
         definition = next(row for row in self.data["models"] if row["id"] == "fenno-chat")
         healthy_ids, fallback_id = fallback_acceptance_deployments(
             self.state["deployments"], model, fallback_model, fallback_definition["provider"])
+        excluded_fallback_ids = [row["id"] for row in self.state["deployments"]
+                                 if row["public_name"] == fallback_model and row["id"] != fallback_id]
         fault_id = self.deployment(definition, provider, model, fault=True, temporary=True)
         route_id, temporary_keys = None, []
         try:
             route, _ = self.api("/route_template/new", {"name": "real-acceptance-fallback-" + self.run,
                 "body": fallback_acceptance_route(model, fault_id, healthy_ids, fallback_model, fallback_id,
-                                                    self.data["routing"]["timeout_seconds"])})
+                                                    self.data["routing"]["timeout_seconds"], excluded_fallback_ids)})
             route_id = route["id"]
             for suffix, models in (("allowed", [model, fallback_model]), ("primary-only", [model])):
                 created, _ = self.api("/key/generate", {"key_alias": "real-fallback-" + suffix,
@@ -141,22 +145,36 @@ class RoutingCases:
                 temporary_keys.append({**key, **created, "profile": "logic-chain", "call_model": model})
             allowed, primary_only = temporary_keys
             marker = "fallback-repeat-" + self.run
-            body = {"model": model, "messages": [{"role": "user",
+            body = {"model": model, "session_id": marker, "messages": [{"role": "user",
                     "content": "Reply only OK. " + marker}], "max_tokens": 32}
             repeat_count = self.data["logic_chains"]["fallback_cache"]["repeat_requests"]
+            first_answer = None
             for repeat in range(1, repeat_count + 1):
+                # 首次真实回退后重复同一正文；缓存命中必须无上游增量并独立记录零费用。
                 before = len(self.observer.rows)
                 answer, headers, _, call_id = self.chat_request(allowed, body)
                 rows = self.observed_since(before, marker)
                 route = [(row.get("provider"), row.get("route_tag"), row.get("status")) for row in rows]
-                if response_cache_hit(headers) or route != [("fennoai", "fault", 429), ("qiniu", "default", 200)]:
-                    raise AssertionError("回退请求没有按 Fenno 429 到七牛真实 200 执行，或错误命中缓存")
-                cost = bill_check(self.wait_bill(call_id), allowed, self.data["billing"])
+                expected_route = [("fennoai", "fault", 429), ("qiniu", "default", 200)] if repeat == 1 else []
+                if response_cache_hit(headers) != (repeat > 1) or route != expected_route:
+                    raise AssertionError(f"回退第 {repeat} 轮缓存或调用链错误：预期={expected_route}，实际={route}")
+                if repeat == 1:
+                    first_answer = answer
+                elif answer != first_answer:
+                    raise AssertionError("回退缓存正文与首次成功响应不一致")
+                bill = self.wait_bill(call_id)
+                if bill.get("model") != model or bill.get("session_id") != marker or bill.get("session_source") != "explicit":
+                    raise AssertionError(f"回退第 {repeat} 轮账单未保留请求模型或明确会话：model={bill.get('model')}，session_id={bill.get('session_id')}，session_source={bill.get('session_source')}")
+                if repeat == 1:
+                    cost = bill_check(bill, allowed, self.data["billing"])
+                else:
+                    cache_bill_check(bill, allowed, first_answer["usage"])
+                    cost = 0
                 self.action_ok(model + " → " + fallback_model, protocol,
-                               f"第 {repeat}/{repeat_count} 次 429 跨真实模型回退",
-                               f"Fenno fault=429，Fenno 健康零权重=0 次，Qiniu 真实=200，cache_hit=false，金额={cost:.9f}，usage={answer['usage']}")
-            self.action_ok(model + " → " + fallback_model, protocol, "配置回退禁用响应缓存",
-                           f"完全相同正文执行={repeat_count} 次，每次均重新发生 fault 429 和真实回退 200")
+                               f"第 {repeat}/{repeat_count} 轮回退及成功正文复用",
+                               f"调用链={route}，健康零权重=0 次，cache_hit={repeat > 1}，金额={cost:.9f}，usage={answer['usage']}")
+            self.action_ok(model + " → " + fallback_model, protocol, "回退成功响应缓存",
+                           f"同会话同正文执行={repeat_count} 次，首次真实故障后回退，后续命中且独立记录零费用")
 
             denied_marker = "fallback-denied-" + self.run
             denied_body = {"model": model, "messages": [{"role": "user",
@@ -172,7 +190,7 @@ class RoutingCases:
                            f"主模型故障后 HTTP={denied_status}，Qiniu 上游增量=0，拒绝原因已核对")
 
             disabled_marker = "fallback-disabled-" + self.run
-            disabled_body = {"model": model, "messages": [{"role": "user",
+            disabled_body = {"model": model, "session_id": marker, "messages": [{"role": "user",
                 "content": "Reply only OK. " + disabled_marker}], "max_tokens": 32,
                 "disable_fallbacks": True}
             before = len(self.observer.rows)
@@ -207,4 +225,3 @@ class RoutingCases:
                            f"profile={profile}，仅供应商={provider} 收到请求，响应包含非零 usage")
         self.report["checks"].append({"name": "profile-routes-real-models-and-vendors", "passed": True})
         self.save()
-

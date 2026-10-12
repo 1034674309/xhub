@@ -20,26 +20,39 @@ func TestFlush(t *testing.T) {
 		}
 	}
 	c.Set("a", []byte("new"))
-	if value, ok := c.Get("a"); !ok || string(value) != "new" {
+	if value, ok := c.Get("a"); !ok || string(value.Body) != "new" {
 		t.Fatal("清理后无法保存新响应")
 	}
 }
 
+// TestKeySeparatesPartsAndCacheCopiesBytes 验证键边界隔离和正文/权限范围的独立副本。
+// 前置内存缓存，覆盖输入、返回值修改及同键替换；无外部资源，缓存随测试释放。
 func TestKeySeparatesPartsAndCacheCopiesBytes(t *testing.T) {
 	if CacheKey("ab", "c") == CacheKey("a", "bc") {
 		t.Fatal("cache key aliases different part boundaries")
 	}
 	c := NewCache()
 	source := []byte("response")
-	c.Set("key", source)
+	models := []string{"group", "backup"}
+	c.Set("key", source, models...)
 	source[0] = 'X'
+	models[0] = "changed"
 	first, ok := c.Get("key")
-	if !ok || string(first) != "response" {
+	if !ok || string(first.Body) != "response" {
 		t.Fatalf("stored value changed: %q, ok=%v", first, ok)
 	}
-	first[0] = 'Y'
+	first.Body[0] = 'Y'
+	first.Models[0] = "changed"
 	second, _ := c.Get("key")
-	if string(second) != "response" {
+	if string(second.Body) != "response" || second.Models[0] != "group" || second.Models[1] != "backup" {
 		t.Fatalf("returned value aliases cache storage: %q", second)
+	}
+	c.Set("key", []byte("replacement"), "new-model")
+	replaced, _ := c.Get("key")
+	if string(replaced.Body) != "replacement" || len(replaced.Models) != 1 || replaced.Models[0] != "new-model" {
+		t.Fatalf("同键替换未同步更新正文和权限: %+v", replaced)
+	}
+	if missing, ok := c.Get("missing"); ok || missing.Body != nil || missing.Models != nil {
+		t.Fatalf("不存在的条目应返回零值: %+v ok=%v", missing, ok)
 	}
 }

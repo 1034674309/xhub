@@ -13,7 +13,7 @@ import { ProjectBaseForm } from "./ProjectBaseForm";
 import { projectFormSchema, type ProjectFormValues, type ProjectSubmitValues } from "./projectFormSchema";
 import { buildProjectUpdateParams } from "./projectFormUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EditProjectModalProps {
   isOpen: boolean;
@@ -71,6 +71,7 @@ export const toFormValues = (project: ProjectResponse): ProjectFormValues => {
 };
 
 function EditProjectForm({ project, onClose, onSuccess }: Omit<EditProjectModalProps, "isOpen">) {
+  const t = useT();
   const form = useZodForm(projectFormSchema, { defaultValues: toFormValues(project) });
   const updateMutation = useUpdateProject();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -124,6 +125,7 @@ function EditProjectForm({ project, onClose, onSuccess }: Omit<EditProjectModalP
 }
 
 export function EditProjectModal({ isOpen, project, onClose, onSuccess }: EditProjectModalProps) {
+  const t = useT();
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[720px]">

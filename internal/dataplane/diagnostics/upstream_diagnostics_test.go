@@ -1,3 +1,5 @@
+// 本文件验证 diagnostics 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package diagnostics
 
 import (
@@ -44,8 +46,11 @@ func TestTraceFirstByteAndEndpoint(t *testing.T) {
 	}
 }
 
-// diagnosticBrokenBody 模拟读取错误及关闭错误，供透明传输失败路径测试使用。
-type diagnosticBrokenBody struct{ cause error }
+// diagnosticBrokenBody 让 Read 和 Close 返回同一预设错误，验证诊断观察器不会吞掉原始传输或关闭失败；不持有外部资源。
+type diagnosticBrokenBody struct {
+	// 读取和关闭都会返回的预设错误，无真实资源。
+	cause error
+}
 
 // Read 接收调用方缓冲区并返回模拟断流错误；供观察器测试调用，不修改缓冲区或外部状态。
 func (b diagnosticBrokenBody) Read(p []byte) (int, error) { return 0, b.cause }
@@ -109,6 +114,7 @@ func TestUpstreamDiagnosticsJSON(t *testing.T) {
 
 // TestUpstreamDiagnosticsSSE 前置分块 SSE 与多行 data，验证转换前缓存和扩展统计合并。
 // 参数 t 为上下文；覆盖超过日志正文上限的流末尾统计及超限恢复，无外部数据。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestUpstreamDiagnosticsSSE(t *testing.T) {
 	for _, prefix := range []string{"", "data: {\"delta\":\"" + strings.Repeat("a", 3<<20) + "\"}\n\n", "data: " + strings.Repeat("a", (8<<20)+1) + "\n\n"} {
 		body := prefix + "data: {\"message\": {\"usage\": {\"input_tokens\":20,\"details\":{}}}}\r\n\r\n" +

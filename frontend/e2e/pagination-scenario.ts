@@ -48,10 +48,12 @@ test("日志分页完整流程：会话合并后翻页", async ({ page }) => {
       const count = failure ? 26 : 60;
       for (let i = 0; i < count; i++) {
         const response = await page.request.post(GATEWAY + "/v1/chat/completions", {
-          headers: { Authorization: "Bearer " + key.key, "session-id": model + "-" + (failure ? "shared" : Math.floor(i / 2)) },
+          // 两轮共享标准会话 ID；仅使用旧 session-id 会被指纹分成不同组，无法验证真实分页。
+          headers: { Authorization: "Bearer " + key.key, "X-Session-Id": model + "-" + (failure ? "shared" : Math.floor(i / 2)) },
           data: { model, messages: [{ role: "user", content: "pagination " + i }] },
         });
         expect(response.status(), await response.text()).toBe(failure ? 502 : 200);
+        expect(response.headers()["x-session-id"]).toBe(model + "-" + (failure ? "shared" : Math.floor(i / 2)));
       }
       const total = failure ? 26 : 30;
       const query = new URLSearchParams({ model, group_by_session: String(!failure), status_filter: failure ? "error" : "non_error", page_size: "25" });
@@ -128,18 +130,29 @@ test("日志分页完整流程：失败请求逐条翻页", async ({ page }) => 
     expect(deployment.status(), await deployment.text()).toBe(200);
     const deploymentId = (await deployment.json()).model_info.id;
     let keyId: string | undefined;
+    let templateID = "";
     try {
-      const generated = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: model } });
+      // 验证 26 条真实上游错误日志，关闭本用例冷却以免后续请求变成选路提前拒绝。
+      const template = await page.request.post(GATEWAY + "/route_template/new", { headers, data: {
+        name: model + "-pagination",
+        body: { model_routes: [], routing_groups: [], fallbacks: [], context_window_fallbacks: [], content_policy_fallbacks: [],
+          retry_policy: { max_attempts: 1, timeout_seconds: 60, failure_threshold: 0, cooldown_seconds: 0 } },
+      } });
+      expect(template.status(), await template.text()).toBe(200);
+      templateID = (await template.json()).id;
+      const generated = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: model, route_template_id: templateID } });
       expect(generated.status(), await generated.text()).toBe(200);
       const key = await generated.json();
       keyId = key.token_id;
       const count = failure ? 26 : 60;
       for (let i = 0; i < count; i++) {
         const response = await page.request.post(GATEWAY + "/v1/chat/completions", {
-          headers: { Authorization: "Bearer " + key.key, "session-id": model + "-" + (failure ? "shared" : Math.floor(i / 2)) },
+          // 失败日志也使用标准 ID；归组信号与逐条错误分页相互独立。
+          headers: { Authorization: "Bearer " + key.key, "X-Session-Id": model + "-" + (failure ? "shared" : Math.floor(i / 2)) },
           data: { model, messages: [{ role: "user", content: "pagination " + i }] },
         });
         expect(response.status(), await response.text()).toBe(failure ? 502 : 200);
+        expect(response.headers()["x-session-id"]).toBe(model + "-" + (failure ? "shared" : Math.floor(i / 2)));
       }
       const total = failure ? 26 : 30;
       const query = new URLSearchParams({ model, group_by_session: String(!failure), status_filter: failure ? "error" : "non_error", page_size: "25" });
@@ -193,6 +206,7 @@ test("日志分页完整流程：失败请求逐条翻页", async ({ page }) => 
         const deleted = await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [keyId] } });
         expect(deleted.status(), await deleted.text()).toBe(200);
       }
+      if (templateID) expect((await page.request.post(GATEWAY + "/route_template/" + templateID + "/delete", { headers, data: {} })).status()).toBe(200);
       const removed = await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: deploymentId } });
       expect(removed.status(), await removed.text()).toBe(200);
     }

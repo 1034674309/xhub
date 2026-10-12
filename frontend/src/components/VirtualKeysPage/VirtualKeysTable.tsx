@@ -23,7 +23,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { KeyResponse, Team } from "../key_team_helpers/key_list";
 import KeyInfoView from "../templates/key_info_view";
 import { getKeyTableColumns, KEY_TABLE_HIDDEN_COLUMNS, KEY_TABLE_SORT_FIELDS } from "./keyTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VirtualKeysTableProps {
   headerActions?: React.ReactNode;
@@ -76,6 +76,7 @@ const filterValue = (filters: ColumnFiltersState, column: FilterColumn): string 
 
 /** 渲染我的虚拟密钥；headerActions 为创建操作，返回列表或详情。个人路由的查询强制本人范围，URL 筛选不能改变归属；分页及详情导航会更新 URL。 */
 export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
+  const t = useT();
   const { data: fetchedOrganizations } = useOrganizations();
   const organizations = useMemo(() => fetchedOrganizations ?? [], [fetchedOrganizations]);
   const { data: fetchedTeams } = useAllTeams();

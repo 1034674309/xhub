@@ -17,9 +17,10 @@ import {
 import { VectorStore } from "@/components/vector_store_management/types";
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function VectorStoreProviderCell({ provider }: { provider: string }) {
+  const t = useT();
   const { displayName, logo } = getVectorStoreProviderLogoAndName(provider);
   return (
     <div className="flex items-center gap-2">
@@ -39,6 +40,7 @@ function VectorStoreProviderCell({ provider }: { provider: string }) {
 }
 
 function VectorStoreFilesCell({ vectorStore }: { vectorStore: VectorStore }) {
+  const t = useT();
   const ingestedFiles = vectorStore.vector_store_metadata?.ingested_files || [];
   if (ingestedFiles.length === 0) {
     return <span className="text-sm text-muted-foreground">-</span>;
@@ -65,6 +67,7 @@ interface VectorStoreRowActionsProps {
 }
 
 function VectorStoreRowActions({ vectorStore, onEdit, onDelete }: VectorStoreRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

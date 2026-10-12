@@ -2,6 +2,48 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+进程 Open Redis 并共享 Client；affinity 严格接口保留错误，热状态宽松接口根据自身契约降级。用量消费者先提交 IAM，再 Ack；退出关闭 Client。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| Open(url) / Close() | 建立与释放 Redis 客户端 |
+| ReadAffinity(ctx,key) | 未命中为空串 nil，故障保留错误 |
+| CompareAffinity / WriteAffinity | 原子比较或严格发布并设置 TTL |
+
+### 接入 demo
+
+这是供宿主调用的 Go 接入函数。将代码放在仓库内独立包中可编译；实际执行前须由调用方提供下述真实依赖。
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/live"
+)
+
+// ReadDemoAffinity 演示严格共享读取；传入 Redis URL 与独立演示键，返回载荷及存储错误。
+// 不写任何键，调用完成关闭连接；运行需要真实 Redis。
+func ReadDemoAffinity(ctx context.Context, redisURL, key string) (string, error) {
+	client, err := live.Open(redisURL)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	return client.ReadAffinity(ctx, key)
+}
+```
+
+接入函数可编译；真实 Redis 中未存在的演示键返回空串和 nil，网络故障返回错误。
+
+### 错误、状态与副作用
+
+CompareAffinity 必须原子执行，比较失败不能续期。热状态不是最终账本；仅本机降级不能保证多个实例一致。
+
 ## 说明
 
 `internal/live` 管理必须立即在多个网关进程间共享、但不属于 IAM 持久账本的状态：部署冷却、近期延迟和分钟用量、分层 RPM/TPM 计数、尚未落库的花费、可靠用量队列及短期字符串。PostgreSQL 仍是身份和已结算用量的事实来源；本包填补请求准入到 IAM 事务提交之间的窗口。

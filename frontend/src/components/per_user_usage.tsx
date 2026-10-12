@@ -4,7 +4,7 @@ import { BarChart } from "@/components/shared/charts";
 import { DataTable } from "@/components/shared/DataTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { perUserAnalyticsCall } from "./networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PerUserMetrics {
   user_id: string;
@@ -33,6 +33,7 @@ interface PerUserUsageProps {
 
 /** 参数提供登录凭据、标签及数字格式，返回用户用量表和图表；用量页调用，只读请求，失败显示错误，过期响应不覆盖当前页。 */
 const PerUserUsage: React.FC<PerUserUsageProps> = ({ accessToken, selectedTags, formatAbbreviatedNumber }) => {
+  const t = useT();
   // Maximum number of user agent categories to show in charts to prevent color palette overflow
   const MAX_USER_AGENTS = 8;
   const [perUserData, setPerUserData] = useState<PerUserAnalyticsResponse>({

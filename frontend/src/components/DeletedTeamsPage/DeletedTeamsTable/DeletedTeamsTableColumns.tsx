@@ -6,9 +6,10 @@ import { DataTableSortHeader } from "@/components/shared/DataTable";
 import { DateCell, IdCell, IdentityCell, ModelsCell, MoneyCell } from "@/components/shared/table_cells";
 import { DeletedTeam } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { orgDetailHref, userDetailHref } from "@/utils/entityLinks";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function EntityCell({ value, href }: { value: string | null | undefined; href: string | undefined }) {
+  const t = useT();
   if (!value) {
     return <span className="text-muted-foreground">-</span>;
   }

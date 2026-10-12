@@ -28,7 +28,7 @@ import {
 } from "./costOptimizationUtils";
 import SavingsTiles from "@/components/shared/SavingsTiles";
 import { DailyActivityRange } from "./useDailyActivityRange";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UsageTabProps {
   accessToken: string | null;
@@ -45,6 +45,7 @@ const EMPTY_TOOL_SPEND: ToolSpendResponse = {
 const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
 
 const UsageTab: React.FC<UsageTabProps> = ({ accessToken, activity }) => {
+  const t = useT();
   const { dateValue, onDateChange, results, loading, isFetchingMore } = activity;
 
   const startTime = dateValue.from ?? null;
@@ -124,10 +125,10 @@ const UsageTab: React.FC<UsageTabProps> = ({ accessToken, activity }) => {
   const plottedDriverTotal = useMemo(() => byDriver.reduce((sum, d) => sum + d.usd, 0), [byDriver]);
 
   const topTools = useMemo(() => topToolsBySpend(toolSpend?.by_tool ?? []), [toolSpend]);
-  const topToolNames = useMemo(() => topTools.map((t) => t.tool_name), [topTools]);
+  const topToolNames = useMemo(() => topTools.map((t) => t.tool_name), [topTools, t]);
   const topToolsChart = useMemo<Record<string, string | number>[]>(
     () => topTools.map((t) => ({ tool_name: t.tool_name, spend: t.spend })),
-    [topTools],
+    [topTools, t],
   );
   const dailyToolSeries = useMemo(
     () =>

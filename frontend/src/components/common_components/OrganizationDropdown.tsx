@@ -1,7 +1,7 @@
 import React from "react";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { Organization } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface OrganizationDropdownProps {
   organizations?: Organization[] | null;
@@ -24,6 +24,7 @@ const OrganizationDropdown: React.FC<OrganizationDropdownProps> = ({
   placeholder = t("All Organizations"),
   id,
 }) => {
+  const t = useT();
   return (
     <div style={{ minWidth: 280, ...style }}>
       <SearchSelect

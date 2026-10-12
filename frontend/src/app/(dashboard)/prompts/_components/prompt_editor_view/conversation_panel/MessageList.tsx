@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import EmptyState from "./EmptyState";
 import MessageBubble from "./MessageBubble";
 import { Message } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MessageListProps {
   messages: Message[];
@@ -13,6 +13,7 @@ interface MessageListProps {
 }
 
 const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, hasVariables, messagesEndRef }) => {
+  const t = useT();
   return (
     <div className="flex-1 overflow-y-auto p-4 pb-0">
       {messages.length === 0 && <EmptyState hasVariables={hasVariables} />}

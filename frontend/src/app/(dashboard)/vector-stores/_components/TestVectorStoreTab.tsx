@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/combobox";
 import { VectorStoreTester } from "./VectorStoreTester";
 import { VectorStore } from "@/components/vector_store_management/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TestVectorStoreTabProps {
   accessToken: string | null;
@@ -20,6 +20,7 @@ interface TestVectorStoreTabProps {
 const storeLabel = (store: VectorStore) => store.vector_store_name || store.vector_store_id;
 
 const TestVectorStoreTab: React.FC<TestVectorStoreTabProps> = ({ accessToken, vectorStores }) => {
+  const t = useT();
   const [selectedVectorStore, setSelectedVectorStore] = useState<VectorStore | null>(vectorStores[0] ?? null);
 
   if (!accessToken) {

@@ -19,16 +19,16 @@ import { fetchClient } from "@/lib/http/api";
 
 import { buildOrgPatch, orgToForm, type OrgPatchBody } from "./mapper";
 import { orgSettingsSchema } from "./schema";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import RouteTemplateSelect from "@/components/route_templates/RouteTemplateSelect";
 
 export const NO_RESET = "never";
 
 export const BUDGET_DURATION_OPTIONS = [
-  { value: NO_RESET, label: t("No reset") },
-  { value: "24h", label: t("daily") },
-  { value: "7d", label: t("weekly") },
-  { value: "30d", label: t("monthly") },
+  { value: NO_RESET, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No reset"); } },
+  { value: "24h", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("daily"); } },
+  { value: "7d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("weekly"); } },
+  { value: "30d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("monthly"); } },
 ] as const;
 
 /** What the legacy update route actually accepts: the schema's fields plus the id. */
@@ -72,6 +72,7 @@ export const OrgSettingsForm = ({
   onSaved,
   patchOrganization = defaultPatchOrganization,
 }: OrgSettingsFormProps) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const form = useZodForm(orgSettingsSchema, { defaultValues: orgToForm(org) });
   // RHF 按读取字段订阅状态；渲染时订阅 dirtyFields，避免连续编辑多个字段后只提交部分修改项。

@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 import TableIconActionButton from "./IconActionButton/TableIconActionButtons/TableIconActionButton";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export type MemberTableSortValue = string | number | null | undefined;
 
@@ -62,6 +62,7 @@ const roleLabel = (role: string): string => {
 };
 
 function RoleHeaderTitle({ title, tooltip }: { title: string; tooltip?: string }) {
+  const t = useT();
   if (tooltip === undefined) return <>{title}</>;
   return (
     <span className="inline-flex items-center gap-2">
@@ -209,6 +210,7 @@ export default function MemberTable({
   showDeleteForMember,
   emptyText,
 }: MemberTableProps) {
+  const t = useT();
   const [globalFilter, setGlobalFilter] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);

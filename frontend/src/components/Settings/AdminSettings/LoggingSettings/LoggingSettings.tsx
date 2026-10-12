@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { toast } from "@/lib/toast";
 import { CircleHelp } from "lucide-react";
 import React, { useEffect } from "react";
@@ -24,6 +24,7 @@ interface LoggingSettingsFormValues {
 }
 
 const LoggingSettings: React.FC = () => {
+  const t = useT();
   const { mutate, isPending } = useStoreRequestInSpendLogs();
   const { data: proxyConfigData, isLoading } = useProxyConfig(ConfigType.GENERAL_SETTINGS);
   const form = useForm<LoggingSettingsFormValues>({

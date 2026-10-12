@@ -18,7 +18,7 @@ import ResponseMetrics from "@/components/chat_ui/ResponseMetrics";
 import ResponsesImageRenderer from "./ResponsesImageRenderer";
 import { SearchResultsDisplay } from "./SearchResultsDisplay";
 import { MessageType } from "@/components/chat_ui/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChatMessageBubbleProps {
   message: MessageType;
@@ -41,6 +41,7 @@ function ChatMessageBubble({
   codeInterpreterResult,
   accessToken,
 }: ChatMessageBubbleProps) {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(coy);
   const isUser = message.role === "user";
 

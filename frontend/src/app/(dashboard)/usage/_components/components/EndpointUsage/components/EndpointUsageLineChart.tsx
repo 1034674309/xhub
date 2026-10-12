@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { LineChart, type ChartColor } from "@/components/shared/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DailyData } from "@/components/UsagePage/types";
-import { getActiveLocale, t } from "@/i18n";
+import { useT, getActiveLocale } from "@/i18n";
 
 interface EndpointUsageLineChartProps {
   dailyData?: { results: DailyData[] };
@@ -44,6 +44,7 @@ function transformDailyDataToChart(dailyData: DailyData[]): Array<Record<string,
 }
 
 export function EndpointUsageLineChart({ dailyData }: EndpointUsageLineChartProps) {
+  const t = useT();
   const chartData = useMemo(() => {
     if (!dailyData?.results || dailyData.results.length === 0) {
       return [];

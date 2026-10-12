@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface RecognitionMetadata {
   recognizer_name: string;
@@ -25,6 +25,7 @@ const getScoreColor = (score: number): string => {
 };
 
 const PresidioDetectedEntities = ({ entities }: PresidioDetectedEntitiesProps) => {
+  const t = useT();
   const [entityListExpanded, setEntityListExpanded] = useState(true);
   const [expandedEntities, setExpandedEntities] = useState<Record<number, boolean>>({});
 

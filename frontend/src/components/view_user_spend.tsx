@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { modelAvailableCall } from "./networking";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // Define the props type
 interface ViewUserSpendProps {
@@ -12,6 +12,7 @@ interface ViewUserSpendProps {
   selectedTeam: any | null;
 }
 const ViewUserSpend: React.FC<ViewUserSpendProps> = ({ userSpend, userMaxBudget, selectedTeam }) => {
+  const t = useT();
   const { accessToken, userRole, userId: userID } = useAuthorized();
   let [spend, setSpend] = useState(userSpend !== null ? userSpend : 0.0);
   const [maxBudget, setMaxBudget] = useState(

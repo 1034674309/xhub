@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import S3VectorsConfig from "./S3VectorsConfig";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const ACCEPTED_DOCUMENT_EXTENSIONS = ".pdf,.txt,.docx,.md,.doc";
 
@@ -49,6 +49,7 @@ const providerItems = Object.entries(VectorStoreProviders)
 const asText = (value: unknown): string => (typeof value === "string" ? value : "");
 
 const IngestSuccessAlert: React.FC<{ ingestResults: RAGIngestResponse[] }> = ({ ingestResults }) => {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) {
@@ -94,6 +95,7 @@ interface CreateVectorStoreProps {
 }
 
 const CreateVectorStore: React.FC<CreateVectorStoreProps> = ({ accessToken, onSuccess }) => {
+  const t = useT();
   const [documents, setDocuments] = useState<DocumentUpload[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("bedrock");

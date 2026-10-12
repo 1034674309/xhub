@@ -11,7 +11,7 @@ import type { LogEntry } from "./columns";
 import { LOG_FILTER_LABELS, type LogsWindow } from "./log_filter_logic";
 import { RequestLogsFilters } from "./RequestLogsFilters";
 import { getRequestLogsTableColumns } from "./RequestLogsTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface RequestLogsTableProps {
   data: LogEntry[];
@@ -36,6 +36,7 @@ interface RequestLogsTableProps {
 }
 
 function RequestLogsEmptyState({ filtered }: { filtered: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -74,6 +75,7 @@ export function RequestLogsTable({
   toolbarChildren,
   errorsOnly = false,
 }: RequestLogsTableProps) {
+  const t = useT();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const columns = useMemo(() => {

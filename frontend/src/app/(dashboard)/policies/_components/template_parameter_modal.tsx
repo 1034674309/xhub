@@ -15,7 +15,7 @@ import { X } from "lucide-react";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { modelHubCall, enrichPolicyTemplateStream } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TemplateParameter {
   name: string;
@@ -45,6 +45,7 @@ const TemplateParameterModal: React.FC<TemplateParameterModalProps> = ({
   isLoading = false,
   accessToken,
 }) => {
+  const t = useT();
   const [parameterValues, setParameterValues] = useState<Record<string, string>>({});
   const [competitorMode, setCompetitorMode] = useState<"ai" | "manual">("ai");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);

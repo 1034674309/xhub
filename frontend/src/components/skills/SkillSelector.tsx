@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/combobox";
 import { cn } from "@/lib/cva.config";
 import { getClaudeCodePluginsList } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface SkillSelectorProps {
   onChange: (selected: string[]) => void;
@@ -49,6 +49,7 @@ const SkillSelector: React.FC<SkillSelectorProps> = ({
   placeholder = t("Select skills (optional)"),
   disabled = false,
 }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [options, setOptions] = useState<SkillOption[]>([]);
   const [loading, setLoading] = useState(false);

@@ -14,7 +14,7 @@ import { useForm } from "react-hook-form";
 import TeamDropdown from "./common_components/team_dropdown";
 import { toast } from "@/lib/toast";
 import { userCreateCall } from "./networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { iamRoles } from "@/utils/iamRoles";
 import {
   buildCreateUserPayload,
@@ -72,6 +72,7 @@ export const CreateUserButton: React.FC<CreateuserProps> = ({
   onUserCreated,
   isEmbedded = false,
 }) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const form = useForm<CreateUserFormValues>({ defaultValues: EMPTY_CREATE_USER_FORM });
   const [open, setOpen] = useState(false);

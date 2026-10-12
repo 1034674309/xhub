@@ -30,7 +30,7 @@ import {
   storedValuesToForm,
   ToolSearchFormValues,
 } from "./toolSearchForm";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MCPToolSearchSettingsProps {
   accessToken: string | null;
@@ -49,6 +49,7 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
 );
 
 export default function MCPToolSearchSettings({ accessToken }: MCPToolSearchSettingsProps) {
+  const t = useT();
   const { data, isLoading, isError, error } = useMCPToolSearchSettings();
   const { mutate: updateSettings, isPending: isUpdating } = useUpdateMCPToolSearchSettings();
   const form = useForm<ToolSearchFormValues>({ defaultValues: DEFAULT_FORM_VALUES });

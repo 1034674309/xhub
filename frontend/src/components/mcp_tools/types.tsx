@@ -48,17 +48,17 @@ export const AUTH_TYPE = {
 };
 
 export const AUTH_TYPE_ITEMS = [
-  { value: AUTH_TYPE.NONE, label: t("None") },
-  { value: AUTH_TYPE.API_KEY, label: t("API Key") },
-  { value: AUTH_TYPE.BEARER_TOKEN, label: t("Bearer Token") },
-  { value: AUTH_TYPE.TOKEN, label: t("Token") },
-  { value: AUTH_TYPE.BASIC, label: t("Basic Auth") },
+  { value: AUTH_TYPE.NONE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("None"); } },
+  { value: AUTH_TYPE.API_KEY, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("API Key"); } },
+  { value: AUTH_TYPE.BEARER_TOKEN, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Bearer Token"); } },
+  { value: AUTH_TYPE.TOKEN, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Token"); } },
+  { value: AUTH_TYPE.BASIC, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Basic Auth"); } },
   { value: AUTH_TYPE.OAUTH2, label: "OAuth" },
-  { value: AUTH_TYPE.OAUTH2_TOKEN_EXCHANGE, label: t("OAuth Token Exchange (OBO)") },
-  { value: AUTH_TYPE.OAUTH2_ID_JAG, label: t("ID-JAG (Okta Cross App Access)") },
-  { value: AUTH_TYPE.AWS_SIGV4, label: t("AWS SigV4 (Bedrock AgentCore MCPs)") },
-  { value: AUTH_TYPE.TRUE_PASSTHROUGH, label: t("True Passthrough (no LiteLLM auth)") },
-  { value: AUTH_TYPE.OAUTH_DELEGATE, label: t("OAuth Delegate (client-supplied upstream token)") },
+  { value: AUTH_TYPE.OAUTH2_TOKEN_EXCHANGE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("OAuth Token Exchange (OBO)"); } },
+  { value: AUTH_TYPE.OAUTH2_ID_JAG, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("ID-JAG (Okta Cross App Access)"); } },
+  { value: AUTH_TYPE.AWS_SIGV4, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("AWS SigV4 (Bedrock AgentCore MCPs)"); } },
+  { value: AUTH_TYPE.TRUE_PASSTHROUGH, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("True Passthrough (no LiteLLM auth)"); } },
+  { value: AUTH_TYPE.OAUTH_DELEGATE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("OAuth Delegate (client-supplied upstream token)"); } },
 ];
 
 // The two client-forwarded token modes: the caller supplies the upstream Authorization (forwarded
@@ -266,10 +266,10 @@ export const TRANSPORT = {
 };
 
 export const TRANSPORT_ITEMS = [
-  { value: TRANSPORT.HTTP, label: t("Streamable HTTP (Recommended)") },
-  { value: TRANSPORT.SSE, label: t("Server-Sent Events (SSE)") },
-  { value: TRANSPORT.STDIO, label: t("Standard Input/Output (stdio)") },
-  { value: TRANSPORT.OPENAPI, label: t("OpenAPI Spec") },
+  { value: TRANSPORT.HTTP, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Streamable HTTP (Recommended)"); } },
+  { value: TRANSPORT.SSE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Server-Sent Events (SSE)"); } },
+  { value: TRANSPORT.STDIO, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Standard Input/Output (stdio)"); } },
+  { value: TRANSPORT.OPENAPI, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("OpenAPI Spec"); } },
 ];
 
 export const handleTransport = (transport?: string | null, specPath?: string | null): string => {

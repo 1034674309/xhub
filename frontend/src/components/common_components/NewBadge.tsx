@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { useDisableShowNewBadge } from "@/app/(dashboard)/hooks/useDisableShowNewBadge";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export default function NewBadge({ children, dot = false }: { children?: React.ReactNode; dot?: boolean }) {
+  const t = useT();
   const disableShowNewBadge = useDisableShowNewBadge();
 
   if (disableShowNewBadge) {

@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { calculateExpiryPreviewFromDuration, formatExpiresUtc, isKeyExpired } from "@/utils/keyExpiryUtils";
 import { buildRegenerateKeyPayload, type RegenerateKeyFormValues } from "./regenerateKeyPayload";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const DURATION_PATTERN = /^(\d+(s|m|h|d|w|mo))?$/;
 const DURATION_MESSAGE = "Must be a duration like 30s, 30m, 24h, 2d, 1w, or 1mo";
@@ -65,6 +65,7 @@ interface RegenerateKeyModalProps {
 }
 
 export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdate }: RegenerateKeyModalProps) {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const [regeneratedKey, setRegeneratedKey] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);

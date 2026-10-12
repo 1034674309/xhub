@@ -17,8 +17,6 @@ func writeConfig(t *testing.T, body string) string {
 }
 
 const baseConfig = `model_list: []
-router_settings:
-  routing_strategy: simple-shuffle
 general_settings:
   master_key: sk-local-master
   database_url: postgres://user:pass@127.0.0.1:5432/xhub?sslmode=disable
@@ -127,5 +125,26 @@ general_settings:
 	}
 	if !cfg.GeneralSettings.DisableEnvCredentialLogin {
 		t.Fatal("disable_env_credential_login was not read")
+	}
+}
+
+// TestLoadRejectsRetiredRouterSettings 验证配置迁移边界；前置临时 YAML，空旧节合法，实际旧策略必须拒绝。
+// 参数 t 为测试上下文，无返回；Load 不连接外部服务，临时文件由 t.TempDir 自动清理。
+func TestLoadRejectsRetiredRouterSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		rejected   bool
+	}{
+		{"缺省", "", false}, {"空对象", "router_settings: {}\n", false},
+		{"空值", "router_settings: null\n", false},
+		{"旧重试", "router_settings:\n  num_retries: 3\n", true},
+		{"显式零", "router_settings:\n  num_retries: 0\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, baseConfig+tc.body))
+			if (err != nil) != tc.rejected {
+				t.Fatalf("旧执行配置是否拒绝=%v，实际错误=%v", tc.rejected, err)
+			}
+		})
 	}
 }

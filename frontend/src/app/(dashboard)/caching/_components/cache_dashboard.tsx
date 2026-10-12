@@ -28,7 +28,7 @@ import { CacheHealthTab } from "./cache_health";
 import CacheSettings from "./cache_settings";
 import CoordinationRedisSettings from "./coordination_redis_settings";
 import { ErrorDrilldownCard } from "./ErrorDrilldown";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const REQUEST_SERIES = {
   apiRequests: "LLM API requests",
@@ -81,6 +81,7 @@ interface CachePageProps {
 // Helper function to deep-parse a JSON string if possible
 
 const CacheDashboard: React.FC<CachePageProps> = ({ accessToken, token, userRole, userID, premiumUser }) => {
+  const t = useT();
   const anchor1 = useComboboxAnchor();
   const anchor2 = useComboboxAnchor();
   const [selectedApiKeys, setSelectedApiKeys] = useState<string[]>([]);

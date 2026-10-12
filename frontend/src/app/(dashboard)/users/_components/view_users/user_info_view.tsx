@@ -17,7 +17,7 @@ import {
 } from "@/components/networking";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { accountRoleKind, isTeamAdminMembership } from "@/utils/iamRoles";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Combobox,
@@ -176,6 +176,7 @@ export default function UserInfoView({
   initialTab = 0,
   startInEditMode = false,
 }: UserInfoViewProps) {
+  const t = useT();
   const [isEditing, setIsEditing] = useState(startInEditMode);
   const [updatingTeam, setUpdatingTeam] = useState<string | null>(null);
   const [userData, setUserData] = useState<UserInfoV2Response | null>(null);

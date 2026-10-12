@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // Written to sessionStorage so the admin hook (useMcpOAuthFlow), the user hook
 // (useUserMcpOAuthFlow), and the tools re-auth hook (useToolsOAuthFlow) can each
@@ -29,6 +29,7 @@ const resolveDefaultRedirect = () => {
 };
 
 const McpOAuthCallbackContent = () => {
+  const t = useT();
   const searchParams = useSearchParams();
 
   const payload = useMemo(() => {
@@ -93,6 +94,7 @@ const McpOAuthCallbackContent = () => {
 };
 
 const McpOAuthCallbackPage = () => {
+  const t = useT();
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">{t("Loading...")}</div>}>
       <McpOAuthCallbackContent />

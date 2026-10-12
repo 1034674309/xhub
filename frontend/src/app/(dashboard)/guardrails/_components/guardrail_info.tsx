@@ -47,11 +47,11 @@ import GuardrailOptionalParams from "./guardrail_optional_params";
 import GuardrailProviderFields from "./guardrail_provider_fields";
 import PiiConfiguration from "./pii_configuration";
 import ToolPermissionRulesEditor, { ToolPermissionConfig } from "./tool_permission/ToolPermissionRulesEditor";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const DEFAULT_ON_ITEMS = [
-  { label: t("Yes"), value: true },
-  { label: t("No"), value: false },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Yes"); }, value: true },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No"); }, value: false },
 ];
 
 export interface GuardrailInfoProps {
@@ -69,6 +69,7 @@ export interface GuardrailInfoProps {
  * 测试：guardrail_info.integration.test.tsx；旧工具/PII 分支无新增专门测试。
  */
 const GuardrailInfoView: React.FC<GuardrailInfoProps> = ({ guardrailId, onClose, accessToken, isAdmin }) => {
+  const t = useT();
   const [guardrailData, setGuardrailData] = useState<any>(null);
   const [guardrailProviderSpecificParams, setGuardrailProviderSpecificParams] = useState<any>(null);
   const [loading, setLoading] = useState(true);

@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { userDailyActivityAggregatedCall } from "../networking";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const USAGE_QUERY_KEY = "chat-user-usage";
 
@@ -62,6 +62,7 @@ function formatNumber(n: number): string {
 }
 
 function SparklineBar({ data, maxVal }: { data: number[]; maxVal: number }) {
+  const t = useT();
   const barWidth = Math.max(2, Math.floor(200 / Math.max(data.length, 1)));
   const height = 48;
   return (
@@ -91,6 +92,7 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
 ];
 
 const UsagePanel: React.FC<Props> = ({ accessToken, userId }) => {
+  const t = useT();
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
   const { start, end } = getDateRange(timeRange);
 

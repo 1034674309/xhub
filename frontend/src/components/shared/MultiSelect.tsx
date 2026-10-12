@@ -14,7 +14,7 @@ import {
   ComboboxValue,
   useComboboxAnchor,
 } from "@/components/ui/combobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface MultiSelectOption {
   label: string;
@@ -64,6 +64,7 @@ export function MultiSelect({
   allowCustomValues = false,
   className,
 }: MultiSelectProps) {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [query, setQuery] = useState("");
   const safeOptions = options.filter(

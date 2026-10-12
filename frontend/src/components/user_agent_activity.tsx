@@ -20,7 +20,7 @@ import { userAgentSummaryCall, tagDauCall, tagWauCall, tagMauCall, tagDistinctCa
 import PerUserUsage from "./per_user_usage";
 import type { DateRangePickerValue } from "@/components/shared/date_picker_types";
 import { ChartLoader } from "./shared/chart_loader";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // New interfaces for the updated API response
 interface TagActiveUsersResponse {
@@ -61,6 +61,7 @@ interface UserAgentActivityProps {
 }
 
 const UserAgentActivity: React.FC<UserAgentActivityProps> = ({ accessToken, userRole, dateValue, onDateChange }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   // Maximum number of categories to show in charts to prevent color palette overflow
   const MAX_CATEGORIES = 10;

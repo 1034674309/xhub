@@ -15,17 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { INPUT_POLICY_OPTIONS, OUTPUT_POLICY_OPTIONS } from "./PolicySelect";
 import { getToolPoliciesTableColumns } from "./ToolPoliciesTableColumns";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const ALL_VALUE = "all";
 
 const INPUT_POLICY_FILTER_ITEMS = [
-  { value: ALL_VALUE, label: t("All Input Policies") },
+  { value: ALL_VALUE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("All Input Policies"); } },
   ...INPUT_POLICY_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
 ];
 
 const OUTPUT_POLICY_FILTER_ITEMS = [
-  { value: ALL_VALUE, label: t("All Output Policies") },
+  { value: ALL_VALUE, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("All Output Policies"); } },
   ...OUTPUT_POLICY_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
 ];
 
@@ -45,6 +45,7 @@ interface ToolPoliciesTableProps {
 }
 
 function ToolPoliciesEmptyState({ filtered }: { filtered: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -77,6 +78,7 @@ export function ToolPoliciesTable({
   onInputPolicyChange,
   onOutputPolicyChange,
 }: ToolPoliciesTableProps) {
+  const t = useT();
   const [globalFilter, setGlobalFilter] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -93,14 +95,14 @@ export function ToolPoliciesTable({
       { value: ALL_VALUE, label: t("All Teams") },
       ...teamOptions.map((option) => ({ value: option, label: option })),
     ],
-    [teamOptions],
+    [teamOptions, t],
   );
   const keyAliasFilterItems = useMemo(
     () => [
       { value: ALL_VALUE, label: t("All Keys") },
       ...keyAliasOptions.map((option) => ({ value: option, label: option })),
     ],
-    [keyAliasOptions],
+    [keyAliasOptions, t],
   );
 
   return (

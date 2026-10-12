@@ -9,13 +9,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { LogEntry } from "../columns";
 import { parseToolsFromLog } from "./utils";
 import { ToolItem } from "./ToolItem";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ToolsSectionProps {
   log: LogEntry;
 }
 
 export function ToolsSection({ log }: ToolsSectionProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const tools = parseToolsFromLog(log);
 

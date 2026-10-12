@@ -9,7 +9,7 @@ import PromptEditorView from "./prompt_editor_view";
 import { toast } from "@/lib/toast";
 import { isProxyAdminRole } from "@/utils/roles";
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -24,9 +24,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const ALL_ENVIRONMENTS_LABEL = "All Environments";
 
 const ENVIRONMENT_OPTIONS = [
-  { label: t("Development"), value: "development" },
-  { label: t("Staging"), value: "staging" },
-  { label: t("Production"), value: "production" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Development"); }, value: "development" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Staging"); }, value: "staging" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Production"); }, value: "production" },
 ];
 
 // SelectValue falls back to the raw value unless the root can map it to a label.
@@ -38,6 +38,7 @@ interface PromptsProps {
 }
 
 const PromptsPanel: React.FC<PromptsProps> = ({ accessToken, userRole }) => {
+  const t = useT();
   const [promptsList, setPromptsList] = useState<PromptSpec[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined);

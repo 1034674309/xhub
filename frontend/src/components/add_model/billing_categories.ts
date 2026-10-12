@@ -43,10 +43,10 @@ export type BillingCategory = {
   fields: RateField[];
 };
 
-const OFFPEAK_WINDOW_HINT = t(
+const OFFPEAK_WINDOW_HINT = () => t(
   "USD per 1M tokens · Mon–Fri outside 09:00–12:00 & 14:00–18:00 Beijing time, plus weekends and holidays",
 );
-const PEAK_WINDOW_HINT = t(
+const PEAK_WINDOW_HINT = () => t(
   "USD per 1M tokens · Mon–Fri 09:00–12:00 and 14:00–18:00 Beijing time (excl. public holidays)",
 );
 
@@ -63,19 +63,19 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "token_offpeak",
     modes: ["token"],
     window: "offpeak",
-    title: t("Off-peak"),
-    unit: OFFPEAK_WINDOW_HINT,
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Off-peak"); },
+    /** 渲染时读取时段提示；返回当前语言文案，无副作用。 */ get unit() { return OFFPEAK_WINDOW_HINT(); },
     fields: [
       {
         name: "input_cost_per_token",
-        label: t("Input"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Input"); },
         scale: 1e6,
         catalogKey: "input_cost_per_token",
         ratesFilter: { side: "input", window: "offpeak" },
       },
       {
         name: "output_cost_per_token",
-        label: t("Output"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Output"); },
         scale: 1e6,
         catalogKey: "output_cost_per_token",
         ratesFilter: { side: "output", window: "offpeak" },
@@ -86,19 +86,19 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "token_peak",
     modes: ["token"],
     window: "peak",
-    title: t("Peak"),
-    unit: PEAK_WINDOW_HINT,
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Peak"); },
+    /** 渲染时读取时段提示；返回当前语言文案，无副作用。 */ get unit() { return PEAK_WINDOW_HINT(); },
     fields: [
       {
         name: "input_cost_per_token_peak",
-        label: t("Input (peak)"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Input (peak)"); },
         scale: 1e6,
         catalogKey: "input_cost_per_token_peak",
         ratesFilter: { side: "input", window: "peak" },
       },
       {
         name: "output_cost_per_token_peak",
-        label: t("Output (peak)"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Output (peak)"); },
         scale: 1e6,
         catalogKey: "output_cost_per_token_peak",
         ratesFilter: { side: "output", window: "peak" },
@@ -109,21 +109,21 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "token_cache",
     modes: ["token"],
     window: "all",
-    title: t("Cache"),
-    unit: t("USD per 1M tokens"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Cache"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get unit() { return t("USD per 1M tokens"); },
     fields: [
       {
         name: "cache_read_input_token_cost",
-        label: t("Cache read"),
-        hint: t("What a cached prompt costs. Usually far below the input rate."),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Cache read"); },
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("What a cached prompt costs. Usually far below the input rate."); },
         scale: 1e6,
         catalogKey: "cache_read_input_token_cost",
         ratesFilter: { side: "cache_read", window: "all" },
       },
       {
         name: "cache_creation_input_token_cost",
-        label: t("Cache write"),
-        hint: t("What writing the cache costs. Usually above the input rate."),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Cache write"); },
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("What writing the cache costs. Usually above the input rate."); },
         scale: 1e6,
         catalogKey: "cache_creation_input_token_cost",
         ratesFilter: { side: "cache_write", window: "all" },
@@ -134,19 +134,19 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "per_image",
     modes: ["image"],
     window: "all",
-    title: t("Per image"),
-    unit: t("USD per image"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Per image"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get unit() { return t("USD per image"); },
     fields: [
       {
         name: "input_cost_per_image",
-        label: t("Input image"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Input image"); },
         scale: 1,
         catalogKey: "input_cost_per_image",
         ratesFilter: { side: "input", window: "all" },
       },
       {
         name: "output_cost_per_image",
-        label: t("Output image"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Output image"); },
         scale: 1,
         catalogKey: "output_cost_per_image",
         ratesFilter: { side: "output", window: "all" },
@@ -157,19 +157,19 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "per_second",
     modes: ["second"],
     window: "all",
-    title: t("Per second"),
-    unit: t("USD per second"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Per second"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get unit() { return t("USD per second"); },
     fields: [
       {
         name: "input_cost_per_second",
-        label: t("Input per second"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Input per second"); },
         scale: 1,
         catalogKey: "input_cost_per_second",
         ratesFilter: { side: "input", window: "all" },
       },
       {
         name: "output_cost_per_second",
-        label: t("Output per second"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Output per second"); },
         scale: 1,
         catalogKey: "output_cost_per_second",
         ratesFilter: { side: "output", window: "all" },
@@ -180,12 +180,12 @@ export const BILLING_CATEGORIES: BillingCategory[] = [
     id: "per_query",
     modes: ALL_MODES,
     window: "all",
-    title: t("Search"),
-    unit: t("USD per search query"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get title() { return t("Search"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get unit() { return t("USD per search query"); },
     fields: [
       {
         name: "search_context_cost_per_query",
-        label: t("Per search"),
+        /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Per search"); },
         scale: 1,
         catalogKey: "search_context_cost_per_query",
         ratesFilter: { side: "output", window: "all" },

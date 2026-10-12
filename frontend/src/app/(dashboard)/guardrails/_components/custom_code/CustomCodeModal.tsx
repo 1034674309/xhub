@@ -1,5 +1,5 @@
 import { GuardrailModeSelect } from "../GuardrailModeSelect";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { createGuardrailCall, updateGuardrailCall, testCustomCodeGuardrail } from "@/components/networking";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,7 @@ export default function CustomCodeModal({
   editData,
   readOnly = false,
 }: Props) {
+  const t = useT();
   const [name, setName] = useState("");
   const [code, setCode] = useState(templates.block);
   const [defaultOn, setDefaultOn] = useState(false);

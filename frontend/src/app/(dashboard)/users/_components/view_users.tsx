@@ -18,7 +18,7 @@ import SetPasswordModal from "@/components/SetPasswordModal";
 import { DEBOUNCE_WAIT_MS } from "@/utils/debounceConstants";
 import { accountRoleKind } from "@/utils/iamRoles";
 import { isAdminRole, isProxyAdminRole } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { useDebouncedValue } from "@tanstack/react-pacer/debouncer";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -59,6 +59,7 @@ const ViewUserDashboard: React.FC<ViewUserDashboardProps> = ({
   teams,
   orgAdminOrgIds,
 }) => {
+  const t = useT();
   const isProxyAdmin = userRole ? isProxyAdminRole(userRole) : false;
   const queryClient = useQueryClient();
 

@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { deletePolicyAttachmentCall } from "@/components/networking";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UseDeletePolicyAttachmentProps {
   accessToken: string | null;
@@ -10,6 +10,7 @@ interface UseDeletePolicyAttachmentProps {
 }
 
 export const useDeletePolicyAttachment = ({ accessToken, onSuccess, onError }: UseDeletePolicyAttachmentProps) => {
+  const t = useT();
   return useMutation({
     mutationFn: async (attachmentId: string) => {
       if (!accessToken) {

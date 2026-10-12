@@ -2,13 +2,14 @@ import React from "react";
 import { FileText } from "lucide-react";
 import { MessageType } from "@/components/chat_ui/types";
 import { shouldShowAttachedImage } from "./ResponsesImageUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ResponsesImageRendererProps {
   message: MessageType;
 }
 
 const ResponsesImageRenderer: React.FC<ResponsesImageRendererProps> = ({ message }) => {
+  const t = useT();
   if (!shouldShowAttachedImage(message)) {
     return null;
   }

@@ -1,7 +1,7 @@
 import { useMutation, UseMutationResult } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName } from "@/components/networking";
 import useAuthorized from "../useAuthorized";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface StoreModelInDBParams {
   store_model_in_db: boolean;
@@ -43,6 +43,7 @@ const performStoreModelInDB = async (
 };
 
 export const useStoreModelInDB = (): UseMutationResult<StoreModelInDBResponse, Error, StoreModelInDBParams> => {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   return useMutation<StoreModelInDBResponse, Error, StoreModelInDBParams>({

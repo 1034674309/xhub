@@ -1,6 +1,6 @@
 import { FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface FilePreviewCardProps {
   file: File;
@@ -9,6 +9,7 @@ interface FilePreviewCardProps {
 }
 
 function FilePreviewCard({ file, previewUrl, onRemove }: FilePreviewCardProps) {
+  const t = useT();
   const isPdf = file.name.toLowerCase().endsWith(".pdf");
 
   return (

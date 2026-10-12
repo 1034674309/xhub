@@ -1,3 +1,5 @@
+// 本文件解析 JSON/multipart 的路由字段并保留原始载荷，重建时只替换模型及去除网关字段。
+// 调用关系与边界：原生出站请求载体、正文/URL 处理和 HTTP 转发；具体参数、返回及副作用见各方法说明。
 package transport
 
 import (
@@ -10,8 +12,9 @@ import (
 	"net/textproto"
 )
 
-// bypassPart 保存 multipart 原始分段，模型替换不改变文件字节与 MIME 头。
-// Header 是完整分段头；Name 是字段名；Data 是未经编码转换的正文。
+// bypassPart 保存 multipart 一个原始分段的头、名称及字节内容。
+// ParseBypassBody 按原顺序收集，Payload 重建时仅替换模型和去除网关控制字段，文件内容不做文本转换。
+// 只在当前请求内使用，Data 和 Header 不能作为跨请求共享的可变配置。
 type bypassPart struct {
 	// 原始分段 MIME 头，重建时保留文件名称、类型及扩展头，不包含整个 HTTP 请求头。
 	Header textproto.MIMEHeader
@@ -21,9 +24,9 @@ type bypassPart struct {
 	Data []byte
 }
 
-// bypassBody 同时保存透传字节和用于路由、用量提取的字段投影。
-// Raw 是原始载荷；Fields 是非文件字段；Media、Boundary 保留协议类型与原始边界。
-// Parts 保存原始文件和字段顺序，替换模型时只修改对应字段。
+// bypassBody 同时保存原生请求的完整字节和可用于路由、会话及计价的字段投影。
+// ParseBypassBody 产生，原生执行器消费；JSON 保留原始精度，multipart 保留边界、文件及分段顺序。
+// Payload 构建上游载荷时消费网关控制字段，不改写 Raw；字段投影不能替代原始正文进行无损转发。
 type bypassBody struct {
 	// 客户端原始正文；模型替换或控制字段过滤时构建新的正文，不原地改写观测内容。
 	Raw []byte
@@ -37,10 +40,11 @@ type bypassBody struct {
 	Parts []bypassPart
 }
 
-// parseBypassBody 解析路由和计价需要的字段，同时保留原始 JSON 与 multipart 文件。
-// 参数 raw（[]byte）：已受大小限制的请求体；contentType（string）：原始媒体类型。
-// 返回 bypassBody、error：请求字段、原始分段和边界；非法 JSON、边界或重复模型字段返回错误。
-// 调用：serveBypassCreate、forwardOfficial。测试：native_bypass_test.go。
+// ParseBypassBody 提取原生载荷的路由/计价字段，同时保留完整原字节和 multipart 分段。
+// 参数 raw 为入口已限制大小的载荷，contentType 为原始媒体类型；返回 bypassBody 或解析错误。
+// ServeBypass 创建与转发测量调用；缺少媒体类型按 JSON，JSON 必须为对象，multipart 必须有合法 boundary。
+// 重复模型字段拒绝，避免路由投影与真实发送字段不一致；文件内容、头、顺序和边界保留。
+// 其他媒体类型只保留原文，无法安全模型重写时由 Payload 报错；纯解析，不关闭请求或访问上游。
 func ParseBypassBody(raw []byte, contentType string) (bypassBody, error) {
 	b := bypassBody{Raw: raw, Fields: map[string]any{}}
 	b.Media, _, _ = mime.ParseMediaType(contentType)
@@ -83,10 +87,11 @@ func ParseBypassBody(raw []byte, contentType string) (bypassBody, error) {
 	return b, nil
 }
 
-// Payload 替换用于路由的模型名并剥离网关回退开关；路径固定模型则移除请求体中的模型字段。
-// 参数 field、model（string）：模型字段名和上游 ID；pathModel（bool）：模型是否已经编码在固定路径中。
-// 返回 []byte、error：可发送的原生请求体或序列化错误。JSON 大整数、未知参数、文件字节与边界均保留。
-// 调用：serveBypassCreate。测试：TestNativeBypassJSONAndUsage、TestNativeImageEditMultipart。
+// Payload 构造原生上游正文，替换路由模型并去掉 session_id、disable_fallbacks 等网关控制字段。
+// 参数 field 为登记模型字段，model 为实际上游 ID，pathModel 表示模型已编码在路径；返回字节或重建错误。
+// serveBypassCreate 在选定部署后调用；路径模型移除正文模型，避免供应商收到两个互相冲突的模型信号。
+// 无需改写时直接保留 Raw；JSON 使用 RawMessage 保留大整数与未知扩展，multipart 保留边界、文件字节、头及顺序。
+// 未知媒体类型不能安全改写时返回错误；不发送请求，也不把投影 Fields 的简化值替代原始文件或数字。
 func (b bypassBody) Payload(field, model string, pathModel bool) ([]byte, error) {
 	if field == "" && !pathModel && b.Fields["disable_fallbacks"] == nil && b.Fields["session_id"] == nil {
 		return b.Raw, nil

@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -14,19 +16,22 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
 	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
-// fallbackNativeHost 为原生执行测试提供模型策略；内嵌宿主记录转发与计费，无共享配置修改。
+// fallbackNativeHost 为原生回退测试提供指定请求级策略，其余行为复用 logicHost；不解析真实身份链模板。
 type fallbackNativeHost struct {
+	// 复用原生内存宿主，仅覆写请求策略。
 	*logicHost
-	policy prefs.RouteSettings
+	// 本例生效的完整回退/重试配置。
+	policy router.RouteSettings
 }
 
-// RouteSettingsFor 返回原生执行测试指定的配置；参数为鉴权主体，调用方ServeBypass，无持久化副作用。
-func (h *fallbackNativeHost) RouteSettingsFor(*auth.Principal) prefs.RouteSettings { return h.policy }
+// RouteSettingsFor 是 fallbackNativeHost 的测试接口实现。
+// 忽略身份，返回 h.policy；供 ServeBypass 测试请求级回退快照，不访问模板库。
+// 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
+func (h *fallbackNativeHost) RouteSettingsFor(*auth.Principal) router.RouteSettings { return h.policy }
 
 // TestNativeDedicatedFallbackChain 验证仅配置专用列表时，第一目标5xx后继续剩余目标或目标自身的通用链。
 // 参数 t 为测试上下文，无返回；本地HTTP模拟上下文和内容错误，验证普通4xx终止和异步禁用，Cleanup关闭服务。
@@ -62,7 +67,7 @@ func TestNativeDedicatedFallbackChain(t *testing.T) {
 				}
 			}))
 			t.Cleanup(up.Close)
-			settings := prefs.BuiltinSettings()
+			settings := router.BuiltinSettings()
 			targets := []string{"b", "c"}
 			if tc.child {
 				targets = targets[:1]
@@ -87,24 +92,34 @@ func TestNativeDedicatedFallbackChain(t *testing.T) {
 	}
 }
 
-// fallbackServeHost 为执行单测提供请求私有策略和可观察结果；内存配置不修改共享宿主。
+// fallbackServeHost 为统一执行回退测试覆写策略、模型授权、父响应约束及响应写入；不进行真实计费。
 type fallbackServeHost struct {
+	// 复用统一日志宿主，其余字段控制目标拒绝和固定归属。
 	*logHost
-	settings prefs.RouteSettings
-	deny     string
+	// 本例统一请求策略。
+	settings router.RouteSettings
+	// 被模拟权限拒绝的模型名，空值不拒绝正常模型。
+	deny string
+	// 是否启用首部署父响应约束，用于禁止普通回退。
 	required bool
 }
 
-// RouteSettingsFor 返回单测指定策略；参数为已鉴权主体，无存储或副作用。
-func (h *fallbackServeHost) RouteSettingsFor(*auth.Principal) prefs.RouteSettings { return h.settings }
+// RouteSettingsFor 是 fallbackServeHost 的测试接口实现。
+// 忽略身份，返回 h.settings；供 Serve 测试回退配置，不查询数据库。
+// 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
+func (h *fallbackServeHost) RouteSettingsFor(*auth.Principal) router.RouteSettings { return h.settings }
 
-// WriteChatJSON 记录真实HTTP响应；参数与执行宿主一致，返回无，写入测试响应而不结算。
-func (h *fallbackServeHost) WriteChatJSON(w http.ResponseWriter, _ *auth.Principal, _, _, _, _, _ string, body []byte, status int, _ time.Time, _ string) {
+// WriteChatJSON 是 fallbackServeHost 的测试接口实现。
+// 把参数 status/body 写入 w，忽略身份、缓存、计费参数及可变模型授权范围；无返回，供 HTTP 结果断言，不真实结算。
+// 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
+func (h *fallbackServeHost) WriteChatJSON(w http.ResponseWriter, _ *auth.Principal, _, _, _, _, _ string, body []byte, status int, _ time.Time, _ string, _ ...string) {
 	w.WriteHeader(status)
 	w.Write(body)
 }
 
-// EnforceIdentityLimits 模拟单个目标被拒绝；参数为目标模型，返回许可并在拒绝时写403，无外部权限数据。
+// EnforceIdentityLimits 是 fallbackServeHost 的测试接口实现。
+// 当参数 model 等于 h.deny 时向 w 写 403 并返回 false，否则返回 true；其他参数不参与判断，模拟目标权限拒绝。
+// 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
 func (h *fallbackServeHost) EnforceIdentityLimits(w http.ResponseWriter, _ string, _ *auth.Principal, model string, _ int) bool {
 	if model == h.deny {
 		w.WriteHeader(403)
@@ -113,7 +128,9 @@ func (h *fallbackServeHost) EnforceIdentityLimits(w http.ResponseWriter, _ strin
 	return true
 }
 
-// PlanRoute 返回单测固定部署约束；参数为请求及身份，返回固定计划，无外部会话写入。
+// PlanRoute 是 fallbackServeHost 的测试接口实现。
+// 忽略入站参数，未启用 required 返回空计划；启用时返回首部署稳定 ID 与 Required，验证父响应禁止回退。
+// 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
 func (h *fallbackServeHost) PlanRoute(*http.Request, string, map[string]any, *auth.Principal) dpcontract.RoutePlan {
 	if h.required {
 		return dpcontract.RoutePlan{Required: true, Pinned: router.DeploymentID(h.cfg.ModelList[0]), Target: dpcontract.RouteTarget{DeploymentID: router.DeploymentID(h.cfg.ModelList[0]), Model: "a", Pool: "a"}}
@@ -123,6 +140,7 @@ func (h *fallbackServeHost) PlanRoute(*http.Request, string, map[string]any, *au
 
 // TestServeModelFallback 验证实际HTTP执行顺序、禁用开关、继续请求和权限拒绝。
 // 前置本地上游和内存路由，所有错误与成功均走真实HTTP，服务由Cleanup关闭。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestServeModelFallback(t *testing.T) {
 	for _, tc := range []struct {
 		name, denied      string
@@ -149,7 +167,7 @@ func TestServeModelFallback(t *testing.T) {
 			}))
 			t.Cleanup(up.Close)
 			cfg := chatConfig(config.ModelEntry{ModelName: "a", LiteLLMParams: map[string]any{"model": "a", "api_base": up.URL, "api_key": "sk-local", "deployment_id": "a"}}, config.ModelEntry{ModelName: "b", LiteLLMParams: map[string]any{"model": "b", "api_base": up.URL, "api_key": "sk-local", "deployment_id": "b"}})
-			settings := prefs.BuiltinSettings()
+			settings := router.BuiltinSettings()
 			settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"b"}}}
 			h := &fallbackServeHost{logHost: newLogHost(cfg, up.Client()), settings: settings, deny: tc.denied, required: tc.required}
 			req := chatRequest(t, "a", false)
@@ -167,6 +185,7 @@ func TestServeModelFallback(t *testing.T) {
 
 // TestFallbackStreamAlreadyWritten 验证配置回退后流式中断仍不切换；前置分段错误流，断言只发送一次。
 // 使用内存RoundTripper，响应和缓存随测试结束释放，不依赖外部供应商。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestFallbackStreamAlreadyWritten(t *testing.T) {
 	attempts := 0
 	client := &http.Client{Transport: auditRoundTripper(func(*http.Request) (*http.Response, error) {
@@ -174,7 +193,7 @@ func TestFallbackStreamAlreadyWritten(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(&FragmentedErrorReader{Parts: [][]byte{[]byte("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")}, Err: errors.New("reset")})}, nil
 	})}
 	cfg := chatConfig(config.ModelEntry{ModelName: "a", LiteLLMParams: map[string]any{"model": "a", "api_base": "https://example.invalid", "api_key": "local"}}, config.ModelEntry{ModelName: "b", LiteLLMParams: map[string]any{"model": "b", "api_base": "https://example.invalid", "api_key": "local"}})
-	settings := prefs.BuiltinSettings()
+	settings := router.BuiltinSettings()
 	settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"b"}}}
 	h := &fallbackServeHost{logHost: newLogHost(cfg, client), settings: settings}
 	w := httptest.NewRecorder()
@@ -186,6 +205,7 @@ func TestFallbackStreamAlreadyWritten(t *testing.T) {
 
 // TestNativeGroupMemberFallback 验证组名原生调用使用实际成员的回退链；参数t为测试上下文，无返回。
 // 前置本地上游及单成员组；覆盖成功回退、显式禁用、异步禁用和目标错误，Cleanup关闭HTTP服务。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestNativeGroupMemberFallback(t *testing.T) {
 	for _, tc := range []struct {
 		name                 string
@@ -218,7 +238,7 @@ func TestNativeGroupMemberFallback(t *testing.T) {
 				}
 			}))
 			t.Cleanup(up.Close)
-			settings := prefs.BuiltinSettings()
+			settings := router.BuiltinSettings()
 			settings.RoutingGroups = []router.Group{{Name: "group", Models: []string{"a"}, Strategy: "simple-shuffle"}}
 			settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"b"}}}
 			h := &fallbackNativeHost{logicHost: officialHost(up,
@@ -241,6 +261,7 @@ func TestNativeGroupMemberFallback(t *testing.T) {
 // TestNativeRetriesPreserveSupplier 验证同步原生对话不依赖跨模型回退配置即可在同一部署重试。
 // 前置本地受控上游和 max_attempts=3；覆盖短暂失败恢复、持续失败耗尽、普通参数错误和异步不重放。
 // 断言真实上游次数和 HTTP 结果；每个子测试由 Cleanup 关闭服务，无持久化数据。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestNativeRetriesPreserveSupplier(t *testing.T) {
 	for _, tc := range []struct {
 		name                          string // 场景名称，区分恢复、耗尽和不允许重放的边界。
@@ -275,7 +296,7 @@ func TestNativeRetriesPreserveSupplier(t *testing.T) {
 				io.WriteString(w, "{\"id\":\"ok\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}")
 			}))
 			t.Cleanup(up.Close)
-			settings := prefs.BuiltinSettings()
+			settings := router.BuiltinSettings()
 			settings.Settings["retry_policy"].(map[string]any)["max_attempts"] = 3
 			// 失败阈值为 1，当前请求仍应完成预算，不能因第一次失败触发冷却而提前放弃供应商。
 			settings.Settings["retry_policy"].(map[string]any)["failure_threshold"] = 1

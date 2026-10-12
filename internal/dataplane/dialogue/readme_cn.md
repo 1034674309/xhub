@@ -2,6 +2,52 @@
 
 [English](readme.md) · [上层架构](../readme_cn.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+在 responses 续接恢复历史之后调用 ResponsesRequestBody，把历史与增量合并，再执行护栏和预算；已水合的部署交给 BuildDialogue/BuildRegisteredOperation，最后由执行器发送。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| ResponsesRequestBody(body, history) | 返回合并后的新请求或错误 |
+| BuildDialogue / BuildRegisteredOperation | 构造显式 transport 的上游请求 |
+| ProbeDialogue(ctx, client, dep) | 发送真实最小探测请求 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	dpdialogue "github.com/sunqirui1987/xhub/internal/dataplane/dialogue"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	history := []llmdialogue.Turn{{Role: "user", Text: "Hello"}, {Role: "assistant", Text: "Hi"}}
+	body, err := dpdialogue.ResponsesRequestBody(map[string]any{"input": "Continue", "previous_response_id": "demo-response"}, history)
+	if err != nil {
+		panic(err)
+	}
+	d, err := llmdialogue.ParseDialogue("openai-responses", body)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(len(d.Turns), body["previous_response_id"] == nil)
+}
+```
+
+输出 3 true：两条父历史加一条本轮输入，父 ID 已在网关消费。
+
+### 错误、状态与副作用
+
+当前输入仍必须有效。StripGatewayFields 原地修改映射；ProbeDialogue 会访问外部服务并可能产生费用，不能当纯校验调用。
+
 ## 职责
 
 统一对话转换、续接与适配 SSE。只转换支持的文本和函数工具，不可表达的能力明确失败；完整原生能力走 bypass。

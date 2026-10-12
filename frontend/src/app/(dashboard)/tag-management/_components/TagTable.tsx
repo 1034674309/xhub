@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Tag } from "@/components/tag_management/types";
 
 import { getTagTableColumns } from "./tagTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TagTableProps {
   data: Tag[];
@@ -21,6 +21,7 @@ interface TagTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -33,6 +34,7 @@ function EmptyState() {
 }
 
 const TagTable: React.FC<TagTableProps> = ({ data, onEdit, onDelete, onSelectTag, isLoading = false }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => getTagTableColumns({ onSelectTag, onEdit, onDelete }), [onSelectTag, onEdit, onDelete]);

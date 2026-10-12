@@ -70,7 +70,7 @@ import {
 } from "./tabVisibilityUtils";
 import TeamMembersComponent from "./TeamMemberTab";
 import { TeamVirtualKeysTable } from "./TeamVirtualKeysTable";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const UI_MANAGED_METADATA_KEYS: ReadonlySet<string> = new Set([
   "logging",
@@ -288,11 +288,11 @@ const numericInputSchema = z.union([z.string(), z.number()]).nullish();
 // 分钟分配只接受非负 INT；空白共享上级，避免小数在页面被默默取整。
 const rateInputSchema = numericInputSchema.refine(
   (value) => value == null || value === "" || (Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 2147483647),
-  t("Must be a non-negative whole number"),
+  { error: () => t("Must be a non-negative whole number") },
 );
 
 const teamUpdateFieldsSchema = z.object({
-  team_alias: z.string().min(1, t("Please input a team name")),
+  team_alias: z.string().min(1, { error: () => t("Please input a team name") }),
   team_description: z.string().optional(),
   blocked: z.boolean().optional(),
   models: z.array(z.string()).optional(),
@@ -315,7 +315,7 @@ const teamUpdateFieldsSchema = z.object({
         model: z
           .string()
           .nullable()
-          .refine((model) => Boolean(model), t("Missing model")),
+          .refine((model) => Boolean(model), { error: () => t("Missing model") }),
         tpm: z.number().nullish(),
         rpm: z.number().nullish(),
       }),
@@ -508,6 +508,7 @@ const TeamInfoView: React.FC<TeamInfoProps> = ({
   premiumUser = false,
   onUpdate,
 }) => {
+  const t = useT();
   const teamUpdateSchema = useMemo(
     () =>
       teamUpdateFieldsSchema.superRefine((values, ctx) => {

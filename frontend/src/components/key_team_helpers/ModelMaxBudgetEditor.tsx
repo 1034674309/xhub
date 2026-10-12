@@ -5,7 +5,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 import React, { useState } from "react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface ModelBudgetConfig {
   budget_limit: number;
@@ -42,11 +42,11 @@ const readNumber = (raw: unknown): number | null => {
 const readPeriod = (raw: unknown): string | null => (typeof raw === "string" && raw !== "" ? raw : null);
 
 export const MODEL_BUDGET_PERIOD_OPTIONS = [
-  { value: "1h", label: t("Hourly") },
-  { value: "24h", label: t("Daily") },
-  { value: "7d", label: t("Weekly") },
-  { value: "30d", label: t("Monthly") },
-  { value: "1mo", label: t("Calendar month") },
+  { value: "1h", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Hourly"); } },
+  { value: "24h", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Daily"); } },
+  { value: "7d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Weekly"); } },
+  { value: "30d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Monthly"); } },
+  { value: "1mo", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Calendar month"); } },
 ];
 
 const DEFAULT_PERIOD = "30d";
@@ -91,6 +91,7 @@ export function ModelMaxBudgetEditor({
   premiumUser,
   usage,
 }: ModelMaxBudgetEditorProps) {
+  const t = useT();
   const [entries, setEntries] = useState<ModelBudgetEntry[]>(() => modelMaxBudgetToEntries(value));
 
   const emitChange = (updated: ModelBudgetEntry[]) => {
@@ -222,6 +223,7 @@ interface ModelMaxBudgetFieldProps extends ModelMaxBudgetEditorProps {
 
 /** The editor with its label, so every form that offers it presents it the same way. */
 export function ModelMaxBudgetField({ hint, ...editorProps }: ModelMaxBudgetFieldProps) {
+  const t = useT();
   return (
     <Field>
       <FieldLabel>

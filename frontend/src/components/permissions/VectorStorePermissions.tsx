@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { DatabaseIcon } from "@heroicons/react/outline";
 import { Badge } from "@/components/ui/badge";
 import { vectorStoreListCall } from "../networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VectorStoreDetails {
   vector_store_id: string;
@@ -15,6 +15,7 @@ interface VectorStorePermissionsProps {
 }
 
 export function VectorStorePermissions({ vectorStores, accessToken }: VectorStorePermissionsProps) {
+  const t = useT();
   const [vectorStoreDetails, setVectorStoreDetails] = useState<VectorStoreDetails[]>([]);
 
   // Fetch vector store details when component mounts

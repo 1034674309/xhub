@@ -1,3 +1,5 @@
+// 本文件验证 dialogue 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package dialogue
 
 import (
@@ -10,13 +12,14 @@ import (
 	"github.com/sunqirui1987/xhub/internal/config"
 )
 
-// probeRoundTripper 把探测请求留在进程内；参数由测试设置，返回固定响应或网络错误，不访问外部服务。
+// probeRoundTripper 是连接探测测试的函数型 HTTP 传输适配器，所有结果由进程内回调提供，不访问供应商。
 type probeRoundTripper func(*http.Request) (*http.Response, error)
 
 // RoundTrip 执行测试回调；参数为待发请求，返回测试指定响应和错误；仅供 ProbeDialogue 单元测试。
 func (f probeRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 // probeDeployment 构造显式 OpenAI Chat 传输部署；参数为上游地址，返回带假凭据的服务端部署，无持久化副作用。
+// 供本包测试调用，不创建外部数据；资源由所属测试管理。
 func probeDeployment(base string) config.ModelEntry {
 	return config.ModelEntry{ModelName: "probe", LiteLLMParams: map[string]any{
 		"model": "upstream-probe", "api_base": base, "api_key": "secret-probe",
@@ -24,6 +27,7 @@ func probeDeployment(base string) config.ModelEntry {
 }
 
 // TestProbeDialogueContracts 验证探测会发送最小英文请求并区分成功、上游状态和损坏协议；全部使用内存客户端且无需清理外部数据。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestProbeDialogueContracts(t *testing.T) {
 	tests := []struct {
 		name, body string
@@ -58,6 +62,7 @@ func TestProbeDialogueContracts(t *testing.T) {
 }
 
 // TestProbeDialogueRedactsNetworkFailure 验证网络错误不会回显带密钥的目标或底层错误；使用内存失败客户端，无外部数据需清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestProbeDialogueRedactsNetworkFailure(t *testing.T) {
 	client := &http.Client{Transport: probeRoundTripper(func(*http.Request) (*http.Response, error) {
 		return nil, io.ErrUnexpectedEOF
@@ -68,8 +73,11 @@ func TestProbeDialogueRedactsNetworkFailure(t *testing.T) {
 	}
 }
 
-// failingProbeReader 模拟读取到部分正文后失败；用于证明底层读取错误不会泄露。
-type failingProbeReader struct{ sent bool }
+// failingProbeReader 首次提供一个 JSON 起始字节，随后报告带敏感哨兵的读取错误，验证探测只暴露安全分类。
+type failingProbeReader struct {
+	// 是否已返回首次 JSON 起始字节，后续读取转入固定失败。
+	sent bool
+}
 
 // Read 首次返回片段、随后返回固定错误；参数是目标缓冲区，返回字节数和测试错误。
 func (r *failingProbeReader) Read(p []byte) (int, error) {
@@ -81,6 +89,8 @@ func (r *failingProbeReader) Read(p []byte) (int, error) {
 }
 
 // TestProbeDialogueBoundaries 验证 nil 客户端、不支持协议、超限正文和读取失败均返回脱敏分类错误；不访问外部服务。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestProbeDialogueBoundaries(t *testing.T) {
 	tests := []struct {
 		name string

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SearchToolTester } from "./SearchToolTester";
 import { AvailableSearchProvider, SearchTool } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SearchToolViewProps {
   searchTool: SearchTool;
@@ -22,6 +22,7 @@ export const SearchToolView: React.FC<SearchToolViewProps> = ({
   accessToken,
   availableProviders,
 }) => {
+  const t = useT();
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
 
   const copyToClipboard = async (text: string | null | undefined, key: string) => {

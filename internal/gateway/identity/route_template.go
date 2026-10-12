@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/sunqirui1987/xhub/internal/router"
 	"net/http"
 	"strings"
 
 	"github.com/sunqirui1987/xhub/internal/authz"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -20,7 +20,7 @@ import (
 // one authorization decision per object, the identity store, and the error
 // writers that turn a store failure into a response.
 //
-// Reading and writing the settings themselves is still prefs. This file only
+// IAM stores the documents and router compiles execution policies. This file
 // manages which named document a scope points at.
 
 // templateView is one template as the console reads it. Body is handed over as
@@ -385,7 +385,7 @@ func RouteTemplateBinding(g Gate, w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		inherited := routeTemplateResolution{ScopeType: prefs.BuiltinSource}
+		inherited := routeTemplateResolution{ScopeType: router.BuiltinSource}
 		if parent, parentID, parentErr := parentScope(g.Identity(), r, scope, scopeID); parentErr != nil {
 			http.Error(w, parentErr.Error(), http.StatusInternalServerError)
 			return
@@ -471,102 +471,42 @@ type routeTemplateResolution struct {
 	ScopeID    string `json:"scope_id,omitempty"`
 }
 
-// resolveRouteTemplate reports what one scope will actually route by.
-//
-// It calls the same resolver the request path calls, with the chain the request
-// path would have built - so the console cannot tell an operator a team routes
-// by one template while the data plane uses another. An earlier version walked
-// the chain a second time here, and the two would have drifted the first time
-// either changed.
-//
-// 参数 g（Gate）：带当前操作者的鉴权守卫，用来读平台默认那一份设置；r（*http.Request）：入站 HTTP 请求；scope（string）：起点范围；scopeID（string）：起点范围内的一行。
-// 返回 routeTemplateResolution（routeTemplateResolution）：生效的模板和它来自哪一层；error（error）：失败原因，nil 表示这一步成功。
-// 调用：RouteTemplateBinding。
-// 测试：route_template_test.go
+// resolveRouteTemplate 为控制台返回范围的生效模板与来源。
+// 参数 g/r 为身份库及请求上下文，scope/scopeID 为 key、team 或 organization 起点；返回解析结果或数据库错误。
+// 每层只读取一次绑定，与请求共用 IAM 的选择规则；悬空模板回到内置设置，不保存缓存或错误侧通道。
 func resolveRouteTemplate(g Gate, r *http.Request, scope, scopeID string) (routeTemplateResolution, error) {
-	lookup := &requestLookup{db: g.Identity(), ctx: ctx0(r), byID: map[string]*iam.RouteTemplate{}, bound: map[string]string{}}
-	// The chain above the starting scope is discovered by walking outward, which
-	// is what the store does not already know: the starting row names its parent,
-	// not the other way round.
-	chain := []prefs.ScopeRef{{Kind: scope, ID: scopeID}}
-	at, id, err := parentScope(g.Identity(), r, scope, scopeID)
-	if err != nil {
-		return routeTemplateResolution{}, err
-	}
-	for id != "" && len(chain) < 3 {
-		chain = append(chain, prefs.ScopeRef{Kind: at, ID: id})
+	ids := make([]string, 3)
+	scopeIDs := map[string]string{}
+	for at, id := scope, scopeID; id != ""; {
+		selected, err := g.Identity().ScopeRouteTemplate(ctx0(r), at, id)
+		if err != nil {
+			return routeTemplateResolution{}, err
+		}
+		for i, name := range []string{"key", "team", "organization"} {
+			if at == name {
+				ids[i] = selected
+				scopeIDs[name] = id
+			}
+		}
+		if strings.TrimSpace(selected) != "" {
+			break
+		}
 		at, id, err = parentScope(g.Identity(), r, at, id)
 		if err != nil {
 			return routeTemplateResolution{}, err
 		}
 	}
-	for _, step := range chain {
-		if lookup.TemplateFor(step.Kind, step.ID) != "" {
-			if lookup.err != nil {
-				return routeTemplateResolution{}, lookup.err
-			}
-			resolved := prefs.Resolve(lookup, chain...)
-			if lookup.err != nil {
-				return routeTemplateResolution{}, lookup.err
-			}
-			return routeTemplateResolution{
-				TemplateID: resolved.TemplateID,
-				Name:       resolved.TemplateName,
-				ScopeType:  resolved.Source,
-				ScopeID:    step.ID,
-			}, nil
+	selected, source := iam.SelectRouteTemplate(ids...)
+	if selected != "" {
+		row, err := g.Identity().GetRouteTemplate(ctx0(r), selected)
+		if err != nil {
+			return routeTemplateResolution{}, err
 		}
-		if lookup.err != nil {
-			return routeTemplateResolution{}, lookup.err
+		if row != nil {
+			return routeTemplateResolution{TemplateID: row.ID, Name: row.Name, ScopeType: source, ScopeID: scopeIDs[source]}, nil
 		}
 	}
-	return routeTemplateResolution{ScopeType: prefs.BuiltinSource}, nil
-}
-
-// requestLookup caches the template reads one console request makes.
-type requestLookup struct {
-	byID  map[string]*iam.RouteTemplate
-	bound map[string]string
-	db    *iam.DB
-	ctx   context.Context
-	err   error
-}
-
-// TemplateFor returns the template one scope selects.
-// 参数 kind（string）：key、team 或 organization；id（string）：那一行。
-// 返回 string（string）：选用的模板 id，没选时为空串。
-// 调用：prefs.Resolve。
-// 测试：route_template_test.go
-func (l *requestLookup) TemplateFor(kind, id string) string {
-	key := kind + "\x00" + id
-	if got, ok := l.bound[key]; ok {
-		return got
-	}
-	selected, err := l.db.ScopeRouteTemplate(l.ctx, kind, id)
-	if err != nil {
-		l.err = err
-		return ""
-	}
-	l.bound[key] = selected
-	return selected
-}
-
-// Load returns one template by id.
-// 参数 id（string）：模板 id。
-// 返回 *iam.RouteTemplate（*iam.RouteTemplate）：这一行，没有时为 nil。
-// 调用：prefs.Resolve。
-// 测试：route_template_test.go
-func (l *requestLookup) Load(id string) *iam.RouteTemplate {
-	if got, ok := l.byID[id]; ok {
-		return got
-	}
-	row, err := l.db.GetRouteTemplate(l.ctx, id)
-	if err != nil {
-		l.err = err
-		return nil
-	}
-	l.byID[id] = row
-	return row
+	return routeTemplateResolution{ScopeType: router.BuiltinSource}, nil
 }
 
 // parentScope walks one step outward: key to team, team to organization,
@@ -609,7 +549,7 @@ func parentScope(db *iam.DB, r *http.Request, scope, scopeID string) (string, st
 // 调用：RouteTemplateCreate。
 // 测试：route_template_test.go
 func seedFromBuiltin(supplied any) map[string]any {
-	seed := prefs.BuiltinDocument()
+	seed := router.BuiltinDocument()
 	override, ok := supplied.(map[string]any)
 	if !ok {
 		// An empty or absent body keeps the seed as it stands. RouteTemplateUpdate
@@ -666,7 +606,7 @@ func validateTemplateModelRouting(encoded string) error {
 	if err := json.Unmarshal([]byte(encoded), &document); err != nil {
 		return errors.New("body must be a JSON object")
 	}
-	return prefs.ValidateRouteTemplateDocument(document)
+	return router.ValidateRouteTemplateDocument(document)
 }
 
 // ctx0 is the request context, or the background context when the request has

@@ -2,6 +2,37 @@
 
 [English](README.md) · [全功能实现说明](../docs/development/zh-CN/implementation.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+启动入口依次 config.Load → iam.Open/Migrate → store.Open → gateway.New → Server.Run。宿主用 Handler 嵌入 HTTP 服务，模块用 Use/Handle 安装；管理和推理请求分别遵守身份、动作授权和模型权限。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| gateway.New(cfg,store,iam) | 组装已初始化的真实依赖 |
+| Server.Handler() / Server.Run(addr) | 提供 HTTP handler 或启动监听 |
+| Server.Use(module) / Handle(pattern,handler) | 安装模块和专用处理器 |
+
+### 接入 demo
+
+在 /tmp/xhub-demo.yaml 配置专用 PostgreSQL database_url；只使用演示数据库。完整配置格式见 [config](config/readme_cn.md)。启动会迁移/同步表，关闭演示进程后由数据库所有者清理专用库。
+
+在仓库根目录执行以下命令。
+
+```sh
+go run ./cmd/gateway -config /tmp/xhub-demo.yaml -addr :4000
+
+curl -sS -i http://localhost:4000/health/liveness
+curl -sS -i http://localhost:4000/health/readiness
+```
+
+在另一终端运行 curl。存活通常返回 200 status=ok；数据库 Ping 成功时就绪返回 200 status=ready，失败返回 503。
+
+### 错误、状态与副作用
+
+gateway.New 可能连接 Redis、启动刷新并播种管理员；不是无副作用构造函数。示例应使用专用数据库，不把探针成功当供应商可调用证明。
+
 ## 说明
 
 本目录实现 XHub 的身份、管理控制面、模型数据面、路由、计价、持久化。跨模块回归及共用测试夹具集中在 [cmd/regression](../cmd/regression/readme_cn.md)。cmd 负责组合和启动，internal 的包负责可测试的业务行为；Go 的 internal 导入规则限制外部项目直接依赖这些实现。对外稳定边界是 HTTP 协议和配置文档，不是所有导出的 Go 符号。
@@ -20,7 +51,7 @@ Server.Handler 返回宿主和测试使用的 http.Handler；Handle 安装路由
 
 ### 包间协作契约
 
-httpx.Module/Registrar 定义模块安装；auth.Principal 与 authz.Actor/Object/Scope 连接身份、动作授权和查询范围。dataplane.Adapted、Bypass、Runtime 等宿主接口把身份、存储、路由、日志依赖注入数据面；gateway 子模块通过 Host/Gate 调用父模块，避免循环导入。config.ModelEntry、provider.Transport 和 router 策略连接部署配置与实际执行。每个类型的输入、返回值、错误及副作用由拥有它的子包详细说明。
+util.Module/Registrar 定义模块安装；auth.Principal 与 authz.Actor/Object/Scope 连接身份、动作授权和查询范围。dataplane/contract.Adapted、Bypass、Runtime 等宿主接口把身份、存储、路由、日志依赖注入数据面；gateway 子模块通过 Host/Gate 调用父模块，避免循环导入。config.ModelEntry、provider.Transport 和 router 策略连接部署配置与实际执行。每个类型的输入、返回值、错误及副作用由拥有它的子包详细说明。
 
 ## 内部核心实现
 
@@ -50,12 +81,10 @@ IAM 事务保存事件、归属及费率快照，并按请求/任务标识防止
 | [config](config/readme_cn.md) | 启动配置与模型定义 |
 | [dataplane](dataplane/readme_cn.md) | 推理执行与结算数据面 |
 | [gateway](gateway/readme_cn.md) | HTTP 网关与模块组合 |
-| [hooks](hooks/readme_cn.md) | 请求在途计数 |
 | [httpx](util/httpx.zh-CN.md) | HTTP 错误与模块协议 |
 | [iam](iam/readme_cn.md) | 身份、授权资源与事务账务 |
 | [live](live/readme_cn.md) | Redis 热状态与可靠用量队列 |
 | [llm](llm/readme_cn.md) | 上游请求构造与协议适配 |
-| [plugin](plugin/readme_cn.md) | 上游调用扩展注册 |
 | [provider](provider/readme_cn.md) | 供应商能力与传输登记 |
 | [router](router/readme_cn.md) | 部署过滤、排序与加权分流 |
 | [store](store/readme_cn.md) | 框架配置与模型存储 |

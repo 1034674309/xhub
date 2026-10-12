@@ -22,7 +22,7 @@ import { orgDetailHref, teamDetailHref } from "@/utils/entityLinks";
 
 import { KeyResponse, Team } from "../key_team_helpers/key_list";
 import { Organization } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface KeyStatus {
   tone: StatusTone;
@@ -31,8 +31,8 @@ interface KeyStatus {
 }
 
 const SPEND_BUDGET_SORT_FIELDS: DataTableSortField[] = [
-  { id: "spend", label: t("Spend") },
-  { id: "max_budget", label: t("Budget") },
+  { id: "spend", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Spend"); } },
+  { id: "max_budget", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Budget"); } },
 ];
 
 export const KEY_TABLE_SORT_FIELDS: readonly string[] = [
@@ -65,7 +65,7 @@ const getKeyStatus = (key: KeyResponse): KeyStatus => {
   };
 };
 
-const InfoHeader = ({ label, tooltip }: { label: string; tooltip: string }) => (
+const InfoHeader = ({ label, tooltip }: { label: string; tooltip: string }) => { const t = useT(); return ((
   <span className="flex items-center gap-1">
     {label}
     <HoverCard>
@@ -73,7 +73,7 @@ const InfoHeader = ({ label, tooltip }: { label: string; tooltip: string }) => (
       <HoverCardContent className="w-auto">{tooltip}</HoverCardContent>
     </HoverCard>
   </span>
-);
+)); };
 
 interface KeyTableColumnsDeps {
   allTeams: Team[];

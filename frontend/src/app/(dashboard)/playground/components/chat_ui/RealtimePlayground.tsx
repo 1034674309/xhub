@@ -214,7 +214,7 @@ const RealtimePlayground: React.FC<RealtimePlaygroundProps> = ({
     addMessage,
     appendAssistantText,
     playAudioChunk,
-  ]);
+  , t]);
 
   const disconnect = useCallback(() => {
     stopRecording();
@@ -308,7 +308,7 @@ const RealtimePlayground: React.FC<RealtimePlaygroundProps> = ({
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
     setIsRecording(false);
-  }, []);
+  }, [t]);
 
   const configureSessionRef = useRef(false);
 

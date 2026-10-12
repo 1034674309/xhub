@@ -1,3 +1,5 @@
+// 本文件验证 dialogue 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package dialogue
 
 import (
@@ -13,6 +15,7 @@ import (
 
 // TestDialogueRequestBodyRemovesConsumedProxyFields 验证网关消费的护栏和追踪字段不会进入统一协议转换。
 // 前置：正文包含被护栏改写后的消息、两个代理字段和一个未知能力；结果：仅删除已消费字段，原正文不变，未知能力继续留给解析器拒绝；无外部数据需要清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestDialogueRequestBodyRemovesConsumedProxyFields(t *testing.T) {
 	body := map[string]any{
 		"model": "public", "messages": []any{map[string]any{"role": "user", "content": "[手机号已隐藏]"}},
@@ -46,6 +49,7 @@ func TestDialogueRequestBodyRemovesConsumedProxyFields(t *testing.T) {
 
 // TestBuildRegisteredOperation 验证非对话执行只读取显式 transport，并用注册动作生成地址、鉴权和上游模型，剥离回退开关。
 // 前置条件是本地 OpenAI 图片传输已登记；测试不发网络请求，也不依赖外部凭据；结果只存在内存中，无需清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestBuildRegisteredOperation(t *testing.T) {
 	dep := config.ModelEntry{
 		LiteLLMParams: map[string]any{
@@ -95,6 +99,7 @@ func TestBuildRegisteredOperation(t *testing.T) {
 
 // TestBuildRegisteredOperationRequiresCredentials 验证显式执行缺少连接信息时返回可分类错误。
 // 前置条件是传输已登记但部署没有地址和密钥；测试不访问网络，断言错误后无数据需要清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestBuildRegisteredOperationRequiresCredentials(t *testing.T) {
 	dep := config.ModelEntry{
 		LiteLLMParams: map[string]any{"model": "image-model"},

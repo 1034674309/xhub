@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -8,6 +10,7 @@ import (
 )
 
 // TestApplyStreamTiming 使用固定时刻验证原生流首数据、无数据及同步边界；只修改内存备注，无清理需求。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestApplyStreamTiming(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {

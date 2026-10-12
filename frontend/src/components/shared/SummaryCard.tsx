@@ -5,7 +5,7 @@ import { Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface SummaryCardProps {
   label: string;
@@ -24,7 +24,7 @@ export interface SummaryCardProps {
  */
 const slugOf = (label: string): string => label.toLowerCase().replace(/\s+/g, "-");
 
-const SummaryCard = ({ label, value, hint, info, secondary }: SummaryCardProps) => (
+const SummaryCard = ({ label, value, hint, info, secondary }: SummaryCardProps) => { const t = useT(); return ((
   <Card data-testid={`summary-card-${slugOf(label)}`}>
     <CardHeader className="flex flex-row items-center justify-between space-y-0">
       <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -60,6 +60,6 @@ const SummaryCard = ({ label, value, hint, info, secondary }: SummaryCardProps) 
       </div>
     </CardContent>
   </Card>
-);
+)); };
 
 export default SummaryCard;

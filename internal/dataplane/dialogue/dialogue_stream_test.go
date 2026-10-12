@@ -1,3 +1,5 @@
+// 本文件验证 dialogue 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package dialogue
 
 import (
@@ -12,6 +14,7 @@ import (
 
 // TestDialogueStreamMatrix 验证五种上游到五种用户协议的真实 SSE 文本、工具参数及终态转换。
 // 前置：内存 HTTP 响应含稀疏工具索引；结果：二十五组合保持工具 ID、参数及实测用量；无外部清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestDialogueStreamMatrix(t *testing.T) {
 	streams := map[string][]string{
 		"openai-chat":        {`{"id":"r","choices":[{"index":0,"delta":{"content":"hello"}}]}`, `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":3,"id":"call_x","type":"function","function":{"name":"weather","arguments":"{"}}]}}]}`, `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":3,"function":{"arguments":"\"city\":\"上海\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":3}}`, "[DONE]"},
@@ -55,6 +58,7 @@ func TestDialogueStreamMatrix(t *testing.T) {
 
 // TestDialogueStreamFailure 验证 EOF、上游错误和不完整工具不会产生伪成功或继续重试。
 // 前置：已经输出文本的截断流；结果：已输出标记和失败事件可观察；纯内存无清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestDialogueStreamFailure(t *testing.T) {
 	for _, tail := range []string{"", `data: {"error":{"message":"failed"}}
 

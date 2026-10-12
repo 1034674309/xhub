@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { PaginatedMultiSelect } from "@/components/shared/PaginatedMultiSelect";
 import type { SearchSelectOption } from "@/components/shared/SearchSelect";
 import { useInfiniteTeams } from "@/app/(dashboard)/hooks/teams/useTeams";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface TeamMultiSelectProps {
   value?: string[];
@@ -21,6 +21,7 @@ const TeamMultiSelect: React.FC<TeamMultiSelectProps> = ({
   pageSize = 20,
   placeholder = t("Search teams by alias..."),
 }) => {
+  const t = useT();
   const [search, setSearch] = useState("");
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteTeams(

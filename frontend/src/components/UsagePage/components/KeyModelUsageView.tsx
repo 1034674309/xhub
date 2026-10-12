@@ -6,7 +6,7 @@ import { formatNumberWithCommas } from "@/utils/dataUtils";
 import type { ColumnDef } from "@tanstack/react-table";
 import React, { useState } from "react";
 import { TopModelData } from "../types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface KeyModelUsageViewProps {
   topModels: TopModelData[];
@@ -49,6 +49,7 @@ const columns: ColumnDef<TopModelData>[] = [
 ];
 
 const KeyModelUsageView: React.FC<KeyModelUsageViewProps> = ({ topModels }) => {
+  const t = useT();
   const [viewMode, setViewMode] = useState<"chart" | "table">("table");
 
   if (topModels.length === 0) {

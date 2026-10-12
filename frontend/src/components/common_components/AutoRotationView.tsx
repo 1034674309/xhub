@@ -1,7 +1,7 @@
 import React from "react";
 import { StatusBadge } from "@/components/shared/table_cells";
 import { RefreshIcon, ClockIcon } from "@heroicons/react/outline";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AutoRotationViewProps {
   autoRotate?: boolean;
@@ -22,6 +22,7 @@ const AutoRotationView: React.FC<AutoRotationViewProps> = ({
   variant = "card",
   className = "",
 }) => {
+  const t = useT();
   const formatTimestamp = (timestamp: string | Date) => {
     const date = new Date(timestamp);
     const dateStr = date.toLocaleDateString("en-US", {

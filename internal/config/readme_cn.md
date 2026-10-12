@@ -1,5 +1,58 @@
 # 启动配置与模型定义
 
+[English](readme.md)
+
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+进程入口先 Load，再把同一 Config 交给 IAM/Store 初始化和 gateway.New。Load 只读 YAML 与环境变量，检查 PostgreSQL URL；它不证明数据库、Redis 或供应商可连接。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| Load(path) | 读取并返回 *Config,error |
+| ModelEntry.ParamString(key, fallback) | 读取连接字符串参数 |
+| ModelEntry.Disabled() | 读取明确的停用标记 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo /tmp/xhub-demo.yaml`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/config"
+	"os"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	if len(os.Args) != 2 {
+		panic("usage: demo <config.yaml>")
+	}
+	cfg, err := config.Load(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cfg.RouterSettings.RoutingStrategy, cfg.RouterSettings.NumRetries, cfg.RouterSettings.Timeout)
+}
+```
+
+先将以下内容保存为 /tmp/xhub-demo.yaml：
+
+```yaml
+general_settings:
+  database_url: postgres://localhost/demo
+```
+
+把配置路径作为参数。仅含 general_settings.database_url: postgres://localhost/demo 的 YAML 会输出 random 2 60；示例不连接数据库。
+
+### 错误、状态与副作用
+
+os.environ/NAME 未设置时展开为空；零值触发默认值。不要输出整个 Config，其中可能有密钥和管理员密码。
+
 ## 说明
 
 config 把网关 YAML 启动文件加载为有类型的进程配置，同时保留路由和通用设置中未声明的键，供后续数据库覆盖按键合并。它定义模型部署、路由默认值、数据库与 Redis 地址、初始管理员、可选应急主密钥和花费日志开关。加载只读取文件和环境变量，不连接外部服务，也不改写配置文件。

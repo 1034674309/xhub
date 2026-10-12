@@ -7,7 +7,7 @@ import useCan from "@/app/(dashboard)/hooks/useCan";
 import PaginationStatusAlerts from "@/components/shared/PaginationStatusAlerts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import UsageTab from "./UsageTab";
 import PromptCompressionTab from "./PromptCompressionTab";
 import PromptCachingTab from "./PromptCachingTab";
@@ -20,6 +20,7 @@ interface CostOptimizationViewProps {
 }
 
 const CostOptimizationView: React.FC<CostOptimizationViewProps> = ({ accessToken, userId, userRole }) => {
+  const t = useT();
   const activity = useDailyActivityRange(accessToken, userId, userRole);
   const canViewProxyWideCostData = useCan("viewProxyWideCostData");
   const [visitedTabs, setVisitedTabs] = React.useState<readonly string[]>(["usage"]);

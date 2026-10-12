@@ -13,9 +13,10 @@ import ConversationPanel from "./conversation_panel";
 import PublishModal from "./PublishModal";
 import DotpromptViewTab from "./DotpromptViewTab";
 import VersionHistorySidePanel from "./VersionHistorySidePanel";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const PromptEditorView: React.FC<PromptEditorViewProps> = ({ onClose, onSuccess, accessToken, initialPromptData }) => {
+  const t = useT();
   const getInitialPrompt = (): PromptType => {
     if (initialPromptData) {
       try {

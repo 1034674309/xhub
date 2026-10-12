@@ -1,4 +1,4 @@
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 export type ModelViewType = "groups" | "individual";
 
 const MODEL_VIEW_OPTIONS: readonly { value: ModelViewType; labelKey: string }[] = [
@@ -12,6 +12,7 @@ interface ModelViewToggleProps {
 }
 
 export default function ModelViewToggle({ value, onChange }: ModelViewToggleProps) {
+  const t = useT();
   return (
     <div className="flex bg-muted rounded-lg p-1">
       {MODEL_VIEW_OPTIONS.map((option) => (

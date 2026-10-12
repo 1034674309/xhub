@@ -6,25 +6,30 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/cva.config";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  const t = useT();
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  const t = useT();
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  const t = useT();
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
 function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  const t = useT();
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+  const t = useT();
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
@@ -45,6 +50,7 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  const t = useT();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -72,6 +78,7 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  const t = useT();
   return <div data-slot="dialog-header" className={cn("flex flex-col gap-2", className)} {...props} />;
 }
 
@@ -83,6 +90,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean;
 }) {
+  const t = useT();
   return (
     <div
       data-slot="dialog-footer"
@@ -96,12 +104,14 @@ function DialogFooter({
 }
 
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  const t = useT();
   return (
     <DialogPrimitive.Title data-slot="dialog-title" className={cn("leading-none font-medium", className)} {...props} />
   );
 }
 
 function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+  const t = useT();
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

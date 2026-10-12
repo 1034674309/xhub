@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { QUICK_SELECT_OPTIONS } from "./constants";
 import { getTimeRangeDisplay } from "./logs_utils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface LogsTableToolbarProps {
   startTime: string;
@@ -46,6 +46,7 @@ export function LogsTableToolbar({
   onResetToFirstPage,
   onResetFilters,
 }: LogsTableToolbarProps) {
+  const t = useT();
   const [quickSelectOpen, setQuickSelectOpen] = useState(false);
 
   const applyQuickSelect = (option: { label: string; value: number; unit: string }) => {
@@ -150,6 +151,7 @@ export function LogsTableToolbar({
 }
 
 export function LiveTailBanner({ onStop }: { onStop: () => void }) {
+  const t = useT();
   return (
     <div className="mb-4 flex items-center justify-between rounded-md border border-success/20 bg-success/10 px-4 py-2">
       <span className="text-sm text-success">{t("Auto-refreshing every 15 seconds")}</span>

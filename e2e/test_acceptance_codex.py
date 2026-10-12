@@ -1,5 +1,6 @@
 """Codex 验收模拟器的标准会话协议与持久化证据单元测试。"""
 import copy
+import json
 import tempfile
 import unittest
 from unittest import mock
@@ -37,7 +38,7 @@ def codex_fixture(directory):
                         output=[dict(content=[dict(type="output_text", text="project-test")])],
                         usage=dict(input_tokens=11, output_tokens=7))
         bill = dict(api_key="k", user="u", team_id="t", project_id="p", organization_id="o",
-                    model="gpt-test", session_id="codex-test", prompt_tokens=11, completion_tokens=7,
+                    model="gpt-test", session_id="codex-test", session_source="parent" if previous else "explicit", prompt_tokens=11, completion_tokens=7,
                     spend=0.000025, metadata=dict(cost_breakdown=dict(source="snapshot")),
                     response=response, proxy_server_request=dict(body=stored, headers={
                         "User-Agent": config["user_agent"], "X-Session-Id": "codex-test",
@@ -53,6 +54,65 @@ def codex_fixture(directory):
 
 class CodexSessionTests(unittest.TestCase):
     """验证三轮标准会话协议和失败证据；每项使用自动清理的私有目录，无外部调用。"""
+
+    def test_observer_matches_default_tags_and_rejects_ambiguous_deployments(self):
+        """目的：验证默认标签兼容历史 null 并保留唯一性；前置三轮账单和观察器证据，覆盖缺省、空值、具名错配及重复部署；临时目录自动清理，无外部请求。"""
+        for tag in (None, "", "default", "missing", "other", "duplicate"):
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as directory:
+                dataset, key, _, bills = codex_fixture(directory)
+                dep = dict(id="dep-test", public_name="gpt-test", provider="qiniu", model="upstream-test")
+                if tag != "missing":
+                    dep["route_tag"] = None if tag == "duplicate" else tag
+                dataset.state["deployments"] = [dep, dict(dep, id="dep-duplicate")] if tag == "duplicate" else [dep]
+                dataset.observer = mock.Mock(rows=[])
+                observed = []
+                for bill in bills:
+                    messages = [dict(role="system", content=dataset.data["agent_conversation"]["instructions"])]
+                    messages += copy.deepcopy(bill["proxy_server_request"]["body"]["input"])
+                    observed.append([dict(status=200, forwarded=True, provider="qiniu", model="upstream-test",
+                                          route_tag="default", messages=json.dumps(messages),
+                                          usage=dict(prompt_tokens=11, completion_tokens=7))])
+                replies = [(bill["response"], {"X-Session-Id": "codex-test", "x-litellm-call-id": "call-%d" % index})
+                           for index, bill in enumerate(bills, 1)]
+                with mock.patch("acceptance.chat.acceptance_run_id", side_effect=["test", "test"]), \
+                        mock.patch.object(dataset, "api", side_effect=replies), \
+                        mock.patch.object(dataset, "wait_bill", side_effect=bills), \
+                        mock.patch.object(dataset, "observed_since", side_effect=observed):
+                    if tag in ("other", "duplicate"):
+                        with self.assertRaisesRegex(AssertionError, "匹配数量=" + ("0" if tag == "other" else "2")):
+                            dataset.codex_conversation(key)
+                        self.assertFalse(dataset.report.get("agent_conversations"))
+                    else:
+                        saved = dataset.codex_conversation(key)
+                        self.assertEqual([turn["deployment_id"] for turn in saved["turns"]], ["dep-test"] * 3)
+
+    def test_browser_preflight_revalidates_exact_saved_sessions_without_model_calls(self):
+        """目的：浏览器只读核对其选中的会话；前置完整账单，验证正常、空来源、缺会话和缺身份，目录自动清理。"""
+        for mode in ("valid", "empty_source", "missing_session", "missing_key"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                dataset, key, conversation, bills = codex_fixture(directory)
+                dataset.data["verification_order"] = ["gpt-test", "glm-test"]
+                dataset.state["keys"] = [] if mode == "missing_key" else [dict(key, token_id="k")]
+                glm = copy.deepcopy(conversation)
+                glm["model"] = "glm-test"
+                dataset.report["agent_conversations"] = [] if mode == "missing_session" else [conversation, glm]
+                glm_bills = copy.deepcopy(bills)
+                for bill in glm_bills:
+                    bill["model"] = "glm-test"
+                    bill["proxy_server_request"]["body"]["model"] = "glm-test"
+                for turn in glm["turns"]:
+                    turn["request_body"]["model"] = "glm-test"
+                if mode == "empty_source":
+                    bills[0]["session_source"] = ""
+                with mock.patch.object(dataset, "api", side_effect=[(bill, {}, 200) for bill in bills + glm_bills]) as api:
+                    if mode == "valid":
+                        dataset.validate_browser_codex_sessions()
+                        self.assertEqual(api.call_count, 6)
+                    else:
+                        with self.assertRaisesRegex(AssertionError, "make e2e gpt-1 gpt-2 gpt-3 gpt-4 glm browser"):
+                            dataset.validate_browser_codex_sessions()
+                    self.assertTrue(all(call.args[0].startswith("/spend/logs/ui/") for call in api.call_args_list),
+                                    "browser 前置检查不得隐式发送付费模型请求")
 
     def test_three_turns_send_standard_header_and_revalidate(self):
         """目的：三轮均发送标准头并可复验；前置完整响应账单，验证增量请求、稳定 ID 和检查点，临时目录自动清理。"""
@@ -94,7 +154,7 @@ class CodexSessionTests(unittest.TestCase):
             dataset, key, conversation, bills = codex_fixture(directory)
             turn = conversation["turns"][0]
             dataset.check_codex_turn(key, conversation, turn, bills[0])
-            for field in ("session_id", "model"):
+            for field in ("session_id", "model", "session_source"):
                 for actual in (None, "wrong"):
                     with self.subTest(field=field, actual=actual):
                         changed = copy.deepcopy(bills)

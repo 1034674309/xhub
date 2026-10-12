@@ -49,7 +49,7 @@ import { ToolsSection } from "../ToolsSection";
 import { PrettyMessagesView } from "./PrettyMessagesView";
 import { ClassifierAuditView } from "./ClassifierAuditView";
 import { AUTOROUTER_CLASSIFIER_ORIGIN } from "./ClassifyTag";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { logPromptCacheTokens } from "./promptCacheMetrics";
 
 export interface LogDetailContentProps {
@@ -66,6 +66,7 @@ export interface LogDetailContentProps {
  * 上游响应默认折叠，用户通过标题按钮展开；切换请求时重置折叠状态，复制始终保留完整诊断。
  */
 export function LogDetailContent({ logEntry, isLoadingDetails = false, accessToken }: LogDetailContentProps) {
+  const t = useT();
   const metadata = logEntry.metadata || {};
   const hasError = isRequestFailure(logEntry);
   const errorDetails = hasError ? fullErrorDetails(logEntry) : "";
@@ -292,10 +293,12 @@ export function LogDetailContent({ logEntry, isLoadingDetails = false, accessTok
 // ============================================================================
 
 function DescriptionList({ children }: { children: React.ReactNode }) {
+  const t = useT();
   return <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">{children}</div>;
 }
 
 function DescriptionItem({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-0.5">
       <span className="shrink-0 text-muted-foreground after:content-[':']">{label}</span>
@@ -313,6 +316,7 @@ function CopyButton({
   label: string;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -339,6 +343,7 @@ function CopyButton({
 }
 
 function ErrorDescription({ errorInfo }: { errorInfo: any }) {
+  const t = useT();
   return (
     <div>
       {errorInfo.error_code && (
@@ -356,6 +361,7 @@ function ErrorDescription({ errorInfo }: { errorInfo: any }) {
 }
 
 function TagsSection({ tags }: { tags: Record<string, any> }) {
+  const t = useT();
   return (
     <div className="bg-card rounded-lg shadow-sm w-full max-w-full overflow-hidden p-4 mb-6">
       <span className="font-semibold" style={{ display: "block", marginBottom: 8, fontSize: 16 }}>
@@ -373,6 +379,7 @@ function TagsSection({ tags }: { tags: Record<string, any> }) {
 }
 
 function GuardrailLabel({ label, maskedCount }: { label: string; maskedCount: number }) {
+  const t = useT();
   const handleClick = () => {
     const el = document.getElementById("guardrail-section");
     if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -407,6 +414,7 @@ const CACHE_KEY_TOOLTIP =
   "The key XHub computed for this request in the response cache. Requests with the same cache key share a cached response; a different key means the request content did not match any cached entry.";
 
 function MetricLabel({ label, tooltip }: { label: string; tooltip: string }) {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1">
       {label}
@@ -429,6 +437,7 @@ function MetricLabel({ label, tooltip }: { label: string; tooltip: string }) {
  * from the parsed output and error files, and the models the batch actually ran on.
  */
 function BatchResultsSection({ logEntry, metadata }: { logEntry: LogEntry; metadata: Record<string, unknown> }) {
+  const t = useT();
   const counts = getBatchRequestCounts(metadata);
   const batchId = getBatchIdFromRequestId(logEntry.request_id);
   const batchModels = getBatchModels(metadata);
@@ -473,6 +482,7 @@ function BatchResultsSection({ logEntry, metadata }: { logEntry: LogEntry; metad
 
 /** 展示实测指标；参数为日志和元数据，返回指标视图。由详情组件调用，缓存统计缺失保留未知状态。 */
 function MetricsSection({ logEntry, metadata }: { logEntry: LogEntry; metadata: Record<string, any> }) {
+  const t = useT();
   const ttftMs = logEntry.ttft_ms;
 
   const responseCacheValue = String(logEntry.cache_hit ?? "").toLowerCase();
@@ -617,6 +627,7 @@ function JsonPanel({
   copyLabel: string;
   empty?: string;
 }) {
+  const t = useT();
   return (
     <section className="rounded-md border">
       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -649,6 +660,7 @@ function RequestResponseSection({
   getFormattedResponse,
   logEntry,
 }: RequestResponseSectionProps) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [viewMode, setViewMode] = useState<"pretty" | "json">("pretty");
 
@@ -743,6 +755,7 @@ const guardrailJumpLinkOutcome = (statuses: unknown[]): keyof typeof GUARDRAIL_J
 };
 
 export function GuardrailJumpLink({ guardrailEntries }: { guardrailEntries: any[] }) {
+  const t = useT();
   const outcome = guardrailJumpLinkOutcome(guardrailEntries.map((e) => e?.guardrail_status || e?.status));
   const { className, glyph } = GUARDRAIL_JUMP_LINK_STYLE[outcome];
 
@@ -776,6 +789,7 @@ export function GuardrailJumpLink({ guardrailEntries }: { guardrailEntries: any[
 }
 
 function MetadataSection({ metadata }: { metadata: Record<string, any> }) {
+  const t = useT();
   const [open, setOpen] = useState(true);
 
   return (

@@ -14,7 +14,7 @@ import {
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACTION_ITEMS } from "./action_options";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PrebuiltPattern {
   name: string;
@@ -56,6 +56,7 @@ const PatternModal: React.FC<PatternModalProps> = ({
   onAdd,
   onCancel,
 }) => {
+  const t = useT();
   const selectedPattern = prebuiltPatterns.find((pattern) => pattern.name === selectedPatternName) ?? null;
   const patternGroups = categories
     .map((category) => ({

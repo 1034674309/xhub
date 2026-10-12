@@ -1,7 +1,7 @@
 import React from "react";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { ProjectResponse } from "@/app/(dashboard)/hooks/projects/useProjects";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ProjectDropdownProps {
   projects?: ProjectResponse[] | null;
@@ -23,6 +23,7 @@ const ProjectDropdown: React.FC<ProjectDropdownProps> = ({
   teamId,
   id,
 }) => {
+  const t = useT();
   const filtered = teamId ? projects?.filter((p) => p.team_id === teamId) : projects;
 
   return (

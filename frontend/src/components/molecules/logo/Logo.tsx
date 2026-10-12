@@ -3,7 +3,7 @@ import { getProviderLogoAndName } from "@/components/provider_info_helpers";
 import { resolveLogoSrc } from "@/lib/assetPaths";
 import { cn } from "@/lib/cva.config";
 import { logoTreatmentFor, type LogoTreatment } from "@/lib/logoTreatments";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 type LogoProps = { className?: string } & (
   | { provider: string; src?: never; label?: string }
@@ -16,6 +16,7 @@ const DARK_TREATMENT_CLASS: Readonly<Record<LogoTreatment, string>> = {
 };
 
 export const Logo: React.FC<LogoProps> = ({ provider, src, label, className = "w-4 h-4" }) => {
+  const t = useT();
   const [erroredSrc, setErroredSrc] = useState<string | null>(null);
   const resolvedSrc = provider !== undefined ? getProviderLogoAndName(provider).logo : resolveLogoSrc(src) ?? "";
   const name = label ?? provider ?? "";

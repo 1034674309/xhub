@@ -3,7 +3,7 @@
 import { InheritedBudgetHint, type InheritedBudgetGate } from "@/components/shared/InheritedBudgetHint";
 import { Meter, MeterIndicator, MeterTrack } from "@/components/shared/Meter";
 import { formatNumberWithCommas, getSpendString } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SpendBudgetCellProps {
   spend: number | null | undefined;
@@ -30,6 +30,7 @@ export function SpendBudgetCell({
   spendDecimals = 4,
   budgetDecimals = 0,
 }: SpendBudgetCellProps) {
+  const t = useT();
   const spendValue = typeof spend === "number" && !Number.isNaN(spend) ? spend : 0;
   const budget = maxBudget ?? null;
   const hasBudget = typeof budget === "number" && budget > 0;

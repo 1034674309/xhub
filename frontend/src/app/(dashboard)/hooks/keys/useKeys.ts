@@ -10,7 +10,7 @@ import { createQueryKeys } from "../common/queryKeysFactory";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import { KeyResponse } from "@/components/key_team_helpers/key_list";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const keyKeys = createQueryKeys("keys");
 
@@ -113,6 +113,7 @@ export const useKeys = (
   pageSize: number,
   options: KeyListCallOptions = {},
 ): UseQueryResult<KeysResponse> => {
+  const t = useT();
   const { accessToken, userId } = useAuthorized();
 
   return useQuery<KeysResponse>({
@@ -127,6 +128,7 @@ export const useKeys = (
 const infiniteKeyKeys = createQueryKeys("infiniteKeys");
 
 export const useInfiniteKeys = (pageSize: number, options: KeyListCallOptions = {}) => {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   const infiniteKeyListOptions = {
@@ -151,6 +153,7 @@ export const useDeletedKeys = (
   pageSize: number,
   options: KeyListCallOptions = {},
 ): UseQueryResult<DeletedKeysResponse> => {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   return useQuery<DeletedKeysResponse>({

@@ -59,7 +59,7 @@ const jsonListRule: CoordinationFieldRule = (value) => {
 export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   {
     name: "url",
-    label: t("Redis URL"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Redis URL"); },
     type: "password",
     section: "connection",
     helpText:
@@ -69,7 +69,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "host",
-    label: t("Host"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Host"); },
     type: "string",
     section: "connection",
     helpText: "Redis server hostname or IP address",
@@ -78,7 +78,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "port",
-    label: t("Port"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Port"); },
     type: "integer",
     section: "connection",
     helpText: "Redis server port number",
@@ -89,7 +89,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "username",
-    label: t("Username"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Username"); },
     type: "string",
     section: "connection",
     helpText: "Redis server username (if required)",
@@ -98,7 +98,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "password",
-    label: t("Password"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Password"); },
     type: "password",
     section: "connection",
     helpText: "Redis server password",
@@ -107,7 +107,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "startup_nodes",
-    label: t("Startup Nodes"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Startup Nodes"); },
     type: "list",
     section: "cluster",
     helpText: 'List of startup nodes for Redis Cluster (e.g., [{"host": "127.0.0.1", "port": 7001}])',
@@ -117,7 +117,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "sentinel_nodes",
-    label: t("Sentinel Nodes"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Sentinel Nodes"); },
     type: "list",
     section: "sentinel",
     helpText: 'List of Sentinel nodes (e.g., [["localhost", 26379]])',
@@ -127,7 +127,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "service_name",
-    label: t("Service Name"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Service Name"); },
     type: "string",
     section: "sentinel",
     helpText: "Master service name for Redis Sentinel",
@@ -136,7 +136,7 @@ export const COORDINATION_FIELDS: readonly CoordinationField[] = [
   },
   {
     name: "sentinel_password",
-    label: t("Sentinel Password"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Sentinel Password"); },
     type: "password",
     section: "sentinel",
     helpText: "Password for Redis Sentinel authentication",

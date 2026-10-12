@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CircleHelp } from "lucide-react";
 import React from "react";
 import { useMyTeamMember } from "./useMyTeamMember";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface MyUserTabProps {
   teamId: string;
@@ -32,6 +32,7 @@ const formatRateLimit = (value: number | null | undefined): string => {
 };
 
 export default function MyUserTab({ teamId }: MyUserTabProps) {
+  const t = useT();
   const { data, isLoading, error } = useMyTeamMember(teamId);
 
   if (isLoading) {

@@ -3,7 +3,7 @@ import { Globe2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailSettingsViewProps {
   globalGuardrailNames: Set<string>;
@@ -22,6 +22,7 @@ export function GuardrailSettingsView({
   variant = "card",
   className = "",
 }: GuardrailSettingsViewProps) {
+  const t = useT();
   const optedOutSet = new Set(optedOutGlobalGuardrails);
   const globalsRunning = Array.from(globalGuardrailNames).filter((n) => !optedOutSet.has(n));
   const nonGlobalOptIns = teamGuardrails.filter((n) => !globalGuardrailNames.has(n));

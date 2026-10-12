@@ -17,7 +17,7 @@ import {
   configuredSecretFields,
   isFieldVisible,
 } from "./cacheSettingsUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const ADVANCED_SECTIONS = ["ssl", "cacheManagement", "gcp"] as const;
 
@@ -31,6 +31,7 @@ const toRedisType = (value: unknown): RedisType =>
   REDIS_TYPES.includes(value as RedisType) ? (value as RedisType) : "node";
 
 const CacheSettings: React.FC<CacheSettingsProps> = ({ accessToken }) => {
+  const t = useT();
   const form = useForm<CacheFormValues>({ defaultValues: buildInitialValues({}) });
   const [redisType, setRedisType] = useState<RedisType>("node");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -53,7 +54,7 @@ const CacheSettings: React.FC<CacheSettingsProps> = ({ accessToken }) => {
       console.error("Failed to load cache settings:", error);
       toast.fromError(t("Failed to load cache settings"));
     }
-  }, [accessToken, form]);
+  }, [accessToken, form, t]);
 
   useEffect(() => {
     loadCacheSettings();

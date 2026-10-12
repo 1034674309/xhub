@@ -35,7 +35,7 @@ export function ModelMonitorView({ accessToken }: { accessToken: string | null }
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(false),
     [invalid, setInvalid] = useState(false);
-  // 将筛选保存在地址中，语言切换导致页面重挂载时仍保持当前查看范围。
+  // 将筛选保存在地址中，便于分享当前查看范围并支持浏览器前进后退。
   const [{ supplier, model, metric: selectedMetric }, setFilters] = useQueryStates({
     supplier: parseAsString.withDefault(""),
     model: parseAsString.withDefault(""),
@@ -58,7 +58,7 @@ export function ModelMonitorView({ accessToken }: { accessToken: string | null }
       signal: controller.signal,
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error("monitor request failed");
+        if (!response.ok) throw new Error(String(response.status));
         return parseMonitorData(await response.json());
       })
       .then((result) => {

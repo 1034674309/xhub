@@ -22,10 +22,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { copyToClipboard as utilCopyToClipboard } from "@/utils/dataUtils";
 import { CheckIcon, ChevronRight, CopyIcon } from "lucide-react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const tagEditShape = {
-  name: z.string().min(1, t("Please input a tag name")),
+  name: z.string().min(1, { error: () => t("Please input a tag name") }),
   description: z.string().optional(),
   models: z.array(z.string()).optional(),
   max_budget: z.union([z.string(), z.number()]).optional(),
@@ -45,6 +45,7 @@ interface TagEditFormProps {
 }
 
 const TagEditForm: React.FC<TagEditFormProps> = ({ tag, seedBudgetFields, userModels, onCancel, onSave }) => {
+  const t = useT();
   const [budgetSectionOpen, setBudgetSectionOpen] = useState(false);
   const form = useZodForm(tagEditSchema, {
     defaultValues: {
@@ -147,6 +148,7 @@ interface TagInfoViewProps {
 }
 
 const TagInfoView: React.FC<TagInfoViewProps> = ({ tagId, onClose, accessToken, is_admin, editTag }) => {
+  const t = useT();
   const [tagDetails, setTagDetails] = useState<Tag | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(editTag);
   const [userModels, setUserModels] = useState<string[]>([]);

@@ -1,3 +1,5 @@
+// 本文件定义执行器消费的宿主接口、会话路由计划和日志备注；先读 RequestHost，再读 Adapted/Bypass 的增量能力。
+// 调用关系与边界：数据面与网关之间的能力契约；具体参数、返回及副作用见各方法说明。
 package contract
 
 import (
@@ -7,18 +9,15 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
 	dpdiagnostics "github.com/sunqirui1987/xhub/internal/dataplane/diagnostics"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
-	"github.com/sunqirui1987/xhub/internal/hooks"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
 	"github.com/sunqirui1987/xhub/internal/router"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-// SpendLog 是用量行。聊天循环和 Bypass 都调用它，两边都不自己写数据库。
-// 网关实现在 gateway/spend.go。必须先 RememberExchange 和 AnnotateCall，再 RecordSpend，
-// 因为 RecordSpend 会按 callID 把暂存的头、正文和备注取走并删掉。
+// SpendLog 定义一次调用的日志与计费边界，适配执行器和原生执行器共同使用。
+// 实现由 gateway 提供；先按 callID 暂存交互及备注，再 RecordSpend 消费并清理，避免正文与费用串到另一请求。
+// 接口只描述能力，不持有存储；实现可能写内存、Redis 队列或数据库，测试宿主只捕获断言所需事实。
 type SpendLog interface {
 	// RememberExchange 把这一次调用的请求头、请求体和响应体暂存到 callID 上。
 	// 网关只在打开「在日志里保存请求内容」时才真正落库。
@@ -27,7 +26,7 @@ type SpendLog interface {
 	// 参数 reqBody：原始请求字节。respBody：准备写入日志的响应字节。查询没有正文时传 nil。
 	// 返回：无。
 	// 调用：Serve 的拒绝、缓存命中、流式成功、非流式成功；ServeBypass 的创建和查询。
-	// 测试：gateway/prompt_log_test.go 覆盖 promptJSON 的落库形状。数据面夹具里的实现是空的。
+	// 测试：gateway/prompt_log_test.go 覆盖 promptJSON 的落库形状。测试宿主按需要捕获交互或提供空实现，并不写真实数据库。
 	RememberExchange(callID string, r *http.Request, reqBody, respBody []byte)
 
 	// AnnotateCall 记下首字时间、供应商、缓存和部署。RecordSpend 会按 callID 取走这条备注。
@@ -51,8 +50,9 @@ type SpendLog interface {
 	RecordSpend(w http.ResponseWriter, p *auth.Principal, callID, alias, op string, usage map[string]any, start time.Time, cacheHit bool, status int, depID string)
 }
 
-// RequestHost 是适配和透传共同消费的身份、路由、凭据与传输边界。
-// 网关实现这些方法；协议模块不依赖具体 Server 或数据库。
+// RequestHost 定义两类执行器共有的身份、路由、凭据和 HTTP 能力。
+// gateway 实现此接口，使数据面不依赖具体 Server、身份库或缓存布局；方法的拒绝响应与返回值约定见各项说明。
+// 执行器必须先鉴权、再校验每个实际目标；读到偏好或能力匹配都不等于获得调用权限。
 type RequestHost interface {
 	// RequireLLMPrincipal 解析可以发起推理的身份。失败时响应已经写成 401，并返回 nil。
 	// 参数 w：写 401。r：从 Authorization 或会话 cookie 取身份。
@@ -64,13 +64,14 @@ type RequestHost interface {
 	// 返回：新的身份。密钥被撤销或过期时返回错误，Serve 中止重试。
 	// 调用：Serve 在 num_retries 大于 0 且第一次尝试之后。测试夹具返回固定身份。
 	ResolveRequest(r *http.Request) (*auth.Principal, error)
-	// EnforceIdentityLimits 检查模型允许名单、预算，以及 RPM 或 TPM。拒绝时响应已写好。
-	//
-	// 参数 w、path：写 403 或 429，path 决定错误包络。p：调用方。alias：对外模型名。
-	// 参数 est：EstimateTokens 给出的上界，用来扣 TPM。
-	// 返回：true 表示可以继续。false 表示调用方必须 return。
-	// 调用：Serve 在读完模型名之后，以及每次重试之前。测试夹具恒返回 true。
+	// EnforceIdentityLimits 校验当前模型/组允许名单、预算链，拒绝时由实现写好响应。
+	// 参数 w/path 指定写入器和错误包络，p 为已鉴权主体，alias 为本次实际检查的公开目标，est 为输入文本的启发式 token 估算，并非严格上界。
+	// 返回 true 表示继续，false 表示执行器立即终止；首次请求、重试和缓存中记录的实际目标都需要检查，不更新限流热计数。
 	EnforceIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool
+	// AdmitRequest 首次校验身份、模型和预算，并对本次入站请求执行一次 RPM/TPM 准入。
+	// 参数为响应、路径、主体、公开目标及估算 token；返回是否放行，拒绝已写响应。
+	// 成功占用分钟容量；后续目标切换、缓存目标和重试使用只读 EnforceIdentityLimits。
+	AdmitRequest(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool
 	// GatewayConfig 返回进程配置。Serve 用它的模型表；路由策略和重试次数改读 RouteSettingsFor。
 	// 参数：无。
 	// 返回 *config.Config（*config.Config）：当前进程配置，含模型表和路由策略，不会复制。
@@ -83,10 +84,10 @@ type RequestHost interface {
 	// 没有任何一层选中模板时返回平台默认那一份，行为和这个功能存在之前一样。
 	//
 	// 参数 p（*auth.Principal）：已经解析的调用方，含预算链填入的模板选择。
-	// 返回 prefs.RouteSettings（prefs.RouteSettings）：这次请求生效的设置和来源。
+	// 返回 router.RouteSettings（router.RouteSettings）：这次请求生效的设置和来源。
 	// 调用：dataplane/execution/serve.go
 	// 测试：route_settings_test.go
-	RouteSettingsFor(p *auth.Principal) prefs.RouteSettings
+	RouteSettingsFor(p *auth.Principal) router.RouteSettings
 	// RouteState 返回这一刻的冷却、延迟、用量和正在处理的请求数。没有 Redis 时只有 Busy。
 	// 参数：无。
 	// 返回 router.State（router.State）：这一刻的冷却、延迟、用量和并发，交给路由器排序。
@@ -108,66 +109,44 @@ type RequestHost interface {
 	// 返回：填好密钥的副本。凭证库不可用或凭证无效时返回错误，Serve 跳过该部署。
 	// 调用：Serve 每个部署一次；ServeBypass 在创建和查询时。测试夹具原样返回 dep。
 	AttachCredential(dep config.ModelEntry) (config.ModelEntry, error)
-	// HTTPClient 返回访问上游的客户端。超时来自路由配置。
-	// 参数：无。
-	// 返回 *http.Client（*http.Client）：访问上游的 HTTP 客户端，超时来自路由设置。
-	// 调用：dataplane/execution/official.go、dataplane/execution/serve.go、gateway/wire.go
-	// 测试：bypass_logic_test.go、failure_log_test.go
+	// HTTPClient 返回用于访问上游的共享客户端；无参数，返回指针应按只读配置使用。
+	// 执行器复制客户端并应用本次请求模板的上下文超时，避免改写全局 Timeout 或让启动时超时覆盖请求策略。
+	// 方法本身不发送请求，执行器负责响应正文关闭和取消每次尝试上下文。
 	HTTPClient() *http.Client
-	// NoteFailure 记下这个部署的一次失败，供下次路由决定是否冷却。
-	//
-	// 阈值跟着这次请求的设置走，所以调用方把那设置一并传进来：一个租户把
-	// allowed_fails 调低之后，它的失败按它自己的阈值计数，而不是按全局的值。
-	//
-	// 参数 id：部署 id。settings：这次请求生效的路由设置。返回：无。
-	// 调用：Serve 在 5xx 或 429 之后。实现转到 dataplane.RecordFailure。
-	// 测试：无直接单测
-	NoteFailure(id string, settings prefs.RouteSettings)
+	// NoteFailure 按本次请求生效的策略记录一次部署失败，可能触发冷却。
+	// 参数 id 为 CooldownID 运行身份，settings 为此次解析的模板/模型设置；无返回。
+	// 执行器在网络、429/5xx 或协议失败时调用；宿主委托 runtime.RecordFailure，不能替换为进程全局阈值。
+	NoteFailure(id string, settings router.RouteSettings)
 }
 
-// Adapted 是适配执行器消费的能力；参数方法由网关实现，响应缓存和护栏只属于适配链。
-// 调用 execution.Serve；原生任务归属不属于本接口。
+// Adapted 是统一推理适配入口所需的宿主能力，由 execution.Serve 消费。
+// 在 RequestHost 上增加护栏、响应缓存和响应写入；同时嵌入 SpendLog 统一结算。
+// 不提供原生任务归属，防止统一对话执行器意外耦合供应商任务生命周期。
 type Adapted interface {
+	// 嵌入 RequestHost 的公共能力；执行器通过同一宿主消费，不能省略其中的鉴权或记账约定。
 	RequestHost
 
-	// GuardrailBlocks 在聊天发往上游之前跑护栏。拦截时响应已经写好。
-	// 参数 callID：本次调用 id。body：请求 JSON。
-	// 返回：blocked 为 true 时 msg 是给调用方的说明。未命中时 blocked 为 false，msg 为空。
-	// 调用：Serve，且只在 op 为 chat 或空时。测试：gateway/guardrail_block_test.go。
+	// GuardrailBlocks 在支持的统一对话请求发送前执行护栏，也允许脱敏规则原地修改正文。
+	// 参数 callID 关联本轮调用，body 为已恢复授权历史的请求对象；返回 blocked 和说明 msg。
+	// Serve 对 chat/responses/messages/gemini/vertex/空操作调用，blocked 时由 Serve 写拒绝响应并记账，本方法不表示已经写出 HTTP。
+	// 允许时仍须重新序列化 body，让缓存、日志和编码器消费同一份脱敏后输入。
 	GuardrailBlocks(callID string, body map[string]any) (bool, string)
 
-	// ResponseCache 返回进程内和 Redis 的响应缓存。缓存关闭时 Get 仍然可调用，只是没有命中。
+	// ResponseCache 返回进程内 LRU 响应缓存，正文及实际授权模型/组存放在同一条目，不访问 Redis。
 	// 参数：无。
 	// 返回 *util.DualCache（*util.DualCache）：响应缓存。未命中时 Get 返回空。
 	// 调用：dataplane/execution/serve.go、gateway/wire.go
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	ResponseCache() *util.DualCache
 
-	// HookEngine 返回并发钩子。Begin 占用一个名额，返回的函数在请求结束时释放。 超过并行上限时 Begin 的结果由网关侧写成 429，这里只负责调用 Begin。
-	// 参数：无。
-	// 返回 *hooks.Engine（*hooks.Engine）：并发钩子。Begin 占用一个名额，返回的函数在请求结束时释放。
-	// 调用：dataplane/execution/serve.go、gateway/wire.go
-	// 测试：bypass_logic_test.go、failure_log_test.go
-	HookEngine() *hooks.Engine
-
-	// Extensions 返回推理前的扩展注册表。没有注册项时 Run 不拒绝，调用继续走向上游。
-	// 参数：无。
-	// 返回 *plugin.Registry（*plugin.Registry）：推理前扩展。没有注册项时不会拒绝调用。
-	// 调用：dataplane/execution/serve.go、gateway/wire.go
-	// 测试：bypass_logic_test.go、failure_log_test.go
-	Extensions() *plugin.Registry
-
-	// IncBusy 把该部署正在处理的请求数加一。id 是 api_base|model。RouteState 的 Busy 读这个计数。
-	// 参数 id（string）：部署 id，形状是 api_base|model。空串时计数没有对应的部署。
-	// 返回：无。该部署的在途请求数加一。RouteState 的 Busy 读这个数。
-	// 调用：dataplane/execution/serve.go、gateway/wire.go
-	// 测试：bypass_logic_test.go、failure_log_test.go
+	// IncBusy 增加一次实际 HTTP 尝试的在途计数。
+	// 参数 id 为部署当前 CooldownID 运行身份；无返回，Serve 发送前调用，RouteState 的 Busy 使用同一身份。
+	// 每次调用必须在成功、拨号失败、读取失败和转换失败等路径配对 DecBusy；不是稳定 deployment_id 的计数。
 	IncBusy(id string)
 
-	// DecBusy 把该部署正在处理的请求数减一。必须和 IncBusy 成对，包含失败路径。
-	// 参数 id：与 IncBusy 相同。返回：无。
-	// 调用：Serve 在请求结束时，包括失败路径，必须和 IncBusy 成对。
-	// 测试：无直接单测
+	// DecBusy 释放实际 HTTP 尝试占用的在途计数。
+	// 参数 id 与对应 IncBusy 相同，为 CooldownID 运行身份；无返回，执行器在每次尝试结束时调用。
+	// 不能只在成功路径释放，否则失败部署会一直表现为忙碌。
 	DecBusy(id string)
 
 	// NoteLatency 记下从这个请求开始到响应头的毫秒数。
@@ -191,29 +170,25 @@ type Adapted interface {
 	// 调用：Serve 在 ResponseCache.Get 命中时。测试：TestServeLogsCacheHitAndStreamMetrics。
 	WriteCacheHit(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op string, hit []byte, start time.Time)
 
-	// WriteChatJSON 把上游 JSON 写给调用方并记用量。非成功状态不会被当成成功正文放进缓存。
-	//
-	// 参数 provider：custom_llm_provider 或从模型 id 拆出的供应商。respBody：上游正文。
-	// 参数 status：上游状态码。depID：部署 id。其余参数与 WriteCacheHit 相同。
-	// 返回：无。
-	// 调用：Serve 的非流式成功路径。流式路径自己写字节并直接 RecordSpend。
-	// 测试：failure_log_test.go
-	WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string)
+	// WriteChatJSON 输出同步响应并执行用量记录和允许的响应缓存写入。
+	// 参数 w/p/callID/alias 指定交互与调用方，ck/op/provider 为缓存、操作及供应商标记，respBody/status 为最终正文及 HTTP 状态，start 为开始时间，depID 为运行部署身份。
+	// models 为实际执行涉及的模型或组范围，缓存命中时须逐项复核权限；返回值无，Serve 同步结束路径调用。
+	// 非成功状态不得当作成功响应缓存；与流式路径自行写字节和 RecordSpend 的职责不同。
+	WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string, models ...string)
 
+	// 嵌入 SpendLog 的公共能力；执行器通过同一宿主消费，不能省略其中的鉴权或记账约定。
 	SpendLog
 }
 
-// Bypass 是官方接口转发。它不把正文编成聊天补全，不读响应缓存，不跑护栏。
-// 网关在 bypass.go 的 serveBypass 里，路径已经匹配到端点类型之后调用 ServeBypass。
-// 公共能力通过 RequestHost 复用，本接口只增加原生任务所需的模型查找和归属。
+// Bypass 是原生 API 转发入口所需的宿主能力，由 execution.ServeBypass 消费。
+// 在 RequestHost 上增加部署查找、任务归属及创建时计价事实，并通过 SpendLog 记录每次交互。
+// 原生载荷直接按登记传输发送，不经过统一护栏或响应缓存；任务键必须已隔离调用方与传输。
 type Bypass interface {
+	// 嵌入 RequestHost 的公共能力；执行器通过同一宿主消费，不能省略其中的鉴权或记账约定。
 	RequestHost
 
-	// Models 返回当前进程里的全部部署。Bypass 再用端点类型过滤。
-	// 参数：无。
-	// 参数：无。
-	// 调用：dataplane/runtime/live.go、dataplane/execution/official.go、gateway/bypass.go、gateway/wire.go
-	// 测试：bypass_logic_test.go、failure_log_test.go
+	// Models 返回当前原生调用可读取的全部部署目录；无参数，返回切片由实现持有，执行器只读使用。
+	// ServeBypass 进一步校验停用、端点、策略、权限和凭据，返回目录不代表任意条目都可执行。
 	Models() []config.ModelEntry
 
 	// FindDeployment 按钉住的部署 id 找回那条模型配置。进程里已经没有这行时返回假。
@@ -222,37 +197,31 @@ type Bypass interface {
 	// 调用：serveBypassFollow。测试：bypass_logic_test.go。
 	FindDeployment(id string) (config.ModelEntry, bool)
 
-	// PinOfficial 把官方任务 id 钉到创建时的部署，有效期七天。
-	// 参数 taskID：从创建响应按端点类型的 task_id 字段取出。deploymentID：api_base|model。
-	// 返回：无。
-	// 调用：serveBypassCreate 在上游返回任务 id 之后。测试：gateway/affinity_pin_test.go 固定 7 天。
+	// PinOfficial 保存原生任务到创建部署的归属。
+	// 参数 taskID 实际为调用方与登记传输隔离后的任务范围键，deploymentID 为当前 CooldownID 运行身份；无返回。
+	// 创建取得有效任务 ID 后调用，网关实现为临时缓存并设七天 TTL；不得把裸供应商任务 ID 当作全局缓存键。
 	PinOfficial(taskID, deploymentID string)
 
-	// OfficialDeployment 按任务 id 取回创建时的部署。没有钉时返回空串。
-	// 参数 taskID：路径参数或查询参数里的任务 id。
-	// 返回：部署 id，或空串。
-	// 调用：serveBypassFollow。测试：bypass_logic_test.go 清掉钉之后再查得到 404。
+	// OfficialDeployment 读取原生任务创建时的部署归属。
+	// 参数 taskID 为已隔离调用方与传输的范围键；返回运行部署 ID，缺失或过期返回空串。
+	// 后续操作调用，执行器再校验部署存在且端点匹配，空值返回 404，不自动猜测或迁移账户。
 	OfficialDeployment(taskID string) string
-	// PinOfficialContext 与任务归属一起保存创建时的计费事实。
-	// 参数 taskID（string）：任务标识；facts（provider.TaskContext）：请求中的计费事实。
-	// 返回：无。
-	// 调用：官方任务创建成功后。
-	// 测试：official_settlement_test.go。
+	// PinOfficialContext 保存原生任务创建时的请求身份、开始时间及计价事实。
+	// 参数 taskID 为已隔离的任务范围键，facts 为 TaskContext；无返回，创建成功后与部署归属使用同一范围保存。
+	// 后续轮询恢复这些事实，不能以轮询的空正文重新推断原任务规格；持久性及 TTL 由宿主实现负责。
 	PinOfficialContext(taskID string, facts providercontract.TaskContext)
-	// OfficialContext 读取任务创建时记录的计费事实。
-	// 参数 taskID（string）：任务标识。
-	// 返回 provider.TaskContext：已保存的计费事实；缺失时为零值。
-	// 调用：官方任务查询结算时。
-	// 测试：official_settlement_test.go。
+	// OfficialContext 读取原生任务创建时的计价与生命周期事实。
+	// 参数 taskID 为已隔离的任务范围键；返回 TaskContext，缺失返回零值。
+	// 查询和最终结算调用；不得把本轮 callID 覆写成原请求 ID，原请求关联与轮询日志应分别保存。
 	OfficialContext(taskID string) providercontract.TaskContext
 
+	// 嵌入 SpendLog 的公共能力；执行器通过同一宿主消费，不能省略其中的鉴权或记账约定。
 	SpendLog
 }
 
-// RoutePlan 是选部署前生成的请求私有计划，普通偏好可动态重选，父响应归属必须保持。
-// Alias 是对外模型名。SessionID 写入用量行，把同一会话的请求收成一组。
-// Caller 是密钥哈希或用户 id，避免不同租户共用一根钉。
-// 适配和原生入口均重新验证候选，成功后才比较更新偏好；不是持久化强绑定。
+// RoutePlan 保存选部署之前生成的请求私有会话计划，由 affinity 产生、两类执行器消费。
+// 普通会话偏好执行前重新验证；Required 父响应归属只能回原目标，失效必须拒绝。
+// Claim/Save 协调缓存版本而非锁住上游请求；History 只能来自已授权的临时续接上下文，不授予额外权限。
 type RoutePlan struct {
 	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
 	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
@@ -283,7 +252,9 @@ type RoutePlan struct {
 	Pinned string
 }
 
-// RouteStep 是实际回退路径的一条边，每轮按当前模板验证。
+// RouteStep 描述从公开模型或组到下一目标的一条回退边。
+// 由请求回退队列记录，保存进会话偏好后每轮依当前模板重新验证；JSON 字段用于缓存载体。
+// 它记录实际路径，不证明目标已授权，也不允许绕过当前禁用开关。
 type RouteStep struct {
 	// 回退失败源的公开模型或组；没有显式组链时可以是实际成员名。
 	From string `json:"from"`
@@ -293,7 +264,9 @@ type RouteStep struct {
 	Kind string `json:"kind"`
 }
 
-// RouteTarget 保存动态偏好；Pool 是展开的模型或组，Revision 防止比较更新出现 ABA。
+// RouteTarget 描述可被会话偏好保存的部署、实际公开模型池及回退路径。
+// 稳定 DeploymentID 用于重新定位当前配置，运行时冷却身份由执行器重新计算；Revision 用于比较更新防止迟到覆盖。
+// Path 需由生产方复制，不应在不同请求间共享可变切片；目标记录本身不是持久化强绑定。
 type RouteTarget struct {
 	// 部署目录的稳定 ID，地址或定价变化不改变它；每轮从当前目录恢复执行配置，删除后失效。
 	DeploymentID string `json:"deployment_id"`
@@ -307,15 +280,13 @@ type RouteTarget struct {
 	Revision string `json:"revision"`
 }
 
-// CallNote 是写进用量行的事实。由 AnnotateCall 暂存，RecordSpend 取走。
-// TTFTMs 是首字节或同步整次的毫秒数，nil 表示这次没量到。
-// Provider 是 custom_llm_provider，或 Bypass 的供应商前缀。
-// CacheKey 是响应缓存键。CacheHit 为 true 时扣费金额为 0。
-// SessionID 与 RoutePlan.SessionID 相同。部署身份由 RecordSpend 的 depID 参数传递。
+// CallNote 汇集一次调用的计时、会话、缓存、上游诊断与异步任务结算事实。
+// 执行器用 AnnotateCall 按本次 callID 暂存，RecordSpend 随后取走并清理；字段为空表示本次未取得该事实。
+// 轮询的 callID、创建请求的 TaskRequestID 与最终费用的 SettlementID 分别承担交互隔离、生命周期归属和结算去重。
 type CallNote struct {
 	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool
-	// 传输观察器产生的脱敏响应头及原始用量诊断；nil 表示没有上游观察事实。
+	// 传输观察器产生的完整原始响应头和用量诊断，并未在此处脱敏；消费方负责过滤后输出，nil 表示未取得观察事实。
 	Upstream *dpdiagnostics.UpstreamDiagnostics
 	// 异步任务创建时的原请求 ID，轮询仍使用自己的 callID，供更新原任务日志。
 	TaskRequestID string
@@ -325,7 +296,7 @@ type CallNote struct {
 	TaskInitial bool
 	// 查询取得成功实测结果时为 true，通知账单原子结算原任务并防止重复收费。
 	TaskSettlement bool
-	// 指定账单落在原任务请求上，不改变暂存诊断使用的 callID。
+	// 按已隔离任务与运行部署构造的稳定最终费用标识，供持久层去重；与原请求 TaskRequestID 及本次轮询 callID 不同。
 	SettlementID string
 	// 查询不计入同步路由 TPM 时为 true，避免反复轮询放大 token 用量。
 	SkipRouteUsage bool

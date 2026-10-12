@@ -1,5 +1,7 @@
 # Gateway architecture
 
+[简体中文](readme_cn.md)
+
 The root composes HTTP and adapts identity, quotas and persistence. Business modules are split by responsibility.
 
 | Package | Responsibility |
@@ -19,6 +21,37 @@ The root composes HTTP and adapts identity, quotas and persistence. Business mod
 | [templateauth](templateauth/readme.md) | Route-template selection authorization |
 | [tokens](tokens/readme.md) | Local token estimates, parameter discovery and transformation records |
 | [usage](usage/readme.md) | Reports, activity, guard statistics and log reads |
+
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Startup runs config.Load → iam.Open/Migrate → store.Open → gateway.New → Server.Run. Embed Handler in an HTTP host and install modules through Use/Handle. Management and inference enforce identity, action authorization, and model access.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| gateway.New(cfg,store,iam) | Assemble initialized real dependencies |
+| Server.Handler() / Server.Run(addr) | Provide an HTTP handler or start listening |
+| Server.Use(module) / Handle(pattern,handler) | Install modules and dedicated handlers |
+
+### Integration demo
+
+Configure a dedicated PostgreSQL database_url in /tmp/xhub-demo.yaml. See [config](../config/readme.md) for the schema. Startup migrates/synchronizes tables; after shutdown the database owner can remove the dedicated demo database.
+
+Run the following commands from the repository root.
+
+```sh
+go run ./cmd/gateway -config /tmp/xhub-demo.yaml -addr :4000
+
+curl -sS -i http://localhost:4000/health/liveness
+curl -sS -i http://localhost:4000/health/readiness
+```
+
+Run curl in a second terminal. Liveness returns 200 status=ok; readiness returns 200 status=ready when database Ping succeeds and 503 on failure.
+
+### Errors, state, and side effects
+
+gateway.New can connect Redis, start refresh work, and seed an administrator. Use a dedicated database. Probe success does not prove a supplier is callable.
 
 ## Root review route
 

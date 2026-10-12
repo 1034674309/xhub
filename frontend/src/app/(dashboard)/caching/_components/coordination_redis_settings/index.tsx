@@ -21,9 +21,10 @@ import {
   isFieldVisible,
   sourceBadge,
 } from "./coordinationRedisUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const CoordinationRedisSettings: React.FC = () => {
+  const t = useT();
   const form = useForm<CoordinationFormValues>({ defaultValues: buildInitialValues({}) });
   const [selectedRedisType, setSelectedRedisType] = useState<CoordinationRedisType | null>(null);
 

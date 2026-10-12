@@ -3,13 +3,14 @@
 import type { ColumnDef, Row, RowData, Table } from "@tanstack/react-table";
 
 import { Checkbox } from "@/components/ui/checkbox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface SelectionColumnOptions<TData> {
   rowAriaLabel?: (row: Row<TData>) => string;
 }
 
 function SelectAllCheckbox<TData>({ table }: { table: Table<TData> }) {
+  const t = useT();
   const allSelected = table.getIsAllPageRowsSelected();
   const someSelected = table.getIsSomePageRowsSelected();
 
@@ -25,6 +26,7 @@ function SelectAllCheckbox<TData>({ table }: { table: Table<TData> }) {
 }
 
 function SelectRowCheckbox<TData>({ row, label }: { row: Row<TData>; label: string }) {
+  const t = useT();
   return (
     <Checkbox
       aria-label={label}

@@ -1,3 +1,5 @@
+// 本文件透传无需协议转换的字节流，增量提取用量和响应 ID；与 dialogue 的终态校验转换链不同。
+// 调用关系与边界：原字节流透传、增量用量解析与响应归属标识提取；具体参数、返回及副作用见各方法说明。
 package stream
 
 import (
@@ -16,22 +18,19 @@ import (
 // 不再留档，但要记一行：截断之后按正文估算的 token 会偏低。
 const captureLimit = 2 << 20
 
-// noteCaptureTruncated 在保留的正文达到上限时记一行。静默截断会让用量偏低，
-// 而偏低的原因在日志里看不出来。
-// 参数 kept（int）：已经保留的字节数。
-// 返回：无。只写进程日志。
-// 调用：pipeStream 在拼接捕获正文时。
-// 测试：无直接单测
+// noteCaptureTruncated 在流式日志捕获达到上限时记录诊断提示。
+// 参数 kept 为已保存字节数；返回值无，PipeStream 追加捕获后调用，未到上限时不输出。
+// 提示正文估算可能偏低，但真实用量解析仍消费完整流；只写进程日志，不截断上游传输。
 func noteCaptureTruncated(kept int) {
 	if kept >= captureLimit {
 		util.Debug("stream capture reached its limit kept=%d; token estimates from the body may run low", kept)
 	}
 }
 
-// responseID 从上游 JSON 或 SSE 里取出第一个响应 id，用来把后续对话钉回同一部署。
-// 参数 raw：上游响应或捕获的 SSE。
-// 返回：第一个非空响应 id，忽略输出项 id。没有时返回空串，CommitRoute 不写响应钉。
-// 调用：Serve 的成功路径；测试覆盖 JSON、Responses/Chat/Messages SSE 和无效事件。
+// ResponseID 从同步 JSON 或捕获 SSE 中寻找首个响应级 ID，供成功后保存归属。
+// 参数 raw 为响应字节；返回 ID，非法或没有响应标识返回空串；Serve 成功路径调用。
+// 先尝试完整 JSON，再按 data 行解析，跳过 DONE/坏帧；Responses 工具和输出项 ID 不能成为父响应 ID。
+// 纯解析，不提交归属；捕获截断时可能找不到 ID，调用方应允许空值而非生成供应商 ID。
 func ResponseID(raw []byte) string {
 	if id := responseDocumentID(raw); id != "" {
 		return id
@@ -48,9 +47,10 @@ func ResponseID(raw []byte) string {
 	return ""
 }
 
-// responseDocumentID 读取一帧 JSON 中的响应标识。
-// 参数 raw 为 JSON 字节；返回响应 id 或空值。responseID 调用，无效 JSON 不保留上一帧字段。
-// Responses 事件只能取 response.id，Messages 开始事件取 message.id，防止误钉工具或输出项。
+// responseDocumentID 读取一份 JSON 文档中的响应级标识。
+// 参数 raw 为单帧或同步 JSON；返回 ID 或空串；ResponseID 调用。
+// response.* 只读取 response.id，message_start 读取 message.id，其他文档读顶层 id。
+// 每次独立解码避免坏帧沿用上一帧数据；不读取工具/output item 的 ID，不修改正文。
 func responseDocumentID(raw []byte) string {
 	var doc map[string]any
 	if json.Unmarshal(raw, &doc) != nil {
@@ -71,11 +71,13 @@ func responseDocumentID(raw []byte) string {
 	return id
 }
 
-// pipeStream 把上游 SSE 原样抄给客户端，并尽量从流里抽出 usage。一个字节都没写时 wrote 为 false。
-// ttft 是 start 到首字节的时间。空正文时 ttft 保持 0。
-// 参数 w：客户端响应。resp：上游响应，函数负责关闭 Body。start：请求开始时间。
-// 返回 wrote、usage、ttft、captured：表示是否输出、使用量、首字节耗时和捕获正文，不改写原生事件。
-// 调用：Serve 的普通流式路径。测试：failure_log_test.go TestServeLogsEmptyStreamAndUpstreamStatus、TestServeLogsCacheHitAndStreamMetrics。
+// PipeStream 将无需协议转换的上游流字节透传，同时解析用量并捕获日志正文。
+// 参数 w 为客户端写入器，resp 为上游响应，start 为请求开始时间；返回 wrote、usage、ttft、captured、err。
+// Serve 的普通流分支调用；本函数负责关闭 resp.Body，首次读到字节时发送状态/流媒体头并测量耗时。
+// wrote 表示读到数据并开始响应，当前实现忽略 w.Write 的 n/err，不能等同于客户端实际完整接收。
+// 原始读取错误向调用方返回，EOF 视为正常结束；与 PipeDialogue 不同，这条透传链不校验协议成功终态。
+// 捕获最多 2 MiB，超过部分继续转发且仍全部送给用量解析器；截断只限制日志，不限制统计扫描。
+// 有写出后调用方不可重试，避免拼接两次回复；函数不执行路由、记账或会话提交。
 func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bool, map[string]any, time.Duration, []byte, error) {
 	defer resp.Body.Close()
 	buf := make([]byte, 4096)
@@ -86,6 +88,8 @@ func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bo
 	parser := streamUsageParser{}
 	for {
 		n, err := resp.Body.Read(buf)
+		// Reader 可以同时返回有效字节和 EOF/错误，必须先处理 n>0 的
+		// 最后片段，再执行下面的收尾；否则末帧用量或正文会丢失。
 		if n > 0 {
 			if !wrote {
 				ttft = time.Since(start)
@@ -93,6 +97,8 @@ func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bo
 				w.WriteHeader(resp.StatusCode)
 				wrote = true
 			}
+			// 当前透传接口忽略客户端短写和写入错误；wrote 仅代表已开始
+			// 响应，不是完整送达确认。上层不得据此重放并拼接另一次回复。
 			_, _ = w.Write(buf[:n])
 			if flusher != nil {
 				flusher.Flush()
@@ -106,6 +112,8 @@ func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bo
 				noteCaptureTruncated(len(captured))
 			}
 			parser.write(buf[:n], false)
+			// 解析器始终消费完整读取片段；上面的 2 MiB 限制只作用于
+			// 日志留档，不能让末尾出现的供应商实测用量被忽略。
 		}
 		if err != nil {
 			parser.write(nil, true)
@@ -117,18 +125,20 @@ func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bo
 	}
 }
 
-// streamUsageParser keeps the unfinished SSE line between body reads. Providers
-// may split a data line at any byte, including in the middle of a JSON token.
+// streamUsageParser 是透传流的增量用量扫描器，为一次 PipeStream 保留跨 Read 的残行。
+// 完整行尝试提取统计并递归合并；不验证协议成功终态，也不处理 SSE 多行 data 合并语义。
+// 不能在多个请求间共享，统计对象可能在后续写入时原地更新。
 type streamUsageParser struct {
+	// 跨 Read 保留的未完成一行，final 收尾时也尝试解析。
 	pending []byte
-	usage   map[string]any
+	// 累计用量对象，后报字段覆盖同名旧值，缺失字段保留。
+	usage map[string]any
 }
 
-// write appends one body fragment and consumes every complete SSE line. final
-// also consumes a final line without a newline, as permitted at EOF.
-// 参数 raw：本次读取的正文；final：正文是否已经结束。
-// 返回：无。解析出的用量合并进 p.usage，未完整的行保留在 p.pending。
-// 调用：pipeStream。测试：usage_stream_test.go。
+// write 向用量解析器追加一段字节，消费所有完整行并保留跨读取的残片。
+// 参数 raw 为本次片段，final 为是否收尾；返回值无，PipeStream 每次读取和退出前调用。
+// 供应商可能在 JSON token 中间分块，pending 必须跨 Read 保留；final 时再处理无换行末行。
+// 修改 pending/usage，实际传输不受解析影响；按行处理，不实现多行 data 拼成一个 SSE 事件的语义。
 func (p *streamUsageParser) write(raw []byte, final bool) {
 	p.pending = append(p.pending, raw...)
 	for {
@@ -145,11 +155,10 @@ func (p *streamUsageParser) write(raw []byte, final bool) {
 	}
 }
 
-// consumeLine parses one complete SSE data line or one newline-delimited JSON
-// object and merges any provider usage it contains.
-// 参数 line：不含换行符的完整事件行。
-// 返回：无。没有有效 JSON 或 usage 时保持原状态。
-// 调用：streamUsageParser.write。测试：usage_stream_test.go。
+// consumeLine 对一条完整 SSE data 或逐行 JSON 提取并合并用量。
+// 参数 line 为一行字节；返回值无，由 write 调用。
+// 去 data 前缀和空白，跳过 DONE、空行与非法 JSON；有效用量递归覆盖合并，后报零值不能丢失。
+// 只修改 parser.usage，不写响应或报告协议成功；多行 JSON 事件不在本局部解析器支持范围。
 func (p *streamUsageParser) consumeLine(line []byte) {
 	line = bytes.TrimSpace(line)
 	if bytes.HasPrefix(line, []byte("data:")) {
@@ -164,10 +173,10 @@ func (p *streamUsageParser) consumeLine(line []byte) {
 	}
 }
 
-// streamUsage 在新到达的 SSE 字节里查找 usage，没有新用量时沿用上一次的结果。
-// 参数 raw：本次要扫描的字节。prev：上一次找到的 usage，可为 nil。
-// 返回：更新后的 usage。从未出现过时返回 prev，可能仍是 nil。
-// 调用：pipeStream。无单独测试。
+// streamUsage 一次性扫描完整片段中的用量，并保留此前统计。
+// 参数 raw 为准备完整扫描的字节，prev 为旧用量，可为 nil；返回合并映射，无新统计时沿用 prev。
+// 本包辅助调用/测试使用；临时 parser 以 final 收尾，不适合逐次扫描跨调用残缺行，连续读取应复用 streamUsageParser。
+// 可能原地更新 prev，不发送响应或关闭资源。
 func streamUsage(raw []byte, prev map[string]any) map[string]any {
 	p := streamUsageParser{usage: prev}
 	p.write(raw, true)

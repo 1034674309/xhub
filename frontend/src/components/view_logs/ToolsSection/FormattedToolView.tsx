@@ -4,13 +4,14 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ParsedTool, ParameterRow } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface FormattedToolViewProps {
   tool: ParsedTool;
 }
 
 export function FormattedToolView({ tool }: FormattedToolViewProps) {
+  const t = useT();
   // Parse parameters for table display
   const parameterRows: ParameterRow[] = Object.entries(tool.parameters?.properties || {}).map(
     ([name, schema]: [string, any]) => ({

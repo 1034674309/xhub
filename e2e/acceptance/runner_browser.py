@@ -30,33 +30,48 @@ def run_browser(directory, env, gateway, ui_port, processes, handles, logger):
     command_stream(["node", str(ROOT / "e2e/real_dataset_browser.cjs")], logger, env=ui_env)
     return json.loads((directory / "browser-report.json").read_text())
 
+def business_browser_selection(catalog):
+    """用途：将去重业务映射到当前独立场景；参数为场景清单，返回按验收顺序排列的条目。
+
+    浏览器编排与契约测试调用；缺失、重复、非法路径或非 .test.ts 绑定抛异常，无副作用。
+    稳定 ID 保留迁移前完整范围：拆分后的密钥/模型生命周期、所有页面与四层可见性均独立执行。
+    """
+    ids = ["SC-252", "SC-252-rotation", "SC-252-block", "SC-252-unblock", "SC-252-delete",
+           "SC-253", "SC-253-connection", "SC-253-delete", "SC-254", "SC-255", "SC-256",
+           "SC-245", "SC-027", "SC-257", "SC-108", "SC-109", "SC-110", "SC-020",
+           "SC-240", "SC-122", "SC-247", "SC-113", "SC-114",
+           *[f"SC-{number:03d}" for number in range(162, 208)],
+           "SC-226", "SC-221", "SC-231", "SC-214"]
+    selected = []
+    files = set()
+    for scenario_id in ids:
+        matches = [row for row in catalog if row.get("id") == scenario_id]
+        if len(matches) != 1:
+            raise ValueError("去重浏览器场景缺失或 ID 重复: " + scenario_id)
+        row = matches[0]
+        file = row.get("file", "")
+        if (not file.startswith("e2e/scenarios/") or not file.endswith(".test.ts")
+                or ".." in Path(file).parts or file in files or not row.get("title")):
+            raise ValueError("去重浏览器场景绑定无效: " + scenario_id)
+        files.add(file)
+        selected.append(row)
+    return selected
+
+
 def run_business_browser(directory, logger):
-    """用途：补齐去重浏览器业务；参数为报告目录和日志器，返回本轮统计；精确标题与浏览器用例同步，等待共享锁并保存专属证据，隔离库和模拟供应商由 e2e.sh 清理，失败、缺报告或选中数量不符抛异常。"""
-    titles = [
-        "virtual key update, regenerate, block, and delete",
-        "model update, test connection, and delete",
-        "team member add is listed", "router fallback update lists the mapping",
-        "admin panel saves prompt storage and hides the unused settings",
-        "users can be edited and their team access follows membership changes",
-        "关键词正则完成草稿调试、保存、编辑、真实拦截与删除",
-        "XGo editor executes, persists, reloads, and edits real scripts",
-        "chat explains missing credentials and unavailable deployment, then recovers",
-        "single workspace has no comparison controls and preserves bilingual chat",
-        "cancel and clear ignore delayed real responses; mobile chat remains usable",
-        "错误日志详情完整显示上游正文并可返回普通日志",
-        "异步任务原日志展示生命周期且轮询不增加日志：完成",
-        "deployment deletion clears stale weights and preserves public inference",
-        "deployment deletion clears default and template weights for inherited routing",
-        "browser cache flush restores a billed miss after a free hit",
-        "team session inheritance and explicitly bound key preview match inference without consuming rpm",
-        "every page route renders without a dashboard error",
-        "the visibility chain holds at every tier",
-    ]
-    # 文件与精确标题同时约束，避免相近名称或参数化变体重复执行同一业务类型。
-    files = ["writes.spec.ts", "user-edit.spec.ts", "guardrails.spec.ts", "xgo-guardrails.spec.ts",
-             "playground-workspace.spec.ts", "error-logs.spec.ts", "task-request-logs.spec.ts",
-             "route-diagnostic.spec.ts", "weighted-routing.spec.ts", "product-fixes.spec.ts",
-             "coverage.spec.ts", "visibility-chain.spec.ts"]
+    """用途：补齐去重浏览器业务；参数为报告目录和日志器，返回本轮统计。
+
+    共享验收调用；从场景清单解析独立文件与标题，等待共享锁并保存专属证据；
+    隔离库和本地供应商由 e2e.sh 清理，失败、缺报告或选中数量不符抛异常。
+    """
+    frontend = ROOT / "frontend"
+    selected = business_browser_selection(json.loads((frontend / "e2e/scenario-catalog.json").read_text()))
+    for row in selected:
+        if not (frontend / row["file"]).is_file():
+            raise ValueError("去重浏览器场景文件不存在: " + row["file"])
+    titles = [row["title"] for row in selected]
+    # 文件与精确标题同时约束；路径需按正则转义并锚定，防止 sc-252 误选其生命周期变体。
+    files = [r"(^|/)" + re.escape(row["file"]) + "$" for row in selected]
     pattern = "(" + "|".join(re.escape(title) + "$" for title in titles) + ")"
     env = dict(os.environ)
     for key in ("E2E_LIVE", "E2E_CREDENTIAL_SOURCE"):
@@ -77,4 +92,3 @@ def run_business_browser(directory, logger):
     if stats["expected"] != len(titles) or any(stats[field] for field in ("unexpected", "flaky", "skipped")):
         raise AssertionError("去重浏览器流程未全部执行通过: " + str(stats))
     return dict(status="passed", cases=len(titles), stats=stats, report="business-browser-results.json")
-

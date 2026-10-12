@@ -4,7 +4,7 @@ import { ArrowRight, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { getProxyBaseUrl } from "./networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface RoutePreviewProps {
   pathValue: string;
@@ -12,14 +12,15 @@ interface RoutePreviewProps {
   includeSubpath: boolean;
 }
 
-const Endpoint = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const Endpoint = ({ label, children }: { label: string; children: React.ReactNode }) => { const t = useT(); return ((
   <div className="min-w-0 flex-1 rounded-lg border bg-muted/40 p-3">
     <div className="mb-2 text-sm text-muted-foreground">{label}</div>
     <code className="block overflow-x-auto font-mono text-sm text-foreground">{children}</code>
   </div>
-);
+)); };
 
 const RoutePreview: React.FC<RoutePreviewProps> = ({ pathValue, targetValue, includeSubpath }) => {
+  const t = useT();
   const proxyBaseUrl = getProxyBaseUrl();
 
   if (!pathValue || !targetValue) {

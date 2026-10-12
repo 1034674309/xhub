@@ -6,7 +6,7 @@ import AddGuardrailForm from "./add_guardrail_form";
 import { Logo } from "@/components/molecules/logo/Logo";
 import { GUARDRAIL_PRESETS } from "./guardrail_garden_configs";
 import { GuardrailCardInfo } from "./guardrail_garden_data";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailDetailViewProps {
   card: GuardrailCardInfo;
@@ -16,6 +16,7 @@ interface GuardrailDetailViewProps {
 }
 
 const GuardrailDetailView: React.FC<GuardrailDetailViewProps> = ({ card, onBack, accessToken, onGuardrailCreated }) => {
+  const t = useT();
   const [isAddFormVisible, setIsAddFormVisible] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 

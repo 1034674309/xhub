@@ -19,11 +19,8 @@ import (
 	dpruntime "github.com/sunqirui1987/xhub/internal/dataplane/runtime"
 	"github.com/sunqirui1987/xhub/internal/gateway/guard"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
-	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	"github.com/sunqirui1987/xhub/internal/router"
 	"github.com/sunqirui1987/xhub/internal/store"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -57,7 +54,7 @@ func (s *Server) ResolveRequest(r *http.Request) (*auth.Principal, error) {
 // 调用：dataplane Serve 与 ServeBypass。测试：failure_log_test.go、bypass_logic_test.go 的夹具实现同一方法。
 func (s *Server) GatewayConfig() *config.Config { return s.Cfg }
 
-// HTTPClient returns the HTTP client used for upstream calls. The timeout comes from the router settings.
+// HTTPClient returns the HTTP client used for upstream calls. The selected route template controls each attempt timeout.
 // 参数：无。
 // 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
@@ -71,33 +68,12 @@ func (s *Server) HTTPClient() *http.Client { return s.Client }
 // 返回 *util.DualCache（*util.DualCache）：响应缓存。未命中时 Get 返回空。
 func (s *Server) ResponseCache() *util.DualCache { return s.Cache }
 
-// HookEngine returns the budget and concurrency gate.
-// 参数：无。
-// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
-// 测试：bypass_logic_test.go、failure_log_test.go
-// 返回 *hooks.Engine（*hooks.Engine）：并发钩子。Begin 占用一个名额，返回的函数在请求结束时释放。
-func (s *Server) HookEngine() *hooks.Engine { return s.Hooks }
-
-// Extensions is the empty extension registry created at process start. Tests and startup code register implementations here, and the data plane calls them in registration order.
-// 参数：无。
-// 调用：dataplane/contract/host.go、dataplane/execution/serve.go
-// 测试：bypass_logic_test.go、failure_log_test.go
-// 返回 *plugin.Registry（*plugin.Registry）：推理前扩展。没有注册项时不会拒绝调用。
-func (s *Server) Extensions() *plugin.Registry { return s.extensions }
-
 // RouteState returns concurrency, cooldown, latency, and usage for the router. Without Redis only in-process Busy is present.
 // 参数：无。
 // 调用：dataplane/contract/host.go、dataplane/execution/official.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
 // 返回 router.State（router.State）：这一刻的冷却、延迟、用量和并发，交给路由器排序。
 func (s *Server) RouteState() router.State { return s.routerState() }
-
-// RouterDocument returns the merged router settings. A database key overrides YAML.
-// 参数：无。
-// 返回 map[string]any（map[string]any）：路由文档的字段表。缺键表示上游或库里没有这个字段。
-// 调用：dataplane/contract/host.go、dataplane/runtime/live.go
-// 测试：bypass_logic_test.go、failure_log_test.go
-func (s *Server) RouterDocument() map[string]any { return prefs.MergedRouter(s) }
 
 // GuardrailBlocks runs guardrails before a chat request is sent. When blocked is true, msg is the reason shown to the caller. The findings are kept against callID until the spend row is written.
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；body（map[string]any）：已经解析的 JSON 对象。缺字段表示上游或调用方没有给这项。
@@ -142,7 +118,7 @@ func (s *Server) DecBusy(id string) { s.decBusy(id) }
 // 返回：无。这个部署的一次失败已记下。allowed_fails 小于 1 时不写 Redis。
 // 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
-func (s *Server) NoteFailure(id string, settings prefs.RouteSettings) {
+func (s *Server) NoteFailure(id string, settings router.RouteSettings) {
 	s.noteFailure(id, settings)
 }
 
@@ -281,8 +257,9 @@ func (s *Server) WriteCacheHit(w http.ResponseWriter, p *auth.Principal, callID,
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：dataplane/contract/host.go、dataplane/execution/serve.go
 // 测试：bypass_logic_test.go、failure_log_test.go
-func (s *Server) WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string) {
-	s.writeChatJSON(w, p, callID, alias, ck, op, provider, respBody, status, start, depID)
+// models 为本次执行检查的实际模型/组；与成功正文一同保存，命中时重新校验，无额外路由判断。
+func (s *Server) WriteChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string, models ...string) {
+	s.writeChatJSON(w, p, callID, alias, ck, op, provider, respBody, status, start, depID, models...)
 }
 
 // EnforceIdentityLimits checks the model allow-list, budget, and RPM or TPM. On rejection it has already written the response.
@@ -323,11 +300,11 @@ func (s *Server) BusyMap() map[string]int { return s.Busy }
 func (s *Server) routerState() router.State { return dpruntime.State(s) }
 
 // noteFailure records a deployment failure and may start cooldown.
-// 参数 id（string）：记下失败使用的主键。空串表示调用方没有指定记录；settings（prefs.RouteSettings）：这次请求生效的路由设置，冷却阈值从它来。
+// 参数 id（string）：记下失败使用的主键。空串表示调用方没有指定记录；settings（router.RouteSettings）：这次请求生效的路由设置，冷却阈值从它来。
 // 返回：无。这个部署的失败已记下，并可能开始冷却。
 // 调用：仅在 wire.go 内使用
 // 测试：无直接单测
-func (s *Server) noteFailure(id string, settings prefs.RouteSettings) {
+func (s *Server) noteFailure(id string, settings router.RouteSettings) {
 	dpruntime.RecordFailure(s, id, settings)
 }
 
@@ -593,9 +570,16 @@ func (s *Server) DataPlane(w http.ResponseWriter, r *http.Request, op string) {
 	s.dataPlane(w, r, op)
 }
 
-// Config returns the in-process config. A router-settings write changes fields that are already present on RouterSettings.
+// Config 返回当前进程配置；参数为空，供偏好管理读取，返回共享指针，不复制。
 // 参数：无。
 // 调用：gateway/prefs/host.go、gateway/prefs/settings.go
 // 测试：无直接单测
 // 返回 *config.Config（*config.Config）：当前进程配置，含模型表和路由策略，不会复制。
 func (s *Server) Config() *config.Config { return s.Cfg }
+
+// AdmitRequest 首次校验身份、模型、预算并占用一次分钟容量。
+// 参数 w/path 用于拒绝响应、p 为主体、alias 为公开目标、est 为估算 token；返回是否放行。
+// 统一及原生入口调用一次；后续目标复核使用 EnforceIdentityLimits，只读当前权限和预算。
+func (s *Server) AdmitRequest(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
+	return s.checkIdentityLimits(w, path, p, alias, est, true)
+}

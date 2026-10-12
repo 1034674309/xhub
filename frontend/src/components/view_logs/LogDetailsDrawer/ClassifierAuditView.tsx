@@ -2,7 +2,7 @@ import CopyButton from "@/components/shared/CopyButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ReactNode } from "react";
 import { JsonViewer } from "./JsonViewer";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ClassifierAuditViewProps {
   request: Record<string, unknown>;
@@ -10,6 +10,7 @@ interface ClassifierAuditViewProps {
 }
 
 export function ClassifierAuditView({ request, response }: ClassifierAuditViewProps) {
+  const t = useT();
   return (
     <div className="mb-6 space-y-4">
       <AuditField title={t("Classifier input")} value={request.classifier_input}>
@@ -26,6 +27,7 @@ export function ClassifierAuditView({ request, response }: ClassifierAuditViewPr
 }
 
 function AuditField({ title, value, children }: { title: string; value: unknown; children: ReactNode }) {
+  const t = useT();
   const serialized = JSON.stringify(value);
   const truncated = serialized?.includes("litellm_truncated") ?? false;
 

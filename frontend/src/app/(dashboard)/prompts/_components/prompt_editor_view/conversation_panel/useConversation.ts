@@ -4,9 +4,10 @@ import { TokenUsage } from "@/components/chat_ui/ResponseMetrics";
 import { Message } from "./types";
 import { convertToDotPrompt, extractVariables } from "../utils";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const useConversation = (prompt: any, accessToken: string | null) => {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");

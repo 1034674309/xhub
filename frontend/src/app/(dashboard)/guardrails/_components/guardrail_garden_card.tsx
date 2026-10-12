@@ -2,9 +2,10 @@ import React from "react";
 import { CircleCheck } from "lucide-react";
 import { GuardrailCardInfo } from "./guardrail_garden_data";
 import { Logo } from "@/components/molecules/logo/Logo";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const GuardrailCard: React.FC<{ card: GuardrailCardInfo; onClick: () => void }> = ({ card, onClick }) => {
+  const t = useT();
   return (
     <div
       onClick={onClick}

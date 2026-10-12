@@ -17,7 +17,7 @@ import { toast } from "@/lib/toast";
 import PromptCodeSnippets from "./prompt_editor_view/PromptCodeSnippets";
 import { extractModel, extractTemplateVariables, getBasePromptId, getCurrentVersion } from "./prompt_utils";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface PromptInfoProps {
   promptId: string;
@@ -38,6 +38,7 @@ const PromptInfoView: React.FC<PromptInfoProps> = ({
   onDelete,
   onEdit,
 }) => {
+  const t = useT();
   const [promptData, setPromptData] = useState<PromptSpec | null>(null);
   const [promptTemplate, setPromptTemplate] = useState<PromptTemplateBase | null>(null);
   const [rawApiResponse, setRawApiResponse] = useState<any>(null);

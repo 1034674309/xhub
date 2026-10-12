@@ -4,7 +4,7 @@ import { useDebouncedCallback } from "@tanstack/react-pacer/debouncer";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { fetchAvailableModels, ModelGroup } from "@/components/llm_calls/fetch_models";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const MODEL_SELECT_DEBOUNCE_MS = 500;
 
@@ -31,6 +31,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   showLabel = true,
   labelText = t("Select Model"),
 }) => {
+  const t = useT();
   const [selectedModel, setSelectedModel] = useState<string | null>(value ?? null);
   const [showCustomModelInput, setShowCustomModelInput] = useState<boolean>(false);
   const [modelInfo, setModelInfo] = useState<ModelGroup[]>([]);

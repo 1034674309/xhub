@@ -1,6 +1,6 @@
 import React from "react";
 import type { DateRangePickerValue } from "@/components/shared/date_picker_types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ExportSummaryProps {
   dateRange: DateRangePickerValue;
@@ -8,6 +8,7 @@ interface ExportSummaryProps {
 }
 
 const ExportSummary: React.FC<ExportSummaryProps> = ({ dateRange, selectedFilters }) => {
+  const t = useT();
   return (
     <div className="text-sm text-muted-foreground">
       {dateRange.from?.toLocaleDateString()} - {dateRange.to?.toLocaleDateString()}

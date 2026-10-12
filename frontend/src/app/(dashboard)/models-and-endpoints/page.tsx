@@ -13,11 +13,12 @@ import AllModelsPanel from "@/app/(dashboard)/models-and-endpoints/panels/AllMod
 import AddModelPanel from "@/app/(dashboard)/models-and-endpoints/panels/AddModelPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const BASE_TAB_KEY = "all-models";
 
 export default function ModelsAndEndpointsPage() {
+  const t = useT();
   const { accessToken, userRole, userId: userID, premiumUser, isViewOnly } = useAuthorized();
   const queryClient = useQueryClient();
   const { modelId, close } = useModelDetailRouting();

@@ -1,6 +1,7 @@
 import { t } from "@/i18n";
 import { BILLING_CATEGORIES, type BillingMode } from "./billing_categories";
 
+// 价格字段是纯配置，模块加载时只展开字段；工具函数不能调用依赖 React 渲染上下文的 Hook。
 export const PRICE_FIELDS = BILLING_CATEGORIES.flatMap((category) => category.fields);
 export type CatalogRow = Record<string, unknown>;
 export type PriceRate = {

@@ -17,7 +17,7 @@ import {
   mcpAllowedToolsFor,
   resolveEffectiveMcpServers,
 } from "./effectiveMcpServers";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface MCPToolPermissionsProps {
   accessToken: string;
@@ -58,6 +58,7 @@ const MCPToolPermissions: React.FC<MCPToolPermissionsProps> = ({
   onChange,
   disabled = false,
 }) => {
+  const t = useT();
   const {
     data: allServers = [],
     isError: serversFailed,

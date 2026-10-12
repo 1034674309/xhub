@@ -13,7 +13,7 @@ import DeleteResourceModal from "@/components/common_components/DeleteResourceMo
 import VectorStoreInfoView from "./vector_store_info";
 import CreateVectorStore from "./CreateVectorStore";
 import TestVectorStoreTab from "./TestVectorStoreTab";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import IndexesTab from "./IndexesTab";
 import { isAdminRole, isProxyAdminRole } from "@/utils/roles";
 import { toast } from "@/lib/toast";
@@ -29,6 +29,7 @@ interface VectorStoreProps {
 }
 
 const VectorStoreManagement: React.FC<VectorStoreProps> = ({ accessToken, userID, userRole, isViewOnly }) => {
+  const t = useT();
   const [vectorStores, setVectorStores] = useState<VectorStore[]>([]);
   const [isLoadingVectorStores, setIsLoadingVectorStores] = useState(true);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);

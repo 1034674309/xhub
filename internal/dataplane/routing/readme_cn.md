@@ -2,6 +2,44 @@
 
 [English](readme.md) · [上层架构](../readme_cn.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+执行器先排除停用和能力不兼容候选，再应用 router 快照与 affinity 验证。失败时用 FallbackKind 分类，在当前模板允许的队列中继续，每个新目标重新检查权限和预算。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| DropDisabled(pool) | 返回有效切片与停用数 |
+| FallbackKind(status, body) | 返回 general/context/content 或空串 |
+| SelectAffinity / DiagnoseRoute | 验证偏好和解释无候选原因 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/dataplane/routing"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	fmt.Println(routing.FallbackKind(429, nil))
+	fmt.Println(routing.FallbackKind(400, []byte(`{"error":{"code":"context_length_exceeded"}}`)))
+	fmt.Printf("%q\n", routing.FallbackKind(200, nil))
+}
+```
+
+输出 general、context、""；这里只演示错误分类，不发送重试。
+
+### 错误、状态与副作用
+
+固定父响应目标不能进入普通跨目标回退；未知创建结果不能盲目重放。分类允许回退不等于模板里存在可用目标。
+
 ## 职责
 
 候选筛选、模型回退与路由诊断。不发上游请求、不结算；无候选需区分缺失、暂停、冷却、零流量与能力不兼容。

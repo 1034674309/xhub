@@ -1,11 +1,12 @@
 import { updateMCPSemanticFilterSettings } from "@/components/networking";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createQueryKeys } from "../common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const mcpSemanticFilterSettingsKeys = createQueryKeys("mcpSemanticFilterSettings");
 
 export const useUpdateMCPSemanticFilterSettings = (accessToken: string) => {
+  const t = useT();
   const queryClient = useQueryClient();
 
   return useMutation({

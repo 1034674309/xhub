@@ -17,9 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function CredentialProviderCell({ provider }: { provider: string | undefined }) {
+  const t = useT();
   if (!provider) {
     return <span className="text-sm text-muted-foreground">-</span>;
   }
@@ -49,6 +50,7 @@ interface CredentialRowActionsProps {
 }
 
 function CredentialRowActions({ credential, onEdit, onDelete }: CredentialRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

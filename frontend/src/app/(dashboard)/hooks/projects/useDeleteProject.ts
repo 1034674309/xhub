@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { projectKeys } from "./useProjects";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // ── Fetch function ───────────────────────────────────────────────────────────
 
@@ -30,6 +30,7 @@ const deleteProjects = async (accessToken: string, projectIds: string[]): Promis
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export const useDeleteProject = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

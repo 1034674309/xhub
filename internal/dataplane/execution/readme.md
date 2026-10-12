@@ -2,6 +2,36 @@
 
 [中文](readme_cn.md) · [Parent architecture](../readme.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Dispatch HTTP requests to Serve or ServeBypass with a complete contract.Adapted/Bypass host supplying authentication, quotas, HTTP, credentials, state, and accounting. The executor coordinates the whole request lifecycle.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| Serve(host,w,r,op) | Unified adapted entry point |
+| ServeBypass(host,w,r,hit) | Matched native-action entry point |
+
+### Integration demo
+
+Run an assembled gateway, point demo-model at a local fixture upstream, and set an authorized XHUB_DEMO_TOKEN. See [gateway/wire.go](../../gateway/wire.go) for the real host.
+
+Run the following commands from the repository root.
+
+```sh
+curl -sS -i "http://localhost:4000/v1/responses" \
+  -H "Authorization: Bearer $XHUB_DEMO_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"model":"demo-model","input":"Hello","stream":false}'
+```
+
+A local fixture upstream can return a response object; inspect error on HTTP failure. The model must support responses and the example issues inference.
+
+### Errors, state, and side effects
+
+Handle errors, timeouts, retries, accounting, and stream terminal states together. Never append a different upstream after stream output starts or replay an unknown task-creation result.
+
 ## Responsibility
 
 Adapted and native request lifecycle orchestration. No console CRUD or direct PostgreSQL/Redis access; review retries, failed billing and successful completion together.

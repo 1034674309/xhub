@@ -2,7 +2,6 @@ import { canDetachKeyProject, KeyProjectField } from "./KeyProjectField";
 import GuardrailSelector from "@/components/guardrails/GuardrailSelector";
 import { useOrganizations } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings";
-import PolicySelector from "@/components/policies/PolicySelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,13 +23,11 @@ import OrganizationDropdown from "../common_components/OrganizationDropdown";
 import RouteTemplateSelect from "../route_templates/RouteTemplateSelect";
 import { estimateTooltips, withNormalizedEstimates } from "./estimatedOutputTokens";
 import {
-  currentValuePlaceholder,
   keyTypeFromRoutes,
   modelSentinelOptions,
   parseAllowedRoutes,
 } from "./keyEditFieldNormalizers";
 import {
-  KeyAgentAndSkillFields,
   KeyBudgetNumberField,
   KeyMetadataField,
   KeyTypeSelect,
@@ -40,7 +37,6 @@ import {
 import {
   KeyEditFormValues,
   keyEditFormSchema,
-  McpServersAndGroups,
   toKeyEditFormValues,
   toSubmittedValues,
 } from "./keyEditFormValues";
@@ -56,10 +52,8 @@ import {
 } from "../key_team_helpers/TagRateLimitEditor";
 import { excludeProxyWideSentinel, hasAllModelsSentinel } from "../key_team_helpers/fetch_available_models_team_key";
 import { KeyResponse } from "../key_team_helpers/key_list";
-import MCPServerSelector from "../mcp_server_management/MCPServerSelector";
-import MCPToolPermissions from "../mcp_server_management/MCPToolPermissions";
 import { toast } from "@/lib/toast";
-import { getPromptsList, modelAvailableCall, tagListCall } from "../networking";
+import { modelAvailableCall, tagListCall } from "../networking";
 import { fetchTeamModels } from "../organisms/create_key_button";
 import NumericalInput from "../shared/numerical_input";
 import { MultiSelect } from "../shared/MultiSelect";
@@ -67,8 +61,7 @@ import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filt
 import { Tag } from "../tag_management/types";
 import EditLoggingSettings from "../team/EditLoggingSettings";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import VectorStoreSelector from "../vector_store_management/VectorStoreSelector";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface KeyEditViewProps {
   keyData: KeyResponse;
@@ -92,6 +85,7 @@ export function KeyEditView({
   userRole,
   premiumUser = false,
 }: KeyEditViewProps) {
+  const t = useT();
   const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
   const canViewPolicies = hasCapability(userRole, "viewPolicies");
   const canViewPrompts = hasCapability(userRole, "viewPrompts");

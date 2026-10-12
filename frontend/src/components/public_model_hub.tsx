@@ -49,7 +49,7 @@ import { getEndpointType } from "@/components/chat_ui/mode_endpoint_mapping";
 import { MessageType } from "@/components/chat_ui/types";
 import { getProviderLogoAndName } from "./provider_info_helpers";
 import { filterBySearchTerm, rankBySearchRelevance } from "@/utils/searchUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { isBrandOutbound, scrubBrand } from "@/i18n/brand";
 
 interface PublicModelHubProps {
@@ -58,6 +58,7 @@ interface PublicModelHubProps {
 }
 
 function PublicHubEmptyState({ title, body }: { title: string; body: string }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -70,6 +71,7 @@ function PublicHubEmptyState({ title, body }: { title: string; body: string }) {
 }
 
 const PublicModelHub: React.FC<PublicModelHubProps> = ({ accessToken, isEmbedded = false }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [proxyConfigured, setProxyConfigured] = useState<boolean>(false);
   const [agentHubData, setAgentHubData] = useState<AgentCard[] | null>(null);

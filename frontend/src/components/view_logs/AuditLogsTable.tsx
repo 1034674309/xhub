@@ -14,9 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { AuditLogEntry, getAuditLogsTableColumns } from "./AuditLogsTableColumns";
-import { t, useI18n } from "@/i18n";
+import { useT, t, useI18n } from "@/i18n";
 import { auditResourceType } from "./auditPresentation";
 
+/** 审计列表的服务端数据、分页和筛选状态，以及由父面板处理的用户操作回调。 */
 interface AuditLogsTableProps {
   data: AuditLogEntry[];
   rowCount: number;
@@ -34,6 +35,7 @@ interface AuditLogsTableProps {
 
 const ALL_VALUE = "all";
 
+// 模块加载时只保存协议值与翻译键；翻译由组件内的 Hook 完成，避免导入页面时触发非法 Hook 调用。
 const ACTION_OPTIONS = ["created", "updated", "deleted", "rotated", "read", "bound"].map((value) => ({
   value,
   label: "audit.filters." + value,
@@ -71,7 +73,9 @@ const formatFilterValue = (columnId: string, value: unknown): string => {
   return raw;
 };
 
+/** 根据 filtered 返回空列表或无匹配结果的本地化提示；由审计表格调用，无外部副作用。 */
 function AuditLogsEmptyState({ filtered }: { filtered: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -89,6 +93,7 @@ function AuditLogsEmptyState({ filtered }: { filtered: boolean }) {
   );
 }
 
+/** 接收父面板的服务端列表及操作回调，返回可分页、筛选和查看详情的审计表格；语言切换时重新翻译筛选项，不修改用户输入。 */
 export function AuditLogsTable({
   data,
   rowCount,
@@ -103,6 +108,7 @@ export function AuditLogsTable({
   onRefresh,
   onViewLog,
 }: AuditLogsTableProps) {
+  const t = useT();
   const { locale } = useI18n();
   const ACTION_FILTER_ITEMS = [
     { value: ALL_VALUE, label: t("All Actions") },
@@ -152,6 +158,8 @@ export function AuditLogsTable({
             onOpenChange={setFiltersOpen}
             title={t("Filters")}
             description={t("Narrow down audit log entries")}
+            applyLabel={t("Apply Filters")}
+            resetLabel={t("Reset")}
           >
             {({ get, set }) => (
               <>

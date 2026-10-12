@@ -16,7 +16,7 @@ import {
 import { DataTable } from "@/components/shared/DataTable";
 import { IdCell } from "@/components/shared/table_cells/id_cell";
 import { MoneyCell } from "@/components/shared/table_cells/money_cell";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface CounterRow {
   counter: string;
@@ -55,11 +55,11 @@ const groupRows = (
     .sort((a, b) => b.units - a.units);
 
 const UnpricedUnitsCell = ({ unpriced }: { unpriced: number }) =>
-  unpriced > 0 ? (
+  { const t = useT(); return (unpriced > 0 ? (
     <span className="text-warning">{unpriced.toLocaleString()}</span>
   ) : (
     <span className="text-muted-foreground">—</span>
-  );
+  )); };
 
 const unpricedColumn = <TRow extends { unpriced: number }>(): ColumnDef<TRow> => ({
   header: () => t("Unpriced Units"),
@@ -114,28 +114,29 @@ const groupColumns = (label: string, emptyLabel: string): ColumnDef<GroupRow>[] 
 const teamColumns = groupColumns("Team", "No team");
 const keyColumns = groupColumns("Key", "No key");
 
-const CostMath = ({ counters, detail }: { counters: CounterRow[]; detail: GuardrailUsageDetail }) => (
+const CostMath = ({ counters, detail }: { counters: CounterRow[]; detail: GuardrailUsageDetail }) => { const t = useT(); return ((
   <CalcPopover title={t("How this cost is calculated")} formula="priced units × price per unit = cost, per counter">
     <MathTable rows={counters.map(counterMathRow)} total={formatCost(detail.cost)} />
     <p className="text-xs text-muted-foreground">{t("Per-unit prices come from the cost map LiteLLM ships with.")}</p>
     <UnpricedNote unpriced={detail.untracked_usage_units} provider={detail.provider} />
   </CalcPopover>
-);
+)); };
 
-const UnitsMath = ({ units }: { units: GuardrailUsageDetail["usage_units"] }) => (
+const UnitsMath = ({ units }: { units: GuardrailUsageDetail["usage_units"] }) => { const t = useT(); return ((
   <CalcPopover title={t("How usage units add up")} formula="counter + counter + … = usage units">
     <MathTable rows={unitsMathRows(units)} total={totalUnits(units).toLocaleString()} />
     <p className="text-xs text-muted-foreground">
       {t("Units are the billable counters the provider reported for this guardrail, added up over every call.")}
     </p>
   </CalcPopover>
-);
+)); };
 
-const TableHeading = ({ title }: { title: string }) => (
+const TableHeading = ({ title }: { title: string }) => { const t = useT(); return ((
   <h6 className="text-sm font-semibold text-foreground">{title}</h6>
-);
+)); };
 
 export function GuardrailUsageBreakdown({ detail }: { detail: GuardrailUsageDetail }) {
+  const t = useT();
   const counters = counterRows(detail);
   const unpriced = unpricedSummary(detail.untracked_usage_units);
 

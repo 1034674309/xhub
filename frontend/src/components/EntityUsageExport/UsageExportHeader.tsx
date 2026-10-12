@@ -18,7 +18,7 @@ import {
 import EntityUsageExportModal from "./EntityUsageExportModal";
 import type { EntitySpendData, EntityType } from "./types";
 import type { Team } from "@/components/key_team_helpers/key_list";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UsageExportHeaderProps {
   dateValue: DateRangePickerValue;
@@ -52,6 +52,7 @@ const UsageExportHeader: React.FC<UsageExportHeaderProps> = ({
   compactLayout = false,
   teams = [],
 }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ExportFormat } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ExportFormatSelectorProps {
   value: ExportFormat;
@@ -14,6 +14,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
 };
 
 const ExportFormatSelector: React.FC<ExportFormatSelectorProps> = ({ value, onChange }) => {
+  const t = useT();
   return (
     <div>
       <label className="text-sm font-medium text-foreground block mb-2">{t("Format")}</label>

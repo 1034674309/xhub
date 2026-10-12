@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Boxes, Filter, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import type { PriceCatalogRow } from "./priceCatalogRows";
 import {
   CAPABILITIES,
@@ -21,6 +21,7 @@ import type { PriceCatalogProps } from "./PriceCatalog";
 
 /** 市场模型卡片供目录网格使用；参数含价格行与管理回调，返回简洁卡片；只展示首档两个计费项，完整规则在详情打开，无后台写入。 */
 function MarketCard({ row, onDetail, onEdit, onDelete, onReset }: PriceCatalogProps & { row: PriceCatalogRow }) {
+  const t = useT();
   // 首屏优先展示输入和输出价格；缓存和分辨率变体仍完整保留在详情，避免按接口字段顺序误导用户。
   const prices = marketPrices(row)
     .filter((price) => price.tier === 0)
@@ -115,6 +116,7 @@ function MarketCard({ row, onDetail, onEdit, onDelete, onReset }: PriceCatalogPr
 /** Modelink 风格价格目录；参数为完整价格行、加载状态和管理回调，返回侧栏与模型网格。
  * 只展示在售公开市场模型，排除非公开、退役、删除与内部补充条目；计数来自实际数据，无持久化副作用。 */
 export function MarketPriceCatalog(props: PriceCatalogProps) {
+  const t = useT();
   const rows = props.rows ?? [];
   const [query, setQuery] = useState("");
   const [providerSearch, setProviderSearch] = useState("");

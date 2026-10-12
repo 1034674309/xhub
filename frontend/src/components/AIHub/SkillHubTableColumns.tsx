@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
 import { Plugin } from "@/components/claude_code_plugins/types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function getSkillSourceLink(skill: Plugin): { url: string; label: string } | null {
   const src = skill.source;
@@ -39,6 +39,7 @@ interface SkillHubRowActionsProps {
 }
 
 function SkillHubRowActions({ skill, onSkillClick }: SkillHubRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

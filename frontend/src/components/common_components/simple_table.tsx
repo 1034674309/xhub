@@ -1,6 +1,6 @@
 import React from "react";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface SimpleTableColumn<T> {
   header: string;
@@ -30,6 +30,7 @@ export function SimpleTable<T>({
   emptyMessage = t("No data"),
   getRowKey,
 }: SimpleTableProps<T>) {
+  const t = useT();
   return (
     <Table>
       <TableHeader>

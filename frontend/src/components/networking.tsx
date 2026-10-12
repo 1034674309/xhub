@@ -3163,23 +3163,13 @@ export const getGeneralSettingsCall = async (accessToken: string) => {
   }
 };
 
-export const getRouterSettingsCall = async (accessToken: string) => {
-  try {
-    const data = await apiClient.get(`/router/settings`, { accessToken });
-    return data;
-  } catch (error) {
-    console.error("Failed to get router settings:", error);
-    throw error;
-  }
-};
-
 /**
  * Named router settings templates.
  *
  * A template is one whole router_settings document. An organization, a team and
  * a key each select at most one, and the narrowest selection wins outright -
  * nothing is merged field by field. Selecting no template means the platform
- * default, which is the document /router/settings already edits.
+ * built-in retry policy and the model catalog defaults.
  *
  * The body is sent and returned as an object rather than a JSON string: the
  * backend stores it as text, but nothing above the route should have to know

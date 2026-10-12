@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VariableTextAreaProps {
   value: string;
@@ -16,6 +16,7 @@ interface VariableTextAreaProps {
 }
 
 const VariableTextArea: React.FC<VariableTextAreaProps> = ({ value, onChange, placeholder, rows = 4, className }) => {
+  const t = useT();
   const [editingVariable, setEditingVariable] = useState<{
     oldName: string;
     start: number;

@@ -1,6 +1,36 @@
 # Data plane architecture
 
+[简体中文](readme_cn.md)
+
 The root contains documentation only. Responsibilities for inference/native-task requests are organized below.
+
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+This directory has no root entry point. Gateway implements contract and calls execution, which coordinates routing, dialogue/transport, stream, diagnostics, usage, and runtime. Utility demos do not replace the full request chain.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| contract.Adapted / Bypass | Host dependency interfaces |
+| execution.Serve / ServeBypass | Complete request-lifecycle entry points |
+| runtime.Flush | Acknowledge usage queues after database commit |
+
+### Integration demo
+
+Run the following commands from the repository root.
+
+```sh
+go test ./internal/dataplane/... -count=1
+```
+
+Runs data-plane package tests. See [execution](execution/readme.md) for an HTTP request demo and [dialogue](dialogue/readme.md) for offline continuation-body construction.
+
+### Errors, state, and side effects
+
+Authenticate and enforce quotas before sending. Cache hits and upstream success are different facts. Adapted dialogue streams save continuation history only after validating an acceptable terminal state. Responses saves history before writing the terminal event; a subsequent client write failure does not roll back that history. See stream for the terminal-validation boundary of raw forwarding. Vendor availability needs separate environment validation.
+
+## Source and verification
 
 | Package | Responsibility |
 |---|---|

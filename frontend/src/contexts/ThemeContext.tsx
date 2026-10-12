@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ThemeContextType {
   logoUrl: string | null;
@@ -13,6 +13,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const useTheme = () => {
+  const t = useT();
   const context = useContext(ThemeContext);
   if (!context) {
     throw new Error(t("useTheme must be used within a ThemeProvider"));
@@ -26,6 +27,7 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const t = useT();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUrlDark, setLogoUrlDark] = useState<string | null>(null);
   const [faviconUrl, setFaviconUrl] = useState<string | null>(null);

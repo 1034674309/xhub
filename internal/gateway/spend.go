@@ -472,12 +472,13 @@ func (s *Server) writeCacheHit(w http.ResponseWriter, p *auth.Principal, callID,
 	_, _ = w.Write(hit)
 }
 
-// writeChatJSON writes the upstream JSON back to the client and records the spend.
+// writeChatJSON 返回上游完整响应并记录用量，成功 JSON 对象及其真实权限范围写入响应缓存。
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；alias（string）：对外模型名；ck（string）：写入对话JSON使用的ck。空串表示调用方没有提供这项；op（string）：操作名，例如 chat；provider（string）：供应商标识，例如 openai 或 volcengine；respBody（[]byte）：写入对话JSON要读的原始字节；status（int）：HTTP 状态码；start（time.Time）：时间范围的起点。零值表示不限制开始；depID（string）：部署 id。空串表示当前没有钉住的部署。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/wire.go
-// 测试：无直接单测
-func (s *Server) writeChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string) {
+// 测试：response_cache_test.go。
+// models 为执行时通过权限检查的真实模型及组名；随正文缓存，下一次命中按当前权限复核。
+func (s *Server) writeChatJSON(w http.ResponseWriter, p *auth.Principal, callID, alias, ck, op, provider string, respBody []byte, status int, start time.Time, depID string, models ...string) {
 	if op == "audio_speech" {
 		// Speech responses do not carry chat-token usage. Do not manufacture
 		// 8/2/10 tokens: that corrupts both usage reports and billing.
@@ -491,7 +492,7 @@ func (s *Server) writeChatJSON(w http.ResponseWriter, p *auth.Principal, callID,
 		return
 	}
 	var parsed map[string]any
-	if json.Unmarshal(respBody, &parsed) == nil {
+	if json.Unmarshal(respBody, &parsed) == nil && parsed != nil {
 		if op == "chat" || op == "" || op == "completions" || op == "embeddings" || op == "messages" || op == "responses" || op == "moderations" || op == "videos" {
 			parsed["model"] = alias
 		}
@@ -537,8 +538,9 @@ func (s *Server) writeChatJSON(w http.ResponseWriter, p *auth.Principal, callID,
 		}
 		s.recordSpend(w, p, callID, alias, op, usage, start, false, status, depID)
 		respBody, _ = json.Marshal(parsed)
-		if status >= 200 && status < 300 {
-			s.Cache.Set(ck, respBody)
+		// 成功 JSON 正文可复用；Responses 的 ID/历史属于当次执行，读写均不缓存。
+		if ck != "" && op != "responses" && status >= 200 && status < 300 {
+			s.Cache.Set(ck, respBody, models...)
 		}
 	} else {
 		s.recordSpend(w, p, callID, alias, op, nil, start, false, status, depID)

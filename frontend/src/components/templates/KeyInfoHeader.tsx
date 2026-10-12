@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -69,6 +69,7 @@ interface KeyInfoHeaderProps {
 }
 
 function UserField({ userAlias, userEmail, userId }: { userAlias?: string | null; userEmail: string; userId: string }) {
+  const t = useT();
   const labelEl = (
     <div className="flex items-center gap-1">
       <span className="text-muted-foreground">
@@ -174,6 +175,7 @@ export function KeyInfoHeader({
   regenerateDisabled = false,
   regenerateTooltip,
 }: KeyInfoHeaderProps) {
+  const t = useT();
   const regenerateButton = (
     <span>
       <Button variant="outline" onClick={onRegenerate} disabled={regenerateDisabled}>

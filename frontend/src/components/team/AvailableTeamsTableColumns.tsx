@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface AvailableTeam {
   team_id: string;
@@ -24,6 +24,7 @@ export interface AvailableTeam {
 }
 
 function AvailableTeamRowActions({ team, onJoinTeam }: { team: AvailableTeam; onJoinTeam: (teamId: string) => void }) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

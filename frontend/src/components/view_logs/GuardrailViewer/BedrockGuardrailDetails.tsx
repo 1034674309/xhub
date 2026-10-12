@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type BedrockGuardrailAction = "NONE" | "GUARDRAIL_INTERVENED";
 
@@ -126,6 +126,7 @@ interface SectionProps {
 }
 
 const Section: React.FC<SectionProps> = ({ title, count, defaultOpen = true, right, children }) => {
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -159,17 +160,18 @@ interface KVProps {
   mono?: boolean;
 }
 
-const KV: React.FC<KVProps> = ({ label, children, mono }) => (
+const KV: React.FC<KVProps> = ({ label, children, mono }) => { const t = useT(); return ((
   <div className="flex">
     <span className="font-medium w-1/3">{label}</span>
     <span className={mono ? "font-mono text-sm break-all" : ""}>{children}</span>
   </div>
-);
+)); };
 
-const Divider: React.FC = () => <div className="my-3 border-t" />;
+const Divider: React.FC = () => { const t = useT(); return (<div className="my-3 border-t" />); };
 
 /** ====== Main component ====== */
 export const BedrockGuardrailDetails: React.FC<{ response: BedrockGuardrailResponse }> = ({ response }) => {
+  const t = useT();
   if (!response) return null;
 
   const outputs: BedrockOutputContent[] = (response.outputs ?? response.output ?? []) as BedrockOutputContent[];

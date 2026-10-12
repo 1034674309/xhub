@@ -32,7 +32,8 @@ import (
 )
 
 // TestBrowserEnterpriseFixture 启动仅编入测试二进制的 HTTPS 身份/对象服务和控制台代理。
-// 参数 t 为测试运行器；仅显式开启时启动，要求私有 e2e schema 和禁用 Redis。
+// 参数 t 为测试运行器；仅显式开启时启动，要求私有 e2e schema，拒绝调用方提供的共享 Redis。
+// E2E_REDIS=1 时夹具自行启动专属 Redis，并刷写真实队列；退出关闭连接和进程。
 // 浏览器操作真实页面、网关和数据库，归档通过官方 SDK；控制端仅调度 worker/故障。
 // 退出关闭服务和数据库，外层脚本删除私有 schema，不使用外部凭据，不改变生产 SSRF 限制。
 func TestBrowserEnterpriseFixture(t *testing.T) {
@@ -46,7 +47,10 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	}
 	dsn, err := url.Parse(cfg.GeneralSettings.DatabaseURL)
 	if err != nil || !strings.HasPrefix(dsn.Query().Get("search_path"), "e2e_") || cfg.GeneralSettings.RedisURL != "" {
-		t.Fatal("夹具要求私有 e2e schema 且禁用 Redis")
+		t.Fatal("夹具要求私有 e2e schema，Redis 只能由夹具自行创建")
+	}
+	if os.Getenv("E2E_REDIS") == "1" {
+		cfg.GeneralSettings.RedisURL = browserPrivateRedis(t)
 	}
 	ctx := context.Background()
 	db, err := iam.Open(ctx, cfg.GeneralSettings.DatabaseURL)
@@ -63,6 +67,15 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	}
 	defer st.Engine.Close()
 	s := New(cfg, st, db)
+	if cfg.GeneralSettings.RedisURL != "" {
+		if s.Live == nil {
+			t.Fatal("专属 Redis 未连接，浏览器验收不能降级为直接落库")
+		}
+		defer s.Live.Close()
+		// 使用真实刷写方法，缩短离线夹具的等待；停止后再关闭连接，避免迟到刷写访问已关闭的数据库。
+		stopFlush := browserSpendWorker(s)
+		defer stopFlush()
+	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)

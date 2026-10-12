@@ -47,7 +47,12 @@ def main():
     dataset = Dataset(config["gateway"], config["directory"], load_manifest(), logger=lambda _: None)
     dataset.admin = config["admin"]
     key = resolve_billing_identity(dataset, config["key"])
-    print(json.dumps(dataset.codex_conversation(key)))
+    conversation = dataset.codex_conversation(key)
+    # 隔离浏览器也走共享验收的只读前置检查，证明新会话能通过真实账单接口复验。
+    dataset.state["keys"] = [key]
+    dataset.data["verification_order"] = [key["call_model"]]
+    dataset.validate_browser_codex_sessions()
+    print(json.dumps(conversation))
 
 
 if __name__ == "__main__":

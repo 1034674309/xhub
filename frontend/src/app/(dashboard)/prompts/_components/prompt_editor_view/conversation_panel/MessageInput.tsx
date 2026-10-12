@@ -2,7 +2,7 @@ import React from "react";
 import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MessageInputProps {
   inputMessage: string;
@@ -23,6 +23,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onKeyDown,
   onCancel,
 }) => {
+  const t = useT();
   return (
     <div className="flex items-center gap-2">
       <div className="flex items-center flex-1 bg-background border border-border rounded-xl px-3 py-1 min-h-[44px]">

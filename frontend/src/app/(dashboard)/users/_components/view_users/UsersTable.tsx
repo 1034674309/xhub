@@ -21,7 +21,7 @@ import { SearchSelect } from "@/components/shared/SearchSelect";
 import { Input } from "@/components/ui/input";
 
 import { getUsersTableColumns } from "./UsersTableColumns";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface UsersTableTeamOption {
   team_id: string;
@@ -60,6 +60,7 @@ function filterLabels(): Record<string, string> {
 }
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -92,6 +93,7 @@ export function UsersTable({
   onDeleteUser,
   onResetPassword,
 }: UsersTableProps) {
+  const t = useT();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const columns = useMemo(() => {

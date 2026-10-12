@@ -21,15 +21,15 @@ import {
   GuardrailListItem,
   GuardrailListResponse,
 } from "./helpers";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface PromptCompressionTabProps {
   accessToken: string | null;
 }
 
 const compressionSchema = z.object({
-  name: z.string().min(1, t("Name is required")),
-  apiBase: z.string().min(1, t("API base is required")),
+  name: z.string().min(1, { error: () => t("Name is required") }),
+  apiBase: z.string().min(1, { error: () => t("API base is required") }),
   defaultOn: z.boolean(),
 });
 
@@ -52,6 +52,7 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
 );
 
 const PromptCompressionTab: React.FC<PromptCompressionTabProps> = ({ accessToken }) => {
+  const t = useT();
   const form = useZodForm(compressionSchema, { defaultValues: EMPTY_VALUES });
   const [guardrails, setGuardrails] = useState<GuardrailListItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -68,7 +69,7 @@ const PromptCompressionTab: React.FC<PromptCompressionTabProps> = ({ accessToken
         toast.fromError(t("Failed to load compression guardrails"));
       })
       .finally(() => setIsLoading(false));
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   useEffect(() => {
     loadGuardrails();

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAgentsList } from "../networking";
 import { InheritedGrant, inheritedGrantTooltip } from "./inheritedGrants";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Agent {
   agent_id: string;
@@ -26,6 +26,7 @@ export function AgentPermissions({
   inheritedAgents = [],
   accessToken,
 }: AgentPermissionsProps) {
+  const t = useT();
   const [agentDetails, setAgentDetails] = useState<Agent[]>([]);
   const inheritedOnlyAgents = inheritedAgents.filter((grant) => !agents.includes(grant.id));
   const agentIdCount = agents.length + inheritedOnlyAgents.length;

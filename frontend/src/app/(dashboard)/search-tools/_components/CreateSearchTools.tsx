@@ -36,7 +36,7 @@ import parallelAiLogo from "../../../../../public/assets/logos/parallel_ai.png";
 import perplexityLogo from "../../../../../public/assets/logos/perplexity.png";
 import tavilyLogo from "../../../../../public/assets/logos/tavily.png";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const searchProviderLogoMap: Record<string, string> = {
   perplexity: perplexityLogo.src,
@@ -54,22 +54,22 @@ interface SearchProviderLabelProps {
   displayName: string;
 }
 
-export const SearchProviderLabel: React.FC<SearchProviderLabelProps> = ({ providerName, displayName }) => (
+export const SearchProviderLabel: React.FC<SearchProviderLabelProps> = ({ providerName, displayName }) => { const t = useT(); return ((
   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
     <Logo src={searchProviderLogoMap[providerName]} label={displayName} className="w-5 h-5 object-contain" />
     <span>{displayName}</span>
   </div>
-);
+)); };
 
 const createSearchToolShape = {
   search_tool_name: z
     .string()
-    .min(1, t("Please enter a search tool name"))
-    .regex(/^[a-zA-Z0-9_-]+$/, t("Name can only contain letters, numbers, hyphens, and underscores")),
+    .min(1, { error: () => t("Please enter a search tool name") })
+    .regex(/^[a-zA-Z0-9_-]+$/, { error: () => t("Name can only contain letters, numbers, hyphens, and underscores") }),
   search_provider: z
     .string()
     .nullable()
-    .pipe(z.string({ error: "Please select a search provider" }).min(1, t("Please select a search provider"))),
+    .pipe(z.string({ error: "Please select a search provider" }).min(1, { error: () => t("Please select a search provider") })),
   api_key: z.string().optional(),
   description: z.string().optional(),
 };
@@ -105,6 +105,7 @@ const CreateSearchTool: React.FC<CreateSearchToolProps> = ({
   isModalVisible,
   setModalVisible,
 }) => {
+  const t = useT();
   const form = useZodForm(createSearchToolSchema, { defaultValues: EMPTY_VALUES });
   const [isLoading, setIsLoading] = useState(false);
   const [isTestModalVisible, setIsTestModalVisible] = useState(false);

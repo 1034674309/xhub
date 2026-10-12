@@ -2,6 +2,52 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Open one shared identity database, run Migrate during schema setup, and Close at shutdown. Authorize reads through authz and pass trusted ownership to transactional accounting/audit APIs.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| Open(ctx, dsn) | Return a connection or error |
+| DB.Migrate(ctx) | Create/update the schema |
+| DB.GetUser(ctx, id) | Read a user without action authorization |
+| DB.Close() | Release database connections |
+
+### Integration demo
+
+This is a Go integration helper for a host. It compiles as a separate package inside the repository; callers must supply the real dependencies described below before execution.
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/iam"
+)
+
+// ReadDemoUser 演示迁移后身份读取；调用方提供专用 PostgreSQL DSN 和已授权 ID，返回用户或错误。
+// Migrate 会写 schema，必须使用演示数据库；defer 关闭连接，不创建用户记录。
+func ReadDemoUser(ctx context.Context, dsn, userID string) (*iam.User, error) {
+	db, err := iam.Open(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		return nil, err
+	}
+	return db.GetUser(ctx, userID)
+}
+```
+
+This helper compiles; running requires dedicated PostgreSQL and an authorized user ID. Production migrations normally run once at startup, not on every read.
+
+### Errors, state, and side effects
+
+Migrations and accounting write to the database. The five spend scopes are views of one consumption event and must not be summed. Commit database transactions before acknowledging usage queues.
+
 ## Overview
 
 `internal/iam` is the PostgreSQL-backed identity and accounting domain used by authentication, the management gateway, inference admission, and usage reporting. It owns users, organizations, teams, memberships, projects, API keys, route-template bindings, audit records, immutable usage events, request bodies, daily aggregates, budget spend, and RPM/TPM assignments. The package exposes Go methods only; HTTP authentication and role checks live in the gateway before these methods are called.
@@ -26,7 +72,7 @@ Organization and team entry points include `CreateOrg(..., rates ...RateLimits)`
 
 ### Quota, rate, template, and usage APIs
 
-`QuotaPath(ctx, kind, id, hot)` returns `(teamID, organizationID, exhaustedScope, error)`. It reads the complete hierarchy, adds unflushed Redis spend through `hot`, reserves unused fixed child allocations, and reports the first exhausted scope on the target path. Missing parents, ambiguous memberships, and invalid allocations return errors. This is a pre-call admission check; a supplier's final charge can still exceed the last available balance.
+`QuotaPath(ctx, kind, id, hot)` returns `(teamID, organizationID, exhaustedScope, error)`. It reads the caller’s organization, including sibling reservations (or the teamless caller and personal keys), and adds unflushed Redis spend through `hot`, reserves unused fixed child allocations, and reports the first exhausted scope on the target path. Missing parents, ambiguous memberships, and invalid allocations return errors. This is a pre-call admission check; a supplier's final charge can still exceed the last available balance.
 
 `ValidateRates` rejects negative or PostgreSQL-`INT`-overflowing RPM/TPM values. `RatePlan(ctx, kind, id)` returns a `live.RatePlan` containing the target path plus siblings and descendants whose fixed allocations reserve ancestor capacity. Missing nodes, ambiguous parents, and cycles fail. IAM is responsible for producing the valid acyclic indexes and path consumed directly by `live.CheckRatePlan` and `live.AdmitRatePlan`.
 
@@ -38,7 +84,7 @@ Route-template APIs create, update, list, read, and delete JSON bodies and bind 
 
 ### Actual HTTP registration and callers
 
-This directory does not mount HTTP handlers. `internal/gateway/identity/mount.go` maps the APIs to `/user/*`, `/organization/*`, `/team/*`, `/project/*`, `/route_template/*`, and `GET /audit/logs`; login/bootstrap handlers in `internal/gateway/routes.go` also call IAM. `internal/gateway/keys/mount.go` registers personal key generation, list/info, update, block/unblock, delete, bulk, rotate/reset, aliases, and key health endpoints. `internal/gateway/usage/mount.go` registers spend logs and detail, session/global reports, daily activity, model/key/team/provider/tag rollups, cost calculation, and health endpoints. Gateway middleware supplies the actor and authorized scope and maps IAM errors to HTTP status codes. Inference authentication calls key/user/model checks, `QuotaPath`, and `RatePlan`; the live spend flusher calls `RecordUsage`.
+This directory does not mount HTTP handlers. `internal/gateway/identity/mount.go` maps the APIs to `/user/*`, `/organization/*`, `/team/*`, `/project/*`, `/route_template/*`, and `GET /audit/logs`; login/bootstrap handlers in `internal/gateway/routes.go` also call IAM. `internal/gateway/keys/mount.go` registers personal key generation, list/info, update, block/unblock, delete, bulk, rotate/reset, aliases, and key health endpoints. `internal/gateway/usage/mount.go` registers spend logs and detail, session/global reports, daily activity, model/key/team/provider/tag rollups, cost calculation, and health endpoints. Gateway middleware supplies the actor and authorized scope and maps IAM errors to HTTP status codes. Inference admission calls key/user/model checks and `QuotaAndRates`; later target checks use `QuotaPath` without consuming minute capacity; the live spend flusher calls `RecordUsage`.
 
 ## Core implementation
 
@@ -48,7 +94,7 @@ This directory does not mount HTTP handlers. `internal/gateway/identity/mount.go
 
 ### Budget and rate allocation
 
-`quotaTree` loads organizations, teams, users, memberships, and keys and links them into one forest. Fixed budget children reserve `max(limit-spend, 0)`; shared children pass the sum of fixed descendant reservations upward. `validateQuota` checks only the changed node and its ancestors: changing an allocation does not rewind historical consumption or block unrelated profile updates. At admission time `QuotaPath` applies hot Redis spend to both the path and reservation calculations and credits the target child's own reservation so it is not blocked by capacity allocated to itself.
+`quotaTree` loads organizations, teams, users, memberships, and keys and links them into one forest. Fixed budget children reserve `max(limit-spend, 0)`; shared children pass the sum of fixed descendant reservations upward. `validateQuota` checks only the changed node and its ancestors: changing an allocation does not rewind historical consumption or block unrelated profile updates. Runtime `quotaTreeFor` reads only the caller’s ownership component. Initial admission uses `QuotaAndRates` to share that read; target rechecks use `QuotaPath`. Both apply hot Redis spend to both the path and reservation calculations and credits the target child's own reservation so it is not blocked by capacity allocated to itself.
 
 RPM and TPM use the same topology. `rateAllocated` sums fixed children and passes fixed descendants through shared nodes; zero is a real limit and nil means shared/unset. `buildRatePlan` walks the target to its root with cycle and parent validation, then includes the complete rooted component so sibling reservations remain visible. It sorts node IDs for stable indexes and emits the target path from narrowest to broadest. Configuration updates validate nonnegative values and parent allocation inside the same transaction.
 
@@ -72,7 +118,7 @@ The package depends on PostgreSQL/pgx/xorm, bcrypt, `internal/live` for rate-pla
 - [`db.go`](db.go) defines `DB`, normalized domain errors, `Open`/`Migrate`/`Close`, transaction/session and time-zone helpers, `Actor`/`Audit`/`AuditFilter`, audit writes, and audit list/query entry points.
 - [`keys.go`](keys.go) defines key records and inputs, secret generation/hash/rotation, lifecycle and filters, model intersections, budget ceilings, expiry parsing, team-key revocation, and spend reset. Authentication enters through `KeyByHash`; management enters through create/update/list/status/delete methods.
 - [`models.go`](models.go) defines persisted user, organization, team, membership, project, audit, and bootstrap records, status/role constants, table mappings, active/admin predicates, and UUID generation.
-- [`quota.go`](quota.go) builds and validates the private quota tree, computes fixed-child reservations and rate allocation, enforces one-team ownership, and exposes `QuotaPath`, `ErrQuotaAllocation`, and `ErrMultipleTeams`.
+- [`quota.go`](quota.go) builds and validates the private quota tree, computes fixed-child reservations and rate allocation, enforces one-team ownership, and exposes `QuotaAndRates`, `QuotaPath`, `ErrQuotaAllocation`, and `ErrMultipleTeams`.
 - [`rates.go`](rates.go) defines `RateLimits`, patch semantics that distinguish omitted from explicit clear, numeric validation, `RatePlan`, and the private stable rooted-plan builder consumed by `internal/live`.
 - [`route_template.go`](route_template.go) defines template ownership/storage, JSON settings decoding, CRUD, binding validation, scope-table selection, and usage listing/counting.
 - [`task_usage.go`](task_usage.go) implements the advisory-lock task lifecycle and exactly-once completed settlement through `RecordTaskUsage`.

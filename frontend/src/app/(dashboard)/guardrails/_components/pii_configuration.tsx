@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CategoryFilter, PiiEntityList, QuickActions } from "./pii_components";
 import { PiiConfigurationProps } from "@/components/guardrails/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /**
  * A reusable component for rendering PII entity selection and action configuration
@@ -16,6 +16,7 @@ const PiiConfiguration: React.FC<PiiConfigurationProps> = ({
   onActionSelect,
   entityCategories = [],
 }) => {
+  const t = useT();
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   // Create a lookup map to quickly find an entity's category

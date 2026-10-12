@@ -36,7 +36,7 @@ import {
   reloadModelCostMap,
   scheduleModelCostMapReload,
 } from "./networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ReloadStatus {
   scheduled: boolean;
@@ -109,7 +109,7 @@ const formatModelCount = (count: number | null | undefined) => {
   return count.toLocaleString();
 };
 
-const CostMapProvenanceRows: React.FC<{ sourceInfo: CostMapSourceInfo }> = ({ sourceInfo }) => (
+const CostMapProvenanceRows: React.FC<{ sourceInfo: CostMapSourceInfo }> = ({ sourceInfo }) => { const t = useT(); return ((
   <>
     {sourceInfo.source_revision && (
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -149,7 +149,7 @@ const CostMapProvenanceRows: React.FC<{ sourceInfo: CostMapSourceInfo }> = ({ so
       </div>
     )}
   </>
-);
+)); };
 
 const PriceDataReload: React.FC<PriceDataReloadProps> = ({
   accessToken,
@@ -160,6 +160,7 @@ const PriceDataReload: React.FC<PriceDataReloadProps> = ({
   type = "primary",
   className = "",
 }) => {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);

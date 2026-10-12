@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { VectorStore } from "@/components/vector_store_management/types";
 
 import { getVectorStoreTableColumns } from "./VectorStoreTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VectorStoreTableProps {
   data: VectorStore[];
@@ -21,6 +21,7 @@ interface VectorStoreTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -35,6 +36,7 @@ function EmptyState() {
 }
 
 const VectorStoreTable: React.FC<VectorStoreTableProps> = ({ data, onView, onEdit, onDelete, isLoading = false }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => getVectorStoreTableColumns({ onView, onEdit, onDelete }), [onView, onEdit, onDelete]);

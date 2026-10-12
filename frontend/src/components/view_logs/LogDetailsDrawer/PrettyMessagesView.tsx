@@ -9,7 +9,7 @@ import { InputCard } from "./InputCard";
 import { OutputCard } from "./OutputCard";
 import { isRealtimeResponse, RealtimePrettyView } from "./RealtimePrettyView";
 import { MediaRequestResponseView } from "./MediaRequestResponseView";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PrettyMessagesViewProps {
   request: any;
@@ -31,6 +31,7 @@ interface PrettyMessagesViewProps {
  * 边界：媒体请求正文未携带 model 时使用日志模型 ID；未知结构仍回退到普通输入输出卡片。
  */
 export function PrettyMessagesView({ request, response, model, metrics }: PrettyMessagesViewProps) {
+  const t = useT();
   if (isRealtimeResponse(response)) {
     return <RealtimePrettyView response={response} metrics={metrics} />;
   }

@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Policy } from "@/components/policies/types";
 
 import { getPolicyTableColumns, PolicyRow } from "./PolicyTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /** One row per DB policy name plus one row per config policy, so a config policy never hides same-named DB versions; primaryPolicy is used for display and for Edit (FlowBuilder loads all versions) */
 function groupPoliciesByName(policies: Policy[]): PolicyRow[] {
@@ -39,6 +39,7 @@ interface PolicyTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "policy_name", desc: false }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -60,6 +61,7 @@ const PolicyTable: React.FC<PolicyTableProps> = ({
   onViewClick,
   isAdmin = false,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const rows = useMemo(() => groupPoliciesByName(policies), [policies]);

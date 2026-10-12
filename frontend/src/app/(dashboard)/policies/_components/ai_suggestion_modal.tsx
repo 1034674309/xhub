@@ -195,7 +195,7 @@ const AiSuggestionModal: React.FC<AiSuggestionModalProps> = ({
       if (template?.id) byId.set(template.id, template);
     }
     return Array.from(byId.values());
-  }, [suggestions, selectedIds, allTemplates]);
+  }, [suggestions, selectedIds, allTemplates, t]);
 
   const handleUseSelected = () => {
     const selected = selectedTemplates.map((template) => {
@@ -242,7 +242,7 @@ const AiSuggestionModal: React.FC<AiSuggestionModalProps> = ({
 
   const selectedTemplatesNeedingEnrichment = useMemo(
     () => selectedTemplates.filter((t) => t?.llm_enrichment),
-    [selectedTemplates],
+    [selectedTemplates, t],
   );
 
   const needsEnrichment = selectedTemplatesNeedingEnrichment.length > 0;

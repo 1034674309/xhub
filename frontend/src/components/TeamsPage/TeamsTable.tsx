@@ -21,7 +21,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Team } from "../key_team_helpers/key_list";
 import { getTeamTableColumns, TEAM_TABLE_HIDDEN_COLUMNS } from "./teamTableColumns";
 import { exportTeamsToCsv } from "./teamsCsvExport";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TeamsTableProps {
   userRole: string | null;
@@ -46,6 +46,7 @@ const FILTER_LABELS: Record<string, string> = {
 };
 
 export function TeamsTable({ userRole, userID, onSelectTeam, onEditTeam, onDeleteTeam }: TeamsTableProps) {
+  const t = useT();
   const { data: fetchedOrganizations } = useOrganizations();
   const organizations = useMemo(() => fetchedOrganizations ?? [], [fetchedOrganizations]);
 

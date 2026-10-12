@@ -8,7 +8,7 @@ vi.mock("@/components/networking", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/networking")>();
   return {
     ...actual,
-    getCallbacksCall: async () => ({ router_settings: {} }),
+    getCallbacksCall: async () => ({ general_settings: {} }),
   };
 });
 
@@ -71,7 +71,7 @@ beforeEach(() => {
         guardrails: [],
         values: {},
         current_values: {},
-        router_settings: {},
+        general_settings: {},
         field_schema: {},
         fields: [],
         object: "list",

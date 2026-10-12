@@ -8,7 +8,7 @@ import {
 } from "@/data/compliancePrompts";
 import useCan from "@/app/(dashboard)/hooks/useCan";
 import { getGuardrailsList, testPoliciesAndGuardrails } from "@/components/networking";
-import PolicySelector, { getPolicyOptionEntries } from "@/components/policies/PolicySelector";
+import { getPolicyOptionEntries } from "@/components/policies/PolicySelector";
 import { Policy } from "@/components/policies/types";
 import { makeOpenAIChatCompletionRequest } from "@/components/llm_calls/chat_completion";
 import {
@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import Papa from "papaparse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const CATEGORY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   lock: Lock,
@@ -72,6 +72,7 @@ function CategoryIcon({
   iconKey: string;
   className?: string;
 }) {
+  const t = useT();
   const Icon = CATEGORY_ICON_MAP[iconKey] ?? ClipboardList;
   return <Icon className={className} />;
 }
@@ -131,6 +132,7 @@ export default function ComplianceUI({
   fixedModel,
   proxySettings,
 }: ComplianceUIProps) {
+  const t = useT();
   const canViewPolicies = useCan("viewPolicies");
   const frameworks = getFrameworks();
 
@@ -528,7 +530,7 @@ export default function ComplianceUI({
     } finally {
       setIsQuickTesting(false);
     }
-  }, [accessToken, quickTestInput, selectedPolicies, selectedGuardrails, backendMode, fixedModel, requestProxyBaseUrl]);
+  }, [accessToken, quickTestInput, selectedPolicies, selectedGuardrails, backendMode, fixedModel, requestProxyBaseUrl, t]);
 
   const handleQuickTestKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

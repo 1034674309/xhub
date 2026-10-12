@@ -3,7 +3,7 @@ import VectorStorePermissions from "./permissions/VectorStorePermissions";
 import AgentPermissions from "./permissions/AgentPermissions";
 import type { ObjectPermission } from "./object_permission_types";
 import type { InheritedGrant } from "./permissions/inheritedGrants";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ObjectPermissionsViewProps {
   objectPermission?: ObjectPermission | null;
@@ -22,6 +22,7 @@ export function ObjectPermissionsView({
   className = "",
   accessToken,
 }: ObjectPermissionsViewProps) {
+  const t = useT();
   const vectorStores = objectPermission?.vector_stores || [];
   const agents = objectPermission?.agents || [];
   const agentAccessGroups = objectPermission?.agent_access_groups || [];

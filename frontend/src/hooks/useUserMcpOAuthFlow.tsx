@@ -24,7 +24,7 @@ import { extractErrorMessage } from "@/utils/errorUtils";
 import { generateCodeChallenge, generateCodeVerifier } from "@/utils/pkce";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
 import { buildCallbackUrl, clearStorage } from "./mcpOAuthUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { randomId } from "@/utils/randomId";
 
 export type UserMcpOAuthStatus = "idle" | "authorizing" | "exchanging" | "success" | "error";
@@ -78,6 +78,7 @@ export const useUserMcpOAuthFlow = ({
   clientId: preClientId,
   onSuccess,
 }: UseUserMcpOAuthFlowOptions): UseUserMcpOAuthFlowResult => {
+  const t = useT();
   const [status, setStatus] = useState<UserMcpOAuthStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const processingRef = useRef(false);
@@ -236,7 +237,7 @@ export const useUserMcpOAuthFlow = ({
         processingRef.current = false;
       }, 1000);
     }
-  }, [accessToken, serverId, onSuccess]);
+  }, [accessToken, serverId, onSuccess, t]);
 
   useEffect(() => {
     resumeOAuthFlow();

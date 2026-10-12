@@ -18,9 +18,10 @@ import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
 
 import ImpactPopover from "./impact_popover";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function ChipList({ values }: { values: string[] }) {
+  const t = useT();
   if (values.length === 0) {
     return <span className="text-muted-foreground">-</span>;
   }
@@ -46,6 +47,7 @@ const CONFIG_ATTACHMENT_HINT =
   "Config attachments are defined in the config file and cannot be deleted from the dashboard.";
 
 function AttachmentRowActions({ attachment, isAdmin, onDeleteClick }: AttachmentRowActionsProps) {
+  const t = useT();
   const isConfigAttachment = attachment.definition_location === "config";
 
   return (

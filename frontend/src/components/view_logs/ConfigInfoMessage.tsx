@@ -1,11 +1,12 @@
 import React from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ConfigInfoMessageProps {
   show: boolean;
 }
 
 export const ConfigInfoMessage: React.FC<ConfigInfoMessageProps> = ({ show }) => {
+  const t = useT();
   if (!show) return null;
 
   return (

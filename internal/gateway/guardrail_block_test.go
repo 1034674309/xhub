@@ -12,9 +12,7 @@ import (
 	"github.com/sunqirui1987/xhub/cmd/regression/testsupport"
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	"github.com/sunqirui1987/xhub/internal/store"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
@@ -98,14 +96,11 @@ func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 					"api_base": upstream.URL + "/v1",
 				},
 			}},
-			RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 0},
 		},
 		Cache:  util.NewCache(),
-		Hooks:  hooks.New(),
 		Busy:   map[string]int{},
 		Client: upstream.Client(),
 	}
-	s.extensions = plugin.New()
 	if !s.rememberSession("sess-guard", user.ID, user.SessionVersion) {
 		t.Fatal("persist session")
 	}

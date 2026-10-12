@@ -23,7 +23,7 @@ describe("model monitor data", () => {
       { ...data, options: [null] },
       { ...data, options: [{ supplier: 3, model: "x" }] },
     ]) {
-      expect(() => parseMonitorData(value)).toThrow("Invalid model monitor response");
+      expect(() => parseMonitorData(value)).toThrow("monitor_response_invalid");
     }
   });
   /** 前置配置与历史身份，验证无调用选项、删除历史和去重；输入只读，无清理需求。 */

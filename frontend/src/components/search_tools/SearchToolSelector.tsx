@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/combobox";
 import { cn } from "@/lib/cva.config";
 import { fetchSearchTools } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface SearchToolSelectorProps {
   onChange: (selected: string[]) => void;
@@ -33,6 +33,7 @@ const SearchToolSelector: React.FC<SearchToolSelectorProps> = ({
   placeholder = t("Select search tools (optional)"),
   disabled = false,
 }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);

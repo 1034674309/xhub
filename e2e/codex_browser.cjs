@@ -21,6 +21,9 @@ async function verifyCodexLogs(page, ui, gateway, admin, sessions, directory) {
       expect(detail.status(), 'Codex 精确账单接口').toBe(200);
       const bill = await detail.json();
       expect(bill.session_id).toBe(session.session_id);
+      expect(bill.session_source,
+        `Codex model=${session.model} turn=${turn.turn} call_id=${turn.call_id} 会话来源应在落库后保留`)
+        .toBe(turn.turn === 1 ? 'explicit' : 'parent');
       expect(bill.api_key).toBe(session.key_id);
       expect(bill.model).toBe(session.model);
       expect(bill.response.id).toBe(turn.response_id);

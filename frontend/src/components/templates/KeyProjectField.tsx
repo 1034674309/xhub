@@ -5,7 +5,7 @@ import { useProjects } from "@/app/(dashboard)/hooks/projects/useProjects";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 type KeyProjectFieldProps = {
   projectId: string | null | undefined;
@@ -16,6 +16,7 @@ type KeyProjectFieldProps = {
 };
 
 export function KeyProjectField({ projectId, canDetach, pending, disabled, onToggle }: KeyProjectFieldProps) {
+  const t = useT();
   const id = useId();
   const { data: projects } = useProjects();
   const alias = projects?.find((project) => project.project_id === projectId)?.project_alias;

@@ -15,7 +15,7 @@ import { toast } from "@/lib/toast";
 import { keyListCall, regenerateKeyCall } from "../networking";
 import { KeyResponse } from "../key_team_helpers/key_list";
 import { formatExpiresUtc, isKeyExpired, calculateExpiryPreviewFromDuration } from "@/utils/keyExpiryUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const KEYS_QUERY_KEY = "chat-user-keys";
 
@@ -60,6 +60,7 @@ interface FormState {
 }
 
 const KeysPanel: React.FC<Props> = ({ accessToken, userId, premiumUser }) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const [rotateTarget, setRotateTarget] = useState<KeyResponse | null>(null);
   const [regeneratedKey, setRegeneratedKey] = useState<string | null>(null);

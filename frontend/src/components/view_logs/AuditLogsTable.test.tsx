@@ -1,7 +1,8 @@
 import type { ColumnFiltersState, PaginationState } from "@tanstack/react-table";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider, LOCALE_COOKIE, translate, useI18n } from "@/i18n";
 
 import { AuditLogsTable } from "./AuditLogsTable";
 import type { AuditLogEntry } from "./AuditLogsTableColumns";
@@ -36,6 +37,7 @@ const ROWS: AuditLogEntry[] = [
 
 const FIRST_PAGE: PaginationState = { pageIndex: 0, pageSize: 50 };
 
+/** 用途：以可覆盖的服务端数据渲染表格；参数为属性覆盖，返回回调供断言；组件测试调用，由全局 cleanup 卸载，无后台写入。 */
 function renderTable(overrides: Partial<React.ComponentProps<typeof AuditLogsTable>> = {}) {
   const props: React.ComponentProps<typeof AuditLogsTable> = {
     data: ROWS,
@@ -185,5 +187,59 @@ describe("AuditLogsTable", () => {
 
     expect(action).toHaveTextContent("Created");
     expect(table).toHaveTextContent("Team");
+  });
+});
+
+/** 用途：提供真实 Provider 的语言切换入口；无参数，返回测试按钮；只供本文件使用，写入语言偏好由 afterEach 清理。 */
+function LocaleControls() {
+  const { setLocale } = useI18n();
+  return <button onClick={() => setLocale("zh-CN")}>Switch locale</button>;
+}
+
+describe("AuditLogsTable Hook and locale regression", () => {
+  afterEach(() => {
+    localStorage.removeItem(LOCALE_COOKIE);
+    document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0`;
+  });
+
+  /** 目的：验证真实模块可在组件渲染前导入；前置不模拟 React/i18n；结果为正常导出，非法模块级 Hook 会直接使文件加载失败；无持久化数据。 */
+  it("imports the audit table without calling hooks at module scope", async () => {
+    const auditModule = await import("./AuditLogsTable");
+    expect(auditModule.AuditLogsTable).toBeTypeOf("function");
+  });
+
+  /** 目的：验证英文到中文切换同步更新筛选项、按钮和无匹配状态并保留用户输入；前置真实 Provider、空数据和已应用筛选；全局卸载与 afterEach 清理偏好。 */
+  it("updates filters and empty state on locale changes without changing user input", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <LocaleControls />
+        <AuditLogsTable
+          data={[]} rowCount={0} isLoading={false} isRefreshing={false}
+          pagination={FIRST_PAGE} onPaginationChange={vi.fn()}
+          columnFilters={[{ id: "action", value: "created" }]}
+          onColumnFiltersChange={vi.fn()} onRefresh={vi.fn()} onViewLog={vi.fn()}
+          searchValue="用户 original input" onSearchChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText(translate("en", "No matching audit logs"))).toBeVisible();
+    await user.click(screen.getByTestId("datatable-filters-trigger"));
+    expect(screen.getAllByRole("combobox")[0]).toHaveTextContent(translate("en", "audit.filters.created"));
+    await user.click(screen.getByTestId("filter-drawer-apply"));
+    await user.click(screen.getByRole("button", { name: "Switch locale" }));
+    expect(screen.getByPlaceholderText(translate("zh-CN", "audit.search"))).toHaveValue("用户 original input");
+    expect(screen.getByText(translate("zh-CN", "No matching audit logs"))).toBeVisible();
+    expect(screen.getByTestId("filter-chip-action")).toHaveTextContent(translate("zh-CN", "audit.filters.created"));
+    await user.click(screen.getByTestId("datatable-filters-trigger"));
+    expect(screen.getAllByRole("combobox")[0]).toHaveTextContent(translate("zh-CN", "audit.filters.created"));
+    expect(screen.getByTestId("filter-drawer-apply")).toHaveTextContent(translate("zh-CN", "Apply Filters"));
+    expect(screen.getByTestId("filter-drawer-reset")).toHaveTextContent(translate("zh-CN", "Reset"));
+  });
+
+  /** 目的：未知动作作为边界输入不抛错或伪造翻译；前置服务端返回未知筛选值；结果保留原始协议值；全局 cleanup 卸载，无后台数据。 */
+  it("preserves unknown action filter values", () => {
+    renderTable({ columnFilters: [{ id: "action", value: "future-action" }] });
+    expect(screen.getByTestId("filter-chip-action")).toHaveTextContent("future-action");
   });
 });

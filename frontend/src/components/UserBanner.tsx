@@ -8,7 +8,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/shared/Alert"
 import { Button } from "@/components/ui/button";
 import { useUserBanner } from "@/app/(dashboard)/hooks/userBanner/useUserBanner";
 import { UserBanner as UserBannerData, UserBannerSeverity } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const DISMISS_STORAGE_KEY = "litellm:userBannerDismissed";
 
@@ -21,7 +21,7 @@ export const SEVERITY_ICONS: Record<UserBannerSeverity, React.ReactElement> = {
 export const bannerSignature = (banner: UserBannerData): string =>
   JSON.stringify({ message: banner.message, severity: banner.severity, revision: banner.revision });
 
-export const UserBannerMarkdown: React.FC<{ message: string }> = ({ message }) => (
+export const UserBannerMarkdown: React.FC<{ message: string }> = ({ message }) => { const t = useT(); return ((
   <ReactMarkdown
     remarkPlugins={[remarkGfm]}
     components={{
@@ -30,13 +30,14 @@ export const UserBannerMarkdown: React.FC<{ message: string }> = ({ message }) =
   >
     {message}
   </ReactMarkdown>
-);
+)); };
 
 interface UserBannerProps {
   accessToken: string | null;
 }
 
 export const UserBanner: React.FC<UserBannerProps> = ({ accessToken }) => {
+  const t = useT();
   const { data: banner } = useUserBanner(accessToken);
   const [dismissedSignature, setDismissedSignature] = useState<string | null>(() =>
     typeof window === "undefined" ? null : localStorage.getItem(DISMISS_STORAGE_KEY),

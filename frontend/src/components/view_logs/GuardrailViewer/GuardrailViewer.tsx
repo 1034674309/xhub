@@ -7,7 +7,7 @@ import BedrockGuardrailDetails, {
 import ContentFilterDetails from "./ContentFilterDetails";
 import CompliancePanel from "./CompliancePanel";
 import { getSpendString } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ const getDisplayName = (entry: GuardrailInformation): string => {
 
 // ── Icons (inline SVGs) ─────────────────────────────────────────────────────
 
-const ShieldIcon = () => (
+const ShieldIcon = () => { const t = useT(); return ((
   <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
     <circle cx="20" cy="20" r="20" fill="#EEF2FF" />
     <path
@@ -206,49 +206,50 @@ const ShieldIcon = () => (
       fill="none"
     />
   </svg>
-);
+)); };
 
-const CheckCircleIcon = ({ className }: { className?: string }) => (
+const CheckCircleIcon = ({ className }: { className?: string }) => { const t = useT(); return ((
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className={className}>
     <circle cx="11" cy="11" r="10" stroke="#16A34A" strokeWidth="1.5" fill="#F0FDF4" />
     <path d="M7 11l3 3 5-6" stroke="#16A34A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-);
+)); };
 
-const FailCircleIcon = ({ className }: { className?: string }) => (
+const FailCircleIcon = ({ className }: { className?: string }) => { const t = useT(); return ((
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className={className}>
     <circle cx="11" cy="11" r="10" stroke="#DC2626" strokeWidth="1.5" fill="#FEF2F2" />
     <path d="M8 8l6 6M14 8l-6 6" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
-);
+)); };
 
-const FlagCircleIcon = ({ className }: { className?: string }) => (
+const FlagCircleIcon = ({ className }: { className?: string }) => { const t = useT(); return ((
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className={className}>
     <circle cx="11" cy="11" r="10" stroke="#D97706" strokeWidth="1.5" fill="#FFFBEB" />
     <path d="M11 6.5v5M11 14.5v.5" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
-);
+)); };
 
 const OutcomeIcon = ({ outcome }: { outcome: EntryOutcome }) => {
+  const t = useT();
   if (outcome === "passed") return <CheckCircleIcon />;
   if (outcome === "flagged") return <FlagCircleIcon />;
   return <FailCircleIcon />;
 };
 
-const PlayCircleIcon = () => (
+const PlayCircleIcon = () => { const t = useT(); return ((
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
     <circle cx="11" cy="11" r="10" stroke="#3B82F6" strokeWidth="1.5" fill="#EFF6FF" />
     <path d="M9 7.5l6 3.5-6 3.5V7.5z" fill="#3B82F6" />
   </svg>
-);
+)); };
 
-const GrayDotIcon = () => (
+const GrayDotIcon = () => { const t = useT(); return ((
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
     <circle cx="11" cy="11" r="5" fill="#9CA3AF" />
   </svg>
-);
+)); };
 
-const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
+const ChevronIcon = ({ expanded }: { expanded: boolean }) => { const t = useT(); return ((
   <svg
     width="20"
     height="20"
@@ -258,9 +259,9 @@ const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   >
     <path d="M6 8l4 4 4-4" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-);
+)); };
 
-const DownloadIcon = () => (
+const DownloadIcon = () => { const t = useT(); return ((
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path
       d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"
@@ -270,11 +271,12 @@ const DownloadIcon = () => (
       strokeLinejoin="round"
     />
   </svg>
-);
+)); };
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
 const MatchDetailsTable = ({ matchDetails }: { matchDetails: MatchDetail[] }) => {
+  const t = useT();
   if (!matchDetails || matchDetails.length === 0) return null;
 
   return (
@@ -322,6 +324,7 @@ const MatchDetailsTable = ({ matchDetails }: { matchDetails: MatchDetail[] }) =>
 };
 
 const GenericGuardrailResponse = ({ response }: { response: any }) => {
+  const t = useT();
   const [showRaw, setShowRaw] = useState(false);
   return (
     <div className="mt-3">
@@ -355,6 +358,7 @@ interface TimelineEntry {
 }
 
 const RequestLifecycle = ({ entries }: { entries: GuardrailInformation[] }) => {
+  const t = useT();
   const sorted = useMemo(() => [...entries].sort((a, b) => (a.start_time ?? 0) - (b.start_time ?? 0)), [entries]);
 
   const timeline = useMemo(() => {
@@ -424,7 +428,7 @@ const RequestLifecycle = ({ entries }: { entries: GuardrailInformation[] }) => {
     items.push({ type: "response", label: t("Response returned"), offsetMs: responseOffsetMs });
 
     return items;
-  }, [sorted]);
+  }, [sorted, t]);
 
   return (
     <div>
@@ -479,6 +483,7 @@ const formatGuardrailCost = (cost: number): string => {
 };
 
 const EvaluationCard = ({ entry }: { entry: GuardrailInformation }) => {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const outcome = getEntryOutcome(entry);
   const totalMasked = getTotalMasked(entry);
@@ -685,6 +690,7 @@ const EvaluationCard = ({ entry }: { entry: GuardrailInformation }) => {
 // ── Main Component ──────────────────────────────────────────────────────────
 
 const GuardrailViewer = ({ data, accessToken, logEntry }: GuardrailViewerProps) => {
+  const t = useT();
   const guardrailEntries = useMemo(() => {
     return Array.isArray(data)
       ? data.filter((entry): entry is GuardrailInformation => Boolean(entry))

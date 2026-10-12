@@ -1,8 +1,9 @@
 import React from "react";
 import { pricingIssueUrl, totalUnits, type UsageUnits } from "./usageUnits";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export function UnpricedNote({ unpriced, provider }: { unpriced: UsageUnits; provider?: string }) {
+  const t = useT();
   const total = totalUnits(unpriced);
   if (total === 0) return null;
   const [noun, verb] = total === 1 ? ["unit", "is"] : ["units", "are"];

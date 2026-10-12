@@ -1,3 +1,5 @@
+// 本文件验证 transport 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package transport
 
 import (
@@ -10,6 +12,7 @@ import (
 )
 
 // TestFallbackNativePayload 验证网关开关剥离及大整数原样转发；前置原生 JSON，检查未知字段和模型替换，无资源清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestFallbackNativePayload(t *testing.T) {
 	b, err := ParseBypassBody([]byte("{\"model\":\"a\",\"disable_fallbacks\":true,\"value\":9007199254740993}"), "application/json")
 	if err != nil {

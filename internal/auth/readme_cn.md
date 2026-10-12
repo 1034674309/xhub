@@ -2,6 +2,45 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+HTTP 准入先用 Resolve 解析真实凭据；界面会话先验证签名，再用 SessionPrincipal 恢复用户。把得到的 Principal 交给 authz，不能把成功鉴权当作动作授权。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| APIKeyFrom(r) | 提取请求凭据，不访问存储 |
+| Resolve(ctx, cfg, db, r) | 返回 Principal 或鉴权/依赖错误 |
+| SessionPrincipal(user, version, session) | 校验用户会话状态并构造身份 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/auth"
+	"net/http/httptest"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	r := httptest.NewRequest("GET", "/v1/models", nil)
+	r.Header.Set("Authorization", "Bearer demo-key")
+	fmt.Println(auth.APIKeyFrom(r) == "demo-key")
+}
+```
+
+输出 true，只演示凭据提取；完整 Resolve 还需要已加载配置和真实 IAM。
+
+### 错误、状态与副作用
+
+依赖错误应保留为服务端错误；不能把数据库故障当作密钥不存在。不要记录提取出的明文凭据。
+
 ## 说明
 
 `internal/auth` 把 HTTP 请求携带的凭据或已验证的界面会话转换为 `Principal`。它只回答“调用者是谁”，具体动作能否执行由 `internal/authz` 决定。主调用方既包含鉴权所需的身份字段，也保留路由、预算、限流、花费、模型访问和请求日志后续需要的密钥信息，可表示应急主密钥、虚拟 API 密钥或已登录用户会话。

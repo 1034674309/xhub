@@ -20,7 +20,7 @@ import { copyToClipboard } from "@/utils/dataUtils";
 import { userDetailHref } from "@/utils/entityLinks";
 
 import { extractModel, getProviderFromModelHub, ModelGroupInfo } from "./prompt_utils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const ENVIRONMENT_TONE: Record<string, StatusTone> = {
   production: "error",
@@ -29,6 +29,7 @@ const ENVIRONMENT_TONE: Record<string, StatusTone> = {
 };
 
 function PromptModelCell({ prompt, modelHubData }: { prompt: PromptSpec; modelHubData: Map<string, ModelGroupInfo> }) {
+  const t = useT();
   const model = extractModel(prompt);
   if (!model) {
     return <span className="text-sm text-muted-foreground">-</span>;
@@ -70,6 +71,7 @@ interface PromptRowActionsProps {
 }
 
 function PromptRowActions({ prompt, isAdmin, onDeleteClick }: PromptRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

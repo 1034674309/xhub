@@ -4,7 +4,7 @@ import { MoneyCell } from "@/components/shared/table_cells";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 type TopModel = {
   key: string;
@@ -23,6 +23,7 @@ interface TopModelViewProps {
 export const TOP_MODEL_LIMITS = [5, 10, 25, 50];
 
 export default function TopModelView({ topModels, topModelsLimit, setTopModelsLimit }: TopModelViewProps) {
+  const t = useT();
   const [modelViewMode, setModelViewMode] = useState<"chart" | "table">("table");
 
   const columns = [

@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { fetchClient } from "@/lib/http/api";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 import { buildBody, settingsToForm, type DefaultInternalUserParams, type InternalUserSettings } from "./mapper";
 import {
@@ -31,16 +31,16 @@ import {
 const NO_RESET = "never";
 
 const BUDGET_DURATION_OPTIONS = [
-  { value: NO_RESET, label: t("No reset") },
-  { value: "1h", label: t("hourly") },
-  { value: "24h", label: t("daily") },
-  { value: "7d", label: t("weekly") },
-  { value: "30d", label: t("monthly") },
+  { value: NO_RESET, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No reset"); } },
+  { value: "1h", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("hourly"); } },
+  { value: "24h", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("daily"); } },
+  { value: "7d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("weekly"); } },
+  { value: "30d", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("monthly"); } },
 ] as const;
 
 const TEAM_ROLE_OPTIONS = [
-  { value: "user", label: t("User") },
-  { value: "admin", label: t("Admin") },
+  { value: "user", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("User"); } },
+  { value: "admin", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Admin"); } },
 ] as const;
 
 const MODEL_SENTINEL_LABELS: ReadonlyMap<string, string> = new Map(
@@ -72,6 +72,7 @@ interface RoleOption {
 type SettingsControl = Control<DefaultUserSettingsFormValues, unknown, DefaultUserSettingsSubmitValues>;
 
 const TeamPickerField = ({ control, index }: { control: SettingsControl; index: number }) => {
+  const t = useT();
   const [search, setSearch] = React.useState("");
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteTeams(
     TEAMS_PAGE_SIZE,
@@ -114,6 +115,7 @@ const TeamPickerField = ({ control, index }: { control: SettingsControl; index: 
 };
 
 const TeamsField = ({ control }: { control: SettingsControl }) => {
+  const t = useT();
   const { fields, append, remove } = useFieldArray({ control, name: "teams" });
 
   return (
@@ -177,12 +179,12 @@ const TeamsField = ({ control }: { control: SettingsControl }) => {
   );
 };
 
-const ViewRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const ViewRow = ({ label, children }: { label: string; children: React.ReactNode }) => { const t = useT(); return ((
   <div>
     <p className="text-sm font-medium">{label}</p>
     <p className="text-sm text-muted-foreground">{children}</p>
   </div>
-);
+)); };
 
 interface SettingsViewProps {
   values: DefaultUserSettingsFormValues;
@@ -190,6 +192,7 @@ interface SettingsViewProps {
 }
 
 const SettingsView = ({ values, roleOptions }: SettingsViewProps) => {
+  const t = useT();
   const roleLabel = roleOptions.find((option) => option.value === values.user_role)?.label ?? values.user_role;
   const durationValue = values.budget_duration === "" ? NO_RESET : values.budget_duration;
   const durationLabel =
@@ -232,6 +235,7 @@ interface SettingsFormProps {
 }
 
 const SettingsForm = ({ initialValues, roleOptions, updateSettings, onCancel, onSaved }: SettingsFormProps) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const form = useZodForm(defaultUserSettingsSchema, { defaultValues: initialValues });
   const { isDirty } = form.formState;
@@ -356,7 +360,7 @@ const SettingsForm = ({ initialValues, roleOptions, updateSettings, onCancel, on
   );
 };
 
-const SettingsCard = ({ action, children }: { action?: React.ReactNode; children: React.ReactNode }) => (
+const SettingsCard = ({ action, children }: { action?: React.ReactNode; children: React.ReactNode }) => { const t = useT(); return ((
   <Card>
     <CardHeader>
       <CardTitle>{t("pages.users.defaultsTitle")}</CardTitle>
@@ -365,7 +369,7 @@ const SettingsCard = ({ action, children }: { action?: React.ReactNode; children
     </CardHeader>
     <CardContent>{children}</CardContent>
   </Card>
-);
+)); };
 
 export interface DefaultUserSettingsFormProps {
   possibleUIRoles?: Record<string, Record<string, string>> | null;
@@ -378,6 +382,7 @@ export const DefaultUserSettingsForm = ({
   fetchSettings = defaultFetchSettings,
   updateSettings = defaultUpdateSettings,
 }: DefaultUserSettingsFormProps) => {
+  const t = useT();
   const [isEditing, setIsEditing] = React.useState(false);
   const { data, isPending, isError } = useQuery({ queryKey: SETTINGS_QUERY_KEY, queryFn: fetchSettings });
 

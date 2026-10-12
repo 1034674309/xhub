@@ -3,17 +3,17 @@
 import React from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export const INPUT_POLICY_OPTIONS = [
-  { value: "untrusted", label: t("untrusted"), dot: "bg-warning" },
-  { value: "trusted", label: t("trusted"), dot: "bg-success" },
-  { value: "blocked", label: t("blocked"), dot: "bg-destructive" },
+  { value: "untrusted", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("untrusted"); }, dot: "bg-warning" },
+  { value: "trusted", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("trusted"); }, dot: "bg-success" },
+  { value: "blocked", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("blocked"); }, dot: "bg-destructive" },
 ] as const;
 
 export const OUTPUT_POLICY_OPTIONS = [
-  { value: "untrusted", label: t("untrusted"), dot: "bg-warning" },
-  { value: "trusted", label: t("trusted"), dot: "bg-success" },
+  { value: "untrusted", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("untrusted"); }, dot: "bg-warning" },
+  { value: "trusted", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("trusted"); }, dot: "bg-success" },
 ] as const;
 
 export const POLICY_OPTIONS = INPUT_POLICY_OPTIONS;
@@ -40,6 +40,7 @@ export const PolicySelect: React.FC<PolicySelectProps> = ({
   size = "small",
   stopPropagation = true,
 }) => {
+  const t = useT();
   const options = policyType === "output" ? OUTPUT_POLICY_OPTIONS : INPUT_POLICY_OPTIONS;
   const selected = policyStyle(value);
   return (

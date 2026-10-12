@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronRight, Clock, Copy, ShieldX } from "lucide-r
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TestResult {
   guardrailName: string;
@@ -32,6 +32,7 @@ interface GuardrailTestResultsProps {
  * 测试：GuardrailTestResults.test.tsx。
  */
 export function GuardrailTestResults({ results, errors }: GuardrailTestResultsProps) {
+  const t = useT();
   const [collapsedResults, setCollapsedResults] = useState<Set<string>>(new Set());
 
   /**

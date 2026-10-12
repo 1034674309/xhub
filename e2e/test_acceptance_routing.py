@@ -1,5 +1,6 @@
 """真实验收 routing 模块的单元测试；各用例独立管理夹具与清理。"""
 import tempfile
+import threading
 import unittest
 from unittest import mock
 from acceptance import Dataset, fallback_acceptance_deployments, fallback_acceptance_route, load_manifest, weighted_acceptance_route
@@ -10,27 +11,38 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_weighted_acceptance_route_switches_only_the_active_deployment(self):
         """目的：确定性权重链只在两个真实部署间切换；前置同一模型和两个部署 ID，验证 100:0、0:100、无回退及单次尝试，纯内存结果无需清理。"""
-        first = weighted_acceptance_route("gpt-5.6-sol", "a", "b", [100, 0], 300)
-        second = weighted_acceptance_route("gpt-5.6-sol", "a", "b", [0, 100], 300)
+        first = weighted_acceptance_route("gpt-5.6-sol", "a", "b", [100, 0], 300, ["baseline"])
+        second = weighted_acceptance_route("gpt-5.6-sol", "a", "b", [0, 100], 300, ["baseline"])
         self.assertEqual(first["model_routes"][0]["allocations"], [
-            {"deployment_id": "a", "weight": 100}, {"deployment_id": "b", "weight": 0}])
+            {"deployment_id": "a", "weight": 100}, {"deployment_id": "b", "weight": 0}, {"deployment_id": "baseline", "weight": 0}])
         self.assertEqual(second["model_routes"][0]["allocations"], [
-            {"deployment_id": "a", "weight": 0}, {"deployment_id": "b", "weight": 100}])
-        self.assertEqual(first["fallbacks"], [])
+            {"deployment_id": "a", "weight": 0}, {"deployment_id": "b", "weight": 100}, {"deployment_id": "baseline", "weight": 0}])
+        for category in ("fallbacks", "context_window_fallbacks", "content_policy_fallbacks"):
+            self.assertEqual(first[category], [{"gpt-5.6-sol": []}])
         self.assertEqual(first["retry_policy"]["max_attempts"], 1)
+
+    def test_weighted_route_rejects_ambiguous_ids_and_invalid_weights(self):
+        """目的：确定性路由拒绝重复部署和非法分配；前置纯内存样本，验证空、重复、负数、非有限及全零权重失败，无资源需要清理。"""
+        for first, second, excluded in (("a", "a", []), ("", "b", []), ("a", "b", ["a"]), ("a", "b", ["c", "c"])):
+            with self.subTest(ids=(first, second, excluded)), self.assertRaises(ValueError):
+                weighted_acceptance_route("model", first, second, [100, 0], 60, excluded)
+        for weights in ([], [1], [1, 2, 3], [0, 0], [-1, 1], [float("nan"), 1], [float("inf"), 1], [True, 0]):
+            with self.subTest(weights=weights), self.assertRaises(ValueError):
+                weighted_acceptance_route("model", "a", "b", weights, 60)
 
 
     def test_fallback_acceptance_route_pins_zero_weight_and_real_fallback(self):
         """目的：零权重验收不能被现有组织或团队模板覆盖；前置主模型故障/健康部署及真实备用模型，验证临时密钥模板显式写入100:0、备用部署和回退链，纯内存结果无需清理。"""
-        body = fallback_acceptance_route("gpt-5.6-sol", "fault", "healthy", "z-ai/glm-5", "qiniu", 300)
+        body = fallback_acceptance_route("gpt-5.6-sol", "fault", "healthy", "z-ai/glm-5", "qiniu", 300, ["other-glm"])
         self.assertEqual(body["model_routes"][0]["allocations"], [
             {"deployment_id": "fault", "weight": 100},
             {"deployment_id": "healthy", "weight": 0},
         ])
         self.assertEqual(body["model_routes"][1]["allocations"], [
             {"deployment_id": "qiniu", "weight": 100},
+            {"deployment_id": "other-glm", "weight": 0},
         ])
-        self.assertEqual(body["fallbacks"], [{"gpt-5.6-sol": ["z-ai/glm-5"]}])
+        self.assertEqual(body["fallbacks"], [{"gpt-5.6-sol": ["z-ai/glm-5"]}, {"z-ai/glm-5": []}])
         self.assertEqual(body["retry_policy"]["max_attempts"], 1)
 
 
@@ -88,7 +100,7 @@ class AcceptanceTests(unittest.TestCase):
                 def api(route, body):
                     """模拟管理接口并核对完整路由参数；参数为路径和正文，返回创建结果或抛故障，所有状态仅在当前临时实例内。"""
                     if route == "/route_template/new":
-                        self.assertEqual(body["body"]["fallbacks"], [{"gpt-5.6-sol": ["z-ai/glm-5"]}])
+                        self.assertEqual(body["body"]["fallbacks"], [{"gpt-5.6-sol": ["z-ai/glm-5"]}, {"z-ai/glm-5": []}])
                         self.assertEqual(body["body"]["model_routes"][0]["allocations"], [
                             {"deployment_id": "fault", "weight": 100},
                             {"deployment_id": "qiniu", "weight": 0},
@@ -108,6 +120,73 @@ class AcceptanceTests(unittest.TestCase):
                 if fail_at == "chat":
                     requests.assert_any_call("/route_template/route/delete", {})
                     self.assertEqual(sum(call.args[0] == "/key/delete" for call in requests.call_args_list), 2)
+
+
+    def test_fallback_chain_reuses_successful_target_and_rejects_wrong_bill_identity(self):
+        """目的：同会话同正文首次回退两跳、后续命中成功正文且账单保留请求身份；前置隔离观察器，覆盖正常及模型/会话/来源错误，验证禁回退仍使用原会话并清理所有临时资源。"""
+        for invalid_field in (None, "model", "session_id", "session_source"):
+            with self.subTest(invalid_field=invalid_field), tempfile.TemporaryDirectory() as directory:
+                dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
+                dataset.state["chat_models"] = {"fennoai": "gpt-5.6-sol"}
+                dataset.state["selected"] = {"fennoai": {"provider": {"id": "fennoai"}}}
+                baseline = [
+                    {"id": "healthy", "public_name": "gpt-5.6-sol", "provider": "fennoai"},
+                    {"id": "glm", "public_name": "z-ai/glm-5", "provider": "qiniu"},
+                ]
+                dataset.state["deployments"] = baseline + [{"id": "fault", "public_name": "gpt-5.6-sol", "provider": "fennoai", "temporary": True}]
+                dataset.observer = mock.MagicMock(rows=[], lock=threading.Lock())
+                successful_bodies = []
+                disabled_bodies = []
+
+                def api(route, body):
+                    """模拟管理边界；参数为路径和正文，返回临时模板或密钥，仅记录本例管理调用，结束由外层核对删除。"""
+                    if route == "/route_template/new":
+                        return {"id": "route"}, {}
+                    return {"key": "temporary-" + body.get("key_alias", "")}, {}
+
+                def chat(subject, body, expected=200):
+                    """模拟供应商边界；参数为密钥、请求和预期状态，返回响应与 call ID，首次记录主备两跳，后续不外发，禁止回退只记录主模型。"""
+                    if expected == 200:
+                        if not successful_bodies:
+                            dataset.observer.rows.append({"provider": "fennoai", "route_tag": "fault", "status": 429, "messages": body["messages"][0]["content"]})
+                        successful_bodies.append(dict(body))
+                        if len(successful_bodies) == 1:
+                            dataset.observer.rows.append({"provider": "qiniu", "route_tag": "default", "status": 200, "messages": body["messages"][0]["content"]})
+                        return {"usage": {"total_tokens": 3}}, {"cache_hit": str(len(successful_bodies) > 1).lower()}, 200, str(len(successful_bodies))
+                    if expected == 502:
+                        disabled_bodies.append(dict(body))
+                    dataset.observer.rows.append({"provider": "fennoai", "route_tag": "fault", "status": 429, "messages": body["messages"][0]["content"]})
+                    return {"error": "model not in allowed model list"}, {}, expected, "denied"
+
+                def bill(call_id):
+                    """模拟已落库账单；参数为独立调用 ID，返回请求身份；可注入单字段错误以证明错误归属不会被成功状态掩盖。"""
+                    row = {"model": "gpt-5.6-sol", "session_id": successful_bodies[-1]["session_id"], "session_source": "explicit"}
+                    if invalid_field:
+                        row[invalid_field] = "wrong"
+                    return row
+
+                with mock.patch.object(dataset, "deployment", return_value="fault"), \
+                     mock.patch.object(dataset, "api", side_effect=api) as requests, \
+                     mock.patch.object(dataset, "chat_request", side_effect=chat), \
+                     mock.patch.object(dataset, "wait_bill", side_effect=bill), \
+                     mock.patch("acceptance.routing.bill_check", return_value=0.001),                      mock.patch("acceptance.routing.cache_bill_check") as check_cache_bill:
+                    if invalid_field:
+                        with self.assertRaisesRegex(AssertionError, "账单未保留请求模型或明确会话"):
+                            dataset.verify_fallback_policy_chain({"user_id": "user", "team_id": "team", "project_id": "project"})
+                    else:
+                        dataset.verify_fallback_policy_chain({"user_id": "user", "team_id": "team", "project_id": "project"})
+                        repeat_count = dataset.data["logic_chains"]["fallback_cache"]["repeat_requests"]
+                        self.assertEqual(len(successful_bodies), repeat_count)
+                        self.assertEqual(len({row["session_id"] for row in successful_bodies}), 1, "各轮必须保持同一个明确会话")
+                        self.assertEqual(len({row["messages"][0]["content"] for row in successful_bodies}), 1, "重复相同正文验证回退成功响应缓存")
+                        self.assertEqual(check_cache_bill.call_count, repeat_count - 1)
+                        self.assertEqual(len(disabled_bodies), 1)
+                        self.assertEqual(disabled_bodies[0]["session_id"], successful_bodies[0]["session_id"])
+                        self.assertEqual(len(dataset.observer.rows), 4)
+                self.assertEqual(dataset.state["deployments"], baseline)
+                requests.assert_any_call("/model/delete", {"id": "fault"})
+                requests.assert_any_call("/route_template/route/delete", {})
+                self.assertEqual(sum(call.args[0] == "/key/delete" for call in requests.call_args_list), 2)
 
 
     def test_profile_route_isolation_calls_both_real_models_and_rejects_cross_provider(self):
@@ -147,6 +226,7 @@ class AcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             observer = type("ObserverStub", (), {"base": "http://127.0.0.1:4567"})()
             dataset = Dataset("http://127.0.0.1:1", directory, load_manifest(), observer=observer)
+            dataset.isolated_upstreams = True
             definition = next(row for row in dataset.data["models"] if row["id"] == "fenno-chat")
             provider = dataset.data["providers"][0]
             captured = []
@@ -163,5 +243,3 @@ class AcceptanceTests(unittest.TestCase):
                              "http://127.0.0.1:4567/fennoai/weight-b")
             self.assertEqual(dataset.state["deployments"][0]["route_tag"], "weight-b")
             self.assertTrue(dataset.state["deployments"][0]["temporary"])
-
-

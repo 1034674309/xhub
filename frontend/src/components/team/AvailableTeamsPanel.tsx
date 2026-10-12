@@ -5,7 +5,7 @@ import { toast } from "@/lib/toast";
 
 import AvailableTeamsTable from "./AvailableTeamsTable";
 import { AvailableTeam } from "./AvailableTeamsTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AvailableTeamsProps {
   accessToken: string | null;
@@ -13,6 +13,7 @@ interface AvailableTeamsProps {
 }
 
 const AvailableTeamsPanel: React.FC<AvailableTeamsProps> = ({ accessToken, userID }) => {
+  const t = useT();
   const [availableTeams, setAvailableTeams] = useState<AvailableTeam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

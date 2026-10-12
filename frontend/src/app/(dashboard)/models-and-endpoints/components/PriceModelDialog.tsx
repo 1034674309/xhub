@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,6 +53,7 @@ export function PriceModelDialog({
   onSave: (body: Record<string, unknown>) => void;
   isSaving?: boolean;
 }) {
+  const t = useT();
   const draft: PriceModelDraft = editing?.raw ?? {};
   const [id, setId] = useState(editing?.id ?? "");
   const [provider, setProvider] = useState(editing?.provider ?? providers[0]?.slug ?? "");

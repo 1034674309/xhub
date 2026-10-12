@@ -3,13 +3,14 @@ import Image from "next/image";
 import { FileText } from "lucide-react";
 import { MessageType } from "@/components/chat_ui/types";
 import { shouldShowChatAttachedImage } from "./ChatImageUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChatImageRendererProps {
   message: MessageType;
 }
 
 const ChatImageRenderer: React.FC<ChatImageRendererProps> = ({ message }) => {
+  const t = useT();
   if (!shouldShowChatAttachedImage(message)) {
     return null;
   }

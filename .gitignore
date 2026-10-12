@@ -50,3 +50,10 @@ docs/development/zh-CN/e2e-scenario-inventory-20261011.json
 docs/development/zh-CN/e2e-scenario-inventory-20261011.md
 frontend/.next-e2e-audit
 frontend/.next-codex-session-fix
+docs/testdata/supplier-cache
+frontend/.next-business-browser-fix
+frontend/.next-codex-source-fix
+frontend/.next-design-redis
+frontend/.next-design-cleanup
+frontend/.next-cache-review
+gateway

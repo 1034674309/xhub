@@ -7,13 +7,14 @@ import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
 import { ChevronDown, ChevronRight, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ReasoningContentProps {
   reasoningContent: string;
 }
 
 const ReasoningContent: React.FC<ReasoningContentProps> = ({ reasoningContent }) => {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(coy);
   const [isExpanded, setIsExpanded] = useState(true);
 

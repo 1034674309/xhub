@@ -7,9 +7,10 @@ import VariableInput from "./VariableInput";
 import MessageList from "./MessageList";
 import VariableWarning from "./VariableWarning";
 import MessageInput from "./MessageInput";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const ConversationPanel: React.FC<ConversationPanelProps> = ({ prompt, accessToken }) => {
+  const t = useT();
   const {
     isLoading,
     messages,

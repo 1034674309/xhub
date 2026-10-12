@@ -6,25 +6,30 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/cva.config";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
+  const t = useT();
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
 }
 
 function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {
+  const t = useT();
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />;
 }
 
 function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
+  const t = useT();
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
 }
 
 function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {
+  const t = useT();
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
 function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
+  const t = useT();
   return (
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
@@ -47,6 +52,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
 }) {
+  const t = useT();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -75,20 +81,24 @@ function SheetContent({
 }
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
+  const t = useT();
   return <div data-slot="sheet-header" className={cn("flex flex-col gap-1.5 p-4", className)} {...props} />;
 }
 
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
+  const t = useT();
   return <div data-slot="sheet-footer" className={cn("mt-auto flex flex-col gap-2 p-4", className)} {...props} />;
 }
 
 function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
+  const t = useT();
   return (
     <SheetPrimitive.Title data-slot="sheet-title" className={cn("font-medium text-foreground", className)} {...props} />
   );
 }
 
 function SheetDescription({ className, ...props }: SheetPrimitive.Description.Props) {
+  const t = useT();
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"

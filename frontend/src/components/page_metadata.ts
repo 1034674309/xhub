@@ -24,6 +24,7 @@ export const pageDescriptions: Record<string, string> = {
   new_usage: "查看用量分析与指标",
   logs: "查看请求与响应日志",
   "audit-logs": "查看平台管理操作审计记录",
+  "model-monitor": "监控模型调用、费用和性能",
   "guardrails-monitor": "监控护栏表现并查看日志",
   users: "管理内部用户账号与权限",
   teams: "创建并管理用于访问控制的团队",

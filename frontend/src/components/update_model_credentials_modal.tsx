@@ -11,10 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const updateCredentialsSchema = z.object({
-  api_key: z.string().min(1, t("Enter a new API key")),
+  api_key: z.string().min(1, { error: () => t("Enter a new API key") }),
 });
 
 type UpdateCredentialsValues = z.infer<typeof updateCredentialsSchema>;
@@ -36,6 +36,7 @@ export default function UpdateModelCredentialsModal({
   modelId,
   onUpdated,
 }: UpdateModelCredentialsModalProps) {
+  const t = useT();
   const form = useZodForm(updateCredentialsSchema, { defaultValues: EMPTY_VALUES });
   const [isSaving, setIsSaving] = useState(false);
 

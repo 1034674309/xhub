@@ -164,7 +164,6 @@ def reset_shared_target(database_url=SHARED_DATABASE_URL, redis_url=SHARED_REDIS
 
 def shared_config(password):
     """用途：生成直连用户指定数据库与 Redis 的网关配置；参数为管理员密码，返回配置字典；密钥仅写入私有运行目录。"""
-    return {"model_list": [], "router_settings": {"num_retries": 1, "timeout": 90},
-            "general_settings": {"master_key": "sk-" + secrets.token_hex(24), "admin_email": "admin", "admin_name": "admin",
+    return {"model_list": [], "general_settings": {"master_key": "sk-" + secrets.token_hex(24), "admin_email": "admin", "admin_name": "admin",
             "admin_password": password, "store_model_in_db": True, "store_prompts_in_spend_logs": True,
             "database_url": SHARED_DATABASE_URL, "redis_url": SHARED_REDIS_URL}}

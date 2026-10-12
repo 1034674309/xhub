@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { TooltipContentProps, TooltipValueType } from "recharts";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export type ChartTooltipProps = Pick<
   TooltipContentProps<TooltipValueType, string | number>,
@@ -27,6 +27,7 @@ export const ValueTooltip = ({
   label,
   valueFormatter,
 }: ChartTooltipProps & { valueFormatter?: (value: number) => string }) => {
+  const t = useT();
   if (!active || !payload || payload.length === 0) return null;
 
   const formatValue = (value: unknown): string => {
@@ -71,6 +72,7 @@ const formatMetricValue = (rawValue: number | undefined, isSpend: boolean): stri
 };
 
 export const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+  const t = useT();
   if (!active || !payload || payload.length === 0) return null;
 
   return (

@@ -1,7 +1,6 @@
 "use client";
 import { keyKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import { formatNumberWithCommas } from "@/utils/dataUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,7 @@ import { Info } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { rolesWithWriteAccess } from "../../utils/roles";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
 import {
   MountedFormField,
@@ -40,9 +39,9 @@ import { simplifyKeyGenerateError } from "./utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const KEY_TYPE_OPTIONS = [
-  { value: "llm_api", label: t("AI APIs"), hint: t("Can call only AI API routes (chat/completions, embeddings, etc.)") },
-  { value: "management", label: t("Management"), hint: t("Can call only management routes (user/team/key management)") },
-  { value: "default", label: t("Full Access"), hint: t("Can call all routes (AI APIs, Management, and read-only)") },
+  { value: "llm_api", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("AI APIs"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only AI API routes (chat/completions, embeddings, etc.)"); } },
+  { value: "management", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Management"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only management routes (user/team/key management)"); } },
+  { value: "default", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Full Access"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call all routes (AI APIs, Management, and read-only)"); } },
 ];
 
 type FieldWrite = (value: unknown) => void;
@@ -130,6 +129,7 @@ export const fetchUserModels = async (
  * 创建失败展示错误，成功刷新列表，关闭后重置表单；明文不持久化到浏览器。
  */
 const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOpenCreate, prefillData }) => {
+  const t = useT();
   const { accessToken, userId: userID, userRole } = useAuthorized();
   const queryClient = useQueryClient();
   const [formDefaults] = useState<MountedFormValues>(() => ({

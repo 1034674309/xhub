@@ -154,9 +154,9 @@ func (f *supplierFixture) fail(supplier string, status int) {
 }
 func (f *supplierFixture) reset() { f.mu.Lock(); defer f.mu.Unlock(); f.calls = nil }
 
-// selected checks committed affinity against the supplier's response. Model
-// strings cannot distinguish suppliers; supplier names alone cannot distinguish
-// two deployment rows sharing a connection. Response IDs are unique per call.
+// selected 校验成功响应的固定归属与供应商返回内容；参数为测试上下文、密钥、请求别名和响应，返回原部署。
+// 多供应商回归调用；通过唯一响应 ID 查询授权归属，用稳定部署 ID 区分同连接部署，不能比较用于冷却的运行身份。
+// 未授权、缺失响应 ID 或归属不一致时立即失败；只读当前隔离夹具，无额外清理。
 func (f *supplierFixture) selected(t *testing.T, key, public string, r reply) config.ModelEntry {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -171,7 +171,7 @@ func (f *supplierFixture) selected(t *testing.T, key, public string, r reply) co
 	}
 	plan := f.h.gw.PlanRoute(req, public, map[string]any{"previous_response_id": id}, principal)
 	for _, entry := range f.entries {
-		if entry.ModelName == public && router.CooldownID(entry) == plan.Pinned {
+		if entry.ModelName == public && router.DeploymentID(entry) == plan.Pinned {
 			choices := listField(r.json(), "choices")
 			if len(choices) != 1 {
 				t.Fatal("supplier response has no choice")

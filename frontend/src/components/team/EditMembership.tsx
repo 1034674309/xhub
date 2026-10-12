@@ -19,7 +19,7 @@ import {
   type MemberFormValues,
 } from "./memberFormValues";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface BaseMember {
   user_email?: string;
@@ -65,6 +65,7 @@ const MemberModal = <T extends BaseMember>({
   mode,
   config,
 }: MemberModalProps<T>) => {
+  const t = useT();
   const schema = useMemo(() => buildMemberSchema(config), [config]);
   const form = useZodForm(schema, { defaultValues: emptyMemberFormValues(config) });
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -3,7 +3,7 @@ import { apiClient } from "@/components/networking";
 import type { components } from "@/lib/http/schema";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { createQueryKeys } from "../common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type MCPToolSearchSettings = components["schemas"]["MCPToolSearchSettings"];
 export type MCPToolSearchSettingsResponse = components["schemas"]["MCPToolSearchSettingsResponse"];
@@ -23,6 +23,7 @@ export const updateMCPToolSearchSettings = (
   apiClient.patch<MCPToolSearchSettings>(UPDATE_PATH, { accessToken, body: settings });
 
 export const useMCPToolSearchSettings = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   return useQuery<MCPToolSearchSettingsResponse>({
     queryKey: mcpToolSearchSettingsKeys.list({}),
@@ -32,6 +33,7 @@ export const useMCPToolSearchSettings = () => {
 };
 
 export const useUpdateMCPToolSearchSettings = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
   return useMutation<MCPToolSearchSettings, Error, MCPToolSearchSettings>({

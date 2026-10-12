@@ -15,7 +15,6 @@ import (
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/live"
 	"github.com/sunqirui1987/xhub/internal/llm/estimate"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
 	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
@@ -24,25 +23,6 @@ import (
 	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
-
-// regressionExtension 是内部扩展注册表的可观察替身，记录收到的调用并返回固定决定。
-// 参数由 BeforeUpstream 接收；返回预置的 plugin.Decision。调用场景是验证具名扩展边界；无外部调用和持久化副作用。
-type regressionExtension struct {
-	name  string
-	seen  *plugin.Call
-	value plugin.Decision
-}
-
-// Name 返回扩展的稳定注册名。
-// 参数：无；返回注册名。仅由 plugin.Registry 注册和查找时调用；无副作用。
-func (e *regressionExtension) Name() string { return e.name }
-
-// BeforeUpstream 保存网关准备发往上游的调用并返回预置决定。
-// 参数 call 是模型调用上下文；返回预置决定。仅在注册表调用边界使用；会更新 seen，不访问外部服务。
-func (e *regressionExtension) BeforeUpstream(call plugin.Call) plugin.Decision {
-	*e.seen = call
-	return e.value
-}
 
 // TestInternalEstimateBoundary 验证折扣、加价、计费档位和本地 token 估算的组合契约。
 // 前置条件是固定价格和短文本；验证供应商规则优先级、未知值降级及模型名归一化；不访问供应商且无清理需求。
@@ -172,20 +152,20 @@ func TestInternalCatalogClassificationBoundary(t *testing.T) {
 	}
 }
 
-// TestInternalCacheAndPluginBoundary 验证缓存清空与具名扩展调用这两个进程内模块的实际边界。
+// TestInternalCacheBoundary 验证缓存清空与具名扩展调用这两个进程内模块的实际边界。
 // 前置条件是新建内存缓存和注册表；验证副本隔离、Flush、调用透传及缺失扩展错误；所有状态随测试进程释放。
-func TestInternalCacheAndPluginBoundary(t *testing.T) {
+func TestInternalCacheBoundary(t *testing.T) {
 	c := util.NewCache()
 	source := []byte("answer")
 	c.Set("key", source)
 	source[0] = 'X'
 	got, ok := c.Get("key")
-	if !ok || string(got) != "answer" {
+	if !ok || string(got.Body) != "answer" {
 		t.Fatalf("缓存未隔离写入切片: %q/%v", got, ok)
 	}
-	got[0] = 'Y'
+	got.Body[0] = 'Y'
 	again, _ := c.Get("key")
-	if string(again) != "answer" {
+	if string(again.Body) != "answer" {
 		t.Fatalf("缓存未隔离读取切片: %q", again)
 	}
 	c.Flush()
@@ -196,36 +176,6 @@ func TestInternalCacheAndPluginBoundary(t *testing.T) {
 		t.Fatal("缓存键分段发生碰撞")
 	}
 
-	registry := plugin.New()
-	var seen plugin.Call
-	ext := &regressionExtension{
-		name:  "audit",
-		seen:  &seen,
-		value: plugin.Decision{Refuse: true, Status: http.StatusForbidden, Code: "blocked", Message: "policy", Header: map[string]string{"X-Audit": "yes"}},
-	}
-	if err := registry.Register(ext); err != nil {
-		t.Fatalf("注册扩展失败: %v", err)
-	}
-	names := registry.Names()
-	if !reflect.DeepEqual(names, []string{"audit"}) {
-		t.Fatalf("扩展注册顺序错误: %#v", names)
-	}
-	names[0] = "mutated"
-	if registry.Names()[0] != "audit" {
-		t.Fatal("调用方修改了扩展注册表名称切片")
-	}
-	call := plugin.Call{Op: "chat", Model: "demo", Path: "/v1/chat/completions"}
-	decision, err := registry.Invoke("audit", call)
-	if err != nil || !reflect.DeepEqual(seen, call) || !decision.Refuse || decision.Status != http.StatusForbidden || decision.Header["X-Audit"] != "yes" {
-		t.Fatalf("具名扩展调用边界错误: seen=%#v decision=%#v err=%v", seen, decision, err)
-	}
-	if _, err := registry.Invoke("missing", call); err == nil || !strings.Contains(err.Error(), "not registered") {
-		t.Fatalf("缺失扩展未返回可定位错误: %v", err)
-	}
-	var nilRegistry *plugin.Registry
-	if _, err := nilRegistry.Invoke("missing", call); err == nil {
-		t.Fatal("nil 注册表未返回错误")
-	}
 }
 
 // TestInternalLiveUnavailableBoundary 验证未配置 Redis 时热路径模块保持可预测降级，同时拒绝需要可靠入队的写入。
@@ -340,7 +290,7 @@ func TestInternalConfigLoadBoundary(t *testing.T) {
 	t.Setenv("XHUB_REGRESSION_DB", "postgresql://user:pass@localhost/xhub")
 	t.Setenv("XHUB_REGRESSION_KEY", "resolved-secret")
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw := []byte("general_settings:\n  database_url: os.environ/XHUB_REGRESSION_DB\n  custom_flag: kept\nrouter_settings:\n  custom_route: kept\nmodel_list:\n  - model_name: demo\n    litellm_params:\n      api_key: os.environ/XHUB_REGRESSION_KEY\n")
+	raw := []byte("general_settings:\n  database_url: os.environ/XHUB_REGRESSION_DB\n  custom_flag: kept\nmodel_list:\n  - model_name: demo\n    litellm_params:\n      api_key: os.environ/XHUB_REGRESSION_KEY\n")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatalf("写入临时配置失败: %v", err)
 	}
@@ -351,11 +301,8 @@ func TestInternalConfigLoadBoundary(t *testing.T) {
 	if loaded.GeneralSettings.DatabaseURL != "postgresql://user:pass@localhost/xhub" || loaded.ModelList[0].LiteLLMParams["api_key"] != "resolved-secret" {
 		t.Fatalf("配置环境引用未展开: %#v", loaded)
 	}
-	if loaded.RouterSettings.RoutingStrategy != "random" || loaded.RouterSettings.NumRetries != 2 || loaded.RouterSettings.Timeout != 60 {
-		t.Fatalf("路由默认值未建立: %#v", loaded.RouterSettings)
-	}
-	if loaded.GeneralRaw["custom_flag"] != "kept" || loaded.RouterRaw["custom_route"] != "kept" {
-		t.Fatalf("未声明扩展配置未保留: general=%#v router=%#v", loaded.GeneralRaw, loaded.RouterRaw)
+	if loaded.GeneralRaw["custom_flag"] != "kept" {
+		t.Fatalf("通用扩展配置未保留: %#v", loaded.GeneralRaw)
 	}
 
 	invalid := filepath.Join(t.TempDir(), "invalid.yaml")

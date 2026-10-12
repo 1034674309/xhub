@@ -1,6 +1,6 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface NumericalInputProps {
   step?: number;
@@ -27,7 +27,7 @@ const NumericalInput = React.forwardRef<HTMLInputElement, NumericalInputProps>(
   (
     { step = 0.01, style = { width: "100%" }, placeholder = t("Enter a numerical value"), min, max, onChange, ...rest },
     ref,
-  ) => (
+  ) => { const t = useT(); return ((
     <Input
       ref={ref}
       type="number"
@@ -40,7 +40,7 @@ const NumericalInput = React.forwardRef<HTMLInputElement, NumericalInputProps>(
       onChange={onChange}
       {...rest}
     />
-  ),
+  )); },
 );
 NumericalInput.displayName = "NumericalInput";
 

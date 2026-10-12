@@ -287,29 +287,15 @@ func openHarness(t *testing.T, storePrompts bool, models ...config.ModelEntry) *
 	// Redis 是可选的。设了 XHUB_REGRESSION_REDIS_URL 才走真实的 Redis
 	// 热花费和限流路径；不设就走进程内滑窗，断言照样成立。
 	cfg := &config.Config{
-		ModelList:      models,
-		RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 0, Timeout: 30},
-		GeneralRaw:     map[string]any{},
+		ModelList: models,
+
+		GeneralRaw: map[string]any{},
 		GeneralSettings: config.GeneralSettings{
 			MasterKey:               h.master,
 			DatabaseURL:             dsn,
 			RedisURL:                os.Getenv("XHUB_REGRESSION_REDIS_URL"),
 			StorePromptsInSpendLogs: storePrompts,
 		},
-	}
-	for _, model := range models {
-		var timeout float64
-		switch value := model.LiteLLMParams["timeout"].(type) {
-		case float64:
-			timeout = value
-		case int:
-			timeout = float64(value)
-		case string:
-			timeout, _ = strconv.ParseFloat(value, 64)
-		}
-		if timeout > cfg.RouterSettings.Timeout {
-			cfg.RouterSettings.Timeout = timeout
-		}
 	}
 	h.gw = gateway.New(cfg, st, db)
 	h.server = httptest.NewServer(h.gw.Handler())

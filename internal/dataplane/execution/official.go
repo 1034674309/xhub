@@ -1,3 +1,5 @@
+// 本文件串联供应商原生创建与任务后续操作，保留原生载荷并按调用方/传输隔离任务及最终结算。
+// 调用关系与边界：数据面执行编排；具体参数、返回及副作用见各方法说明。
 package execution
 
 import (
@@ -25,11 +27,13 @@ import (
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-// ServeBypass 转发一次已经匹配到的官方调用。正文按登记的模型规则转发；Fal 队列链接改为网关相对路径。
-// usage 在后续查询第一次出现时扣一次。
-// 参数 h：Bypass 接口。w：调用方响应。r：入站请求。hit：路径匹配到的端点类型和动作。
-// 返回：无。错误和上游正文都写在 w 上。
-// 调用：gateway/bypass.go serveBypass。测试：bypass_logic_test.go TestEndpointAndModelLogic。
+// ServeBypass 是供应商原生 API 的数据面入口，按已登记操作分派创建或后续任务操作。
+// 参数 h 提供身份、路由、任务归属与记账能力；w、r 是客户端交互；hit 必须来自协议目录匹配，不能由客户端任意构造目标 URL。
+// 返回值：无，响应和错误直接写入 w；网关在识别原生端点后调用。
+// 先鉴权，最多读取 64 MiB 正文，解析 JSON 或 multipart 的路由字段；创建交给 serveBypassCreate，查询等操作交给 serveBypassFollow。
+// 原生链保留供应商载荷，不进入统一对话护栏或响应缓存；错误与任务查询仍受身份、模型权限和预算约束。
+// 副作用包括读取入站正文、出站 HTTP、任务归属缓存及用量日志；入站正文由 HTTP 服务生命周期关闭。
+// 超限、非法载荷或未授权请求在访问上游前拒绝，出站响应正文由 ForwardOfficial 关闭。
 func ServeBypass(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hit providercontract.Hit) {
 	start := time.Now()
 	callID := util.CallID()
@@ -49,6 +53,7 @@ func ServeBypass(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hi
 		return
 	}
 	body := requestBody.Fields
+	// 某些同步协议没有动作名，以登记的 ModelField 判定创建；任务 ID 则按路径/查询登记读取。
 	if hit.Action.Name == "create" || hit.Transport.ModelField != "" && hit.Action.Name == "" {
 		serveBypassCreate(h, w, r, hit, p, body, raw, callID, start)
 		return
@@ -66,15 +71,15 @@ func ServeBypass(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hi
 	serveBypassFollow(h, w, r, hit, id, callID, start, p)
 }
 
-// serveBypassCreate 处理创建。按模型字段找勾了该类型的部署，换成官方模型 id 和上游密钥。
-// 创建响应里的任务 id 钉住这条部署；同步对话按实际 usage 计费，异步任务沿用查询结算。
-// 仅显式配置回退的同步对话可在失败后重放；继续请求、已输出流和异步创建保持原部署。
-//
-// 参数 h（Bypass）：官方转发需要的能力，不含聊天缓存和护栏；w（http.ResponseWriter）：创建结果或错误写在这里；r（*http.Request）：入站请求，用来读路径和头；hit（provider.Hit）：这次匹配到的端点类型和动作。
-// 参数 principal（*auth.Principal）：已通过鉴权的调用方。body（map[string]any）：解析后的 JSON。raw（[]byte）：原始正文。
-// 参数 callID（string）：用量行 id。start（time.Time）：请求开始时间。
-// 返回：无。
-// 调用：ServeBypass 在动作名是 create 时。测试：逻辑测试中的方舟创建、重试及任务归属。
+// serveBypassCreate 为原生创建请求选择合法部署，转发原始协议并记录后续任务归属。
+// 参数 h、w、r、hit 为原生入口环境；principal 为已鉴权身份；body 是路由/计价字段投影，raw 是完整载荷；callID、start 标识本次调用与开始时间。
+// 返回值：无，写入原生响应或网关错误；仅由 ServeBypass 的创建分支调用。
+// 公开模型可来自正文或登记路径；路径固定模型必须唯一映射公开别名，歧义时要求显式选择。
+// 每个候选都复核实际模型/组权限，附加服务端凭据，用登记传输替换模型并移除网关字段。
+// 同步对话且非 background 才允许安全重放；异步创建遭遇网络中断、超时或 5xx 时可能已创建付费任务，因此不能盲目再创建。
+// disable_fallbacks 只禁止跨目标回退；Required 父响应归属同时禁止普通重放。流写出后发生错误也立即终止。
+// 成功时按调用方与传输隔离任务 ID，保存部署和创建时计费事实，改写队列查询 URL，并提交成功会话目标。
+// 每次执行记录协议实测用量与出站诊断；资源清理由尝试上下文和响应正文关闭完成，远程任务生命周期由调用方管理。
 func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hit providercontract.Hit, principal *auth.Principal, body map[string]any, raw []byte, callID string, start time.Time) {
 	requestBody, _ := dptransport.ParseBypassBody(raw, r.Header.Get("Content-Type"))
 	field := hit.Transport.ModelField
@@ -88,8 +93,8 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		alias = hit.Names["model"]
 	}
 	if alias == "" && hit.Action.Model != "" {
-		// A Fal body normally has no model. Resolve the registered path to its
-		// configured public alias, including names created by the model editor.
+		// Fal 原厂正文通常没有 model，必须把固定路径型号映射回当前目录的公开别名。
+		// 多个别名对应同一端点时不猜测调用方权限范围，要求显式指定 model。
 		names := map[string]bool{}
 		list, _ := dprouting.DropDisabled(eligible(h, hit))
 		for _, dep := range list {
@@ -117,7 +122,7 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", plan.Err.Error())
 		return
 	}
-	if !h.EnforceIdentityLimits(w, r.URL.Path, principal, alias, dpusage.EstimateTokens(body)) {
+	if !h.AdmitRequest(w, r.URL.Path, principal, alias, dpusage.EstimateTokens(body)) {
 		return
 	}
 	settings := h.RouteSettingsFor(principal)
@@ -284,6 +289,7 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		return
 	}
 forwarded:
+	// 转发结束后才提交任务事实与交互：HTTP 成功、任务创建、会话偏好和可计费用量是不同事实。
 	if status == 0 {
 		h.RememberExchange(callID, r, raw, []byte("upstream request failed"))
 		h.RecordSpend(w, principal, callID, alias, hit.Transport.ID+":"+hit.Action.Name, nil, start, false, http.StatusBadGateway, selectedID)
@@ -343,17 +349,21 @@ forwarded:
 	dptransport.WriteThrough(w, response)
 }
 
-// serveBypassFollow 处理查询和列表。id 非空时走任务钉，并要求部署仍属于这个端点类型。
-// id 为空时是列表：只有一个上游密钥才转发，多个则写 400 和模型名。
-// 参数 id：路径或查询串里的任务 id，列表时为空。其余参数与创建相同。
-// 返回：无。异步查询更新原日志状态与正文，成功实测用量只结算一次。
-// 调用：ServeBypass。测试：逻辑测试的重复扣费、跨供应商 404、列表和 Suno 查询参数。
+// serveBypassFollow 查询、取消或读取已创建原生任务，始终回到创建该任务的部署。
+// 参数 h、w、r、hit 是当前交互；id 是登记字段取出的任务 ID；callID、start 属于本次查询；principal 用于归属隔离与权限检查。
+// 返回值：无；ServeBypass 对非创建操作调用，转发一次上游结果或写错误响应。
+// 带 ID 时先读调用方/传输范围内的归属，再验证当前部署仍存在且端点匹配；缺失或跨身份查询返回 404。
+// 无 ID 的列表操作仅在凭据与根地址唯一时可执行，避免猜测多个账户中应查询哪一个。
+// 恢复创建时 RequestID、StartedAt 与计价维度；每次轮询保留独立调用 ID，有正实测用量的最终结果另用稳定 SettlementID 去重结算。
+// SkipRouteUsage 避免反复轮询污染路由用量；记账持久层负责结算去重，本方法不以丢弃轮询日志代替去重。
+// 副作用包括一次上游 HTTP、调用日志和可能的最终结算；不会自动迁移任务到其他部署或重新创建任务。
 func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hit providercontract.Hit, id, callID string, start time.Time, principal *auth.Principal) {
 	var dep config.ModelEntry
 	var ok bool
 	scopedID := officialTaskScope(principal, hit.Transport.ID, id)
 	var depID string
 	if id != "" {
+		// 任务属于创建时账户，普通模型偏好或回退不能迁移它；不存在与越权都返回同一 404。
 		pinned := h.OfficialDeployment(scopedID)
 		if pinned == "" {
 			util.WriteTypedError(w, r.URL.Path, 404, "not_found", "unknown task")
@@ -380,7 +390,7 @@ func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 	if depID == "" {
 		depID = router.CooldownID(dep)
 	}
-	if !h.EnforceIdentityLimits(w, r.URL.Path, principal, dep.ModelName, 0) {
+	if !h.AdmitRequest(w, r.URL.Path, principal, dep.ModelName, 0) {
 		return
 	}
 	settings := h.RouteSettingsFor(principal)
@@ -446,6 +456,8 @@ func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 			billingStart = facts.StartedAt
 		}
 	}
+	// 轮询日志保留独立 callID；有正实测用量且没有进行中/失败事实时才建立稳定结算标识。
+	// 进行中报告的进度统计不能当最终费用；实际去重由记账持久层完成。
 	settlementID := ""
 	if id != "" && status >= 200 && status < 300 && positiveOfficialUsage(usage) && !officialPending(doc) && officialTaskStatus(status, doc, false) != "failed" {
 		// 每次完成查询都允许重试持久化；新任务由原日志事务标记去重，旧任务保留稳定结算 ID 兼容。
@@ -480,9 +492,10 @@ func serveBypassFollow(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 	dptransport.WriteThrough(w, response)
 }
 
-// officialTaskStatus 将供应商响应转换为原请求生命周期状态。
-// 参数 status、doc、initial：HTTP 状态、响应对象、是否创建；返回执行中、轮询中、完成或失败的协议值。
-// 调用创建与查询路径；未知或缺失状态保持活动态，HTTP 错误及供应商失败显示失败，无副作用。
+// officialTaskStatus 把原生 HTTP 状态与任务正文归一为日志中的生命周期状态。
+// 参数 status 为 HTTP 状态；doc 为已解析响应；initial 区分首次创建和后续轮询。返回 failed、completed、executing 或 polling。
+// 创建/查询记账调用；HTTP 错误、error/detail 和明确失败状态优先，成功终态映射 completed。
+// 缺少可识别状态时，创建仍记 executing，查询记 polling；只分类事实，不更新远程任务或存储。
 func officialTaskStatus(status int, doc map[string]any, initial bool) string {
 	if status >= 400 || doc["error"] != nil || doc["detail"] != nil {
 		return "failed"
@@ -500,12 +513,10 @@ func officialTaskStatus(status int, doc map[string]any, initial bool) string {
 	return "polling"
 }
 
-// dataplaneNote 组装 Bypass 写入用量行的备注。供应商优先用部署上的 custom_llm_provider，
-// 否则用端点类型的前缀，再否则用类型 id。
-// 参数 hit：端点类型。dep：选中的部署。sessionID：PlanRoute 给出的会话，可空。
-// 参数 elapsed：从请求开始到上游响应结束。
-// 返回：CallNote。TTFTMs 在耗时大于 0 时至少为 1 毫秒。
-// 调用：创建和查询在 RecordSpend 之前。测试：逻辑测试断言 Provider 为 volcengine。
+// dataplaneNote 生成原生调用的用量备注，统一入口、供应商、实际上游模型、会话及计时字段。
+// 参数 hit 为登记操作；dep 为实际执行部署；sessionID 为网关会话；elapsed 为本次耗时。返回独立 CallNote 值。
+// 创建和查询在记账前调用；同步耗时作为默认计时，真正流式计时随后由 applyStreamTiming 覆盖。
+// 函数不写日志、不访问网络，返回的备注必须通过 AnnotateCall 与同一 callID 关联。
 func dataplaneNote(hit providercontract.Hit, dep config.ModelEntry, sessionID string, elapsed time.Duration) dpcontract.CallNote {
 	name := dep.ParamString("custom_llm_provider", "")
 	if name == "" {
@@ -521,18 +532,17 @@ func dataplaneNote(hit providercontract.Hit, dep config.ModelEntry, sessionID st
 	}
 }
 
-// sameEndpoint 确认钉住的部署和当前路径属于同一类端点。防止跨协议查询任务。
-// 参数 dep：钉上找回的部署。hit：当前路径匹配到的类型。
-// 返回：true 才继续用这行部署转发。
-// 调用：serveBypassFollow。测试：native_bypass_test.go 的任务隔离与重复查询。
+// sameEndpoint 检查当前部署是否仍匹配任务所要求的原生端点及传输。
+// 参数 dep 为目录中的当前部署，hit 为本次登记路径；返回兼容时为 true。
+// serveBypassFollow 恢复任务后调用，防止配置变化将旧任务送到错误协议；只读能力注册，不访问上游。
 func sameEndpoint(dep config.ModelEntry, hit providercontract.Hit) bool {
 	return providerdeployment.Includes(dep, hit.Transport.ID)
 }
 
-// eligible 列出模型表里属于当前传输方式的部署。
-// 参数 h、hit：读模型表和当前匹配。
-// 返回：未再过滤暂停状态的部署。暂停由创建和 oneUpstream 去掉。
-// 调用：serveBypassCreate、oneUpstream。测试：bypass_logic_test.go。
+// eligible 从主机模型目录筛出支持本次原生端点的部署。
+// 参数 h 提供当前模型表，hit 指定能力端点；返回能力兼容的候选切片。
+// 原生创建与唯一上游查找调用；之后仍需过滤停用、授权、冷却和凭据，能力兼容本身不是执行许可。
+// 只读目录，不发请求、不提交会话归属；空切片表示没有兼容部署。
 func eligible(h dpcontract.Bypass, hit providercontract.Hit) []config.ModelEntry {
 	var out []config.ModelEntry
 	for _, m := range h.Models() {
@@ -544,10 +554,11 @@ func eligible(h dpcontract.Bypass, hit providercontract.Hit) []config.ModelEntry
 	return out
 }
 
-// oneUpstream 为没有任务 id 的列表选部署。按 api_base 加 api_key 分组。 只有一组时返回那条部署。多组不能合成一家的官方响应。
-// 参数 h（Bypass）：h；hit（provider.Hit）：hit。
-// 调用：仅在 official.go 内使用
-// 测试：无直接单测
+// oneUpstream 为不带任务 ID 的原生列表操作寻找唯一可确定的上游账户。
+// 参数 h、hit 指定当前部署目录与端点；返回候选部署、可报告的公开模型名列表及是否唯一。
+// serveBypassFollow 调用；过滤停用部署并补齐凭据后，以根地址与密钥组合去重，不以模型名数量判断账户数量。
+// 凭据失败的候选跳过；没有或多个账户时 ok 为 false，由调用方返回明确错误。
+// 仅查询服务端配置/凭据，不访问上游；不得把返回模型名列表当作供应商密钥或地址输出。
 func oneUpstream(h dpcontract.Bypass, hit providercontract.Hit) (config.ModelEntry, []string, bool) {
 	list, _ := dprouting.DropDisabled(eligible(h, hit))
 	seen := map[string]config.ModelEntry{}
@@ -572,10 +583,10 @@ func oneUpstream(h dpcontract.Bypass, hit providercontract.Hit) (config.ModelEnt
 	return config.ModelEntry{}, names, false
 }
 
-// officialTaskScope 隔离不同调用方和不同供应商端点的任务编号。
-// 参数 p、transport、id：调用方、端点类型和上游任务编号。
-// 返回：固定长度、不含凭证的任务范围键。
-// 调用：创建和查询。测试：official_template_test.go。
+// officialTaskScope 构造原生任务归属的租户隔离键，避免供应商任务 ID 碰撞或跨用户读取。
+// 参数 p 为已鉴权身份，transport 为登记传输 ID，id 为原生任务 ID；返回 v2: 前缀的 SHA-256 键。
+// 创建保存与后续读取必须使用同一函数；身份优先使用密钥哈希，否则使用用户 ID。
+// JSON 数组编码保留字段边界后再哈希，不靠字符串拼接分隔符猜边界；函数无网络或存储副作用。
 func officialTaskScope(p *auth.Principal, transport, id string) string {
 	caller := ""
 	if p != nil {
@@ -590,29 +601,30 @@ func officialTaskScope(p *auth.Principal, transport, id string) string {
 	return "v2:" + hex.EncodeToString(sum[:])
 }
 
-// officialSettlementID 由固定部署与调用方任务范围生成唯一结算身份。
-// 等待或零用量轮询保留各自的请求身份，不占用成功结果的结算身份。
-// 参数 scopedID：隔离调用主体和任务的身份。depID：钉住的部署身份。
-// 返回：稳定的持久层结算 request_id。
-// 调用：serveBypassFollow。测试：official_settlement_test.go。
+// officialSettlementID 为同一个原生任务在同一部署上的最终费用构造稳定去重标识。
+// 参数 scopedID 为已隔离身份的任务键，depID 为部署运行身份；返回 official-settlement: 前缀的哈希。
+// 最终查询有正实测用量时调用；重复或并发轮询得到同一标识，持久层可重试失败结算并防止重复扣费。
+// 它不替代每轮 callID，也不在本函数中执行去重或扣费。
 func officialSettlementID(scopedID, depID string) string {
 	raw, _ := json.Marshal([]string{scopedID, depID})
 	sum := sha256.Sum256(raw)
 	return "official-settlement:" + hex.EncodeToString(sum[:])
 }
 
-// positiveOfficialUsage 判断规范化后是否有正用量。
-// 参数 usage：上游用量对象。返回：任一计费维度为正时为真。
-// 调用：serveBypassFollow。测试：official_settlement_test.go。
+// positiveOfficialUsage 判断原生用量是否存在可用于最终结算的正实测维度。
+// 参数 usage 为已提取的用量对象，可为 nil；返回任一受支持维度大于零时为 true。
+// 查询结算调用；检查输入/输出与缓存 token、图像、时长、搜索等维度，缺失或全零为 false。
+// 只检查事实，不估算费用、不修改映射；未知扩展维度不会自动变成计费依据。
 func positiveOfficialUsage(usage map[string]any) bool {
 	u := catalog.NormalizeUsage(usage)
 	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.CachedTokens > 0 ||
 		u.CacheWriteTokens > 0 || u.Images > 0 || u.Seconds > 0 || u.Searches > 0
 }
 
-// officialPending 判断显式未完成或失败的任务，避免把进度用量当作最终账单。
-// 参数 doc：上游任务响应。返回：任务尚未成功完成时为真。
-// 调用：serveBypassFollow。测试：official_template_test.go。
+// officialPending 识别不能按完成结果结算的明确原生任务状态。
+// 参数 doc 为任务正文；返回已识别的进行中或失败状态是否应视作非成功结果。
+// 创建与查询计价调用；明确成功终态为 false，未知或缺失状态同样为 false，不把所有未知响应都假定未完成。
+// 本函数只读状态，不检查 HTTP 状态或推断用量，调用方必须结合协议测量结果处理。
 func officialPending(doc map[string]any) bool {
 	status, _ := doc["status"].(string)
 	switch strings.ToLower(strings.TrimSpace(status)) {
@@ -622,10 +634,10 @@ func officialPending(doc map[string]any) bool {
 	return false
 }
 
-// usageFromOfficial 从官方响应里取出 usage 对象。没有用量字段时返回 nil，创建请求因此不计费。
-// 参数 doc：已解析的上游响应。
-// 返回：usage 映射，或 nil。
-// 调用：serveBypassFollow。测试：逻辑测试第一次查询带 completion_tokens，创建响应没有 usage。
+// usageFromOfficial 从原生 JSON 正文提取协议报告的用量字段。
+// 参数 doc 为解析后的响应；返回用量映射，未报告时为 nil。
+// 原生执行在记账时调用，复用 usage 包的普通、Responses 与 Gemini 包络规则；不执行估算或价格计算。
+// 返回对象可能引用 doc 内部映射，调用方需在请求范围内使用，不能并发改写共享正文。
 func usageFromOfficial(doc map[string]any) map[string]any {
 	usage, _ := doc["usage"].(map[string]any)
 	if len(usage) == 0 {
@@ -634,11 +646,11 @@ func usageFromOfficial(doc map[string]any) map[string]any {
 	return usage
 }
 
-// rewriteQueueURLs 将任务轮询地址改写为登记的网关相对路径。
-// 参数 hit：固定传输与动作；doc：上游对象；raw：原始正文。
-// 返回：改写后的 JSON；无任务、无变更或编码失败时返回原字节。
-// 调用：创建与后续查询。测试：fal_test.go。
-// 不信任上游 URL 的主机；未实现取消时清空 cancel_url。
+// rewriteQueueURLs 把供应商队列响应中的查询/结果链接改为网关原生路径，使后续操作继续受鉴权与任务归属约束。
+// 参数 hit 为登记操作；doc 为已解析响应；raw 为原始字节。返回改写后的 JSON，不能改写或编码失败时保留 raw。
+// 原生成功创建/查询后调用；仅处理已登记的相对操作路径，不采信供应商 URL 的主机名作为出站目标。
+// cancel_url 被置空以避免暴露不可代理操作；会原地修改 doc，但不发送请求或更新任务状态。
+// 无需改写时原始字节保持不变，避免透传链无意义地重编码未知扩展字段。
 func rewriteQueueURLs(hit providercontract.Hit, doc map[string]any, raw []byte) []byte {
 	if !hit.Transport.QueueURLs || doc == nil {
 		return raw
@@ -681,8 +693,10 @@ func rewriteQueueURLs(hit providercontract.Hit, doc map[string]any, raw []byte) 
 	return out
 }
 
-// applyStreamTiming 将实测 SSE 首数据时间写入调用备注；参数 note 为待更新快照、response 为转发结果、start 为开始时间。
-// 原生调用计费前调用，无返回值；非流式保持原备注，未收到 SSE 数据时不产生性能样本。
+// applyStreamTiming 将原生转发器实测的流标志及首数据耗时写入调用备注。
+// 参数 note 为可修改备注指针，response 为转发结果，start 为请求起点；返回值无。
+// 原生执行记账前调用；非流式保留原计时，流式无数据时清空默认同步 TTFT，确有首数据时才设置毫秒值。
+// 原地修改 note，不访问网络；HTTP 首响应字节与首 SSE 数据是不同事实，不能把空流的总耗时伪装成首 token 延迟。
 func applyStreamTiming(note *dpcontract.CallNote, response dptransport.ForwardResponse, start time.Time) {
 	note.Streamed = response.Streamed
 	if response.Streamed {

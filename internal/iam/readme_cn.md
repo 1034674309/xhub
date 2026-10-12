@@ -2,6 +2,52 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+进程用 Open 建立一次身份库，Open 已自动调用 Migrate；显式重复 Migrate 用于幂等重新应用 schema。之后共享 DB 并在关闭时 Close。生产读取之前由 authz 授权；事务账务与审计接口只接收可信归属。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| Open(ctx, dsn) | 返回连接或错误 |
+| DB.Migrate(ctx) | 创建/升级 schema，写数据库 |
+| DB.GetUser(ctx, id) | 读取用户，不执行动作授权 |
+| DB.Close() | 释放数据库连接 |
+
+### 接入 demo
+
+这是供宿主调用的 Go 接入函数。将代码放在仓库内独立包中可编译；实际执行前须由调用方提供下述真实依赖。
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/iam"
+)
+
+// ReadDemoUser 演示迁移后身份读取；调用方提供专用 PostgreSQL DSN 和已授权 ID，返回用户或错误。
+// Migrate 会写 schema，必须使用演示数据库；defer 关闭连接，不创建用户记录。
+func ReadDemoUser(ctx context.Context, dsn, userID string) (*iam.User, error) {
+	db, err := iam.Open(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		return nil, err
+	}
+	return db.GetUser(ctx, userID)
+}
+```
+
+接入函数可编译；运行需要专用 PostgreSQL 和已授权用户 ID。生产通常在启动迁移一次，不在每次读取时迁移。
+
+### 错误、状态与副作用
+
+迁移和账务会写数据库。五个费用作用域是同一消费的不同视图，不能相加；数据库事务提交前不能确认 Redis 用量队列。
+
 ## 说明
 
 `internal/iam` 是认证、管理网关、推理准入和用量报表共用的 PostgreSQL 身份与账务域。它持有用户、组织、团队、成员关系、项目、API 密钥、路由模板绑定、审计记录、不可变用量事件、请求正文、日聚合、各层花费以及 RPM/TPM 分配。本目录只提供 Go 方法；HTTP 身份认证和角色判断由网关完成后再调用这些方法。
@@ -26,7 +72,7 @@
 
 ### 配额、速率、模板与用量 API
 
-`QuotaPath(ctx, kind, id, hot)` 返回 `(teamID, organizationID, exhaustedScope, error)`。它读取完整层级，通过 `hot` 加入尚未刷库的 Redis 花费，为固定额度子节点保留未消费余额，并报告目标路径上第一个耗尽层级。父节点缺失、成员归属歧义和非法分配都会返回错误。它是调用前检查，供应商最终结算仍可能超过最后一点余额。
+`QuotaPath(ctx, kind, id, hot)` 返回 `(teamID, organizationID, exhaustedScope, error)`。它仅读取调用者所在组织（含兄弟预留），无团队个人仅读取自身和个人密钥，通过 `hot` 加入尚未刷库的 Redis 花费，为固定额度子节点保留未消费余额，并报告目标路径上第一个耗尽层级。父节点缺失、成员归属歧义和非法分配都会返回错误。它是调用前检查，供应商最终结算仍可能超过最后一点余额。
 
 `ValidateRates` 拒绝负数以及超出 PostgreSQL `INT` 的 RPM/TPM。`RatePlan(ctx, kind, id)` 返回 `live.RatePlan`，其中既有目标路径，也保留会占用祖先容量的兄弟及后代节点；节点缺失、父级歧义和循环会失败。IAM 负责构造有效无环的索引与路径，`live.CheckRatePlan` 和 `live.AdmitRatePlan` 会直接使用这些索引。
 
@@ -38,7 +84,7 @@
 
 ### 实际 HTTP 注册与调用方
 
-本目录不直接挂载 HTTP handler。`internal/gateway/identity/mount.go` 将这些 API 注册为 `/user/*`、`/organization/*`、`/team/*`、`/project/*`、`/route_template/*` 和 `GET /audit/logs`；`internal/gateway/routes.go` 的登录和 bootstrap handler 也调用 IAM。`internal/gateway/keys/mount.go` 注册密钥生成、服务密钥、列表/详情、更新、阻止/恢复、删除、批量、轮换/重置、别名和密钥健康接口。`internal/gateway/usage/mount.go` 注册花费日志与详情、会话/全局报表、日活动、模型/密钥/团队/供应商/标签汇总、成本计算和健康接口。网关中间件传入 actor 和授权范围，并把 IAM 错误映射成 HTTP 状态。推理认证会调用密钥、用户、模型检查以及 `QuotaPath`、`RatePlan`；live 花费刷写器调用 `RecordUsage`。
+本目录不直接挂载 HTTP handler。`internal/gateway/identity/mount.go` 将这些 API 注册为 `/user/*`、`/organization/*`、`/team/*`、`/project/*`、`/route_template/*` 和 `GET /audit/logs`；`internal/gateway/routes.go` 的登录和 bootstrap handler 也调用 IAM。`internal/gateway/keys/mount.go` 注册密钥生成、服务密钥、列表/详情、更新、阻止/恢复、删除、批量、轮换/重置、别名和密钥健康接口。`internal/gateway/usage/mount.go` 注册花费日志与详情、会话/全局报表、日活动、模型/密钥/团队/供应商/标签汇总、成本计算和健康接口。网关中间件传入 actor 和授权范围，并把 IAM 错误映射成 HTTP 状态。推理认证会调用密钥、用户、模型检查以及共用一次归属读取的 `QuotaAndRates`；后续目标复核使用 `QuotaPath`，不再占分钟容量；live 花费刷写器调用 `RecordUsage`。
 
 ## 内部核心实现
 
@@ -48,7 +94,7 @@
 
 ### 预算与速率分配
 
-`quotaTree` 读取组织、团队、用户、成员和密钥并连接成森林。固定预算子节点向父级保留 `max(limit-spend, 0)`；共享子节点把固定后代的保留额继续上传。`validateQuota` 只校验被修改节点及其祖先：分配调整不回退已有消费，也不阻断无关资料修改。运行时 `QuotaPath` 把 Redis 热花费同时纳入路径消费和保留额计算，并把目标子节点自身的保留额度作为 credit 加回，避免它被分配给自己的容量拦截。
+`quotaTree` 读取组织、团队、用户、成员和密钥并连接成森林。固定预算子节点向父级保留 `max(limit-spend, 0)`；共享子节点把固定后代的保留额继续上传。`validateQuota` 只校验被修改节点及其祖先：分配调整不回退已有消费，也不阻断无关资料修改。运行时 `quotaTreeFor` 仅读取当前归属分量，首次准入通过 `QuotaAndRates` 共用读取，目标复核通过 `QuotaPath` 读取最新数据。两者把 Redis 热花费同时纳入路径消费和保留额计算，并把目标子节点自身的保留额度作为 credit 加回，避免它被分配给自己的容量拦截。
 
 RPM 和 TPM 复用相同拓扑。`rateAllocated` 累加固定子节点，并让固定后代穿过共享节点；零是真实限额，nil 表示共享或未设置。`buildRatePlan` 从目标向根回溯并检测循环、缺失父级，再加入完整根分量，确保兄弟保留额参与判断。节点 ID 排序后得到稳定索引，路径按从窄到宽输出。配置变更在同一事务内校验非负值与父级分配容量。
 

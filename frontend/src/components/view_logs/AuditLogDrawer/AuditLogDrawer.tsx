@@ -5,7 +5,7 @@ import CopyButton from "@/components/shared/CopyButton";
 import { StatusBadge } from "@/components/shared/table_cells/status_badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { t, useI18n } from "@/i18n";
+import { useT, useI18n } from "@/i18n";
 import {
   auditAction,
   auditDate,
@@ -22,6 +22,7 @@ interface AuditLogDrawerProps {
 }
 
 function CopyableJsonBlock({ label, value }: { label: string; value: Record<string, any> }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -63,6 +64,7 @@ function CopyableJsonBlock({ label, value }: { label: string; value: Record<stri
 }
 
 function MetadataRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="flex items-start gap-2 py-1.5">
       <span className="w-36 shrink-0 text-xs text-muted-foreground">{label}</span>
@@ -72,6 +74,7 @@ function MetadataRow({ label, value }: { label: string; value: React.ReactNode }
 }
 
 function DiffSection({ log }: { log: AuditLogEntry }) {
+  const t = useT();
   const { action, table_name, before_value, updated_values } = log;
   const isKeyTable = table_name === "LiteLLM_VerificationToken";
   const isUpdateAction = action === "updated" || action === "rotated";
@@ -170,6 +173,7 @@ function DiffSection({ log }: { log: AuditLogEntry }) {
 }
 
 export function AuditLogDrawer({ open, onClose, log }: AuditLogDrawerProps) {
+  const t = useT();
   useI18n();
   if (!log) return null;
   const detail = log.detail ?? {};

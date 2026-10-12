@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface OrganizationBudget {
   max_budget?: number | null;
@@ -26,6 +26,7 @@ const getOrganizationBudget = (organization: Organization): OrganizationBudget =
   (organization.litellm_budget_table ?? {}) as OrganizationBudget;
 
 function OrganizationLimitsCell({ organization }: { organization: Organization }) {
+  const t = useT();
   const { tpm_limit, rpm_limit } = getOrganizationBudget(organization);
   return (
     <div className="flex flex-col text-xs text-muted-foreground">
@@ -42,6 +43,7 @@ interface OrganizationRowActionsProps {
 }
 
 function OrganizationRowActions({ organization, onEditClick, onDeleteClick }: OrganizationRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

@@ -14,7 +14,7 @@ import { CircleHelp } from "lucide-react";
 import React, { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelSettingsModalProps {
   isVisible: boolean;
@@ -33,6 +33,7 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
 );
 
 const ModelSettingsModal: React.FC<ModelSettingsModalProps> = ({ isVisible, onCancel, onSuccess }) => {
+  const t = useT();
   const { mutateAsync, isPending } = useStoreModelInDB();
   const { data: proxyConfigData, isLoading: isLoadingConfig, refetch } = useProxyConfig(ConfigType.GENERAL_SETTINGS);
 

@@ -3,7 +3,7 @@ import { PaginatedSearchSelect } from "@/components/shared/PaginatedSearchSelect
 import type { SearchSelectOption } from "@/components/shared/SearchSelect";
 import { useInfiniteUsers, useUserLookup } from "@/app/(dashboard)/hooks/users/useUsers";
 import type { UserInfo } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UserDropdownProps {
   value?: string | null;
@@ -20,6 +20,7 @@ export const userOptionLabel = (user: Pick<UserInfo, "user_id" | "user_alias" | 
 };
 
 const UserDropdown: React.FC<UserDropdownProps> = ({ value, onChange, disabled, pageSize = 50, id }) => {
+  const t = useT();
   const [search, setSearch] = useState("");
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteUsers(

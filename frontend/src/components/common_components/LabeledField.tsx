@@ -4,7 +4,7 @@ import { EntityLink } from "@/components/shared/EntityLink";
 import { cx } from "@/lib/cva.config";
 import { DEFAULT_PROXY_ADMIN_USER_ID } from "@/utils/sentinels";
 import DefaultProxyAdminTag from "./DefaultProxyAdminTag";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface LabeledFieldProps {
   label: string;
@@ -25,6 +25,7 @@ export default function LabeledField({
   copyable = false,
   defaultUserIdCheck = false,
 }: LabeledFieldProps) {
+  const t = useT();
   const isEmpty = !value;
   const isDefaultUser = defaultUserIdCheck && value === DEFAULT_PROXY_ADMIN_USER_ID;
   const displayValue = isEmpty ? "-" : value;

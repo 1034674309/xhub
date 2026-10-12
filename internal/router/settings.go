@@ -4,14 +4,9 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/util"
 )
-
-var logTraceOnceRouteSettings sync.Once
 
 // RouteSettings 表示一次请求使用的模板、路由组和模型管理默认分配。
 // 策略优先级为模板模型规则、模板路由组、ModelDefaults；模板回退按主模型和类别覆盖全局默认。
@@ -38,26 +33,8 @@ type RouteSettings struct {
 	RuleSource string
 }
 
-// ScopeRef 表示模板继承链中的一个身份范围。
-type ScopeRef struct {
-	// 鉴权主体类型，仅 key、team、organization；RequestChain 按此顺序查第一份绑定模板。
-	Kind string
-	// 对应主体的数据库 ID，空值不加入继承链；由服务端鉴权生成，不是客户端会话 ID。
-	ID string
-}
-
-// BuiltinSource 表示当前身份没有绑定模板，直接使用模型管理默认分配。
+// BuiltinSource 表示未绑定模板时使用模型管理默认分配。
 const BuiltinSource = "builtin"
-
-// ScopeLookup 提供范围绑定与模板读取，供请求和控制台共用同一解析顺序。
-type ScopeLookup interface {
-	// TemplateFor 查询鉴权主体 kind/id 的绑定模板 ID；无绑定返回空，不接受客户端指定的身份范围。
-	// 请求解析与控制台预览调用；实现只读取绑定，不修改主体或模板。
-	TemplateFor(kind, id string) string
-	// Load 按模板 ID 读取完整文档；不存在返回 nil，由 Resolve 采用内置设置，不拼接部分模板。
-	// 请求解析与预览调用；返回值由调用方读取，接口自身不写入持久化数据。
-	Load(id string) *iam.RouteTemplate
-}
 
 // BuiltinDocument 返回新模板的公共执行参数。模型规则默认为空，不自动复制模型目录。
 func BuiltinDocument() map[string]any {
@@ -72,38 +49,6 @@ func BuiltinDocument() map[string]any {
 // BuiltinSettings 返回未绑定模板时的设置；所有模型均走模型管理里的默认分配。
 func BuiltinSettings() RouteSettings {
 	return RouteSettings{Settings: BuiltinDocument(), Source: BuiltinSource, RuleSource: "model-default"}
-}
-
-// Resolve 按密钥、团队、组织的顺序选择第一份完整模板；均未绑定时使用模型管理默认分配。
-func Resolve(lookup ScopeLookup, chain ...ScopeRef) RouteSettings {
-	logTraceOnceRouteSettings.Do(func() { util.Trace("enter prefs.Resolve") })
-	if lookup != nil {
-		for _, scope := range chain {
-			if scope.ID == "" {
-				continue
-			}
-			id := lookup.TemplateFor(scope.Kind, scope.ID)
-			if id == "" {
-				continue
-			}
-			if row := lookup.Load(id); row != nil {
-				return RouteSettings{Settings: row.Settings(), TemplateID: row.ID, TemplateName: row.Name, Source: scope.Kind}
-			}
-			break
-		}
-	}
-	return BuiltinSettings()
-}
-
-// RequestChain 构造由窄到宽的模板选择链，空 ID 不进入结果。
-func RequestChain(keyID, teamID, orgID string) []ScopeRef {
-	chain := make([]ScopeRef, 0, 3)
-	for _, scope := range []ScopeRef{{Kind: "key", ID: keyID}, {Kind: "team", ID: teamID}, {Kind: "organization", ID: orgID}} {
-		if scope.ID != "" {
-			chain = append(chain, scope)
-		}
-	}
-	return chain
 }
 
 // Strategy 返回已解析策略。调用 ForModel 前使用模型管理默认的按权重随机。

@@ -1,10 +1,10 @@
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 /**
  * Compact type-indicator badges for LLM, Agent, and MCP log entries.
  * Used in the request logs table and session type column.
  */
 
-export const SparkleIcon = ({ size = 12 }: { size?: number }) => (
+export const SparkleIcon = ({ size = 12 }: { size?: number }) => { const t = useT(); return ((
   <svg
     width={size}
     height={size}
@@ -18,9 +18,9 @@ export const SparkleIcon = ({ size = 12 }: { size?: number }) => (
   >
     <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
   </svg>
-);
+)); };
 
-export const WrenchIcon = ({ size = 10 }: { size?: number }) => (
+export const WrenchIcon = ({ size = 10 }: { size?: number }) => { const t = useT(); return ((
   <svg
     width={size}
     height={size}
@@ -34,10 +34,10 @@ export const WrenchIcon = ({ size = 10 }: { size?: number }) => (
   >
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
   </svg>
-);
+)); };
 
 /** Agent/bot icon for A2A and agent call types (Lucide Bot-style). */
-export const AgentIcon = ({ size = 12 }: { size?: number }) => (
+export const AgentIcon = ({ size = 12 }: { size?: number }) => { const t = useT(); return ((
   <svg
     width={size}
     height={size}
@@ -56,10 +56,10 @@ export const AgentIcon = ({ size = 12 }: { size?: number }) => (
     <path d="M15 13v2" />
     <path d="M9 13v2" />
   </svg>
-);
+)); };
 
 /** Stacked-layers icon for Batch API call types (Lucide Layers-style). */
-export const LayersIcon = ({ size = 12 }: { size?: number }) => (
+export const LayersIcon = ({ size = 12 }: { size?: number }) => { const t = useT(); return ((
   <svg
     width={size}
     height={size}
@@ -75,32 +75,32 @@ export const LayersIcon = ({ size = 12 }: { size?: number }) => (
     <path d="m2 17 10 5 10-5" />
     <path d="m2 12 10 5 10-5" />
   </svg>
-);
+)); };
 
-export const LlmBadge = ({ count }: { count?: number }) => (
+export const LlmBadge = ({ count }: { count?: number }) => { const t = useT(); return ((
   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info border border-info/20 rounded-full text-[11px] font-medium whitespace-nowrap">
     <SparkleIcon />
     {count != null ? count : "LLM"}
   </span>
-);
+)); };
 
-export const McpBadge = ({ count }: { count?: number }) => (
+export const McpBadge = ({ count }: { count?: number }) => { const t = useT(); return ((
   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-warning/10 text-warning border border-warning/20 rounded-full text-[11px] font-medium whitespace-nowrap">
     <WrenchIcon />
     {count != null ? count : "MCP"}
   </span>
-);
+)); };
 
-export const AgentBadge = ({ count }: { count?: number }) => (
+export const AgentBadge = ({ count }: { count?: number }) => { const t = useT(); return ((
   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[11px] font-medium whitespace-nowrap dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800">
     <AgentIcon />
     {count != null ? count : t("Agent")}
   </span>
-);
+)); };
 
-export const BatchBadge = () => (
+export const BatchBadge = () => { const t = useT(); return ((
   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full text-[11px] font-medium whitespace-nowrap dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800">
     <LayersIcon />
     {t("Batch")}
   </span>
-);
+)); };

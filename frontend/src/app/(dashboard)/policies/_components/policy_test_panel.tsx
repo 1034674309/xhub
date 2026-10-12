@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/combobox";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { TokenSelect, includesQuery } from "./TokenSelect";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PolicyTestPanelProps {
   accessToken: string | null;
@@ -71,7 +71,7 @@ interface ContextComboboxProps {
   options: string[];
 }
 
-const ContextCombobox: React.FC<ContextComboboxProps> = ({ id, value, onChange, placeholder, options }) => (
+const ContextCombobox: React.FC<ContextComboboxProps> = ({ id, value, onChange, placeholder, options }) => { const t = useT(); return ((
   <Combobox
     items={options}
     value={value ?? null}
@@ -90,9 +90,10 @@ const ContextCombobox: React.FC<ContextComboboxProps> = ({ id, value, onChange, 
       </ComboboxList>
     </ComboboxContent>
   </Combobox>
-);
+)); };
 
 const PolicyTestPanel: React.FC<PolicyTestPanelProps> = ({ accessToken }) => {
+  const t = useT();
   const form = useForm<PolicyTestFormValues>({ defaultValues: EMPTY_VALUES });
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ResolveResult | null>(null);

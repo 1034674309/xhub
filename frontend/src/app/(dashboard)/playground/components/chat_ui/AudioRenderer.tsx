@@ -1,12 +1,13 @@
 import React from "react";
 import { MessageType } from "@/components/chat_ui/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AudioRendererProps {
   message: MessageType;
 }
 
 const AudioRenderer: React.FC<AudioRendererProps> = ({ message }) => {
+  const t = useT();
   // Check if this message contains audio
   if (!message.isAudio || typeof message.content !== "string") {
     return null;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AssistantMessageUpdate, ChatMessage, Conversation } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { randomId } from "@/utils/randomId";
 
 const STORAGE_KEY_PREFIX = "litellm_chat_history_v1";
@@ -66,6 +66,7 @@ export function useChatHistory(
   renameConversation: (id: string, newTitle: string) => void;
   setActiveConversationId: (id: string | null) => void;
 } {
+  const t = useT();
   // Storage is unavailable on the server. Hydrate with the server's empty
   // snapshot before reading saved conversations or showing a storage warning.
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
@@ -127,7 +128,7 @@ export function useChatHistory(
     setConversations((prev) => trimConversations([newConversation, ...prev]));
     setCurrentActiveId(id);
     return id;
-  }, []);
+  }, [t]);
 
   const appendMessage = useCallback((conversationId: string, message: Omit<ChatMessage, "id" | "timestamp">) => {
     const newMessage: ChatMessage = {

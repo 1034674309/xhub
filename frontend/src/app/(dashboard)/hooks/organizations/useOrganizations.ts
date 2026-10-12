@@ -2,7 +2,7 @@ import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { Organization, organizationInfoCall, organizationListCall } from "@/components/networking";
 import { useQuery, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { createQueryKeys } from "../common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const organizationKeys = createQueryKeys("organizations");
 
@@ -12,6 +12,7 @@ export interface OrganizationListFilters {
 }
 
 export const useOrganizations = (filters?: OrganizationListFilters): UseQueryResult<Organization[]> => {
+  const t = useT();
   const { accessToken, userId, userRole, premiumUser } = useAuthorized();
   const orgId = filters?.org_id || null;
   const orgAlias = filters?.org_alias || null;
@@ -28,6 +29,7 @@ export const useOrganizations = (filters?: OrganizationListFilters): UseQueryRes
 };
 
 export const useOrganization = (organizationID?: string) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const { accessToken, premiumUser } = useAuthorized();
   return useQuery<Organization>({

@@ -11,7 +11,7 @@ import { FormField } from "@/components/shared/form/FormField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { clearTokenCookies, getCookieFromDocument } from "@/utils/cookieUtils";
@@ -22,13 +22,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { z } from "zod/v4";
 import { useWorker } from "@/hooks/useWorker";
-import { t, useI18n } from "@/i18n";
+import { useT, useI18n } from "@/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import EnterpriseLogin from "@/components/EnterpriseLogin";
 
 type LoginFormValues = { username: string; password: string };
 
 function LoginLogo() {
+  const t = useT();
   return (
     <div data-testid="login-logo" className="flex shrink-0 flex-col items-start gap-4">
       <svg role="img" aria-label={t("site.logoAlt")} width="56" height="56" viewBox="0 0 84 84">
@@ -43,6 +44,7 @@ function LoginLogo() {
 }
 
 function LoginStage({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <div data-testid="login-stage" className="relative flex h-dvh min-h-dvh w-full overflow-y-auto bg-canvas">
       <div className="absolute top-5 right-5 z-10">
@@ -92,6 +94,7 @@ function LoginStage({ children }: { children: ReactNode }) {
 }
 
 function LoginPageContent() {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(true);
   const { data: uiConfig, isLoading: isConfigLoading } = useUIConfig();
   const loginMutation = useLogin();
@@ -106,7 +109,7 @@ function LoginPageContent() {
         username: z.string().min(1, t("login.usernameRequired")),
         password: z.string().min(1, t("login.passwordRequired")),
       }),
-    [locale],
+    [locale, t],
   );
   const form = useZodForm(loginSchema, { defaultValues: { username: "", password: "" } });
 
@@ -334,5 +337,6 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
+  const t = useT();
   return <LoginPageContent />;
 }

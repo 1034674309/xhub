@@ -14,7 +14,7 @@ import {
 
 import type { SearchSelectOption } from "./SearchSelect";
 import { usePaginatedCombobox } from "./usePaginatedCombobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface PaginatedSearchSelectProps {
   options: SearchSelectOption[];
@@ -77,6 +77,7 @@ export function PaginatedSearchSelect({
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
 }: PaginatedSearchSelectProps) {
+  const t = useT();
   const [pickedOption, setPickedOption] = useState<SearchSelectOption | null>(null);
   const wholeSelectionRef = useRef(false);
 

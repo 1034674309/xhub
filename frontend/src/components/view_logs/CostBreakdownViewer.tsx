@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { measureLabel, rateLabel, rateText } from "@/lib/rateDisplay";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 /** 这次调用实际用到的一条费率，单位自带，不能假设都是 token。 */
 export interface AppliedRate {
@@ -98,6 +98,7 @@ export const CostBreakdownViewer: React.FC<CostBreakdownViewerProps> = ({
   cacheReadTokens,
   cacheCreationTokens,
 }) => {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const isCached = String(cacheHit ?? "").toLowerCase() === "true";
   const isUnpriced = !isCached && costBreakdown?.pricing_status === "unpriced";

@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useHealthReadinessDetails } from "@/app/(dashboard)/hooks/healthReadiness/useHealthReadinessDetails";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdminRole } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const DISMISS_STORAGE_KEY = "litellm:envCredentialLoginWarningDismissed";
 
 export const EnvCredentialLoginWarningBanner: React.FC<{ accessToken: string | null }> = ({ accessToken }) => {
+  const t = useT();
   const { userRole } = useAuth();
   const { data: healthData } = useHealthReadinessDetails(accessToken);
   const [dismissed, setDismissed] = useState(

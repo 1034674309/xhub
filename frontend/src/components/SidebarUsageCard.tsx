@@ -6,7 +6,7 @@ import { Meter, MeterIndicator, MeterLabel, MeterTrack } from "@/components/shar
 import { useQuery } from "@tanstack/react-query";
 import { Award, ChevronDown, Loader2 } from "lucide-react";
 import { getRemainingUsers } from "./networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface SidebarUsageCardProps {
   accessToken: string | null;
@@ -27,6 +27,7 @@ const meterTone = (pct: number): "default" | "warning" | "over" => {
 };
 
 const UsageMeter = ({ label, used, total }: MeterData) => {
+  const t = useT();
   const pct = total > 0 ? (used / total) * 100 : 0;
   return (
     <Meter value={used} max={total} aria-valuetext={t("{value0} of {value1}", { value0: (used.toLocaleString()), value1: (total.toLocaleString()) })}>
@@ -73,6 +74,7 @@ const buildMeters = (data: RemainingUsage | null): MeterData[] => {
  * design's Spend / API-request meters are intentionally omitted.
  */
 export default function SidebarUsageCard({ accessToken, collapsed, onExpandRail }: SidebarUsageCardProps) {
+  const t = useT();
   const licenseInfo = useLicenseInfo(accessToken).data ?? null;
   // The seat count is only meaningful under a license, which is also the only
   // state the card renders in. Requesting it earlier is what produced the 403.

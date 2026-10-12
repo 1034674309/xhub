@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface ContentFilterDetection {
   type: "pattern" | "blocked_word" | "category_keyword";
@@ -35,6 +35,7 @@ interface SectionProps {
 }
 
 const Section: React.FC<SectionProps> = ({ title, count, defaultOpen = true, children }) => {
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -67,14 +68,15 @@ interface KVProps {
   mono?: boolean;
 }
 
-const KV: React.FC<KVProps> = ({ label, children, mono }) => (
+const KV: React.FC<KVProps> = ({ label, children, mono }) => { const t = useT(); return ((
   <div className="flex">
     <span className="font-medium w-1/3">{label}</span>
     <span className={mono ? "font-mono text-sm break-all" : ""}>{children}</span>
   </div>
-);
+)); };
 
 const ContentFilterDetails: React.FC<ContentFilterDetailsProps> = ({ response }) => {
+  const t = useT();
   // Handle case where response is a string (error message) or null
   if (!response || typeof response === "string") {
     if (typeof response === "string" && response) {

@@ -20,7 +20,7 @@ import { copyToClipboard, formatNumberWithCommas } from "@/utils/dataUtils";
 
 import { Team } from "../key_team_helpers/key_list";
 import { Organization } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ResourceTone {
   icon: typeof Users;
@@ -42,6 +42,7 @@ const teamModelCount = (team: Team): number => team.models?.length ?? 0;
 const teamKeyCount = (team: Team): number => team.keys_count ?? team.keys?.length ?? 0;
 
 function ResourcesCell({ team }: { team: Team }) {
+  const t = useT();
   const items = [
     { key: "members" as const, label: t("members"), count: teamMemberCount(team) },
     { key: "models" as const, label: t("models"), count: teamModelCount(team) },
@@ -72,6 +73,7 @@ function ResourcesCell({ team }: { team: Team }) {
 }
 
 function RateLimitLine({ label, value }: { label: string; value: number | null }) {
+  const t = useT();
   return (
     <div>
       <span className="text-[10px] font-semibold text-muted-foreground">{label} </span>
@@ -88,6 +90,7 @@ interface TeamRowActionsProps {
 }
 
 function TeamRowActions({ team, canManage, onEditTeam, onDeleteTeam }: TeamRowActionsProps) {
+  const t = useT();
   const handleCopy = () => {
     void copyToClipboard(team.team_id, "Team ID copied");
   };

@@ -40,22 +40,22 @@ import { isValidUrl } from "@/lib/forms/urlValidation";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const GUARDRAIL_MODES = [
-  { value: "pre_call", label: t("Pre Call") },
-  { value: "post_call", label: t("Post Call") },
-  { value: "during_call", label: t("During Call") },
+  { value: "pre_call", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Pre Call"); } },
+  { value: "post_call", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Post Call"); } },
+  { value: "during_call", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("During Call"); } },
 ] as const;
 
 const submitGuardrailSchema = z.object({
   team_id: z
     .string()
     .nullable()
-    .pipe(z.string({ error: "Select a team" }).min(1, t("Select a team"))),
-  guardrail_name: z.string().min(1, t("Enter a guardrail name")),
-  mode: z.string().min(1, t("Select a mode")),
-  api_base: z.string().min(1, t("Enter the API base URL")).refine(isValidUrl, t("Must be a valid URL")),
+    .pipe(z.string({ error: "Select a team" }).min(1, { error: () => t("Select a team") })),
+  guardrail_name: z.string().min(1, { error: () => t("Enter a guardrail name") }),
+  mode: z.string().min(1, { error: () => t("Select a mode") }),
+  api_base: z.string().min(1, { error: () => t("Enter the API base URL") }).refine(isValidUrl, { error: () => t("Must be a valid URL") }),
   extra_litellm_params: z.string().superRefine((value, ctx) => {
     if (!value) return;
     try {
@@ -211,19 +211,19 @@ function submissionToTeamGuardrail(item: GuardrailSubmissionItem): TeamGuardrail
 
 const STATUS_CONFIG: Record<GuardrailStatus, { label: string; bg: string; text: string; dot: string }> = {
   active: {
-    label: t("Active"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Active"); },
     bg: "bg-success/10",
     text: "text-success",
     dot: "bg-success",
   },
   pending: {
-    label: t("Pending Review"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Pending Review"); },
     bg: "bg-warning/10",
     text: "text-warning",
     dot: "bg-warning",
   },
   rejected: {
-    label: t("Rejected"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Rejected"); },
     bg: "bg-destructive/10",
     text: "text-destructive",
     dot: "bg-destructive",
@@ -292,6 +292,7 @@ function buildEquivalentConfigYaml(g: TeamGuardrail): string {
  * 测试：TeamGuardrailsTab.integration.test.tsx；隐藏的历史审核写入分支未新增端到端覆盖。
  */
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+  const t = useT();
   return (
     <div className="bg-card border border-border rounded-lg px-4 py-3">
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
@@ -316,6 +317,7 @@ function Toggle({
   onToggle: () => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -366,6 +368,7 @@ function GuardrailCard({
   onApprove,
   onReject,
 }: GuardrailCardProps) {
+  const t = useT();
   const status = STATUS_CONFIG[g.status];
   const teamColor = TEAM_COLORS[g.team] ?? "bg-muted text-foreground";
   return (
@@ -482,6 +485,7 @@ function GuardrailCard({
  * 测试：TeamGuardrailsTab.integration.test.tsx；隐藏的历史审核写入分支未新增端到端覆盖。
  */
 function ConfigRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <div>
       <div className="text-xs font-semibold text-muted-foreground mb-1">{label}</div>
@@ -518,6 +522,7 @@ function DetailPanel({
   onUpdateCustomHeaders,
   onUpdateExtraHeaders,
 }: DetailPanelProps) {
+  const t = useT();
   const [configExpanded, setConfigExpanded] = useState(false);
   const [newExtraHeader, setNewExtraHeader] = useState("");
   const [newStaticHeaderKey, setNewStaticHeaderKey] = useState("");
@@ -831,6 +836,7 @@ type ConfirmDialogProps = {
  * 测试：TeamGuardrailsTab.integration.test.tsx；隐藏的历史审核写入分支未新增端到端覆盖。
  */
 function ConfirmDialog({ action, guardrailName, onConfirm, onCancel }: ConfirmDialogProps) {
+  const t = useT();
   const isApprove = action === "approve";
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-overlay">
@@ -893,6 +899,7 @@ interface TeamGuardrailsTabProps {
  * 测试：TeamGuardrailsTab.integration.test.tsx。
  */
 export function TeamGuardrailsTab({ accessToken }: TeamGuardrailsTabProps) {
+  const t = useT();
   const { userRole } = useAuthorized();
   const isAdmin = userRole ? isProxyAdminRole(userRole) : false;
   const [supported, setSupported] = useState(true);
@@ -953,7 +960,7 @@ export function TeamGuardrailsTab({ accessToken }: TeamGuardrailsTabProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, statusFilter, searchDebounced]);
+  }, [accessToken, statusFilter, searchDebounced, t]);
 
   useEffect(() => {
     fetchSubmissions();

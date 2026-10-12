@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { matchesSearchTerm } from "@/utils/searchUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelGroupInfo {
   model_group: string;
@@ -34,6 +34,7 @@ const ModelFilters: React.FC<ModelFiltersProps> = ({
   showFiltersCard = true,
   className = "",
 }) => {
+  const t = useT();
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedProvider, setSelectedProvider] = useState<string>("");
   const [selectedMode, setSelectedMode] = useState<string>("");

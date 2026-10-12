@@ -2,6 +2,39 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+This directory contains build-time resources, not a Go API. Preserve JSON schemas, provenance, and licenses when editing. Rebuild/restart to update embedded baselines; runtime overrides use catalog APIs.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| pricedata.json | Embedded price/supplier baseline |
+| cn_holidays.json | Beijing-time pricing calendar |
+| provider_fields.json | Supplier credential-field descriptions |
+
+### Integration demo
+
+Run the following commands from the repository root.
+
+```sh
+python3 - <<'PY'
+import json
+from pathlib import Path
+for name in ("pricedata.json", "cn_holidays.json", "provider_fields.json"):
+    json.loads((Path("internal/catalog/publicdata") / name).read_text())
+    print(name, "valid JSON")
+PY
+go test ./internal/catalog -count=1
+```
+
+Run from the repository root to check all three JSON files, then test the consuming package. This does not update deployed resources.
+
+### Errors, state, and side effects
+
+Valid JSON does not prove rate, holiday, or credential-field correctness; check consumer semantics as well. Editing files does not hot-update running processes.
+
 ## Overview
 
 `internal/catalog/publicdata` contains build-time data consumed by the parent `catalog` package. It has no Go package, mutable state, or HTTP handler. The resources provide the baseline price/provider catalog, the Beijing billing calendar, a provider credential-field snapshot and its license, plus a retained autorouter preset document. `go:embed` puts their bytes into the binary; editing files cannot change a running process. Runtime market reloads and operator overrides are separate layers.

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const PREDEFINED_INTERVALS = ["7d", "30d", "90d", "180d", "365d"] as const;
 
@@ -55,6 +55,7 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
   onNeverExpireChange,
   id,
 }) => {
+  const t = useT();
   const isCustomInterval = Boolean(rotationInterval) && !PREDEFINED_INTERVALS.includes(rotationInterval as never);
 
   const [showCustomInput, setShowCustomInput] = useState(isCustomInterval);

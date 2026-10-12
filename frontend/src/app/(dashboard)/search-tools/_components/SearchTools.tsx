@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { z } from "zod/v4";
 import DeleteResourceModal from "@/components/common_components/DeleteResourceModal";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import {
   deleteSearchTool,
   fetchAvailableSearchProviders,
@@ -34,8 +34,8 @@ interface SearchToolsProps {
 }
 
 const editSearchToolShape = {
-  search_tool_name: z.string().min(1, t("Please enter a search tool name")),
-  search_provider: z.string().min(1, t("Please select a search provider")),
+  search_tool_name: z.string().min(1, { error: () => t("Please enter a search tool name") }),
+  search_provider: z.string().min(1, { error: () => t("Please select a search provider") }),
   api_key: z.string().nullish(),
   description: z.string().nullish(),
 };
@@ -47,6 +47,7 @@ type EditSearchToolFormValues = z.infer<typeof editSearchToolSchema>;
 const EMPTY_EDIT_VALUES: EditSearchToolFormValues = { search_tool_name: "", search_provider: "" };
 
 const SearchTools: React.FC<SearchToolsProps> = ({ accessToken, userRole, userID }) => {
+  const t = useT();
   const {
     data: searchTools,
     isLoading: isLoadingTools,
@@ -219,7 +220,7 @@ const SearchTools: React.FC<SearchToolsProps> = ({ accessToken, userRole, userID
   }
 
   const ToolsTab = () =>
-    selectedToolId ? (
+    { const t = useT(); return (selectedToolId ? (
       <SearchToolView
         searchTool={
           searchTools?.find((tool: SearchTool) => tool.search_tool_id === selectedToolId) || {
@@ -250,7 +251,7 @@ const SearchTools: React.FC<SearchToolsProps> = ({ accessToken, userRole, userID
           onDelete={handleDelete}
         />
       </div>
-    );
+    )); };
 
   return (
     <div className="w-full h-full p-6">

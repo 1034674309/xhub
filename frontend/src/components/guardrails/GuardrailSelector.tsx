@@ -4,7 +4,7 @@ import { getGuardrailsList } from "../networking";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { canAccessManagement } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailSelectorProps {
   onChange: (selectedGuardrails: string[]) => void;
@@ -15,6 +15,7 @@ interface GuardrailSelectorProps {
 }
 
 const GuardrailSelector: React.FC<GuardrailSelectorProps> = ({ onChange, value, className, accessToken, disabled }) => {
+  const t = useT();
   const { userRole } = useAuthorized();
   const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
   const [loading, setLoading] = useState(false);

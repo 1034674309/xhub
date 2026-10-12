@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,6 +26,7 @@ export function PriceProviderPanel({
   onDelete?: (provider: PriceProviderRow) => void;
   onReset?: (provider: PriceProviderRow) => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const search = query.trim().toLowerCase();
   const visible = providers.filter(

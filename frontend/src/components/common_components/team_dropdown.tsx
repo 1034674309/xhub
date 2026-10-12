@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { PaginatedSearchSelect } from "@/components/shared/PaginatedSearchSelect";
 import { useInfiniteTeams } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { Team } from "../key_team_helpers/key_list";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TeamDropdownProps {
   value?: string | null;
@@ -25,6 +25,7 @@ const TeamDropdown: React.FC<TeamDropdownProps> = ({
   pageSize = 20,
   id,
 }) => {
+  const t = useT();
   const [search, setSearch] = useState("");
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteTeams(

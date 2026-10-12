@@ -9,9 +9,25 @@ import (
 )
 
 // TestCodexAgentConversation 验证 Codex 客户端通过个人密钥进行三轮增量会话。
-// 参数 t 为测试上下文；前置真实网关及隔离数据库，核对完整历史、客户端头、五级账单和失败无外发。
-// 返回值为空，失败终止测试；harness 在结束时清理服务及私有 schema。
+// 参数 t 为测试上下文；分别走直接落库和专用 Redis 队列，核对三轮来源、历史及非法续接。
+// 返回值为空，失败终止测试；夹具清理服务、私有 schema 和临时 Redis，不访问已有缓存。
 func TestCodexAgentConversation(t *testing.T) {
+	for _, mode := range []string{"direct", "redis"} {
+		t.Run(mode, func(t *testing.T) {
+			if mode == "redis" {
+				isolatedSpendRedis(t)
+			} else {
+				t.Setenv("XHUB_REGRESSION_REDIS_URL", "")
+			}
+			verifyCodexAgentConversation(t)
+		})
+	}
+}
+
+// verifyCodexAgentConversation 执行当前存储模式下的真实三轮 HTTP 会话与账单校验。
+// 参数 t 为调用子测试；无返回值，失败立即报告；由上层选择 Redis，harness 清理数据库及 HTTP 服务。
+func verifyCodexAgentConversation(t *testing.T) {
+	t.Helper()
 	dep := chatDeployment("codex-model")
 	dep.ModelInfo["endpoint_types"] = []string{"chat", "responses"}
 	dep.ModelInfo["id"] = "codex-agent-deployment"
@@ -82,8 +98,22 @@ func TestCodexAgentConversation(t *testing.T) {
 			t.Fatal("Codex 三轮应有独立日志 ID")
 		}
 		ids[callID] = true
+		wantSource := "explicit"
+		if index > 0 {
+			wantSource = "parent"
+		}
+		// 刷写前确认当前事件确实进入队列，防止 Redis 连接失败后直写降级掩盖转换缺陷。
+		if h.gw.Live != nil {
+			rows, _ := h.gw.Live.PeekLogs(10)
+			if len(rows) != 1 || rows[0].RequestID != callID || rows[0].SessionSource != wantSource {
+				t.Fatalf("Codex 第%d轮未入队或会话来源错误：预期=%s 队列=%+v", index+1, wantSource, rows)
+			}
+		}
 		h.flushSpend()
 		bill := h.ok("GET", "/spend/logs/ui/"+callID, admin, nil).json()
+		if bill["session_source"] != wantSource {
+			t.Fatalf("Codex 第%d轮会话来源错误：预期=%s 实际=%v", index+1, wantSource, bill["session_source"])
+		}
 		for field, want := range map[string]string{"model": "codex-model", "session_id": "codex-regression", "api_key": owner.keyID, "user": owner.userID, "team_id": owner.teamID, "project_id": owner.projectID, "organization_id": owner.orgID} {
 			if bill[field] != want {
 				t.Fatalf("Codex 第 %d 轮归属 %s 错误：%v", index+1, field, bill)

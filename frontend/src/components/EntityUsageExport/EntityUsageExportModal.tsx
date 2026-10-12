@@ -11,7 +11,7 @@ import ExportSummary from "./ExportSummary";
 import ExportTypeSelector from "./ExportTypeSelector";
 import type { EntityUsageExportModalProps, ExportFormat, ExportScope } from "./types";
 import { handleExportCSV, handleExportJSON } from "./utils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const EntityUsageExportModal: React.FC<EntityUsageExportModalProps> = ({
   isOpen,
@@ -22,6 +22,7 @@ const EntityUsageExportModal: React.FC<EntityUsageExportModalProps> = ({
   selectedFilters,
   customTitle,
 }) => {
+  const t = useT();
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [exportScope, setExportScope] = useState<ExportScope>("daily");
   const [isExporting, setIsExporting] = useState(false);

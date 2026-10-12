@@ -2,6 +2,45 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Open framework storage at startup and share it through the host. Authorize before reading/writing namespaced records and close Engine at shutdown. IAM owns identity, memberships, and accounts.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| Open(dsn) | Connect to PostgreSQL and synchronize framework tables |
+| GetKV(kind, id) | Read a JSON record; missing records return sql.ErrNoRows |
+| PutKV(kind, id, json) | Write a document and invalidate caches |
+
+### Integration demo
+
+This is a Go integration helper for a host. It compiles as a separate package inside the repository; callers must supply the real dependencies described below before execution.
+
+```go
+package demo
+
+import "github.com/sunqirui1987/xhub/internal/store"
+
+// ReadDemoRecord 演示已授权文档读取；传入专用数据库和命名空间，返回记录或错误。
+// Open 会同步表结构；不修改业务记录，结束关闭 Engine。
+func ReadDemoRecord(dsn, kind, id string) (map[string]any, error) {
+	st, err := store.Open(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Engine.Close()
+	return st.GetKV(kind, id)
+}
+```
+
+This helper compiles and requires dedicated PostgreSQL. Missing records return sql.ErrNoRows. Open can write table definitions.
+
+### Errors, state, and side effects
+
+GetKV bypasses caches for fresh security-sensitive values. Store does not authorize tenants. Do not overwrite user records with demo namespaces.
+
 ## Overview
 
 `internal/store` persists gateway framework records that are separate from IAM: generic JSON documents, dashboard-managed model deployments, and namespaced configuration. It accepts only `postgres://` or `postgresql://`; empty, SQLite, file, and unknown URLs fail at startup. Identity, keys, memberships, audits, and usage belong to `internal/iam`.

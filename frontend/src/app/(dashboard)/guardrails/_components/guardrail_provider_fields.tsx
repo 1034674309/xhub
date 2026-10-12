@@ -27,7 +27,7 @@ import {
   type GuardrailFieldRules,
   type GuardrailFormControl,
 } from "./GuardrailFormField";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface GuardrailProviderFieldsProps {
   selectedProvider: string | null;
@@ -58,8 +58,8 @@ interface ProviderParamsResponse {
 }
 
 const BOOLEAN_ITEMS = [
-  { label: t("True"), value: true },
-  { label: t("False"), value: false },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("True"); }, value: true },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("False"); }, value: false },
 ];
 
 /**
@@ -152,6 +152,7 @@ interface ProviderFieldInputProps {
  * 测试：guardrail_provider_fields.integration.test.tsx。
  */
 const ProviderFieldInput: React.FC<ProviderFieldInputProps> = ({ descriptor, fieldKey, control }) => {
+  const t = useT();
   const { id, value, onChange, onBlur, ref, name, ...aria } = control;
 
   if (descriptor.type === "list") {
@@ -326,6 +327,7 @@ const GuardrailProviderFields: React.FC<GuardrailProviderFieldsProps> = ({
   providerParams: providerParamsProp = null,
   value = null,
 }) => {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [providerParams, setProviderParams] = useState<ProviderParamsResponse | null>(providerParamsProp);
   const [error, setError] = useState<string | null>(null);

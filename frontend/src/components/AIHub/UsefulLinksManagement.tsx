@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { getPublicModelHubInfo, updateUsefulLinksCall } from "../networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface UsefulLinksManagementProps {
   accessToken: string | null;
@@ -22,6 +22,7 @@ interface Link {
 }
 
 const UsefulLinksManagement: React.FC<UsefulLinksManagementProps> = ({ accessToken, userRole }) => {
+  const t = useT();
   const [links, setLinks] = useState<Link[]>([]);
   const [newLink, setNewLink] = useState({ url: "", displayName: "" });
   const [editingLink, setEditingLink] = useState<Link | null>(null);

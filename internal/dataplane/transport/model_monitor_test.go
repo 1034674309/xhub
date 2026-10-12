@@ -1,3 +1,5 @@
+// 本文件验证 transport 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package transport
 
 import (
@@ -10,6 +12,7 @@ import (
 )
 
 // TestForwardMonitorTiming 使用本地服务器验证正常流、缺失终态及非流式计时，服务器由 Cleanup 关闭。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestForwardMonitorTiming(t *testing.T) {
 	for _, tc := range []struct {
 		name, content, body string

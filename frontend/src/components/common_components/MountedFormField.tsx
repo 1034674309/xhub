@@ -10,7 +10,7 @@ import {
 } from "react-hook-form";
 
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export type MountedFormValues = Record<string, unknown>;
 
@@ -46,6 +46,7 @@ const MountedFormContext = React.createContext<MountedFormContextValue>({
 export const MountedFormProvider = MountedFormContext.Provider;
 
 export const useMountRegistry = (): MountRegistry => {
+  const t = useT();
   const counts = React.useRef<Map<string, { readonly name: MountedFieldName; readonly count: number }>>(new Map());
   return React.useMemo(
     () => ({
@@ -96,6 +97,7 @@ export const projectMountedValues = (
 };
 
 export const useMountedName = (name: MountedFieldName): void => {
+  const t = useT();
   const { registry } = React.useContext(MountedFormContext);
   React.useEffect(() => registry.register(name), [registry, name]);
 };
@@ -137,6 +139,7 @@ export const MountedFormField: React.FC<MountedFormFieldProps> = ({
   className,
   children,
 }) => {
+  const t = useT();
   const { control } = React.useContext(MountedFormContext);
   const path = fieldKey(name);
   useMountedName(name);

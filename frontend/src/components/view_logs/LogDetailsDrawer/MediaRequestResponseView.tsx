@@ -1,6 +1,6 @@
 import type { ParsedMediaPayload } from "./prettyMessagesTypes";
 import { requestHeaders, requestLine } from "./prettyMessagesUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MediaRequestResponseViewProps {
   request: unknown;
@@ -15,6 +15,7 @@ interface MediaRequestResponseViewProps {
  * 边界：创建阶段尚无媒体 URL 时仍显示任务 ID、状态和本地查询地址。
  */
 export function MediaRequestResponseView({ request, media }: MediaRequestResponseViewProps) {
+  const t = useT();
   const headers = requestHeaders(request);
   const line = requestLine(request);
   const input = media.request;
@@ -79,6 +80,7 @@ export function MediaRequestResponseView({ request, media }: MediaRequestRespons
  * 边界：调用方只传入需要展示的非空值；长模型 ID、任务 ID 与 URL 会自动换行。
  */
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  const t = useT();
   return (
     <div className="contents">
       <dt className="font-medium text-muted-foreground">{label}</dt>

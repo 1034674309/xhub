@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { DeletedKeyResponse } from "@/app/(dashboard)/hooks/keys/useKeys";
 
 import { getDeletedKeysTableColumns } from "./DeletedKeysTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DeletedKeysTableProps {
   keys: DeletedKeyResponse[];
@@ -21,6 +21,7 @@ interface DeletedKeysTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "deleted_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -39,6 +40,7 @@ export function DeletedKeysTable({
   pagination,
   onPaginationChange,
 }: DeletedKeysTableProps) {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => getDeletedKeysTableColumns(), []);

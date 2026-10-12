@@ -1,6 +1,6 @@
 import { GuardrailModeSelect } from "./GuardrailModeSelect";
 import { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Guardrail } from "@/components/guardrails/types";
 import { applyGuardrail, createGuardrailCall, updateGuardrailCall } from "@/components/networking";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ interface Props {
  * 测试：guardrail_garden.integration.test.tsx。
  */
 export default function ExternalGuardrailEditor(props: Props) {
+  const t = useT();
   return <ExternalForm key={JSON.stringify([props.provider, props.rule])} {...props} />;
 }
 /**
@@ -47,6 +48,7 @@ export default function ExternalGuardrailEditor(props: Props) {
  * 测试：guardrail_garden.integration.test.tsx。
  */
 function ExternalForm({ provider, accessToken, rule, readOnly = false, onSuccess, onClose }: Props) {
+  const t = useT();
   const spec = EXTERNAL_PROVIDERS[provider];
   const [name, setName] = useState(rule?.guardrail_name ?? "");
   const [values, setValues] = useState<Record<string, string>>(() =>

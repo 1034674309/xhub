@@ -8,7 +8,7 @@ import { DateCell, IdCell, IdentityCell } from "@/components/shared/table_cells"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { PolicySelect } from "./PolicySelect";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ToolPoliciesTableColumnsDeps {
   onSelectTool: (toolName: string) => void;
@@ -19,6 +19,7 @@ interface ToolPoliciesTableColumnsDeps {
 }
 
 function TruncatedText({ value, className }: { value: string | undefined; className?: string }) {
+  const t = useT();
   const text = value ?? "-";
   return (
     <TooltipProvider>

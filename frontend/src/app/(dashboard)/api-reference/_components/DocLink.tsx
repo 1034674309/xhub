@@ -2,7 +2,7 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type DocLinkProps = {
   href?: string;
@@ -10,6 +10,7 @@ export type DocLinkProps = {
 };
 
 const DocLink = ({ href, className }: DocLinkProps) => {
+  const t = useT();
   if (!href || /litellm\.ai|berri\.ai|github\.com\/BerriAI/i.test(href)) {
     return null;
   }

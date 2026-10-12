@@ -5,6 +5,7 @@ import {
   catalogFieldValue,
   catalogRows,
   editorDefaults,
+  PRICE_FIELDS,
   suggestedModelName,
   type EditorModel,
 } from "./modelEditorPricing";
@@ -23,6 +24,11 @@ const baseValues = {
 };
 
 describe("modelEditorPricing", () => {
+  /** 目的：在 React 渲染之外直接读取价格字段；前置真实模块导入；结果为完整且不重复的配置，非法 Hook 会使导入失败；纯数据无需清理。 */
+  it("loads price fields outside React rendering", () => {
+    expect(PRICE_FIELDS.length).toBeGreaterThan(0);
+    expect(new Set(PRICE_FIELDS.map(field => field.name)).size).toBe(PRICE_FIELDS.length);
+  });
   /** 前置普通、带协议前缀及路径模型 ID；验证只修改公开名称、空值及点路径边界；纯函数无需清理。 */
   it("generates safe public names without changing upstream identifiers", () => {
     expect(suggestedModelName("openai/group/model:latest", "openai")).toBe("group/model:latest");

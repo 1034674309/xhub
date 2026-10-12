@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface User {
   user_id: string;
@@ -69,6 +69,7 @@ const UserSearchModal: React.FC<UserSearchModalProps> = ({
   defaultRole = "user",
   teamId,
 }) => {
+  const t = useT();
   const emptyValues: FormValues = { user_email: undefined, user_id: undefined, role: defaultRole };
   const form = useForm<FormValues>({ defaultValues: emptyValues });
   const selectedUserId = form.watch("user_id");

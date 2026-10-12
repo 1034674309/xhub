@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { XIcon } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VersionHistorySidePanelProps {
   isOpen: boolean;
@@ -23,6 +23,7 @@ const VersionHistorySidePanel: React.FC<VersionHistorySidePanelProps> = ({
   activeVersionId,
   onSelectVersion,
 }) => {
+  const t = useT();
   const [versions, setVersions] = useState<PromptSpec[]>([]);
   const [loading, setLoading] = useState(false);
 

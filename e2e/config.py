@@ -52,7 +52,6 @@ if live:
 for index, deployment in enumerate(models):
     deployment["litellm_params"].setdefault("deployment_id", "e2e-deployment-" + str(index))
 config = {"model_list": models,
-    "router_settings": {"routing_strategy": "simple-shuffle", "num_retries": 1, "timeout": 90 if live else 15},
     "general_settings": {"master_key": env["E2E_MASTER_KEY"], "admin_email": "admin", "admin_name": "admin",
         "admin_password": env["E2E_MASTER_KEY"],
         "database_url": "postgres://xhub:xhub_dev_password@127.0.0.1:5433/" + database + "?sslmode=disable&search_path=" + env["E2E_SCHEMA"]}}

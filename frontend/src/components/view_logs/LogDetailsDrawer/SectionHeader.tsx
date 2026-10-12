@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, Copy, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SectionHeaderProps {
   type: "input" | "output";
@@ -38,6 +38,7 @@ export function SectionHeader({
   onToggleCollapse,
   turnCount,
 }: SectionHeaderProps) {
+  const t = useT();
   const summary = (
     <>
       {onToggleCollapse &&

@@ -6,7 +6,7 @@ Trace settings by owner. Model providers and deployments are managed in the cons
 
 ~~~bash
 rg 'OverlayDB|MergePatch' internal/config internal/store
-rg 'RequestChain|Resolve' internal/router internal/gateway
+rg 'SelectRouteTemplate|Compile' internal/iam internal/router internal/gateway
 ~~~
 
 ## Contract
@@ -21,7 +21,7 @@ rg 'RequestChain|Resolve' internal/router internal/gateway
 | Response cache | Process | Lost on restart |
 | Usage / snapshots | PostgreSQL | Historical identity and price |
 
-OverlayDB replaces top-level values, including null/0/false/arrays. MergePatch recursively merges maps and replaces arrays. Template Resolve selects one whole document, not a field merge. Failed identity/template reads must not silently grant access.
+OverlayDB replaces top-level values, including null/0/false/arrays. MergePatch recursively merges maps and replaces arrays. iam.SelectRouteTemplate selects one whole document, not a field merge. Failed identity/template reads must not silently grant access.
 
 ## Source and verification
 

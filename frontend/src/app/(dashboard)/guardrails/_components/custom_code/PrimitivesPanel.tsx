@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, Code, Copy, Check } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { copyToClipboard } from "@/utils/dataUtils";
 import { PRIMITIVE_GROUPS, LANGUAGE_PRIMITIVES } from "./primitives";
 
@@ -12,6 +12,7 @@ import { PRIMITIVE_GROUPS, LANGUAGE_PRIMITIVES } from "./primitives";
  * 测试：CustomCodeModal.integration.test.tsx。
  */
 export default function PrimitivesPanel() {
+  const t = useT();
   const [copied, setCopied] = useState("");
   const [copyError, setCopyError] = useState(false);
   const groups = [...PRIMITIVE_GROUPS, { title: "Go / XGo 语言能力", items: LANGUAGE_PRIMITIVES }];

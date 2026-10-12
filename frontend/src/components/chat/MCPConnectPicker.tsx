@@ -6,7 +6,7 @@ import { toast } from "@/lib/toast";
 import { Logo } from "@/components/molecules/logo/Logo";
 import { fetchMCPServers, listMCPTools } from "../networking";
 import { MCPServer } from "../mcp_tools/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Props {
   accessToken: string;
@@ -15,6 +15,7 @@ interface Props {
 }
 
 const MCPConnectPicker: React.FC<Props> = ({ accessToken, selectedServers, onChange }) => {
+  const t = useT();
   const [servers, setServers] = useState<MCPServer[]>([]);
   const [loadingServers, setLoadingServers] = useState(true);
   const [togglingOn, setTogglingOn] = useState<Set<string>>(new Set());

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, XCircle, ClipboardCopy } from "lucide-react";
 import { ResponseTimeIndicator } from "./response_time_indicator";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // Helper function to deep-parse a JSON string if possible
 const deepParse = (input: any) => {
@@ -20,6 +20,7 @@ const deepParse = (input: any) => {
 
 // TableClickableErrorField component with copy-to-clipboard functionality
 const TableClickableErrorField: React.FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => {
+  const t = useT();
   const [isExpanded, setIsExpanded] = React.useState(false);
   const safeValue = value?.toString() || "N/A";
   const truncated = safeValue.length > 50 ? safeValue.substring(0, 50) + "..." : safeValue;
@@ -75,6 +76,7 @@ interface ErrorDetails {
 
 // Update HealthCheckDetails component to handle errors
 const HealthCheckDetails: React.FC<{ response: any }> = ({ response }) => {
+  const t = useT();
   // Initialize with safe default values
   let errorDetails: ErrorDetails | null = null;
   let parsedLitellmParams: any = {};
@@ -272,6 +274,7 @@ export const CacheHealthTab: React.FC<{
   runCachingHealthCheck: () => void;
   responseTimeMs?: number | null;
 }> = ({ accessToken, healthCheckResponse, runCachingHealthCheck, responseTimeMs }) => {
+  const t = useT();
   const [localResponseTimeMs, setLocalResponseTimeMs] = React.useState<number | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
 

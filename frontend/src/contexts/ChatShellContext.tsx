@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useChatHistory } from "@/components/chat/useChatHistory";
 import type { AssistantMessageUpdate, ChatMessage, Conversation } from "@/components/chat/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChatShellContextValue {
   accessToken: string;
@@ -30,6 +30,7 @@ interface ChatShellContextValue {
 const ChatShellContext = createContext<ChatShellContextValue | null>(null);
 
 export function useChatShell(): ChatShellContextValue {
+  const t = useT();
   const ctx = useContext(ChatShellContext);
   if (!ctx) {
     throw new Error(t("useChatShell must be used within a ChatShellProvider"));
@@ -54,6 +55,7 @@ export function ChatShellProvider({
   premiumUser,
   children,
 }: ChatShellProviderProps) {
+  const t = useT();
   const searchParams = useSearchParams();
   const urlConversationId = searchParams.get("id");
   const [selectedMCPServers, setSelectedMCPServers] = useState<string[]>([]);

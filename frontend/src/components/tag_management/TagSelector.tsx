@@ -4,7 +4,7 @@ import { tagListCall } from "../networking";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { canAccessManagement } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TagSelectorProps {
   onChange: (selectedTags: string[]) => void;
@@ -14,6 +14,7 @@ interface TagSelectorProps {
 }
 
 const TagSelector: React.FC<TagSelectorProps> = ({ onChange, value, className, accessToken }) => {
+  const t = useT();
   const { userRole } = useAuthorized();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);

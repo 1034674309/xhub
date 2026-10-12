@@ -7,7 +7,7 @@ import { indexesListCall } from "@/components/networking";
 import { VectorStore } from "@/components/vector_store_management/types";
 
 import IndexesTable from "./IndexesTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface VectorStoreIndex {
   id: string;
@@ -30,6 +30,7 @@ interface IndexesTabProps {
 }
 
 const IndexesTab: React.FC<IndexesTabProps> = ({ accessToken, vectorStores, onViewVectorStore }) => {
+  const t = useT();
   const [indexes, setIndexes] = useState<VectorStoreIndex[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

@@ -7,7 +7,7 @@ import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName } from "@/components/networking";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ContainerFileCitation {
   type: "container_file_citation";
@@ -36,6 +36,7 @@ function isImageFilename(filename: string | undefined): boolean {
 }
 
 const CodeInterpreterOutput: React.FC<CodeInterpreterOutputProps> = ({ code, annotations = [], accessToken }) => {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(coy);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});

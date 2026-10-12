@@ -6,7 +6,7 @@ vi.mock("@/utils/returnUrlUtils", () => ({ clearStoredReturnUrl: mocks.returnUrl
 vi.mock("@/components/networking", () => ({ getProxyBaseUrl: () => "https://gateway.example" }));
 vi.mock("./proxySettings/useProxySettings", () => ({ default: () => ({ PROXY_LOGOUT_URL: "" }) }));
 vi.mock("@/lib/toast", () => ({ toast: { error: mocks.error } }));
-vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/i18n", () => ({ t: (key: string) => key, useT: () => (key: string) => key }));
 import { useLogout } from "./useLogout";
 /** 验证退出顺序、匿名边界与失败恢复；前置模拟浏览器和请求，核对后台撤销后才清理；每次还原 mock，无业务数据。 */
 describe("真实会话退出", () => {

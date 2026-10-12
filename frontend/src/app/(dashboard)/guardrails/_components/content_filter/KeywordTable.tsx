@@ -5,7 +5,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACTION_ITEMS } from "./action_options";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface BlockedWord {
   id: string;
@@ -21,6 +21,7 @@ interface KeywordTableProps {
 }
 
 const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, onActionChange, onRemove }) => {
+  const t = useT();
   const columns: ColumnDef<BlockedWord>[] = [
     {
       header: t("Keyword"),

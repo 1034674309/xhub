@@ -65,7 +65,7 @@ general_settings:
   disable_env_credential_login: false
 ```
 
-Replace the template's `general_settings` section, keeping `model_list` and `router_settings`. Alternatively, point `database_url` at your own new PostgreSQL database. The template uses port `5432` and password `xhub`; the Compose database uses host port `5433` and password `xhub_dev_password`.
+Replace the template's `general_settings` section, keeping `model_list`. Alternatively, point `database_url` at your own new PostgreSQL database. The template uses port `5432` and password `xhub`; the Compose database uses host port `5433` and password `xhub_dev_password`.
 
 An empty `redis_url` disables Redis. If you use Redis, set it to an address reachable **from the gateway process**. The Compose Redis service is not published to the host by default.
 

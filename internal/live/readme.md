@@ -2,6 +2,48 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Open and share a Redis Client. Strict affinity methods retain errors; permissive hot-state methods follow their documented fallback contracts. Usage consumers must commit IAM before Ack. Close the client at shutdown.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| Open(url) / Close() | Open and close the Redis client |
+| ReadAffinity(ctx,key) | Return empty,nil on miss and preserve failures |
+| CompareAffinity / WriteAffinity | Atomically compare or strictly publish with TTL |
+
+### Integration demo
+
+This is a Go integration helper for a host. It compiles as a separate package inside the repository; callers must supply the real dependencies described below before execution.
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/live"
+)
+
+// ReadDemoAffinity 演示严格共享读取；传入 Redis URL 与独立演示键，返回载荷及存储错误。
+// 不写任何键，调用完成关闭连接；运行需要真实 Redis。
+func ReadDemoAffinity(ctx context.Context, redisURL, key string) (string, error) {
+	client, err := live.Open(redisURL)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	return client.ReadAffinity(ctx, key)
+}
+```
+
+This helper compiles. An absent demo key returns empty,nil on real Redis; network failures return errors.
+
+### Errors, state, and side effects
+
+CompareAffinity must be atomic and must not renew TTL on comparison failure. Hot state is not the final ledger; local fallback cannot guarantee multi-instance consistency.
+
 ## Overview
 
 `internal/live` owns state that must be shared immediately between gateway processes but does not belong in the durable IAM ledger: deployment cooldowns, recent latency and minute usage, hierarchical RPM/TPM counters, unflushed spend, a reliable usage queue, and short-lived strings. PostgreSQL remains the source of truth for identities and settled usage. This package closes the interval between admission and the IAM transaction committing.

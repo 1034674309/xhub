@@ -6,6 +6,8 @@ import (
 	"math"
 
 	"xorm.io/xorm"
+
+	"github.com/sunqirui1987/xhub/internal/live"
 )
 
 // ErrQuotaAllocation 表示已消费与下级保留额度超过父级；管理接口返回 400 并回滚配置。
@@ -47,23 +49,90 @@ func quotaUnused(n *quotaNode) (float64, error) {
 // quotaTree 读取当前事务的额度归属；参数 s 是会话，返回节点索引或数据库错误。
 // 调用：分配校验、运行时检查；所有密钥只能沿用户唯一团队消费，项目是额外上限。
 func quotaTree(s *xorm.Session) (map[string]*quotaNode, error) {
+	return quotaTreeFor(s, "", "")
+}
+
+// quotaTreeFor 读取管理校验的完整树，或运行时主体所属组织的额度树。
+// 参数 s 为数据库会话，kind/id 为空时供管理事务校验，否则仅支持 user/key；返回已链接节点或归属错误。
+// 保留同组织兄弟及后代的固定额度，团队外个人只读取自己；不缓存跨请求配置，不读取无关组织热消费。
+func quotaTreeFor(s *xorm.Session, kind, id string) (map[string]*quotaNode, error) {
 	nodes := map[string]*quotaNode{}
 	var orgs []Organization
 	var teams []Team
 	var users []User
 	var keys []Key
 	var members []TeamMembership
+	userID, orgID := "", ""
+	if kind != "" {
+		userID = id
+		if kind == "key" {
+			var key Key
+			ok, err := s.ID(id).Get(&key)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, ErrNotFound
+			}
+			if key.UserID == nil || *key.UserID == "" {
+				return nil, ErrInvalid
+			}
+			userID = *key.UserID
+		} else if kind != "user" {
+			return nil, ErrInvalid
+		}
+		if err := s.Where("user_id = ?", userID).Find(&members); err != nil {
+			return nil, err
+		}
+		if len(members) > 1 {
+			return nil, ErrMultipleTeams
+		}
+		if len(members) == 1 {
+			var team Team
+			ok, err := s.ID(members[0].TeamID).Get(&team)
+			if err != nil {
+				return nil, err
+			}
+			if !ok || team.OrganizationID == "" {
+				return nil, ErrInvalid
+			}
+			orgID = team.OrganizationID
+		}
+	}
+	if kind != "" {
+		s.Where("id = ?", orgID)
+	}
 	if err := s.Find(&orgs); err != nil {
 		return nil, err
+	}
+	if kind != "" {
+		s.Where("organization_id = ?", orgID)
 	}
 	if err := s.Find(&teams); err != nil {
 		return nil, err
 	}
+	// 成员查询按组织界定用户，随后读取这些用户的全部归属，以拒绝跨组织的多团队脏数据。
+	userFilter := "id = ?"
+	userArg := userID
+	if orgID != "" {
+		userFilter = "id IN (SELECT user_id FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE organization_id = ?))"
+		userArg = orgID
+	}
+	if kind != "" {
+		s.Where(userFilter, userArg)
+	}
 	if err := s.Find(&users); err != nil {
 		return nil, err
 	}
+	if kind != "" {
+		s.Where("user_id IN (SELECT id FROM users WHERE "+userFilter+")", userArg)
+	}
 	if err := s.Find(&keys); err != nil {
 		return nil, err
+	}
+	members = nil
+	if kind != "" {
+		s.Where("user_id IN (SELECT id FROM users WHERE "+userFilter+")", userArg)
 	}
 	if err := s.Find(&members); err != nil {
 		return nil, err
@@ -162,11 +231,35 @@ func singleTeamMember(s *xorm.Session, userID, teamID string) error {
 func (db *DB) QuotaPath(ctx context.Context, kind, id string, hot func(string, string) float64) (string, string, string, error) {
 	s := db.session(ctx)
 	defer s.Close()
-	nodes, err := quotaTree(s)
+	nodes, err := quotaTreeFor(s, kind, id)
 	if err != nil {
 		return "", "", "", err
 	}
-	n := nodes[kind+":"+id]
+	return quotaPath(nodes, kind+":"+id, hot)
+}
+
+// QuotaAndRates 为首次准入共用一次归属树读取，避免预算和分钟计划分别扫描同一组织。
+// 参数 ctx/kind/id/hot 与 QuotaPath 相同；返回计费团队、组织、耗尽层级、速率计划及读取错误。
+// 网关首次准入调用；只读数据库及热消费，不占分钟容量，后续权限复核仍读取最新预算。
+func (db *DB) QuotaAndRates(ctx context.Context, kind, id string, hot func(string, string) float64) (string, string, string, live.RatePlan, error) {
+	s := db.session(ctx)
+	defer s.Close()
+	nodes, err := quotaTreeFor(s, kind, id)
+	if err != nil {
+		return "", "", "", live.RatePlan{}, err
+	}
+	team, org, scope, err := quotaPath(nodes, kind+":"+id, hot)
+	if err != nil || scope != "" {
+		return team, org, scope, live.RatePlan{}, err
+	}
+	plan, err := buildRatePlan(nodes, kind+":"+id)
+	return team, org, scope, plan, err
+}
+
+// quotaPath 检查已读取的归属树及热消费，参数 target 为层级前缀 ID，hot 可空。
+// 返回计费归属及耗尽层级；供 QuotaPath/QuotaAndRates 共用，不更新数据库或速率计数。
+func quotaPath(nodes map[string]*quotaNode, target string, hot func(string, string) float64) (string, string, string, error) {
+	n := nodes[target]
 	if n == nil {
 		return "", "", "", ErrNotFound
 	}

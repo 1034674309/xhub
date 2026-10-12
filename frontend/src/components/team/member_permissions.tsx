@@ -7,7 +7,7 @@ import { RotateCw, Save } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { toast } from "@/lib/toast";
 import { getPermissionInfo } from "./permission_definitions";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MemberPermissionsProps {
   teamId: string;
@@ -16,6 +16,7 @@ interface MemberPermissionsProps {
 }
 
 const MemberPermissions: React.FC<MemberPermissionsProps> = ({ teamId, accessToken, canEditTeam }) => {
+  const t = useT();
   const [permissions, setPermissions] = useState<string[]>([]);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);

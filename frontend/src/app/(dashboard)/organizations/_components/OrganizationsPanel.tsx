@@ -11,7 +11,7 @@ import { OrgCreateDialog } from "@/components/organization/org-create/OrgCreateD
 import OrganizationInfoView from "@/components/organization/organization_view";
 import { Button } from "@/components/ui/button";
 import { QuotaGuide } from "@/components/shared/QuotaGuide";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 import OrganizationsTable from "./OrganizationsTable";
 
@@ -22,6 +22,7 @@ interface OrganizationsPanelProps {
 }
 
 const OrganizationsPanel: React.FC<OrganizationsPanelProps> = ({ userRole, accessToken, premiumUser }) => {
+  const t = useT();
   const [selectedOrgId, setSelectedOrgId] = useQueryState("org", parseAsString.withOptions({ history: "push" }));
   const [editOrg, setEditOrg] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);

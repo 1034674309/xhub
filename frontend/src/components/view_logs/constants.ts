@@ -23,10 +23,10 @@ export const AGENT_CALL_TYPES = ["asend_message"];
 export const BATCH_CALL_TYPES = ["acreate_batch", "create_batch", "aretrieve_batch", "retrieve_batch"];
 
 export const QUICK_SELECT_OPTIONS: { label: string; value: number; unit: string }[] = [
-  { label: t("Last Minute"), value: 1, unit: "minutes" },
-  { label: t("Last 15 Minutes"), value: 15, unit: "minutes" },
-  { label: t("Last Hour"), value: 1, unit: "hours" },
-  { label: t("Last 4 Hours"), value: 4, unit: "hours" },
-  { label: t("Last 24 Hours"), value: 24, unit: "hours" },
-  { label: t("Last 7 Days"), value: 7, unit: "days" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last Minute"); }, value: 1, unit: "minutes" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 15 Minutes"); }, value: 15, unit: "minutes" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last Hour"); }, value: 1, unit: "hours" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 4 Hours"); }, value: 4, unit: "hours" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 24 Hours"); }, value: 24, unit: "hours" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 7 Days"); }, value: 7, unit: "days" },
 ];

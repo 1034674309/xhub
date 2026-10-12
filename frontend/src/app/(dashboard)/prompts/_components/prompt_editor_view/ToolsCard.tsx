@@ -3,7 +3,7 @@ import { PlusIcon, TrashIcon } from "lucide-react";
 import { Tool } from "./types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ToolsCardProps {
   tools: Tool[];
@@ -13,6 +13,7 @@ interface ToolsCardProps {
 }
 
 const ToolsCard: React.FC<ToolsCardProps> = ({ tools, onAddTool, onEditTool, onRemoveTool }) => {
+  const t = useT();
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2">

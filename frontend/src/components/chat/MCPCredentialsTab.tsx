@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/lib/toast";
 import { deleteMCPOAuthUserCredential, listMCPUserCredentials, MCPUserCredentialListItem } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const MCP_CREDENTIALS_QUERY_KEY = "mcp-user-credentials";
 
@@ -67,6 +67,7 @@ function expiryLabel(isoString: string | null | undefined): {
 }
 
 const MCPCredentialsTab: React.FC<Props> = ({ accessToken }) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const [revoking, setRevoking] = useState<Set<string>>(new Set());
 

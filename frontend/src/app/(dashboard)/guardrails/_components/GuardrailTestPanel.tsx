@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import GuardrailTestResults from "./GuardrailTestResults";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailTestPanelProps {
   guardrailNames: string[];
@@ -38,6 +38,7 @@ export function GuardrailTestPanel({
   errors,
   onClose,
 }: GuardrailTestPanelProps) {
+  const t = useT();
   const [inputText, setInputText] = useState("");
   const [metadataText, setMetadataText] = useState("");
   const [metadataError, setMetadataError] = useState<string | null>(null);

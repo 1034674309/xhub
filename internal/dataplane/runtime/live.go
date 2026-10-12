@@ -1,3 +1,5 @@
+// 本文件读取 Redis 路由热状态、报告失败/延迟/用量，并将日志队列先落数据库再确认删除。
+// 调用关系与边界：路由热状态及花费日志后台刷写；具体参数、返回及副作用见各方法说明。
 package runtime
 
 import (
@@ -6,19 +8,20 @@ import (
 	"time"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
 	"github.com/sunqirui1987/xhub/internal/router"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
+// logTraceOnceLive 限制 State 的入口跟踪日志在本进程生命周期内只输出一次；不参与路由状态同步。
 var logTraceOnceLive sync.Once
 
-// State 组装这一刻的在途请求、冷却、延迟和用量，交给路由器排序。没有 Redis 时只有在途请求。
-// 参数 h：Runtime。
-// 返回：router.State。
-// 调用：gateway routerState。测试不连 Redis，prefer_test.go 使用空 State。
+// State 组装路由器需要的当前并发、冷却、延迟和 token 用量快照。
+// 参数 h 为运行时能力宿主；返回 router.State；gateway 的路由状态方法调用。
+// 先取本进程 BusyMap，再用当前模型的 CooldownID 批量查询 Redis；没有 Redis 时只返回 Busy。
+// 此快照只用于本轮排序，不构成分布式锁或事务一致视图；首次调用额外输出一次跟踪日志。
+// 函数读取外部热状态，不修改部署或预算；是否复制 BusyMap 由宿主契约负责。
 func State(h Runtime) router.State {
 	logTraceOnceLive.Do(func() { util.Trace("enter dataplane.State") })
 
@@ -37,15 +40,12 @@ func State(h Runtime) router.State {
 	return st
 }
 
-// RecordFailure 按这一次请求生效的路由设置记一次失败。allowed_fails 小于 1 时不写 Redis。
-// cooldown_time 为 0 或缺失时冷却一分钟。
-//
-// 阈值来自 RouteSettingsFor 解析出来的那一份，而不是全局文档：一个团队把
-// allowed_fails 调低之后，它的失败要按它自己的阈值计数。
-// 参数 h：Runtime。id：部署 id。空 id 直接返回。settings：这一次请求生效的路由设置。
-// 返回：无。
-// 调用：gateway noteFailure，由 Serve 的 NoteFailure 转来。无单独测试。
-func RecordFailure(h Runtime, id string, settings prefs.RouteSettings) {
+// RecordFailure 按本次请求的模板阈值增加部署失败计数，并在达到阈值时冷却部署。
+// 参数 h 提供 Redis，id 为部署运行身份，settings 为本轮 RouteSettingsFor 的结果；返回值无。
+// gateway 的 NoteFailure 调用；无 Redis、空 ID 或 AllowedFails 小于 1 时直接返回。
+// 非正冷却时间回退为一分钟；使用请求模板而非全局配置，使不同租户各自的阈值真正生效。
+// 副作用为 Redis 失败计数/冷却状态；Redis 错误在此不向客户端传播，不能据此假定记录必定成功。
+func RecordFailure(h Runtime, id string, settings router.RouteSettings) {
 	redis := h.Redis()
 	if redis == nil || id == "" {
 		return
@@ -61,10 +61,10 @@ func RecordFailure(h Runtime, id string, settings prefs.RouteSettings) {
 	_ = redis.RecordFailure(id, allowed, cd)
 }
 
-// RecordLatency 把这次延迟累进 Redis，供下次排序使用。没有 Redis 时直接返回。
-// 参数 id：部署 id。ms：耗时毫秒。
-// 返回：无。
-// 调用：gateway noteLatency。无单独测试。
+// RecordLatency 把部署本次延迟样本累积到 Redis，供延迟策略下轮排序。
+// 参数 h 提供热状态客户端，id 为运行身份，ms 为毫秒耗时；返回值无，gateway 的 NoteLatency 调用。
+// 无 Redis 时跳过，写入错误不传播；本方法不自行校验样本范围，也不改变当前已经选出的部署。
+// 副作用仅为热统计更新，不写数据库账单。
 func RecordLatency(h Runtime, id string, ms float64) {
 	if h.Redis() == nil {
 		return
@@ -72,10 +72,10 @@ func RecordLatency(h Runtime, id string, ms float64) {
 	_ = h.Redis().AddLatency(id, ms)
 }
 
-// RecordUsage 把这次 token 数累进 Redis。没有 Redis 时直接返回。
-// 参数 id：部署 id。tokens：本次 token 数。
-// 返回：无。
-// 调用：gateway noteUsage。无单独测试。
+// RecordUsage 将部署本次 token 数累积到 Redis 路由用量统计。
+// 参数 h 为宿主，id 为运行身份，tokens 为本次统计量；返回值无，gateway 的用量记录方法调用。
+// 无 Redis 时跳过，写入错误不传播；参数有效性由调用链负责，不能把路由统计成功视作费用持久化成功。
+// 副作用为热状态更新，不直接扣预算或写数据库。
 func RecordUsage(h Runtime, id string, tokens int) {
 	if h.Redis() == nil {
 		return
@@ -83,10 +83,10 @@ func RecordUsage(h Runtime, id string, tokens int) {
 	_ = h.Redis().AddUsage(id, tokens)
 }
 
-// FlushLoop 每分钟调用一次 Flush，直到进程退出。只在配置了 Redis 时启动。
-// 参数 h：Runtime。返回：无。这个函数不返回，直到进程退出。
-// 调用：gateway flushLoop，且只在配置了 Redis 时。无单测。
-// 测试：无直接单测
+// FlushLoop 每 60 秒尝试将 Redis 用量队列刷入身份数据库。
+// 参数 h 为运行时宿主；返回值无，gateway 在配置 Redis 后作为后台循环启动。
+// 循环没有 context 或停止信号，正常运行中不会自行返回；ticker 的 defer 只在函数退出时执行，不提供优雅停机保证。
+// 每轮由 Flush 处理缺失依赖和失败，失败批次留待后续重试；不应在请求处理协程内同步调用此无限循环。
 func FlushLoop(h Runtime) {
 	t := time.NewTicker(60 * time.Second)
 	defer t.Stop()
@@ -95,11 +95,13 @@ func FlushLoop(h Runtime) {
 	}
 }
 
-// Flush 把 Redis 队列里的花费日志写入 PostgreSQL，成功后再从队列确认删除。
-// 参数 h：Runtime。Redis 或 Identity 为 nil 时立即返回。
-// 返回：无。
-// 调用：FlushLoop 和 gateway FlushSpend。无单测。
-// 测试：无直接单测
+// Flush 将至多 500 条队列用量先持久化，再确认删除并调整热预算计数。
+// 参数 h 提供 Redis 与身份数据库；返回值无，FlushLoop 或网关显式刷写方法调用。
+// 任一依赖为 nil 或队列为空时跳过；PeekLogs 只窥视，数据库写入失败记录日志且保留整批队列。
+// PeekLogs 遇到损坏记录只返回此前的有效前缀；损坏记录位于队头时返回空批次，保留原条目等待修复。
+// 成功后用有效前缀的原始条数及首元素 head 确认，防止并发刷写误删已变化的队头。
+// hotDeltas 扣回已经持久化的临时预算增量；数据库幂等性处理重试，确认失败可能导致下次再次写同一批。
+// 副作用涉及数据库和 Redis，二者不是同一事务；不应宣称调用返回就意味着队列一定已清空。
 func Flush(h Runtime) {
 	redis := h.Redis()
 	db := h.Identity()
@@ -112,11 +114,13 @@ func Flush(h Runtime) {
 		return
 	}
 	head := raw[0]
+	// logs 与 raw 是同一有效前缀的两种表示；只确认这段前缀，不越过损坏记录删除后续数据。
 	records := make([]iam.UsageRecord, 0, len(logs))
 	for _, row := range logs {
 		records = append(records, queuedUsageRecord(row))
 	}
 	if len(records) == 0 {
+		// 防御性处理有原始条目却没有转换记录的批次；当前 PeekLogs 不会把损坏条目放进 raw。
 		_ = redis.AckFlushed(nil, n, head)
 		return
 	}
@@ -124,11 +128,16 @@ func Flush(h Runtime) {
 		util.Error("spend flush failed: %v", err)
 		return
 	}
+	// 数据库先成功再删除队列；同时扣回热预算，避免同一笔费用同时算在热状态与持久余额中。
+	// Ack 的队头比较防止另一刷写者改变队列后误删新记录，失败留待下一轮重试。
 	_ = redis.AckFlushed(hotDeltas(logs), n, head)
 }
 
-// queuedUsageRecord 将队列日志转换为数据库账单；参数 row 为 Redis 日志，返回完整的用量快照。
-// Flush 调用，无外部副作用；非法时间回退当前时间，未实测费用保持零，端点不受正文保存开关影响。
+// queuedUsageRecord 将一条 Redis 日志转成完整数据库用量快照。
+// 参数 row 为队列记录；返回 iam.UsageRecord；Flush 的批量转换调用，无网络或存储副作用。
+// 解析纳秒时间戳，非法起止时间各自回退到当前时间；SpendValid 为 false 时费用保留零。
+// 会话来源、端点、供应商、流标志、原始上游诊断及价格快照直接继承，不能根据正文保存开关猜测或丢弃。
+// 只做字段映射，不重新测量 token、重新定价或推断旧记录缺失的归属。
 func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
 	start, err := time.Parse(time.RFC3339Nano, row.Start)
 	if err != nil {
@@ -155,15 +164,16 @@ func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
 		EndedAt:          end, TTFTMs: row.TTFTMs, CacheHit: row.CacheHit,
 		KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
 		Provider: row.Provider, CachedTokens: row.CachedTokens,
-		SessionID: row.SessionID, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
+		// 会话来源必须随队列快照落库；仅保留 SessionID 会让异步账单丢失 explicit/parent 归属。
+		SessionID: row.SessionID, SessionSource: row.SessionSource, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
 		PriceSnapshot: row.PriceSnapshot,
 	}
 }
 
-// hotDeltas 把一批花费日志按密钥、团队、用户、组织和项目拆成要回写的热计数。
-// 参数 logs：Redis 队列里取出的花费日志。
-// 返回：live.SpendRef 到金额的映射，交给 Redis 确认。
-// 调用：Flush。测试：live_test.go TestHotDeltasIncludesProject。
+// hotDeltas 汇总一批成功持久化日志对应的临时预算增量，供 Redis 确认时扣回。
+// 参数 logs 为队列日志切片；返回 SpendRef 到金额的映射；仅由 Flush 的成功确认路径调用。
+// 只累计 SpendValid 且金额非零的记录，按密钥、团队、用户、组织与项目各自聚合；空身份引用跳过。
+// 无效或零费用不应扣回热预算，避免失败日志改变额度；函数只构造内存映射，不直接修改预算。
 func hotDeltas(logs []live.SpendLog) map[string]float64 {
 	out := map[string]float64{}
 	for _, row := range logs {
@@ -183,8 +193,9 @@ func hotDeltas(logs []live.SpendLog) map[string]float64 {
 	return out
 }
 
-// Runtime 是 Redis 快照和花费刷写。它不处理 HTTP，也不看请求正文。
-// 网关在 routerState、noteFailure、noteLatency、noteUsage 和 flushLoop 里调用 live.go。
+// Runtime 定义路由热状态读取和用量队列刷写所需的后台能力。
+// gateway 提供并发快照、模型目录、Redis 与身份数据库；runtime.State/Record*/Flush 消费，无 HTTP 正文依赖。
+// Redis 或数据库可为 nil，具体降级见各方法；FlushLoop 没有取消参数，应作为进程生命周期内的后台任务使用。
 type Runtime interface {
 	// BusyMap 返回本进程内每个部署 id 正在处理的请求数。
 	// 参数：无。接收者是实现 Runtime 的进程。
@@ -200,11 +211,8 @@ type Runtime interface {
 	// 测试：bypass_logic_test.go、failure_log_test.go
 	Redis() *live.Client
 
-	// Models 返回全部部署，用来把模型行换成部署 id，再向 Redis 批量问冷却、延迟和用量。
-	// 参数：无。
-	// 返回：当前模型表。空表表示没有部署。
-	// 调用：State 和 Bypass 的 eligible。
-	// 测试：bypass_logic_test.go 用夹具模型表选部署。
+	// Models 返回当前部署目录；无参数，State 只读计算每个部署的 CooldownID，用于批量查询热统计。
+	// 返回切片及嵌套配置由宿主持有，不能在收集状态时修改；空目录仍可保留进程 BusyMap。
 	Models() []config.ModelEntry
 
 	// Identity 是 Flush 写入用量的库。没配 PostgreSQL 时为 nil，Flush 直接返回。

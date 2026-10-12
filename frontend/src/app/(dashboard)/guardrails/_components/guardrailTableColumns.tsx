@@ -17,11 +17,12 @@ import { cn } from "@/lib/cva.config";
 
 import { formatGuardrailMode, getGuardrailLogoAndName } from "./guardrail_info_helpers";
 import { Logo } from "@/components/molecules/logo/Logo";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const CONFIG_DELETE_HINT = "Config guardrails are defined in the config file and cannot be deleted from the dashboard.";
 
 function GuardrailProviderCell({ provider }: { provider: string }) {
+  const t = useT();
   const { logo, displayName } = getGuardrailLogoAndName(provider);
   return (
     <div className="flex items-center gap-2">
@@ -37,6 +38,7 @@ interface GuardrailRowActionsProps {
 }
 
 function GuardrailRowActions({ guardrail, onDeleteClick }: GuardrailRowActionsProps) {
+  const t = useT();
   const isConfigGuardrail = guardrail.guardrail_definition_location === GuardrailDefinitionLocation.CONFIG;
 
   return (

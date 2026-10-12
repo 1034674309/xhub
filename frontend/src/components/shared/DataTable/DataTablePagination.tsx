@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -31,6 +31,7 @@ export function DataTablePagination({
   isLoading = false,
   className,
 }: DataTablePaginationProps) {
+  const t = useT();
   const pageCount = pageSize > 0 ? Math.ceil(rowCount / pageSize) : 0;
   const start = rowCount === 0 ? 0 : page * pageSize + 1;
   const end = Math.min((page + 1) * pageSize, rowCount);

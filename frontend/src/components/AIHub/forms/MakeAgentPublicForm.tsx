@@ -8,7 +8,7 @@ import { cn } from "@/lib/cva.config";
 import { makeAgentsPublicCall } from "../../networking";
 import { toast } from "@/lib/toast";
 import { AgentHubData } from "@/components/AIHub/AgentHubTableColumns";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const stepTitles = () => [t("Select Agents"), t("Confirm")];
 
@@ -27,6 +27,7 @@ const MakeAgentPublicForm: React.FC<MakeAgentPublicFormProps> = ({
   agentHubData,
   onSuccess,
 }) => {
+  const t = useT();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

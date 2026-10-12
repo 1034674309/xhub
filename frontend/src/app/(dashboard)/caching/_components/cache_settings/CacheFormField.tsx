@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { CacheField } from "./cacheSettingsFields";
 import type { CacheFormValues } from "./cacheSettingsUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface EmbeddingModelOption {
   value: string;
@@ -33,6 +33,7 @@ interface CacheFormFieldProps {
 }
 
 const CacheFormField: React.FC<CacheFormFieldProps> = ({ field, embeddingModels, isSecretConfigured = false }) => {
+  const t = useT();
   const form = useFormContext<CacheFormValues>();
   const placeholder = isSecretConfigured ? SECRET_ALREADY_SET_PLACEHOLDER : field.helpText;
 

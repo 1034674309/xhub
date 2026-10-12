@@ -13,7 +13,8 @@ vi.mock("../networking");
 /** 固定历史组件文案；现行网关不提供 MCP 目录，本组仅验证保留组件的隔离行为。 */
 vi.mock("@/i18n", async () => {
   const { translate } = await import("@/i18n/translate");
-  return { t: (key: string, params?: Record<string, string | number>) => translate("en", key, params) };
+  const t = (key: string, params?: Record<string, string | number>) => translate("en", key, params);
+  return { getActiveLocale: () => "en", t, useT: () => t };
 });
 
 /** 为历史组件注入受控目录查询，覆盖加载、失败和竞态；不改变现行 useMCPServers 的空目录契约。 */

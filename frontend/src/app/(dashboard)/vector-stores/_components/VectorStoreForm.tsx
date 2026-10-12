@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const EMBEDDING_MODEL_RENAME_PROVIDERS = new Set(["milvus", "valkey", "mongodb"]);
 
@@ -92,8 +92,8 @@ const isProviderFieldName = (name: string): name is ProviderFieldName =>
 const optionalText = z.string().optional();
 
 const vectorStoreShape = {
-  custom_llm_provider: z.string().min(1, t("Please select a provider")),
-  vector_store_id: z.string().min(1, t("Please input the vector store ID from your api provider")),
+  custom_llm_provider: z.string().min(1, { error: () => t("Please select a provider") }),
+  vector_store_id: z.string().min(1, { error: () => t("Please input the vector store ID from your api provider") }),
   vector_store_name: optionalText,
   vector_store_description: optionalText,
   litellm_credential_name: z.string().nullable().optional(),
@@ -177,6 +177,7 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
 
 const PasswordInput = React.forwardRef<HTMLInputElement, React.ComponentPropsWithoutRef<typeof InputGroupInput>>(
   (props, ref) => {
+  const t = useT();
     const [revealed, setRevealed] = useState(false);
     return (
       <InputGroup>
@@ -203,6 +204,7 @@ const VectorStoreForm: React.FC<VectorStoreFormProps> = ({
   accessToken,
   credentials,
 }) => {
+  const t = useT();
   const form = useZodForm(vectorStoreSchema, { defaultValues: EMPTY_VALUES });
   const [metadataJson, setMetadataJson] = useState("{}");
   const [selectedProvider, setSelectedProvider] = useState("bedrock");
@@ -550,6 +552,7 @@ interface ProviderFieldProps {
 }
 
 const ProviderField: React.FC<ProviderFieldProps> = ({ field, control, modelInfo }) => {
+  const t = useT();
   const label = labelWithHint(field.label, field.tooltip);
 
   if (field.type === "select") {

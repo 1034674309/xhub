@@ -2,6 +2,49 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Normalize usage, price it at the request start time with CostFromRates or CostAt, and persist the Charge snapshot only after checking priced. IAM owns accounting persistence.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| NormalizeUsage(map) | Normalize reported quantities and media dimensions |
+| CostFromRates / CostAt | Return Charge and a priced flag |
+| Snapshot / SnapshotUsage | Serialize the pricing facts for the call |
+
+### Integration demo
+
+Save the code as `demo/main.go` inside the repository and run `go run ./demo` from the repository root. Remove the demo directory after use.
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/catalog"
+	"time"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	usage := catalog.NormalizeUsage(map[string]any{"prompt_tokens": 100, "completion_tokens": 20})
+	rates := []catalog.Rate{
+		{Measure: "token", Side: "input", Window: "all", USD: 0.000001},
+		{Measure: "token", Side: "output", Window: "all", USD: 0.000002},
+	}
+	charge, priced := catalog.CostFromRates(rates, usage, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	fmt.Printf("%t %.6f\n", priced, charge.Total)
+}
+```
+
+Prints true 0.000140 using fixed rates, without depending on a market feed.
+
+### Errors, state, and side effects
+
+Rate.USD is already per base unit; do not divide by UnitSize again. priced=false means unpriced, not free. Catalog refreshes must not rewrite historical bills.
+
 ## Overview
 
 `internal/catalog` packages the route catalog, model/provider metadata, credential-field descriptions, market price conversion, runtime price layers, usage normalization, and charge calculation used by the gateway. The process starts with embedded resources, accepts provider-package contributions, can replace the generated market layer from a remote feed, and lets management handlers apply runtime model/provider overrides. The catalog is held in memory under a read/write lock; embedded files are startup inputs rather than files watched at runtime.

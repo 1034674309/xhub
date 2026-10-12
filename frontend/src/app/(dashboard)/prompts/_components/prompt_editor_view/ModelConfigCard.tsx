@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { SettingsIcon } from "lucide-react";
 import ModelSelector from "@/components/common_components/ModelSelector";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelConfigCardProps {
   model: string | null;
@@ -25,6 +25,7 @@ const ModelConfigCard: React.FC<ModelConfigCardProps> = ({
   onTemperatureChange,
   onMaxTokensChange,
 }) => {
+  const t = useT();
   const [showConfig, setShowConfig] = useState(false);
 
   return (

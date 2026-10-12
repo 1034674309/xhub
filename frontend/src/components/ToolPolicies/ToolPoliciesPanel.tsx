@@ -10,7 +10,7 @@ import { ToolRow, updateToolPolicy } from "@/components/networking";
 
 import { toolPoliciesListOptions } from "./toolPoliciesQueries";
 import { ToolPoliciesTable } from "./ToolPoliciesTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 function getUTCDateKey(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
@@ -50,6 +50,7 @@ interface ToolPoliciesPanelProps {
 }
 
 export const ToolPoliciesPanel: React.FC<ToolPoliciesPanelProps> = ({ accessToken, onSelectTool }) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const canViewToolPolicies = useCan("viewToolPolicies");
   const [savingInput, setSavingInput] = useState<ReadonlySet<string>>(() => new Set());
@@ -85,7 +86,7 @@ export const ToolPoliciesPanel: React.FC<ToolPoliciesPanelProps> = ({ accessToke
         setSavingInput((previous) => withoutTool(previous, toolName));
       }
     },
-    [accessToken, patchTool],
+    [accessToken, patchTool, t],
   );
 
   const handleOutputPolicyChange = useCallback(
@@ -101,7 +102,7 @@ export const ToolPoliciesPanel: React.FC<ToolPoliciesPanelProps> = ({ accessToke
         setSavingOutput((previous) => withoutTool(previous, toolName));
       }
     },
-    [accessToken, patchTool],
+    [accessToken, patchTool, t],
   );
 
   const { newToday, trendSubtitle, totalTools, blockedCount, activeTeamsCount, needsReviewTools } = useMemo(() => {

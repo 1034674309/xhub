@@ -27,7 +27,7 @@ import {
   updateToolPolicy,
   type ToolPolicyOverrideRow,
 } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ToolDetailProps {
   toolName: string;
@@ -58,6 +58,7 @@ function getDefaultLogsDateRange(): { start: string; end: string } {
 }
 
 export function ToolDetail({ toolName, onBack, accessToken }: ToolDetailProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [inputPolicySaving, setInputPolicySaving] = useState(false);

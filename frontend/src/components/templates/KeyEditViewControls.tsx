@@ -11,7 +11,7 @@ import NumericalInput from "../shared/numerical_input";
 import SkillSelector from "../skills/SkillSelector";
 import { moveTagsOutOfMetadataJson } from "./keyEditFieldNormalizers";
 import { AgentsAndGroups, KeyEditFormValues } from "./keyEditFormValues";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export const labelWithHint = (label: React.ReactNode, hint: string): React.ReactNode => (
   <>
@@ -24,9 +24,9 @@ export const labelWithHint = (label: React.ReactNode, hint: string): React.React
 );
 
 const KEY_TYPE_OPTIONS = [
-  { value: "default", label: t("Full Access"), hint: t("Can call all routes (AI APIs, Management, and read-only)") },
-  { value: "llm_api", label: t("AI APIs"), hint: t("Can call only AI API routes (chat/completions, embeddings, etc.)") },
-  { value: "management", label: t("Management"), hint: t("Can call only management routes (user/team/key management)") },
+  { value: "default", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Full Access"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call all routes (AI APIs, Management, and read-only)"); } },
+  { value: "llm_api", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("AI APIs"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only AI API routes (chat/completions, embeddings, etc.)"); } },
+  { value: "management", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Management"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only management routes (user/team/key management)"); } },
 ];
 
 export const KeyTypeSelect = ({
@@ -37,7 +37,7 @@ export const KeyTypeSelect = ({
   id: string;
   value: string;
   onChange: (value: string) => void;
-}) => (
+}) => { const t = useT(); return ((
   <Select
     items={Object.fromEntries(KEY_TYPE_OPTIONS.map((option) => [option.value, option.label]))}
     value={value}
@@ -57,7 +57,7 @@ export const KeyTypeSelect = ({
       ))}
     </SelectContent>
   </Select>
-);
+)); };
 
 const SKILLS_HINT =
   "Enabled skills are visible to every key. Grant disabled (private) Claude Code plugins to this key here.";
@@ -68,7 +68,7 @@ export const KeyAgentAndSkillFields = ({
 }: {
   control: Control<KeyEditFormValues>;
   accessToken: string;
-}) => (
+}) => { const t = useT(); return ((
   <>
     <FormField control={control} name="agents_and_groups" label={t("Agents / Access Groups")}>
       {({ value, onChange }) => (
@@ -87,7 +87,7 @@ export const KeyAgentAndSkillFields = ({
       )}
     </FormField>
   </>
-);
+)); };
 
 type KeyEditForm = Pick<
   UseFormReturn<KeyEditFormValues, unknown, KeyEditFormValues>,
@@ -104,7 +104,7 @@ export const moveMetadataTagsToTagsField = (form: KeyEditForm): void => {
   }
 };
 
-export const KeyMetadataField = ({ form }: { form: KeyEditForm }) => (
+export const KeyMetadataField = ({ form }: { form: KeyEditForm }) => { const t = useT(); return ((
   <FormField
     control={form.control}
     name="metadata"
@@ -123,7 +123,7 @@ export const KeyMetadataField = ({ form }: { form: KeyEditForm }) => (
       />
     )}
   </FormField>
-);
+)); };
 
 export const KeyBudgetNumberField = ({
   control,
@@ -135,7 +135,7 @@ export const KeyBudgetNumberField = ({
   name: "max_budget" | "soft_budget";
   label: string;
   placeholder: string;
-}) => (
+}) => { const t = useT(); return ((
   <FormField control={control} name={name} label={label}>
     {({ ref: _ref, ...field }) => (
       <NumericalInput
@@ -147,4 +147,4 @@ export const KeyBudgetNumberField = ({
       />
     )}
   </FormField>
-);
+)); };

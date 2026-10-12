@@ -1,5 +1,7 @@
 """真实验收的 media 模块；共享上下文由 Dataset 静态组合，资源与失败证据归本轮所有。"""
 import json
+import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import time
 
@@ -8,6 +10,51 @@ from .support import header_value
 
 class MediaCases:
     """用途：封装 media 场景；通过 self 访问本轮状态、管理 API 和证据，供 Dataset 调用，不自行启动全套测试。"""
+
+    def verify_media_models_parallel(self, key):
+        """用途：并行执行选中的独立媒体用例；参数为授权密钥，无返回值，由模型阶段调用。
+
+        每个工作线程使用独立数据集、证据目录和报告，避免读改写丢失；仅共享线程安全的清单。
+        全部任务结束后顺序合并媒体检查点，即使失败也保留成功任务，随后抛出首个失败。
+        不与修改额度、模型或护栏的场景重叠，不启动网关；每个视频任务内部仍按顺序创建、轮询和结算。
+        """
+        categories = [name for name in ("image", "ark-video", "fal-video", "kling-video") if self.case_enabled(name)]
+        if not categories:
+            return
+        workers = []
+        for category in categories:
+            worker = type(self)(self.gateway, self.directory / "parallel" / self.run / category,
+                                self.data, logger=self.logger)
+            worker.state, worker.report = copy.deepcopy(self.state), copy.deepcopy(self.report)
+            worker.admin, worker.run = self.admin, self.run
+            worker.selected_categories = frozenset([category])
+            worker.checklist = self.checklist
+            workers.append(worker)
+        baseline_report = copy.deepcopy(self.report)
+        failures = []
+        self.progress(f"  [媒体并行] 用例={len(workers)}，并发上限={self.media_jobs}")
+        with ThreadPoolExecutor(max_workers=self.media_jobs) as pool:
+            futures = [pool.submit(worker.verify_media_models, key) for worker in workers]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as error:
+                    failures.append(error)
+        # 每个 worker 只替换其模型的检查点；其余历史项保持原样，新增动作按固定分类顺序合并。
+        for worker in workers:
+            for field in ("checks", "probe_attempts", "media_calls", "media_tasks"):
+                baseline = self.report.get(field, [])
+                for row in worker.report.get(field, []):
+                    if row in baseline_report.get(field, []):
+                        continue
+                    if field in ("media_calls", "media_tasks"):
+                        baseline[:] = [old for old in baseline if (old.get("model"), old.get("kind")) != (row.get("model"), row.get("kind"))]
+                    if row not in baseline:
+                        baseline.append(row)
+                self.report[field] = baseline
+        self.save()
+        if failures:
+            raise failures[0]
 
     def image_generation(self, definition, key, attempts=3, delay=10):
         """用途：执行真实图片生成并对明确的临时上游错误有限重试；参数为模型定义、个人密钥、最大次数和间隔，返回成功响应与头；每次尝试均独立记录，最终仍失败时抛错且不算通过。"""
@@ -268,4 +315,3 @@ class MediaCases:
             definition = definitions.get(task.get("model"))
             if task.get("kind") == "video" and definition:
                 self.verify_video_logs(task, definition)
-

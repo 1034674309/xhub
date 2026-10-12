@@ -2,7 +2,7 @@ import { FilterInput } from "@/components/common_components/Filters/FilterInput"
 import { FiltersButton } from "@/components/common_components/Filters/FiltersButton";
 import { ResetFiltersButton } from "@/components/common_components/Filters/ResetFiltersButton";
 import { Search, User } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface OrganizationFiltersProps {
   filters: FilterState;
@@ -24,6 +24,7 @@ const OrganizationFilters = ({
   onChange,
   onReset,
 }: OrganizationFiltersProps) => {
+  const t = useT();
   const hasActiveFilters = !!(filters.org_id || filters.org_alias);
 
   return (

@@ -4,7 +4,7 @@ import { Waypoints } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface RoutingDecisionTierBoundaries {
   simple_medium?: number;
@@ -143,6 +143,7 @@ function describeEscalation(escalated: boolean, keyword: string | undefined): st
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="flex gap-3 py-1 text-sm">
       <span className="w-28 shrink-0 text-muted-foreground">{label}</span>
@@ -158,6 +159,7 @@ export function RoutingDecisionCard({
   decision?: RoutingDecision | null;
   className?: string;
 }) {
+  const t = useT();
   if (!decision || !decision.cause) return null;
 
   const {

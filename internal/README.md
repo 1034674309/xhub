@@ -2,6 +2,37 @@
 
 [简体中文](README.zh-CN.md) · [Feature implementation reference](../docs/development/en/implementation.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Startup runs config.Load → iam.Open/Migrate → store.Open → gateway.New → Server.Run. Embed Handler in an HTTP host and install modules through Use/Handle. Management and inference enforce identity, action authorization, and model access.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| gateway.New(cfg,store,iam) | Assemble initialized real dependencies |
+| Server.Handler() / Server.Run(addr) | Provide an HTTP handler or start listening |
+| Server.Use(module) / Handle(pattern,handler) | Install modules and dedicated handlers |
+
+### Integration demo
+
+Configure a dedicated PostgreSQL database_url in /tmp/xhub-demo.yaml. See [config](config/readme.md) for the schema. Startup migrates/synchronizes tables; after shutdown the database owner can remove the dedicated demo database.
+
+Run the following commands from the repository root.
+
+```sh
+go run ./cmd/gateway -config /tmp/xhub-demo.yaml -addr :4000
+
+curl -sS -i http://localhost:4000/health/liveness
+curl -sS -i http://localhost:4000/health/readiness
+```
+
+Run curl in a second terminal. Liveness returns 200 status=ok; readiness returns 200 status=ready when database Ping succeeds and 503 on failure.
+
+### Errors, state, and side effects
+
+gateway.New can connect Redis, start refresh work, and seed an administrator. Use a dedicated database. Probe success does not prove a supplier is callable.
+
 ## Overview
 
 This tree implements identity, the management control plane, inference execution, routing, pricing, and persistence. Command packages compose the services; [cmd/regression](../cmd/regression/readme.md) contains business regression tests and their shared fixtures. Exported Go symbols are implementation seams inside the repository; HTTP contracts and configuration documents are the client boundary.
@@ -20,7 +51,7 @@ Server.Handler returns the http.Handler used by embedding hosts and tests; Handl
 
 ### Package collaboration contracts
 
-httpx.Module/Registrar define module installation. auth.Principal and authz.Actor/Object/Scope connect identity, action decisions, and query filters. dataplane.Adapted, Bypass, and Runtime host interfaces inject identity, storage, routing, and logging into execution; gateway children call Host/Gate interfaces to avoid cycles. config.ModelEntry, provider.Transport, and router policies connect deployments to execution. Owning packages document inputs, return values, errors, and side effects.
+util.Module/Registrar define module installation. auth.Principal and authz.Actor/Object/Scope connect identity, action decisions, and query filters. dataplane/contract.Adapted, Bypass, and Runtime host interfaces inject identity, storage, routing, and logging into execution; gateway children call Host/Gate interfaces to avoid cycles. config.ModelEntry, provider.Transport, and router policies connect deployments to execution. Owning packages document inputs, return values, errors, and side effects.
 
 ## Core implementation
 
@@ -50,12 +81,10 @@ IAM transactions retain events, ownership, and rate snapshots and prevent duplic
 | [config](config/readme.md) | Startup configuration and model definitions |
 | [dataplane](dataplane/readme.md) | Inference execution and settlement |
 | [gateway](gateway/readme.md) | HTTP gateway and module composition |
-| [hooks](hooks/readme.md) | In-flight request accounting |
 | [httpx](util/httpx.md) | HTTP errors and module contracts |
 | [iam](iam/readme.md) | Identity resources and transactional accounting |
 | [live](live/readme.md) | Redis hot state and usage queue |
 | [llm](llm/readme.md) | Upstream construction and protocol adaptation |
-| [plugin](plugin/readme.md) | Upstream extension registry |
 | [provider](provider/readme.md) | Provider capabilities and transports |
 | [router](router/readme.md) | Deployment filtering, ordering, and weighted split |
 | [store](store/readme.md) | Framework configuration and deployment storage |

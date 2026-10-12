@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROMPT_CACHE_CREATION_TOOLTIP, PROMPT_CACHE_READ_TOOLTIP } from "@/utils/promptCacheUsage";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const RESPONSE_CACHE_TOOLTIP =
   "This response was replayed from XHub's response cache. The request never reached the provider, so it did not read from or write to the provider's own prompt cache.";
@@ -44,6 +44,7 @@ interface MetricItemProps {
 }
 
 function MetricItem({ label, tooltip, icon, value }: MetricItemProps) {
+  const t = useT();
   return (
     <Tooltip>
       <TooltipTrigger render={<div className="flex items-center gap-1" aria-label={`${label}: ${value}`} />}>
@@ -58,6 +59,7 @@ function MetricItem({ label, tooltip, icon, value }: MetricItemProps) {
 }
 
 function ResponseCacheIndicator() {
+  const t = useT();
   return (
     <MetricItem
       label={t("Response Cache")}
@@ -69,6 +71,7 @@ function ResponseCacheIndicator() {
 }
 
 function PromptCacheChips({ usage }: { usage?: TokenUsage }) {
+  const t = useT();
   if (usage?.servedFromResponseCache) {
     return <ResponseCacheIndicator />;
   }
@@ -100,6 +103,7 @@ function PromptCacheChips({ usage }: { usage?: TokenUsage }) {
 }
 
 const ResponseMetrics: React.FC<ResponseMetricsProps> = ({ timeToFirstToken, totalLatency, usage, toolName }) => {
+  const t = useT();
   if (!timeToFirstToken && !totalLatency && !usage) return null;
 
   return (

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACTION_ITEMS } from "./action_options";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Pattern {
   id: string;
@@ -24,6 +24,7 @@ interface PatternTableProps {
 }
 
 const PatternTable: React.FC<PatternTableProps> = ({ patterns, onActionChange, onRemove }) => {
+  const t = useT();
   const columns: ColumnDef<Pattern>[] = [
     {
       header: t("Type"),

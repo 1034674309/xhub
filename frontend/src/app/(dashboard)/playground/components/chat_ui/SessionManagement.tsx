@@ -5,7 +5,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getActiveLocale, t } from "@/i18n";
+import { useT, getActiveLocale } from "@/i18n";
 
 interface SessionManagementProps {
   endpointType: string | null;
@@ -22,6 +22,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
   useApiSessionManagement,
   onToggleSessionManagement,
 }) => {
+  const t = useT();
   if (endpointType !== EndpointType.RESPONSES) {
     return null;
   }

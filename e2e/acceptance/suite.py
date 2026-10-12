@@ -17,7 +17,7 @@ class SuiteCases:
                     result["status"] = "revalidated"
         if any(self.case_enabled(category) for category in ("image", "ark-video", "fal-video", "kling-video")):
             self.progress("  [模型阶段 3–6/6] 图片 → Ark Seedance → FAL Seedance → Kling")
-        self.verify_media_models(self.state["keys"][0])
+        self.verify_media_models_parallel(self.state["keys"][0]) if getattr(self, "media_jobs", 1) > 1 else self.verify_media_models(self.state["keys"][0])
 
     def verify(self):
         """用途：验收实体基线与不同业务类型；无参数/返回，由 runner 调用；共享模式按路由去重，逐项断言和保存，失败中止，历史成功不能代替本轮业务执行。"""

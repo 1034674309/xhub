@@ -4,7 +4,7 @@ import { cn } from "@/lib/cva.config";
 import type { DateRangePickerValue } from "./date_picker_types";
 import moment from "moment";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { getActiveLocale, t } from "@/i18n";
+import { useT, getActiveLocale, t } from "@/i18n";
 
 // Closed trigger label. zh-CN must not use moment's "D MMM" order, which renders "21 9月".
 export function formatClosedRangeLabel(from: Date, to: Date, locale: string = getActiveLocale()): string {
@@ -33,7 +33,7 @@ interface RelativeTimeOption {
 
 const relativeTimeOptions: RelativeTimeOption[] = [
   {
-    label: t("Today"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Today"); },
     shortLabel: "today",
     getValue: () => ({
       from: moment().startOf("day").toDate(),
@@ -41,7 +41,7 @@ const relativeTimeOptions: RelativeTimeOption[] = [
     }),
   },
   {
-    label: t("Last 7 days"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 7 days"); },
     shortLabel: "7d",
     getValue: () => ({
       from: moment().subtract(7, "days").startOf("day").toDate(),
@@ -49,7 +49,7 @@ const relativeTimeOptions: RelativeTimeOption[] = [
     }),
   },
   {
-    label: t("Last 30 days"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Last 30 days"); },
     shortLabel: "30d",
     getValue: () => ({
       from: moment().subtract(30, "days").startOf("day").toDate(),
@@ -57,7 +57,7 @@ const relativeTimeOptions: RelativeTimeOption[] = [
     }),
   },
   {
-    label: t("Month to date"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Month to date"); },
     shortLabel: "MTD",
     getValue: () => ({
       from: moment().startOf("month").toDate(),
@@ -65,7 +65,7 @@ const relativeTimeOptions: RelativeTimeOption[] = [
     }),
   },
   {
-    label: t("Year to date"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Year to date"); },
     shortLabel: "YTD",
     getValue: () => ({
       from: moment().startOf("year").toDate(),
@@ -85,6 +85,7 @@ const AdvancedDatePicker: React.FC<AdvancedDatePickerProps> = ({
   showTimeRange = true,
   align = "right",
 }) => {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const [tempValue, setTempValue] = useState<DateRangePickerValue>(value);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -173,7 +174,7 @@ const AdvancedDatePicker: React.FC<AdvancedDatePickerProps> = ({
   const formatDisplayRange = useCallback((from: Date | undefined, to: Date | undefined) => {
     if (!from || !to) return t("Select date range");
     return formatClosedRangeLabel(from, to);
-  }, []);
+  }, [t]);
 
   // CRITICAL: Apply the same date adjustment logic as the original component
   const adjustDateRange = useCallback((newValue: DateRangePickerValue): DateRangePickerValue => {

@@ -1,12 +1,13 @@
 import React from "react";
 import { Bot } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EmptyStateProps {
   hasVariables: boolean;
 }
 
 const EmptyState: React.FC<EmptyStateProps> = ({ hasVariables }) => {
+  const t = useT();
   return (
     <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
       <Bot className="mb-4 size-12" aria-hidden="true" />

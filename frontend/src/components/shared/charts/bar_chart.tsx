@@ -6,7 +6,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, type Cha
 import { cn } from "@/lib/cva.config";
 import { ValueTooltip, type ChartTooltipComponent } from "./chart_tooltip";
 import { categoryFills, type ChartColor } from "./colors";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type BarChartProps<TDatum extends Record<string, unknown>> = {
   data: readonly TDatum[];
@@ -51,6 +51,7 @@ export function BarChart<TDatum extends Record<string, unknown>>({
   className,
   style,
 }: BarChartProps<TDatum>) {
+  const t = useT();
   if (data.length === 0) {
     return (
       <div

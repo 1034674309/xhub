@@ -13,7 +13,7 @@ import { Meter, MeterIndicator, MeterTrack } from "@/components/shared/Meter";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { EditProjectModal } from "./ProjectModals/EditProjectModal";
 import { ProjectKeysSection } from "./ProjectKeysSection";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -23,6 +23,7 @@ interface ProjectDetailProps {
 const utilisationTone = (percent: number) => (percent >= 90 ? "over" : percent >= 70 ? "warning" : "default");
 
 export function ProjectDetail({ projectId, onBack }: ProjectDetailProps) {
+  const t = useT();
   const { data: project, isLoading } = useProjectDetails(projectId);
   const { data: teamInfo } = useTeam(project?.team_id ?? undefined);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);

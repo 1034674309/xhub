@@ -50,7 +50,7 @@ test("browser cache flush restores a billed miss after a free hit", async ({ pag
   const suffix = Date.now().toString();
   const model = "cache-fix-" + suffix;
   const deploymentID = "cache-fix-dep-" + suffix;
-  let key = "";
+  let key = "", templateID = "";
   try {
     const created = await page.request.post(GATEWAY + "/model/new", { headers, data: {
       model_name: model,
@@ -62,7 +62,12 @@ test("browser cache flush restores a billed miss after a free hit", async ({ pag
     const team = teams.teams.find((row: any) => row.team_alias === "e2e-fixture-team");
     const jwt = (await page.context().cookies()).find((cookie) => cookie.name === "token")!.value;
     const userID = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()).user_id;
-    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: "cache-fix-" + suffix, key_type: "llm_api", team_id: team.team_id, user_id: userID } });
+    const template = await page.request.post(GATEWAY + "/route_template/new", { headers, data: { name: "cache-empty-fallback-" + suffix, body: {
+      fallbacks: [{ [model]: [] }], context_window_fallbacks: [{ [model]: [] }], content_policy_fallbacks: [{ [model]: [] }],
+    } } });
+    expect(template.status(), await template.text()).toBe(200);
+    templateID = (await template.json()).id;
+    const minted = await page.request.post(GATEWAY + "/key/generate", { headers, data: { key_alias: "cache-fix-" + suffix, key_type: "llm_api", route_template_id: templateID, team_id: team.team_id, user_id: userID } });
     expect(minted.status(), await minted.text()).toBe(200);
     key = (await minted.json()).key;
 
@@ -98,6 +103,7 @@ test("browser cache flush restores a billed miss after a free hit", async ({ pag
     expect(Number(logs[2].spend)).toBeCloseTo(0.000012, 10);
   } finally {
     if (key) await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [key] } });
+    if (templateID) await page.request.post(GATEWAY + "/route_template/" + templateID + "/delete", { headers, data: {} });
     await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: deploymentID } });
     await page.request.post(GATEWAY + "/flushall", { headers, data: {} });
   }
@@ -193,8 +199,10 @@ test("team session inheritance and explicitly bound key preview match inference 
       expect(keyPreview.source).toBe("key");
     }
     const inferenceSession = "preview-inference-" + suffix;
-    const keyInference = await page.request.post(GATEWAY + "/bypass/openai/v1/chat/completions", { headers: { Authorization: "Bearer " + key, "session-id": inferenceSession }, data: { model, messages: [{ role: "user", content: "key inherited template" }] } });
+    // 会话解析只接受标准 X-Session-Id；旧 session-id 头已不参与归组，不能用它定位日志。
+    const keyInference = await page.request.post(GATEWAY + "/bypass/openai/v1/chat/completions", { headers: { Authorization: "Bearer " + key, "X-Session-Id": inferenceSession }, data: { model, messages: [{ role: "user", content: "key inherited template" }] } });
     expect(keyInference.status(), await keyInference.text()).toBe(200);
+    expect(keyInference.headers()["x-session-id"]).toBe(inferenceSession);
     expect((await keyInference.json()).model).toBe(upstreams[1]);
     const log = await waitForSessionLog(page.request, headers, inferenceSession);
     expect(log.team_id).toBe(teamID);
@@ -242,11 +250,16 @@ test("dashboard language switch updates key navigation in both locales", async (
   const englishEmptyState = page.getByText(en("pages.routeTemplates.emptyTitle"), { exact: true }).locator("..");
   await expect(englishEmptyState.getByRole("button", { name: en("pages.routeTemplates.create"), exact: true })).toBeVisible();
 
+  await englishEmptyState.getByRole("button", { name: en("pages.routeTemplates.create"), exact: true }).click();
+  const draft = "用户原始草稿";
+  await page.getByRole("textbox", { name: en("pages.routeTemplates.name"), exact: true }).fill(draft);
   const chinese = page.getByRole("button", { name: en("language.zhCN"), exact: true });
   await chinese.click();
   await expect(chinese).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("heading", { name: t("pages.routeTemplates.title"), exact: true })).toBeVisible();
-  const chineseEmptyState = page.getByText(t("pages.routeTemplates.emptyTitle"), { exact: true }).locator("..");
-  await expect(chineseEmptyState.getByRole("button", { name: t("pages.routeTemplates.create"), exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: t("pages.routeTemplates.name"), exact: true })).toHaveValue(draft);
+  await english.click();
+  await expect(page.getByRole("textbox", { name: en("pages.routeTemplates.name"), exact: true })).toHaveValue(draft);
+
 });
 }

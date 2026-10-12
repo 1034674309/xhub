@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ExternalLink, ChevronDown } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { isBrandOutbound } from "@/i18n/brand";
 
 interface HelpLinkProps {
@@ -48,6 +48,7 @@ export const HelpLink: React.FC<HelpLinkProps> = ({
   variant = "inline",
   className = "",
 }) => {
+  const t = useT();
   if (isBrandOutbound(href)) {
     return null;
   }
@@ -87,6 +88,7 @@ interface HelpIconProps {
 }
 
 export const HelpIcon: React.FC<HelpIconProps> = ({ content, learnMoreHref, learnMoreText = "Learn more" }) => {
+  const t = useT();
   const [showTooltip, setShowTooltip] = React.useState(false);
 
   return (
@@ -150,6 +152,7 @@ export const HelpIcon: React.FC<HelpIconProps> = ({ content, learnMoreHref, lear
  * </DocsMenu>
  */
 export const DocsMenu: React.FC<DocsMenuProps> = ({ items, children = "Docs", className = "" }) => {
+  const t = useT();
   const visibleItems = items.filter((item) => !isBrandOutbound(item.href));
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);

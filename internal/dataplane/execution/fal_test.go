@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -18,6 +20,7 @@ import (
 // TestFalForwardingQueueIsolationAndSettlement 验证 Fal 创建、网关查询地址改写、任务身份隔离和成功结果唯一结算。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFalForwardingQueueIsolationAndSettlement(t *testing.T) {
 	const model = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video"
 	const queue = "/queue/fal-ai/kling-video/requests/task-1"
@@ -91,17 +94,17 @@ func TestFalForwardingQueueIsolationAndSettlement(t *testing.T) {
 	if wrong.Code != 404 || polls != before {
 		t.Fatal("cross-family task escaped pin")
 	}
-	// The same task ID with another identity has no pin.
+	// 相同任务 ID 在另一调用方身份下没有归属，防止跨租户读取产物。
 	hitScope := officialTaskScope(&auth.Principal{UserID: "other"}, "qiniu_fal_kling", "task-1")
 	if h.OfficialDeployment(hitScope) != "" {
 		t.Fatal("cross-caller pin")
 	}
-	// Standard Fal has no body model and routes by its registered endpoint ID.
+	// 标准 Fal 请求正文不带 model，按已登记的端点 ID 寻找部署。
 	h.models[0].ModelName = "qiniu/" + model
 	if r := h.call(t, "POST", "/queue/"+model, "{\"prompt\":\"apple\"}"); r.Code != 200 {
 		t.Fatal(r.Code, r.Body.String())
 	}
-	// The editor defaults to a public name without the supplier prefix.
+	// 编辑器默认公开名不含供应商前缀，也应能匹配登记的 Fal 型号。
 	h.models[0].ModelName = model
 	if r := h.call(t, "POST", "/queue/"+model, "{\"prompt\":\"apple\"}"); r.Code != 200 {
 		t.Fatal("public path alias failed", r.Code, r.Body.String())
@@ -114,7 +117,7 @@ func TestFalForwardingQueueIsolationAndSettlement(t *testing.T) {
 		t.Fatal("ambiguous alias guessed", r.Code)
 	}
 	h.models = h.models[:1]
-	// An alias bound to a different endpoint must not change the requested path model.
+	// 绑定另一端点的别名不能改写当前请求的路径型号，避免误投上游。
 	h.models[0].ModelName = "kling"
 	h.models[0].LiteLLMParams["model"] = "qiniu/fal-ai/kling-video/v2.5-turbo/standard/image-to-video"
 	if r := h.call(t, "POST", "/queue/"+model, "{\"model\":\"kling\",\"prompt\":\"apple\"}"); r.Code != 400 {
@@ -125,6 +128,7 @@ func TestFalForwardingQueueIsolationAndSettlement(t *testing.T) {
 // TestFalAuthorizationDoesNotFollowRedirects 验证原生请求不会跟随重定向而把供应商密钥转发到其他目的地。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFalAuthorizationDoesNotFollowRedirects(t *testing.T) {
 	reached := false
 	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
@@ -142,6 +146,7 @@ func TestFalAuthorizationDoesNotFollowRedirects(t *testing.T) {
 // TestFalCreateDoesNotReplayAmbiguousServerFailure 验证创建任务的未知服务端失败不会切换部署或重放请求。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFalCreateDoesNotReplayAmbiguousServerFailure(t *testing.T) {
 	const model = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video"
 	const response = `{"request_id":"possibly-created","error":"response failed after acceptance"}`
@@ -173,6 +178,7 @@ func TestFalCreateDoesNotReplayAmbiguousServerFailure(t *testing.T) {
 // TestFalCreateBusinessFailureDoesNotPinTask 验证 HTTP 成功但业务失败的响应不会登记可查询任务。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFalCreateBusinessFailureDoesNotPinTask(t *testing.T) {
 	const model = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video"
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

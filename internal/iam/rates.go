@@ -40,7 +40,7 @@ func ValidateRates(values ...*int) error {
 func (db *DB) RatePlan(ctx context.Context, kind, id string) (live.RatePlan, error) {
 	s := db.session(ctx)
 	defer s.Close()
-	nodes, err := quotaTree(s)
+	nodes, err := quotaTreeFor(s, kind, id)
 	if err != nil {
 		return live.RatePlan{}, err
 	}

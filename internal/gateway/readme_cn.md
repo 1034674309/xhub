@@ -1,5 +1,7 @@
 # Gateway 架构
 
+[English](readme.md)
+
 根包是 HTTP 组合根以及身份、配额、存储的适配器。业务模块按职责拆分。
 
 | 目录 | 职责 |
@@ -19,6 +21,37 @@
 | [templateauth](templateauth/readme_cn.md) | 路由模板选择权限 |
 | [tokens](tokens/readme_cn.md) | 本地 token 估算、参数发现与转换记录 |
 | [usage](usage/readme_cn.md) | 报表、活动、护栏统计与日志读取 |
+
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+启动入口依次 config.Load → iam.Open/Migrate → store.Open → gateway.New → Server.Run。宿主用 Handler 嵌入 HTTP 服务，模块用 Use/Handle 安装；管理和推理请求分别遵守身份、动作授权和模型权限。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| gateway.New(cfg,store,iam) | 组装已初始化的真实依赖 |
+| Server.Handler() / Server.Run(addr) | 提供 HTTP handler 或启动监听 |
+| Server.Use(module) / Handle(pattern,handler) | 安装模块和专用处理器 |
+
+### 接入 demo
+
+在 /tmp/xhub-demo.yaml 配置专用 PostgreSQL database_url；只使用演示数据库。完整配置格式见 [config](../config/readme_cn.md)。启动会迁移/同步表，关闭演示进程后由数据库所有者清理专用库。
+
+在仓库根目录执行以下命令。
+
+```sh
+go run ./cmd/gateway -config /tmp/xhub-demo.yaml -addr :4000
+
+curl -sS -i http://localhost:4000/health/liveness
+curl -sS -i http://localhost:4000/health/readiness
+```
+
+在另一终端运行 curl。存活通常返回 200 status=ok；数据库 Ping 成功时就绪返回 200 status=ready，失败返回 503。
+
+### 错误、状态与副作用
+
+gateway.New 可能连接 Redis、启动刷新并播种管理员；不是无副作用构造函数。示例应使用专用数据库，不把探针成功当供应商可调用证明。
 
 ## 根包 review 路线
 

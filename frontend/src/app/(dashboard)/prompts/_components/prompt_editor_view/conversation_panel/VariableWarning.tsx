@@ -1,5 +1,5 @@
 import React from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VariableWarningProps {
   extractedVariables: string[];
@@ -7,6 +7,7 @@ interface VariableWarningProps {
 }
 
 const VariableWarning: React.FC<VariableWarningProps> = ({ extractedVariables, variables }) => {
+  const t = useT();
   const missingVariables = extractedVariables.filter(
     (varName) => !variables[varName] || variables[varName].trim() === "",
   );

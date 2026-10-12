@@ -1,3 +1,5 @@
+// 本文件负责统一对话正文、Responses 授权历史恢复、注册请求构造和管理面真实连接探测。
+// 调用关系与边界：统一对话请求构造与流协议转换；具体参数、返回及副作用见各方法说明。
 package dialogue
 
 import (
@@ -19,30 +21,41 @@ import (
 	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 )
 
-// errDialogueCredentials 区分连接配置缺失与协议编码错误，供数据面返回上游鉴权错误。
+// ErrDialogueCredentials 区分连接配置缺失与协议编码错误，供数据面返回上游鉴权错误。
 var ErrDialogueCredentials = errors.New("upstream address and credentials required")
 
-// DialogueProbeErrorKind 是连接探测的内部失败分类，供 HTTP 层映射固定诊断文案。
-// 分类不携带目标 URL、密钥、供应商正文或底层网络错误。
+// DialogueProbeErrorKind 表示管理面连接探测的安全失败类别。
+// 供 ProbeDialogue 与 HTTP 层约定固定诊断文案；类别不携带地址、密钥、响应正文或原始网络错误。
 type DialogueProbeErrorKind string
 
 const (
-	DialogueProbeUnsupported   DialogueProbeErrorKind = "unsupported"
+	// 部署未登记可供统一对话使用的执行协议，不应发起探测。
+	DialogueProbeUnsupported DialogueProbeErrorKind = "unsupported"
+	// 登记执行配置、请求编码或服务端凭据不完整，探测无法安全构建。
 	DialogueProbeConfiguration DialogueProbeErrorKind = "configuration"
-	DialogueProbeUnavailable   DialogueProbeErrorKind = "unavailable"
-	DialogueProbeProtocol      DialogueProbeErrorKind = "protocol"
-	DialogueProbeHTTP          DialogueProbeErrorKind = "http"
-	DialogueProbeOversize      DialogueProbeErrorKind = "oversize"
+	// HTTP 客户端缺失、拨号或正文读取失败，尚不能确认协议可用。
+	DialogueProbeUnavailable DialogueProbeErrorKind = "unavailable"
+	// 收到成功 HTTP 状态，但正文无法按登记协议解析为有效对话结果。
+	DialogueProbeProtocol DialogueProbeErrorKind = "protocol"
+	// 上游返回非 2xx 状态，HTTPStatus 保存原状态而不暴露原正文。
+	DialogueProbeHTTP DialogueProbeErrorKind = "http"
+	// 响应超过管理面探测的 1 MiB 限制；与正常推理正文上限相互独立。
+	DialogueProbeOversize DialogueProbeErrorKind = "oversize"
 )
 
-// DialogueProbeError 描述连接探测失败的安全类别；HTTPStatus 只在非 2xx 时设置。
-// Error 返回固定文本或状态码，不包含请求地址、鉴权头、响应正文和底层错误。
+// DialogueProbeError 是可安全记录的探测失败对象，按 Kind 区分配置、传输和响应校验失败。
+// HTTPStatus 仅在上游非成功状态时设置；Error 返回固定分类文本而不暴露原始错误或凭据。
+// 管理面应按 Kind 映射对外提示，不能把底层网络异常直接拼进用户响应。
 type DialogueProbeError struct {
-	Kind       DialogueProbeErrorKind
+	// 固定安全失败类别，供管理面映射提示。
+	Kind DialogueProbeErrorKind
+	// 上游非成功状态码；非 HTTP 状态失败时为零。
 	HTTPStatus int
 }
 
-// Error 返回进程内可记录的脱敏文本；调用方应按 Kind 映射外部接口文案。
+// Error 将连接探测失败转换成固定安全文本。
+// 参数为接收者 e，无显式参数；返回分类文案或 HTTP 状态说明，由 error 接口、管理面日志调用。
+// 不包含目标地址、密钥、响应正文或底层网络错误；外部界面应按 Kind 映射国际化文案，不直接展示供应商错误。
 func (e *DialogueProbeError) Error() string {
 	if e != nil && e.Kind == DialogueProbeHTTP && e.HTTPStatus > 0 {
 		return fmt.Sprintf("upstream returned HTTP %d", e.HTTPStatus)
@@ -64,10 +77,11 @@ func (e *DialogueProbeError) Error() string {
 	}
 }
 
-// ProbeDialogue 对一条已补齐凭据的对话部署发起最小真实请求，并校验上游状态与协议正文。
-// 参数 ctx 控制取消，client 提供网关统一超时，dep 必须来自服务端模型表；返回 nil 表示连接及协议均可用。
-// 调用场景是管理面的连接测试；它不经过鉴权额度、路由、冷却和记账链，也不会接受客户端指定的地址或密钥。
-// 探测会在供应商侧产生一次极小对话请求；响应最多读取 1 MiB，非 2xx、网络错误和协议损坏均返回脱敏错误。
+// ProbeDialogue 对已补齐服务端凭据的对话部署发起最小真实请求，验证连接与协议正文。
+// 参数 ctx 控制取消，client 提供 HTTP 传输，dep 必须来自服务端目录；返回 nil 表示可用，否则返回安全分类错误。
+// 管理面的连接测试调用；发送英文 Reply with OK. 并限制输出，响应最多读取 1 MiB。
+// 它不走身份预算、路由、冷却或用量链，但会在供应商侧产生真实请求及可能的费用；不能用它代替完整推理验收。
+// 非成功状态、网络/读取错误、超限及协议损坏均脱敏返回；正文由本方法关闭，不接受客户端任意地址或密钥。
 func ProbeDialogue(ctx context.Context, client *http.Client, dep config.ModelEntry) error {
 	transport, ok := providerdeployment.Execution(dep)
 	if !ok || !providercapability.DialogueProtocol(transport.Protocol) {
@@ -110,9 +124,11 @@ func ProbeDialogue(ctx context.Context, client *http.Client, dep config.ModelEnt
 	return nil
 }
 
-// responsesRequestBody 恢复统一 Responses 的历史并消费网关续接字段。
-// 参数 body 为新请求、history 为已校验归属的历史；返回独立正文或参数错误。
-// Serve 在预算与护栏之前调用，历史也必须接受检查；instructions 只属于当前请求。
+// ResponsesRequestBody 将已授权的临时历史与本轮 Responses 输入组合成统一对话正文。
+// 参数 body 为当前请求，history 为按身份/模型/入口校验过的历史；返回独立浅拷贝正文或能力/输入错误。
+// Serve 在预算与护栏之前调用，使恢复的历史同样接受限额与内容检查；先验证当前输入，避免历史掩盖非法字段。
+// previous_response_id、store 在网关消费，不发给上游；instructions 仅属于当前请求，不继承上一轮指令。
+// 保留护栏、跟踪及回退开关供执行链继续消费；嵌套映射并非深拷贝，不持久化历史或自行授权。
 func ResponsesRequestBody(body map[string]any, history []llmdialogue.Turn) (map[string]any, error) {
 	out := DialogueRequestBody(body)
 	if value, ok := out["previous_response_id"]; ok && value != nil {
@@ -151,9 +167,10 @@ func ResponsesRequestBody(body map[string]any, history []llmdialogue.Turn) (map[
 	return out, nil
 }
 
-// responseHistory 保存本轮输入和实测助手输出，供下一轮跨协议转换。
-// 参数 d 为护栏后的完整对话、body 为本轮正文、result 为成功回复；返回新的历史切片。
-// Serve 成功路径调用；去除请求级 instructions，保留输入里的系统消息与工具关联，无持久化副作用。
+// ResponseHistory 构造下一轮可恢复的对话历史，保留输入与已验证的助手回复/工具调用。
+// 参数 d 为护栏后的完整统一对话，body 为本轮请求，result 为成功解析结果；返回新的 Turn 切片。
+// Serve 成功分支及 Responses 流完成前回调使用；移除 instructions 派生的首条临时指令，保留输入中的显式系统消息。
+// 复制切片并追加回复，保持工具 ID 关联；嵌套字段可能共享引用，本函数本身不写会话缓存或数据库。
 func ResponseHistory(d llmdialogue.Dialogue, body map[string]any, result llmdialogue.DialogueResult) []llmdialogue.Turn {
 	turns := d.Turns
 	if instructions, _ := body["instructions"].(string); instructions != "" && len(turns) > 0 {
@@ -163,16 +180,19 @@ func ResponseHistory(d llmdialogue.Dialogue, body map[string]any, result llmdial
 	return append(history, llmdialogue.Turn{Role: "assistant", Text: result.Text, Calls: result.Calls})
 }
 
-// callerProtocol 将明确用户操作转换为协议 ID；参数为操作名，返回协议或空值。
-// 调用：统一对话编解码；不从供应商或 URL 猜测上游协议。
+// CallerProtocol 将统一入口操作名映射为显式调用方协议 ID。
+// 参数 op 为目录操作；返回已支持协议，非对话操作返回空串；Serve 用它决定是否进行对话编解码。
+// 空操作或未知操作返回空串；Serve 再按原操作进入注册请求构造链，本方法不补默认聊天协议。
+// 只按明确操作映射，不从供应商、模型前缀或 URL 猜协议。
+// 纯映射，无配置修改或外部调用；空返回值应进入登记的非对话请求构造链。
 func CallerProtocol(op string) string {
 	return map[string]string{"chat": "openai-chat", "responses": "openai-responses", "messages": "anthropic-messages", "gemini": "gemini", "vertex": "vertex"}[op]
 }
 
-// dialogueRequestBody 复制统一对话正文，并移除已经由网关消费、不能传给协议转换器的代理字段。
-// 参数 body 是护栏可能已经原地改写的入站正文；返回独立浅拷贝，保留改写后的消息和真正的协议字段。
-// 调用场景是 Serve 在 ParseDialogue 前整理请求；未知协议能力仍交给解析器明确拒绝。
-// guardrails 决定本次执行的规则，litellm_trace_id 只用于网关追踪，两者都不是上游对话能力。
+// DialogueRequestBody 在 ParseDialogue 前移除网关已经消费的代理字段。
+// 参数 body 为护栏可能改写过的正文；返回新的浅拷贝，消息内容保留护栏修改结果。
+// Serve 调用；guardrails 和 litellm_trace_id 等是执行控制而非上游对话能力，不能交给严格协议解析器误判。
+// 未知协议字段仍保留，由能力解析明确拒绝；函数不改顶层原映射，嵌套值并未深拷贝，不发送请求。
 func DialogueRequestBody(body map[string]any) map[string]any {
 	out := make(map[string]any, len(body))
 	for key, value := range body {
@@ -187,8 +207,11 @@ func DialogueRequestBody(body map[string]any) map[string]any {
 	return out
 }
 
-// buildDialogue 使用注册执行配置生成路径、鉴权与正文。参数为部署及已解析对话；返回请求或能力错误。
-// 调用：统一入口；只使用注册 create 操作，禁止客户端指定目标地址。
+// BuildDialogue 按部署登记的执行配置编码统一对话上游请求。
+// 参数 dep 为已附加凭据的部署，d 为已解析对话；返回 Upstream 或凭据、能力、编码错误。
+// Serve 与 ProbeDialogue 调用；只使用登记 create 动作、鉴权头和协议编码器，不从域名或供应商名称猜路径。
+// 地址或密钥缺失返回 ErrDialogueCredentials；Google 流式使用登记 streaming 动作与 alt=sse。
+// 构造 URL、Header、Body，不实际发送 HTTP，不修改调用方对话；执行器负责上下文、重试和资源生命周期。
 func BuildDialogue(dep config.ModelEntry, d llmdialogue.Dialogue) (dptransport.Upstream, error) {
 	t, ok := providerdeployment.Execution(dep)
 	if !ok {
@@ -249,10 +272,11 @@ func BuildDialogue(dep config.ModelEntry, d llmdialogue.Dialogue) (dptransport.U
 	return dptransport.Upstream{}, fmt.Errorf("create operation is not registered")
 }
 
-// buildRegisteredOperation 使用部署显式选择的传输构造非对话请求。
-// 参数 dep 是已经附加凭据的部署，body 是用户请求，op 仅用于错误定位；返回固定注册路径、鉴权头和 JSON 正文。
-// 调用场景是 embedding、图片、音频、重排等统一入口；函数不会根据供应商名、模型前缀或主机名推断协议。
-// 缺少地址或密钥时返回 errDialogueCredentials；未登记 create 动作、鉴权头或序列化失败时返回具体错误，且不修改调用方正文。
+// BuildRegisteredOperation 构造 embedding、图片、音频、重排等非对话统一操作的登记请求。
+// 参数 dep 为已附加凭据部署，body 为用户正文，op 供错误定位；返回显式路径、鉴权头和 JSON 正文或错误。
+// Serve 的非对话分支调用；复制正文，替换上游模型并剥离网关控制字段，保留供应商未知扩展。
+// 必须登记 create 动作与鉴权规则，地址/密钥缺失返回 ErrDialogueCredentials，编码失败原样返回错误。
+// 不猜供应商默认域名/协议，不修改原正文，也不发请求；最终授权与超时由执行器负责。
 func BuildRegisteredOperation(dep config.ModelEntry, body map[string]any, op string) (dptransport.Upstream, error) {
 	t, ok := providerdeployment.Execution(dep)
 	if !ok {

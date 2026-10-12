@@ -740,8 +740,6 @@
       "kind": "management",
       "enterprise": false,
       "http_paths": [
-        "/router/settings",
-        "/router/fields",
         "/auto_router/session",
         "/adaptive_router/state",
         "/fallback",
@@ -4034,18 +4032,6 @@
       "path": "/revoke",
       "source": "litellm/proxy/_experimental/mcp_server/discoverable_endpoints.py",
       "line": 2070
-    },
-    {
-      "method": "GET",
-      "path": "/router/fields",
-      "source": "litellm/proxy/management_endpoints/router_settings_endpoints.py",
-      "line": 127
-    },
-    {
-      "method": "GET",
-      "path": "/router/settings",
-      "source": "litellm/proxy/management_endpoints/router_settings_endpoints.py",
-      "line": 61
     },
     {
       "method": "GET",

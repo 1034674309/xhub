@@ -78,6 +78,23 @@ func TestRoutingGroupLifecycle(t *testing.T) {
 		if h.moneyOf(t, owner).key <= before.key {
 			t.Fatal("组调用未按实际部署计费")
 		}
+		if path == "/v1/chat/completions" {
+			beforeHit := h.moneyOf(t, owner)
+			repeated := h.ok("POST", path, owner.key, chatRequest("chat-group", "cost-group"+path))
+			mu.Lock()
+			count := len(calls)
+			mu.Unlock()
+			h.flushSpend()
+			if !isCacheHit(repeated) || count != 1 || h.moneyOf(t, owner).key != beforeHit.key {
+				t.Fatalf("组成功响应重复应命中且无上游及费用增量: %s calls=%d", repeated.describe(), count)
+			}
+			h.ok("POST", "/key/update", admin, map[string]any{"key": owner.key, "models": []string{"chat-group"}})
+			denied := h.do("POST", path, owner.key, chatRequest("chat-group", "cost-group"+path))
+			if denied.status != 401 || isCacheHit(denied) {
+				t.Fatalf("缓存命中前应复核组成员权限: %s", denied.describe())
+			}
+			h.ok("POST", "/key/update", admin, map[string]any{"key": owner.key, "models": []string{}})
+		}
 		mu.Lock()
 		calls = nil
 		mu.Unlock()

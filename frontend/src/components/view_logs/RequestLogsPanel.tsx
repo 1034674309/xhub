@@ -11,7 +11,7 @@ import { AutoRouterModelGroupsProvider } from "@/components/shared/table_cells";
 import { DEBOUNCE_WAIT_MS } from "@/utils/debounceConstants";
 import { uiSpendLogsCall } from "../networking";
 import type { LogEntry } from "./columns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import {
   DEFAULT_LOGS_SORTING,
   formatLogsWindow,
@@ -44,6 +44,7 @@ interface RequestLogsPanelProps {
  * 参数为登录凭据和活跃状态，返回日志面板，供日志页使用；后台负责权限和分页。
  * 密钥 Hash 仅展示，行点击打开日志详情；面板不再查询或切换到密钥详情，避免历史 Hash 触发 404。 */
 export default function RequestLogsPanel({ accessToken, token, userRole, userID, isActive, errorsOnly = false }: RequestLogsPanelProps) {
+  const t = useT();
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_LOGS_SORTING);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);

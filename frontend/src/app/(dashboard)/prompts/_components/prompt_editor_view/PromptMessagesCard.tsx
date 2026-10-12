@@ -5,12 +5,12 @@ import { Message } from "./types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select as ShadcnSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const ROLE_ITEMS = [
-  { value: "user", label: t("User") },
-  { value: "assistant", label: t("Assistant") },
-  { value: "system", label: t("System") },
+  { value: "user", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("User"); } },
+  { value: "assistant", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Assistant"); } },
+  { value: "system", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("System"); } },
 ] as const;
 
 interface PromptMessagesCardProps {
@@ -28,6 +28,7 @@ const PromptMessagesCard: React.FC<PromptMessagesCardProps> = ({
   onRemoveMessage,
   onMoveMessage,
 }) => {
+  const t = useT();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 

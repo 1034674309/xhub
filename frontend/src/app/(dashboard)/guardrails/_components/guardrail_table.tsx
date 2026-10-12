@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Guardrail } from "@/components/guardrails/types";
 
 import { getGuardrailTableColumns } from "./guardrailTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailTableProps {
   guardrailsList: Guardrail[];
@@ -27,6 +27,7 @@ const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
  * 测试：guardrail_table.test.tsx。
  */
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -51,6 +52,7 @@ const GuardrailTable: React.FC<GuardrailTableProps> = ({
   onDeleteClick,
   onGuardrailClick,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(

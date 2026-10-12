@@ -2,6 +2,45 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+启动时 Open 创建框架表，宿主共享 Store。调用业务 handler 前先授权，然后读写对应命名空间；退出时关闭 Engine。身份、成员和账务使用 IAM。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| Open(dsn) | 连接 PostgreSQL 并同步框架表 |
+| GetKV(kind, id) | 读取 JSON 文档；缺失 sql.ErrNoRows |
+| PutKV(kind, id, json) | 写入文档并使缓存失效 |
+
+### 接入 demo
+
+这是供宿主调用的 Go 接入函数。将代码放在仓库内独立包中可编译；实际执行前须由调用方提供下述真实依赖。
+
+```go
+package demo
+
+import "github.com/sunqirui1987/xhub/internal/store"
+
+// ReadDemoRecord 演示已授权文档读取；传入专用数据库和命名空间，返回记录或错误。
+// Open 会同步表结构；不修改业务记录，结束关闭 Engine。
+func ReadDemoRecord(dsn, kind, id string) (map[string]any, error) {
+	st, err := store.Open(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Engine.Close()
+	return st.GetKV(kind, id)
+}
+```
+
+函数可编译；运行需专用 PostgreSQL，未存在的记录返回 sql.ErrNoRows。Open 有表结构写入副作用。
+
+### 错误、状态与副作用
+
+GetKV 绕过缓存以获得安全敏感的最新值；Store 不检查租户权限。不要用 demo 命名空间覆盖用户已有数据。
+
 ## 说明
 
 `internal/store` 持久化 IAM 之外的网关框架记录：通用 JSON 文档、控制台管理的模型部署和带命名空间的配置。只接受 `postgres://` 或 `postgresql://`；空串、SQLite、file 和未知协议都在启动时失败。身份、密钥、成员关系、审计和用量由 `internal/iam` 管理。

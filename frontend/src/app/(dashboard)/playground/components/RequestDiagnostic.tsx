@@ -1,5 +1,5 @@
 "use client";
-import { getActiveLocale, t } from "@/i18n";
+import { useT, getActiveLocale } from "@/i18n";
 import { uiHref } from "@/utils/uiHref";
 
 /** RequestFailure 是调试工作区的独立错误状态；不会作为模型输出进入后续上下文。 */
@@ -77,6 +77,7 @@ export function diagnoseRequest(error: unknown): RequestFailure {
 }
 /** RequestDiagnostic 展示独立错误和可展开的原始详情。参数 failure：诊断；返回提示面板；用于三种调试模式。 */
 export function RequestDiagnostic({ failure }: { failure: RequestFailure }) {
+  const t = useT();
   const zh = getActiveLocale() === "zh-CN";
   return (
     <div role="alert" className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm">

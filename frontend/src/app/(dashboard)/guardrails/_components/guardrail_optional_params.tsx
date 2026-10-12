@@ -14,7 +14,7 @@ import {
   type GuardrailFieldControlProps,
   type GuardrailFormControl,
 } from "./GuardrailFormField";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ProviderParam {
   param: string;
@@ -43,8 +43,8 @@ interface DictFieldProps {
 }
 
 const BOOLEAN_ITEMS = [
-  { label: t("True"), value: true },
-  { label: t("False"), value: false },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("True"); }, value: true },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("False"); }, value: false },
 ];
 
 const isSecretKey = (fieldKey: string): boolean =>
@@ -60,6 +60,7 @@ const BooleanSelect: React.FC<{ control: GuardrailFieldControlProps; placeholder
   control,
   placeholder,
 }) => {
+  const t = useT();
   const { id, value, onChange, "aria-invalid": ariaInvalid, "aria-describedby": ariaDescribedBy } = control;
 
   return (
@@ -80,6 +81,7 @@ const BooleanSelect: React.FC<{ control: GuardrailFieldControlProps; placeholder
 };
 
 const DictField: React.FC<DictFieldProps> = ({ field, fullFieldKey, control, value }) => {
+  const t = useT();
   const [selectedEntries, setSelectedEntries] = React.useState<Array<{ key: string; id: string }>>([]);
   const [availableKeys, setAvailableKeys] = React.useState<string[]>(field.dict_key_options || []);
 
@@ -209,6 +211,7 @@ interface OptionalParamInputProps {
 }
 
 const OptionalParamInput: React.FC<OptionalParamInputProps> = ({ descriptor, fieldKey, control }) => {
+  const t = useT();
   const { id, value, onChange, onBlur, ref, name, ...aria } = control;
 
   if (descriptor.type === "select" && descriptor.options) {
@@ -298,6 +301,7 @@ const GuardrailOptionalParams: React.FC<GuardrailOptionalParamsProps> = ({
   control,
   values,
 }) => {
+  const t = useT();
   const renderField = (fieldKey: string, field: ProviderParam) => {
     const fullFieldKey = `${parentFieldKey}.${fieldKey}`;
     const value = values?.[fieldKey];

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ToolModalProps {
   visible: boolean;
@@ -33,6 +33,7 @@ const defaultToolJson = `{
 }`;
 
 const ToolModal: React.FC<ToolModalProps> = ({ visible, initialJson, onSave, onClose }) => {
+  const t = useT();
   const [json, setJson] = useState(initialJson || defaultToolJson);
   const [error, setError] = useState<string | null>(null);
 

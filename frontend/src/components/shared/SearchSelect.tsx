@@ -9,7 +9,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface SearchSelectOption {
   label: string;
@@ -55,6 +55,7 @@ export function SearchSelect({
   allowClear = true,
   "aria-label": ariaLabel,
 }: SearchSelectProps) {
+  const t = useT();
   const [query, setQuery] = React.useState("");
   const selected =
     value == null || value === "" ? null : options.find((option) => option.value === value) ?? { label: value, value };

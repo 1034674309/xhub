@@ -1,6 +1,36 @@
 # 数据面架构
 
+[English](readme.md)
+
 根包只保留目录说明。一次推理或原生任务请求的具体职责如下。
+
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+本目录没有根包入口；网关实现 contract 后调用 execution，执行器协调 routing、dialogue/transport、stream、diagnostics、usage 和 runtime。单个工具包 demo 不能替代整条请求链。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| contract.Adapted / Bypass | 宿主依赖接口 |
+| execution.Serve / ServeBypass | 完整请求生命周期入口 |
+| runtime.Flush | 数据库提交后确认用量队列 |
+
+### 接入 demo
+
+在仓库根目录执行以下命令。
+
+```sh
+go test ./internal/dataplane/... -count=1
+```
+
+运行数据面子包测试。HTTP 请求 demo 见 [execution](execution/readme_cn.md)，离线续接正文 demo 见 [dialogue](dialogue/readme_cn.md)。
+
+### 错误、状态与副作用
+
+鉴权与配额必须在出站前完成，缓存命中和上游成功是不同事实。适配对话流只有验证可结束终态后才保存续接历史；Responses 在写终态事件之前保存，若随后客户端写出失败，已保存历史不会回滚。原字节透传链的终态校验边界见 stream。真实供应商可用性需单独环境验证。
+
+## 源码与验证
 
 | 目录 | 职责 |
 |---|---|

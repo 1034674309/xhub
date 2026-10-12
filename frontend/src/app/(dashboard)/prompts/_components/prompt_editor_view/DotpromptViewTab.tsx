@@ -1,13 +1,14 @@
 import React from "react";
 import { PromptType } from "./types";
 import { convertToDotPrompt } from "./utils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DotpromptViewTabProps {
   prompt: PromptType;
 }
 
 const DotpromptViewTab: React.FC<DotpromptViewTabProps> = ({ prompt }) => {
+  const t = useT();
   const dotpromptContent = convertToDotPrompt(prompt);
 
   return (

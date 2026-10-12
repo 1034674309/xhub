@@ -21,7 +21,7 @@ import { generateCodeChallenge, generateCodeVerifier } from "@/utils/pkce";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
 import { setToken } from "@/utils/mcpTokenStore";
 import { buildCallbackUrl, clearStorage } from "./mcpOAuthUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { randomId } from "@/utils/randomId";
 
 export type ToolsOAuthStatus = "idle" | "authorizing" | "exchanging" | "success" | "error";
@@ -73,6 +73,7 @@ export const useToolsOAuthFlow = ({
   gatewayMintsClient,
   onSuccess,
 }: UseToolsOAuthFlowOptions): UseToolsOAuthFlowResult => {
+  const t = useT();
   const [status, setStatus] = useState<ToolsOAuthStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const processingRef = useRef(false);
@@ -233,7 +234,7 @@ export const useToolsOAuthFlow = ({
         processingRef.current = false;
       }, 1000);
     }
-  }, [accessToken, serverId, userId]);
+  }, [accessToken, serverId, userId, t]);
 
   useEffect(() => {
     resumeOAuthFlow();

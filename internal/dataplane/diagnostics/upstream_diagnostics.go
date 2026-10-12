@@ -1,3 +1,5 @@
+// 本文件旁路观察原始 HTTP 响应及用量，区分供应商统计缺失、明确零值和诊断中断。
+// 调用关系与边界：出站事实观察和安全进程日志；具体参数、返回及副作用见各方法说明。
 package diagnostics
 
 import (
@@ -10,23 +12,35 @@ import (
 	"time"
 )
 
-// UpstreamDiagnostics 保存协议转换前的响应事实，与响应缓存及计费用量独立。
-// Headers 保留所有名称和多值；UsageReported 区分未上报与明确的零值。
+// UpstreamDiagnostics 保存转换之前的真实出站响应事实，适配和原生链共同填充。
+// Headers/Trailers 是原始多值头，并未在此结构里脱敏；写日志或向客户端输出时由消费方另行过滤。
+// 正文读取过程中原地更新共享对象，消费方应在读取完成后使用；原始 Usage 与 BillingUsage 分开，避免估算覆盖原厂统计。
 type UpstreamDiagnostics struct {
-	// Endpoint 为实际出站路径，不含凭据及查询参数；FirstByteAt 记录首个 HTTP 响应字节。
-	Endpoint      string         `json:"endpoint"`
-	FirstByteAt   time.Time      `json:"-"`
-	StatusCode    int            `json:"status_code"`
-	Headers       http.Header    `json:"headers"`
-	Trailers      http.Header    `json:"trailers,omitempty"`
-	Usage         map[string]any `json:"usage"`
-	UsageReported bool           `json:"usage_reported"`
-	ParseError    string         `json:"usage_parse_error,omitempty"`
-	BillingUsage  map[string]any `json:"billing_usage,omitempty"`
+	// 实际出站路径，不含用户信息和查询参数，用于安全关联部署端点。
+	Endpoint string `json:"endpoint"`
+	// 首次 HTTP 响应字节的时刻；零值表示未测得，与首 SSE data 的时间不同。
+	FirstByteAt time.Time `json:"-"`
+	// 上游原始 HTTP 状态，协议转换或网关错误映射前保留。
+	StatusCode int `json:"status_code"`
+	// 完整原始多值响应头的副本，尚未脱敏；日志持久化或客户端输出须另行过滤。
+	Headers http.Header `json:"headers"`
+	// 读到 EOF 后收集的原始多值尾部头；提前关闭时可能不完整。
+	Trailers http.Header `json:"trailers,omitempty"`
+	// 上游原始统计，包括零值、嵌套详情和扩展字段，避免被估算覆盖。
+	Usage map[string]any `json:"usage"`
+	// 区分没有统计与明确报告空对象或零用量，不能仅靠 token 是否大于零判断。
+	UsageReported bool `json:"usage_reported"`
+	// 诊断正文损坏、超限或提前中断的标记，不替代真实读取错误。
+	ParseError string `json:"usage_parse_error,omitempty"`
+	// 执行/计价链使用的规范化统计，与原始 Usage 分开以便审计估算和协议映射。
+	BillingUsage map[string]any `json:"billing_usage,omitempty"`
 }
 
-// TraceFirstByte 为实际 HTTP 请求安装首响应字节计时，参数 req 为出站请求。
-// 返回带追踪的请求与时间指针；转发器在 Do 完成后读取，不发送额外请求或暴露凭据。
+// TraceFirstByte 为真实 HTTP 请求安装首响应字节追踪。
+// 参数 req 为已构造的非 nil 出站请求；返回携带新 context 的请求副本与记录时间的指针。
+// 适配/原生转发器在 Do 前调用，Do 完成后读取时间；GotFirstResponseByte 首次触发才记录。
+// 不额外发探测、不改正文或头；HTTP 首字节可能只属于响应头，不能直接当作首 token 或首 SSE data。
+// 时间指针限该请求生命周期内使用，调用方不应在传输尚更新时并发读取。
 func TraceFirstByte(req *http.Request) (*http.Request, *time.Time) {
 	first := new(time.Time)
 	trace := &httptrace.ClientTrace{GotFirstResponseByte: func() {
@@ -37,22 +51,33 @@ func TraceFirstByte(req *http.Request) (*http.Request, *time.Time) {
 	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace)), first
 }
 
-// upstreamObserver 透明观察读取的字节，不改变读取结果。
-// JSON 最多暂存 64 MiB，SSE 每个事件最多 8 MiB；超限仅标记诊断不完整。
+// upstreamObserver 包装上游正文，透明返回原读取结果，同时旁路解析诊断用量。
+// JSON 暂存上限 64 MiB，SSE 单事件上限 8 MiB；超限只标记诊断缺失，真实传输仍继续。
+// 由 ObserveUpstream 为单个响应创建，不可并发读取；调用方仍负责 Close，只有读到 EOF 才能认为完整观察。
 type upstreamObserver struct {
+	// 真实正文读取器，Read/Close 的结果保持不变，观察器不吞传输错误。
 	io.ReadCloser
-	response    *http.Response
+	// 原 HTTP 响应，EOF 后读取其 Trailer。
+	response *http.Response
+	// 边读边更新的共享诊断对象，不支持并发读写。
 	diagnostics *UpstreamDiagnostics
-	stream      bool
-	pending     []byte
-	event       []byte
-	dropping    bool
-	finished    bool
+	// 媒体类型是否按 SSE 处理，决定事件解析或完整 JSON 暂存。
+	stream bool
+	// 尚未形成完整行的 SSE 残片，或等待 EOF 的 JSON 正文。
+	pending []byte
+	// 当前 SSE 事件的多行 data 拼接内容。
+	event []byte
+	// 当前事件已超诊断上限，丢弃观察内容直到事件边界；仍原样转发。
+	dropping bool
+	// 是否已读到 EOF，关闭时据此区分完整与提前中断。
+	finished bool
 }
 
-// observeUpstream 在任何读取或协议转换前安装观察器。
-// 参数 resp 为 HTTP 响应；返回随 Body 读取更新的共享指针。
-// 调用：适配及原生转发；不修改响应头，不负责关闭正文。
+// ObserveUpstream 在任何正文读取或协议转换前安装透明诊断观察器。
+// 参数 resp 为非 nil 且带可读 Body 的 HTTP 响应；返回随读取持续更新的 UpstreamDiagnostics 指针。
+// 两类转发器调用；复制完整多值响应头并记录实际出站路径，以包装器替换 resp.Body。
+// 观察器不改变返回给传输层的字节或读取错误；诊断超限只标记不完整，不截断实际转发。
+// 本函数不读取/关闭正文，调用方仍须关闭包装后的 Body；返回值限单请求使用，不是并发安全快照。
 func ObserveUpstream(resp *http.Response) *UpstreamDiagnostics {
 	diagnostics := &UpstreamDiagnostics{StatusCode: resp.StatusCode, Headers: resp.Header.Clone()}
 	if resp.Request != nil && resp.Request.URL != nil {
@@ -63,9 +88,11 @@ func ObserveUpstream(resp *http.Response) *UpstreamDiagnostics {
 	return diagnostics
 }
 
-// Read 原样返回底层读取结果，同时提取完整 JSON 或 SSE 事件的用量。
-// 参数 p 为缓冲区；返回原始 n、err。EOF 时处理最后一行及 trailers。
-// 错误和超限不影响传输；未读完时不伪造完整统计。
+// Read 透明读取底层响应，同时按 JSON 或 SSE 提取原始用量诊断。
+// 参数 p 为调用方缓冲区；返回底层原样 n、err；传输层通过包装后的 Body 调用。
+// 首次正文数据补充时间；JSON 暂存不超过 64 MiB，SSE 行/事件不超过 8 MiB，超限标记 ParseError 而不改变传输。
+// EOF 才处理最后无换行事件并复制 trailers；非 EOF 读取错误标记不完整，不能伪造完整统计。
+// 修改请求私有诊断与拼帧缓冲，不修改调用方接收到的数据，不独立关闭响应。
 func (o *upstreamObserver) Read(p []byte) (int, error) {
 	n, err := o.ReadCloser.Read(p)
 	if n > 0 && o.diagnostics.FirstByteAt.IsZero() {
@@ -111,8 +138,9 @@ func (o *upstreamObserver) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Close 原样关闭上游正文并标记未读到 EOF 的诊断；无参数，返回底层关闭错误。
-// 由转发器清理调用，已提取用量仍保留，提前取消不能误报为完整观测。
+// Close 关闭被观察的上游正文，并标记提前关闭导致的诊断缺失。
+// 无参数；返回底层 Close 错误；转发器正常或失败清理时调用。
+// 尚未 EOF 且没有已有错误时记录未完成状态，保留已提取用量；不吞掉底层关闭错误，也不宣称关闭等于读完。
 func (o *upstreamObserver) Close() error {
 	if !o.finished && o.diagnostics.ParseError == "" {
 		o.diagnostics.ParseError = "upstream body closed before EOF"
@@ -120,8 +148,11 @@ func (o *upstreamObserver) Close() error {
 	return o.ReadCloser.Close()
 }
 
-// line 组装 SSE 多行 data；参数为无换行的行，无返回值。
-// 由 Read 调用，空行提交事件，超限后在下一事件继续观察。
+// line 将 SSE 的多行 data 拼为一个完整事件。
+// 参数 line 为无 LF 的一行，可带 CR；返回值无，Read 和 EOF 收尾调用。
+// 去末尾 CR，空行提交事件；仅 data 行参与 JSON 拼接，每段后补 LF 以遵守 SSE 多行语义。
+// 超限后丢弃当前事件的诊断内容，在下一个空行重置 dropping；真实响应字节不受影响。
+// 仅修改观察器缓冲及诊断，不直接写客户端。
 func (o *upstreamObserver) line(line []byte) {
 	line = bytes.TrimSuffix(line, []byte{13})
 	if len(line) == 0 {
@@ -145,8 +176,10 @@ func (o *upstreamObserver) line(line []byte) {
 	}
 }
 
-// document 解析完整正文或事件 raw，无返回值；由观察器调用。
-// 保留扩展字段、数值精度及嵌套统计，忽略 DONE 和无统计的正常事件。
+// document 对完整 JSON 正文或 SSE data 事件提取原始用量。
+// 参数 raw 为事件/正文；返回值无，由 line 或 Read 的 EOF 分支调用。
+// 忽略空数据和 DONE，用 UseNumber 保留大整数及供应商数值文本，非法 JSON 标记诊断错误。
+// 有效但无用量的事件不构造假统计；仅更新诊断，不转换客户端协议或计价。
 func (o *upstreamObserver) document(raw []byte) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("[DONE]")) {
@@ -162,8 +195,10 @@ func (o *upstreamObserver) document(raw []byte) {
 	o.usage(doc)
 }
 
-// usage 提取统计及 Responses、Anthropic 包装对象；参数 doc 为解码文档。
-// 由 document 递归调用，无返回值，不改写供应商字段或 token 数值。
+// usage 在供应商原始文档中寻找用量对象及已知包络。
+// 参数 doc 为 JSON 对象；返回值无，document 调用并对 response/message 嵌套递归。
+// usage 或 usageMetadata 即使为空对象也算明确报告；保留零值、扩展字段与原始名称。
+// 修改 diagnostics.Usage/UsageReported，不归一 token 或改正文；账单使用单独的 BillingUsage。
 func (o *upstreamObserver) usage(doc map[string]any) {
 	for _, key := range []string{"usage", "usageMetadata"} {
 		if usage, ok := doc[key].(map[string]any); ok {
@@ -178,8 +213,10 @@ func (o *upstreamObserver) usage(doc map[string]any) {
 	}
 }
 
-// mergeDiagnosticUsage 合并 SSE 分段统计；参数 dst、src 为原始字段，返回合并对象。
-// 由 usage 调用，递归保留空对象、零值和扩展字段；后续事件覆盖同名标量。
+// mergeDiagnosticUsage 递归覆盖合并分段上游统计，保留供应商原始值。
+// 参数 dst 为旧统计，src 为新片段；返回合并映射，dst 为 nil 时创建；usage 调用。
+// 同名标量以后报为准，嵌套对象递归，空对象和明确零仍保留，不能逐帧相加重复累计。
+// 原地修改 dst，限请求私有诊断使用；无费用计算或外部存储副作用。
 func mergeDiagnosticUsage(dst, src map[string]any) map[string]any {
 	if dst == nil {
 		dst = map[string]any{}

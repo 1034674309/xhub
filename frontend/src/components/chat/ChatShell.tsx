@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { uiHref } from "@/utils/uiHref";
 import { useChatShell } from "@/contexts/ChatShellContext";
 import ConversationList from "./ConversationList";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export function getChatRoutes() {
   const base = uiHref("chat");
@@ -33,6 +33,7 @@ interface NavItemProps {
 }
 
 function NavItem({ icon, label, onClick, active = false }: NavItemProps) {
+  const t = useT();
   return (
     <Button
       onClick={onClick}
@@ -53,6 +54,7 @@ interface ChatShellProps {
 }
 
 const ChatShell: React.FC<ChatShellProps> = ({ children }) => {
+  const t = useT();
   const router = useRouter();
   const pathname = stripTrailingSlash(usePathname() ?? "");
   const { conversations, activeConversationId, deleteConversation, renameConversation } = useChatShell();

@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { CredentialItem } from "../networking";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ReuseCredentialsModalProps {
   isVisible: boolean;
@@ -19,7 +19,7 @@ interface ReuseCredentialsModalProps {
 }
 
 const reuseCredentialsSchema = z.object({
-  credential_name: z.string().min(1, t("Credential name is required")),
+  credential_name: z.string().min(1, { error: () => t("Credential name is required") }),
 });
 
 type ReuseCredentialsFormValues = z.infer<typeof reuseCredentialsSchema>;
@@ -36,6 +36,7 @@ const ReuseCredentialsModal: React.FC<ReuseCredentialsModalProps> = ({
   existingCredential,
   setIsCredentialModalOpen,
 }) => {
+  const t = useT();
   const fieldIdPrefix = React.useId();
   const storedValues = storedValuesOf(existingCredential);
   const form = useZodForm(reuseCredentialsSchema, {

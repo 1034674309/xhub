@@ -12,8 +12,10 @@ class SeedCases:
     def seed(self):
         """用途：仅通过管理 API 构建清单声明的保留基线；无参数、无返回值；供 testdata 和验收准备调用，先校验全部实际凭据并要求空租户库，密钥存数据库而不存检查点，不探测或运行模型，异常保留检查点。"""
         credentials = resolve_provider_credentials(self.data)
-        login, _ = self.api("/v2/login", {"username": os.environ.get("E2E_DATASET_ADMIN", "admin"),
-                                          "password": os.environ["E2E_DATASET_PASSWORD"]})
+        # 共享本地入口可从现有网关配置解析凭据；隔离入口仍使用显式环境。
+        auth = getattr(self, "login_credentials", os.environ)
+        login, _ = self.api("/v2/login", {"username": auth.get("E2E_DATASET_ADMIN", "admin@xhub.local"),
+                                          "password": auth["E2E_DATASET_PASSWORD"]})
         self.admin = login["key"]
         self.progress("  [构建 1/5] 管理员登录成功，检查空数据库")
         orgs, _ = self.api("/organization/list")

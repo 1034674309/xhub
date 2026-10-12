@@ -7,6 +7,7 @@ from .dataset import Dataset
 from .runner_runtime import ROOT, E2E_CATEGORIES
 from .runner_shared import shared_main
 from .runner_isolated import run_isolated
+from .category_help import category_help
 
 
 def run_existing(args):
@@ -40,7 +41,7 @@ def main():
     parser.add_argument("--list-categories", action="store_true", help="只列出分类，不读取凭据、不启动服务")
     args = parser.parse_args()
     if args.list_categories:
-        print("E2E categories (make e2e <category> [<category> ...]):\n" + "\n".join(E2E_CATEGORIES))
+        print(category_help())
         return 0
     if args.gateway:
         if args.shared_target or args.phase or args.category or args.with_regression or args.resume or args.keep_data:
@@ -51,8 +52,8 @@ def main():
     if args.category:
         if not args.shared_target or args.phase != "verify":
             parser.error("--category 只能与 --shared-target --phase verify 一起使用")
-        if "regression" in args.category and not args.with_regression:
-            parser.error("regression 分类必须同时指定 --with-regression")
+        if set(args.category) & {"profile-isolation", "cache-weight", "fallback", "business-browser", "regression"}:
+            parser.error("所选分类需要隔离服务或故障注入；请使用 make e2e-offline 或 make regression，make e2e 只连接现有真实网关")
         args.category = list(dict.fromkeys(args.category))
     if args.shared_target:
         if not args.phase:

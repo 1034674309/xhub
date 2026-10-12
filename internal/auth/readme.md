@@ -2,6 +2,45 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+At HTTP admission, resolve credentials with Resolve. For UI sessions, verify the signature before calling SessionPrincipal. Pass the resulting Principal to authz for action authorization.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| APIKeyFrom(r) | Extract request credentials without storage access |
+| Resolve(ctx, cfg, db, r) | Return a Principal or an authentication/dependency error |
+| SessionPrincipal(user, version, session) | Validate session state and construct a principal |
+
+### Integration demo
+
+Save the code as `demo/main.go` inside the repository and run `go run ./demo` from the repository root. Remove the demo directory after use.
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/auth"
+	"net/http/httptest"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	r := httptest.NewRequest("GET", "/v1/models", nil)
+	r.Header.Set("Authorization", "Bearer demo-key")
+	fmt.Println(auth.APIKeyFrom(r) == "demo-key")
+}
+```
+
+Prints true and demonstrates extraction only. Resolve also requires loaded configuration and a real IAM store.
+
+### Errors, state, and side effects
+
+Preserve dependency failures as server errors rather than treating them as unknown keys. Do not log extracted plaintext credentials.
+
 ## Overview
 
 `internal/auth` turns an HTTP credential or a stored UI session into a `Principal`. It identifies the caller; permission decisions belong to `internal/authz`. A principal preserves both the authorization identity and the key metadata needed later by routing, budget, rate-limit, spend, model-access, and request-log paths. It can represent the emergency master credential, a virtual API key, or an active signed-in user session.

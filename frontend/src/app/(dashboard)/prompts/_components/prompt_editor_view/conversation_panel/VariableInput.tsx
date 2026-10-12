@@ -1,6 +1,6 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface VariableInputProps {
   extractedVariables: string[];
@@ -9,6 +9,7 @@ interface VariableInputProps {
 }
 
 const VariableInput: React.FC<VariableInputProps> = ({ extractedVariables, variables, onVariableChange }) => {
+  const t = useT();
   if (extractedVariables.length === 0) {
     return null;
   }

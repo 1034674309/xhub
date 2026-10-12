@@ -1,7 +1,7 @@
 "use client";
 
 import { Copy, FileJson, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,7 @@ export default function RouteTemplateLibrary({
   onEdit,
   onUsage,
 }: Props) {
+  const t = useT();
   const filteredRows = rows.filter((row) => row.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return (
     <Card>

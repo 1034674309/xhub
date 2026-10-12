@@ -42,7 +42,7 @@ import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings"
 import { checkTokenValidity } from "@/utils/jwtUtils";
 import { getCookie } from "@/utils/cookieUtils";
 import { consoleHref, getLoginUrl } from "@/utils/returnUrlUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelHubTableProps {
   accessToken: string | null;
@@ -52,6 +52,7 @@ interface ModelHubTableProps {
 }
 
 function HubEmptyState({ title, body }: { title: string; body: string }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -64,6 +65,7 @@ function HubEmptyState({ title, body }: { title: string; body: string }) {
 }
 
 const ModelHubTable: React.FC<ModelHubTableProps> = ({ accessToken, publicPage, premiumUser, userRole }) => {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(prism);
   // Admin Viewer follows the read-parity rule: see the AI Hub catalog, but
   // cannot toggle public visibility (write).

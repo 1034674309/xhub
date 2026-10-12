@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const ENVIRONMENT_ITEMS = [
-  { value: "development", label: t("Development") },
-  { value: "staging", label: t("Staging") },
-  { value: "production", label: t("Production") },
+  { value: "development", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Development"); } },
+  { value: "staging", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Staging"); } },
+  { value: "production", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Production"); } },
 ] as const;
 
 interface PromptEditorHeaderProps {
@@ -49,6 +49,7 @@ const PromptEditorHeader: React.FC<PromptEditorHeaderProps> = ({
   environment,
   onEnvironmentChange,
 }) => {
+  const t = useT();
   return (
     <div className="bg-background border-b border-border px-6 py-3 flex items-center justify-between">
       <div className="flex items-center space-x-3">

@@ -21,7 +21,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import SyntaxHighlighter from "@/components/SyntaxHighlighter";
 import coy from "react-syntax-highlighter/dist/esm/styles/prism/coy";
 
@@ -29,7 +29,6 @@ import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
 import { v4 as uuidv4 } from "uuid";
 import useCan from "@/app/(dashboard)/hooks/useCan";
 import GuardrailSelector from "@/components/guardrails/GuardrailSelector";
-import PolicySelector from "@/components/policies/PolicySelector";
 import MCPToolArgumentsForm, { MCPToolArgumentsFormRef } from "@/components/mcp_tools/MCPToolArgumentsForm";
 import { MCPServer } from "@/components/mcp_tools/types";
 import { toast } from "@/lib/toast";

@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 
 import { getSearchToolTableColumns, searchToolKey } from "./SearchToolTableColumns";
 import { AvailableSearchProvider, SearchTool } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SearchToolTableProps {
   searchTools: SearchTool[];
@@ -22,6 +22,7 @@ interface SearchToolTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -41,6 +42,7 @@ const SearchToolTable: React.FC<SearchToolTableProps> = ({
   onEdit,
   onDelete,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => {

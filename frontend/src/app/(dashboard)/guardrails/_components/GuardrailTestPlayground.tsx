@@ -8,7 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { GuardrailMode } from "@/components/guardrails/types";
 import { formatGuardrailMode } from "./guardrail_info_helpers";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailItem {
   guardrail_id?: string;
@@ -57,6 +57,7 @@ const GuardrailTestPlayground: React.FC<GuardrailTestPlaygroundProps> = ({
   accessToken,
   onClose,
 }) => {
+  const t = useT();
   const [selectedGuardrails, setSelectedGuardrails] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);

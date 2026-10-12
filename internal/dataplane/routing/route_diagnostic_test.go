@@ -1,3 +1,5 @@
+// 本文件验证 routing 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package routing
 
 import (
@@ -11,8 +13,9 @@ import (
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
-// diagnosticDeployment 构造隔离部署；参数为公开名、部署 ID、传输和暂停标志，返回独立配置。
-// 单元测试调用，不访问外部服务；地址故意含凭据和查询参数以检验日志投影。
+// DiagnosticDeployment 构造路由诊断测试的隔离部署。
+// 参数 name/id/transport/disabled 为公开别名、稳定 ID、协议及停用标志；返回新配置。
+// 故意使用带假密码及查询参数的地址检验日志投影，纯内存，不拨号或持久化。
 func DiagnosticDeployment(name, id, transport string, disabled bool) config.ModelEntry {
 	return config.ModelEntry{ModelName: name, LiteLLMParams: map[string]any{
 		"model": "real", "api_key": "arbitrary-private-secret", "api_base": "https://user:private-password@upstream.example/v1?token=private-query",
@@ -22,6 +25,7 @@ func DiagnosticDeployment(name, id, transport string, disabled bool) config.Mode
 
 // TestRouteDiagnosisStages 验证正常、空目录、无效声明、暂停、冷却、零权重及组/通配符边界。
 // 前置独立内存目录；验证分类、计数及无共享配置改写；日志恢复由 captureLog 清理，无外部数据。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestRouteDiagnosisStages(t *testing.T) {
 	good := DiagnosticDeployment("gpt-5.6-sol", "live", "bypass_openai_chat", false)
 	bad := DiagnosticDeployment("gpt-5.6-sol", "bad", "missing-transport", false)

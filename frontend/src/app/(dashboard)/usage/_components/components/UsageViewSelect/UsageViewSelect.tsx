@@ -1,7 +1,7 @@
 import React from "react";
 import { hasCapability, type Capability } from "@/utils/capabilities";
 import { all_admin_roles } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 export type UsageOption =
   | "global"
   | "my-usage"
@@ -76,6 +76,7 @@ export const UsageViewSelect: React.FC<UsageViewSelectProps> = ({
   description,
   "data-id": dataId,
 }) => {
+  const t = useT();
   const isAdmin = all_admin_roles.includes(userRole ?? "");
   const canFilterByOrganization = isAdmin || isOrgAdmin;
   const canFilterByTeam = isAdmin || isOrgAdmin || isTeamAdmin;

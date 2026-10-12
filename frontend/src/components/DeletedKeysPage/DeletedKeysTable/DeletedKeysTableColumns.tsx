@@ -6,9 +6,10 @@ import { DataTableSortHeader } from "@/components/shared/DataTable";
 import { DateCell, IdCell, IdentityCell, MoneyCell } from "@/components/shared/table_cells";
 import { DeletedKeyResponse } from "@/app/(dashboard)/hooks/keys/useKeys";
 import { userDetailHref } from "@/utils/entityLinks";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function TruncatedTextCell({ value }: { value: string | null | undefined }) {
+  const t = useT();
   if (!value) {
     return <span className="text-muted-foreground">-</span>;
   }
@@ -20,6 +21,7 @@ function TruncatedTextCell({ value }: { value: string | null | undefined }) {
 }
 
 function UserLinkCell({ userId }: { userId: string | null | undefined }) {
+  const t = useT();
   if (!userId) {
     return <span className="text-muted-foreground">-</span>;
   }

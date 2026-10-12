@@ -8,7 +8,7 @@ import (
 
 // TestFallbackAcceptanceSharedModel 验证同名多部署验收模板的真实接口契约与数据面。
 // 前置隔离 PostgreSQL、本地429上游与两条同名健康部署，验证非法重复规则返回400、
-// 合法模板保存回读、重复回退不缓存、目标名单复核及禁用回退不外发；无测试返回值，
+// 合法模板保存回读、回退成功后缓存、命中前目标名单复核及禁用跨模型回退；无测试返回值，
 // defer先删除密钥再模板与部署，harness最终删除schema，不使用外部凭据。
 func TestFallbackAcceptanceSharedModel(t *testing.T) {
 	h := newHarness(t)
@@ -59,20 +59,33 @@ func TestFallbackAcceptanceSharedModel(t *testing.T) {
 		t.Fatal("跨模型模板未保存两条独立规则")
 	}
 	request := chatRequest(primary, "repeat acceptance fallback")
+	request["session_id"] = "acceptance-fallback-session"
 	for repeat := 0; repeat < 2; repeat++ {
 		mark := len(h.upstreamCalls())
 		response := h.ok(http.MethodPost, "/v1/chat/completions", owner.key, request)
-		if isCacheHit(response) || strings.Join(h.upstreamSince(mark), ",") != upstreams[0]+","+upstreams[3] {
-			t.Fatalf("第%d次必须429回退且排除两条健康部署、禁用缓存: %s calls=%v", repeat+1, response.describe(), h.upstreamSince(mark))
+		want := ""
+		if repeat == 0 {
+			want = upstreams[0] + "," + upstreams[3]
+		}
+		if isCacheHit(response) != (repeat > 0) || response.header("X-Session-Id") != "acceptance-fallback-session" || strings.Join(h.upstreamSince(mark), ",") != want {
+			t.Fatalf("第%d轮应首次429回退、随后缓存成功正文: %s calls=%v want=%s", repeat+1, response.describe(), h.upstreamSince(mark), want)
 		}
 	}
 	h.ok(http.MethodPost, "/key/update", admin, map[string]any{"key": owner.key, "models": []string{primary}})
 	mark := len(h.upstreamCalls())
 	denied := h.do(http.MethodPost, "/v1/chat/completions", owner.key, request)
-	if denied.status != 401 || !strings.Contains(errorMessage(denied), "model not in allowed model list") || strings.Join(h.upstreamSince(mark), ",") != upstreams[0] {
+	if denied.status != 401 || !strings.Contains(errorMessage(denied), "model not in allowed model list") || len(h.upstreamSince(mark)) != 0 {
 		t.Fatalf("备用模型白名单应拒绝且无外发: %s calls=%v", denied.describe(), h.upstreamSince(mark))
 	}
 	h.ok(http.MethodPost, "/key/update", admin, map[string]any{"key": owner.key, "models": []string{primary, backup}})
+	// 新正文不能复用旧响应；会话成功偏好仍应直接调用备用部署。
+	fresh := chatRequest(primary, "new turn after cached fallback")
+	fresh["session_id"] = request["session_id"]
+	mark = len(h.upstreamCalls())
+	next := h.ok(http.MethodPost, "/v1/chat/completions", owner.key, fresh)
+	if isCacheHit(next) || strings.Join(h.upstreamSince(mark), ",") != upstreams[3] {
+		t.Fatalf("缓存不应破坏新正文的成功部署偏好: %s calls=%v", next.describe(), h.upstreamSince(mark))
+	}
 	request["disable_fallbacks"] = true
 	mark = len(h.upstreamCalls())
 	disabled := h.do(http.MethodPost, "/v1/chat/completions", owner.key, request)

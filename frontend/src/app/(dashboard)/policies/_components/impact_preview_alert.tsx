@@ -2,7 +2,7 @@ import React from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/shared/Alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Info } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ImpactResult {
   affected_keys_count: number;
@@ -21,7 +21,7 @@ interface SampleListProps {
   totalCount: number;
 }
 
-const SampleList: React.FC<SampleListProps> = ({ label, samples, totalCount }) => (
+const SampleList: React.FC<SampleListProps> = ({ label, samples, totalCount }) => { const t = useT(); return ((
   <div className="mt-1 flex flex-wrap items-center gap-1">
     <span className="text-xs text-muted-foreground">{label}: </span>
     {samples.slice(0, 5).map((sample) => (
@@ -31,9 +31,10 @@ const SampleList: React.FC<SampleListProps> = ({ label, samples, totalCount }) =
     ))}
     {totalCount > 5 && <span className="text-xs text-muted-foreground">{t("and {value0} more...", { value0: (totalCount - 5) })}</span>}
   </div>
-);
+)); };
 
 const ImpactPreviewAlert: React.FC<ImpactPreviewAlertProps> = ({ impactResult }) => {
+  const t = useT();
   const isGlobal = impactResult.affected_keys_count === -1;
 
   return (

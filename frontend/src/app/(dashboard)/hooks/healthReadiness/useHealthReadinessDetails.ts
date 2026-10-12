@@ -1,7 +1,7 @@
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import { getGlobalLitellmHeaderName, getProxyBaseUrl } from "@/components/networking";
 import { createQueryKeys } from "../common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const healthReadinessDetailsKeys = createQueryKeys("healthReadinessDetails");
 
@@ -45,6 +45,7 @@ const fetchHealthReadinessDetails = async (accessToken: string): Promise<HealthR
 export const useHealthReadinessDetails = (
   accessToken: string | null | undefined,
 ): UseQueryResult<HealthReadinessDetailsResponse> => {
+  const t = useT();
   return useQuery<HealthReadinessDetailsResponse>({
     queryKey: healthReadinessDetailsKeys.detail("readiness"),
     queryFn: () => fetchHealthReadinessDetails(accessToken!),

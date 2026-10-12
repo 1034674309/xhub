@@ -12,7 +12,7 @@ import { ProjectBaseForm } from "./ProjectBaseForm";
 import { emptyProjectFormValues, projectFormSchema } from "./projectFormSchema";
 import { buildProjectCreateParams } from "./projectFormUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -20,6 +20,7 @@ interface CreateProjectModalProps {
 }
 
 function CreateProjectForm({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const form = useZodForm(projectFormSchema, { defaultValues: emptyProjectFormValues });
   const createMutation = useCreateProject();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -65,6 +66,7 @@ function CreateProjectForm({ onClose }: { onClose: () => void }) {
 }
 
 export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
+  const t = useT();
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[720px]">

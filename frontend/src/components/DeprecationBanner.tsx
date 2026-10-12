@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Info, X } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const DEPRECATION_TARGET_DATE = "September 1, 2026";
 
@@ -11,6 +11,7 @@ interface DeprecationBannerProps {
 }
 
 export const DeprecationBanner: React.FC<DeprecationBannerProps> = ({ featureName }) => {
+  const t = useT();
   const [isClosed, setIsClosed] = useState(false);
 
   if (isClosed) {

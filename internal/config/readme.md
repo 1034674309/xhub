@@ -1,5 +1,58 @@
 # Startup configuration and model definitions
 
+[简体中文](readme_cn.md)
+
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Load configuration at process startup, then use it to initialize IAM, Store, and gateway.New. Loading validates YAML and PostgreSQL URL syntax, without testing service connectivity.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| Load(path) | Read a file and return *Config,error |
+| ModelEntry.ParamString(key, fallback) | Read a connection parameter with fallback |
+| ModelEntry.Disabled() | Read an explicit disabled flag |
+
+### Integration demo
+
+Save the code as `demo/main.go` inside the repository and run `go run ./demo /tmp/xhub-demo.yaml` from the repository root. Remove the demo directory after use.
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/config"
+	"os"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	if len(os.Args) != 2 {
+		panic("usage: demo <config.yaml>")
+	}
+	cfg, err := config.Load(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cfg.RouterSettings.RoutingStrategy, cfg.RouterSettings.NumRetries, cfg.RouterSettings.Timeout)
+}
+```
+
+First save this fixture as /tmp/xhub-demo.yaml:
+
+```yaml
+general_settings:
+  database_url: postgres://localhost/demo
+```
+
+Pass the YAML path as an argument. A file containing only general_settings.database_url: postgres://localhost/demo prints random 2 60. No database connection is opened.
+
+### Errors, state, and side effects
+
+Unset os.environ/NAME references expand to empty strings; zero values trigger defaults. Do not print the entire Config because it may contain credentials.
+
 ## Overview
 
 The config package loads the gateway YAML startup document into typed process settings while retaining undeclared router and general-setting keys for later database overlays. It defines model deployments, routing defaults, database and Redis locations, bootstrap administrator settings, the optional emergency master credential, and spend-log switches. Loading reads files and environment variables; it does not connect to services or modify the file.

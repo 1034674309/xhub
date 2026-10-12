@@ -49,7 +49,7 @@ test("acceptance fallback excludes both shared-model healthy deployments", async
     templateID = (await response.json()).id;
     const persisted = await (await page.request.get(GATEWAY + "/route_template/" + templateID, { headers })).json();
     expect(persisted.body.model_routes).toEqual(body.model_routes);
-    expect(persisted.body.fallbacks).toEqual([{ [primary]: [backup] }]);
+    expect(persisted.body.fallbacks).toEqual([{ [primary]: [backup] }, { [backup]: [] }]);
     const teams = await (await page.request.get(GATEWAY + "/v2/team/list?page=1&page_size=500", { headers })).json();
     const team = teams.teams.find((row: any) => row.team_alias === "e2e-fixture-team");
     const jwt = (await page.context().cookies()).find((cookie) => cookie.name === "token")!.value;
@@ -61,23 +61,40 @@ test("acceptance fallback excludes both shared-model healthy deployments", async
       expect(minted.status(), await minted.text()).toBe(200);
       keys.push((await minted.json()).key);
     }
-    const request = { model: primary, messages: [{ role: "user", content: "repeat acceptance fallback " + suffix }] };
+    const request = { model: primary, session_id: "fallback-session-" + suffix, messages: [{ role: "user", content: "repeat acceptance fallback " + suffix }] };
     for (let repeat = 0; repeat < 2; repeat++) {
+      // 相同正文验证首次真实回退及随后缓存；当前目标权限仍须逐次复核。
+      const before = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
       const call = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + keys[0] }, data: request });
       expect(call.status(), await call.text()).toBe(200);
-      expect(call.headers()["cache_hit"]).not.toBe("true");
-      expect(call.headers()["x-litellm-cache-hit"]).not.toBe("true");
-      // 标准Chat接口返回模拟上游的固定正文并保留请求公开模型，部署选择由后台回归核对。
+      expect(call.headers()["cache_hit"] === "true").toBe(repeat > 0);
+      expect(call.headers()["x-litellm-cache-hit"] === "true").toBe(repeat > 0);
+      // 第一次故障加回退共两次外发，下一轮复用成功正文且不产生外发。
+      const after = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
+      expect(after - before, "首次回退与成功后复用的真实调用次数").toBe(repeat === 0 ? 2 : 0);
+      expect(call.headers()["x-session-id"]).toBe(request.session_id);
       const answer = await call.json();
       expect(answer.choices[0].message.content).toBe("e2e-ok");
       expect(answer.model).toBe(primary);
       const callID = call.headers()["x-litellm-call-id"];
       expect(callID).toBeTruthy();
       await expect.poll(async () => {
-        const log = await page.request.get(GATEWAY + "/spend/logs/ui/" + callID, { headers });
-        return log.ok() ? Number((await log.json()).spend) : 0;
-      }).toBeGreaterThan(0);
+        const response = await page.request.get(GATEWAY + "/spend/logs/ui/" + callID, { headers });
+        if (!response.ok()) return false;
+        const log = await response.json();
+        return repeat === 0 ? Number(log.spend) > 0 : log.cache_hit === "true" && Number(log.spend) === 0;
+      }).toBe(true);
+      const log = await (await page.request.get(GATEWAY + "/spend/logs/ui/" + callID, { headers })).json();
+      expect(log.model).toBe(primary);
+      expect(log.session_id).toBe(request.session_id);
+      expect(log.session_source).toBe("explicit");
     }
+    const beforeRevocation = (await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests;
+    expect((await page.request.post(GATEWAY + "/key/update", { headers, data: { key: keys[0], models: [primary] } })).status()).toBe(200);
+    const cachedDenied = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + keys[0] }, data: request });
+    expect(cachedDenied.status(), await cachedDenied.text()).toBe(401);
+    expect((await (await page.request.get(UPSTREAM + "/e2e/request-count")).json()).requests).toBe(beforeRevocation);
+    expect((await page.request.post(GATEWAY + "/key/update", { headers, data: { key: keys[0], models: [primary, backup] } })).status()).toBe(200);
     const denied = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + keys[1] }, data: request });
     expect(denied.status(), await denied.text()).toBe(401);
     expect(await denied.text()).toContain("model not in allowed model list");

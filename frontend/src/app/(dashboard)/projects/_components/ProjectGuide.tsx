@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleHelp } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const points = [
   "pages.projects.guideWhat",
@@ -13,6 +13,7 @@ const points = [
 ] as const;
 
 export function ProjectGuide() {
+  const t = useT();
   return (
     <section className="mt-6 rounded-lg border bg-card px-4 py-4" aria-labelledby="project-guide-title">
       <div className="flex items-center gap-2">

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { fetchClient } from "@/lib/http/api";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import RouteTemplateSelect from "@/components/route_templates/RouteTemplateSelect";
 
 import { BUDGET_DURATION_OPTIONS, NO_RESET } from "../org-settings/OrgSettingsForm";
@@ -40,6 +40,7 @@ export const OrgCreateDialog = ({
   accessToken,
   createOrganization = defaultCreateOrganization,
 }: OrgCreateDialogProps) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const form = useZodForm(orgSettingsSchema, { defaultValues: emptyOrgFormValues });
 

@@ -2,6 +2,45 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+在准入估算或工具接口中计算 token 与费用估计；已完成请求的结算应使用供应商实测量和 catalog 费率快照。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| CountTokens(model, prompt, messages) | 返回数量、计数模型及错误 |
+| TokenCost(prompt, completion, inputRate, outputRate) | 按每 token 费率分别计算 |
+| NormalizeServiceTier(value, isString) | 规范化可识别服务层级 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/llm/estimate"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	input, output := estimate.TokenCost(100, 20, 0.000001, 0.000002)
+	fmt.Printf("%.6f %.6f\n", input, output)
+	tier, known := estimate.NormalizeServiceTier("auto", true)
+	fmt.Printf("%q %t\n", tier, known)
+}
+```
+
+输出 0.000100 0.000040 和 "" false；auto 不表示已观测到某种计费层级。
+
+### 错误、状态与副作用
+
+估计量不能冒充供应商实际账单；传入单价的单位必须一致。未知层级应保留未知状态。
+
 ## 说明
 
 本包提供确定性的 token 数、token 成本、折扣、加价和服务层级预估。费率单位是美元/token。结果供准入、界面预览和 LiteLLM 兼容 token-count 响应使用，不是供应商结算的权威证据。

@@ -2,6 +2,50 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+网关已确认 Principal 后，为本次请求创建 Guard，再针对具体 Action/Object 调用 Authorize。列表调用 Scope，把范围施加到数据库查询，不能先读全量再在页面隐藏。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| New(db) | 注入 IAM，构造授权器 |
+| Guard(ctx, actor) | 恢复当前关系；错误必须终止 |
+| Authorize(ctx, guard, action, object) | 检查动作和可信资源归属 |
+| Scope(ctx, guard, action) | 返回可查询范围，需施加到查询 |
+
+### 接入 demo
+
+这是供宿主调用的 Go 接入函数。将代码放在仓库内独立包中可编译；实际执行前须由调用方提供下述真实依赖。
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/auth"
+	"github.com/sunqirui1987/xhub/internal/authz"
+	"github.com/sunqirui1987/xhub/internal/iam"
+)
+
+// CanReadUser 演示已鉴权请求的授权；传入真实 IAM、身份和目标，返回授权错误，不写入数据。
+func CanReadUser(ctx context.Context, db *iam.DB, p *auth.Principal, userID string) error {
+	az := authz.New(db)
+	g, err := az.Guard(ctx, p.Actor())
+	if err != nil {
+		return err
+	}
+	return az.Authorize(ctx, g, authz.ActionUserRead, authz.Object{Type: authz.ObjectUser, ID: userID})
+}
+```
+
+这是可编译的接入函数；需要真实 IAM 和鉴权结果。nil 错误只表示可读取该用户，不执行读取。
+
+### 错误、状态与副作用
+
+不要信任请求正文里的归属。Guard 不应跨请求复用；关系读取失败时拒绝访问，并区分未认证、禁止、不存在及内部错误。
+
 ## 说明
 
 `internal/authz` 是网关统一的权限策略层。它接收已经认证的 `Actor`，从存储中解析 `Object` 的真实归属与生命周期状态，判定一个 `Action`，并为列表查询生成 SQL 范围。处理函数只提交资源标识和动作，不能通过自行填写团队、组织、项目或所有者来获得权限。会话访问已有记录时会重新读取 IAM 关系；依赖状态无法确认时一律关闭访问。

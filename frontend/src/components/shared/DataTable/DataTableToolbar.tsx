@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cva.config";
 
 import { DataTableViewOptions } from "./DataTableViewOptions";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>;
@@ -48,6 +48,7 @@ export function DataTableToolbar<TData>({
   children,
   className,
 }: DataTableToolbarProps<TData>) {
+  const t = useT();
   const filters = table.getState().columnFilters;
 
   const labelFor = (columnId: string): string =>

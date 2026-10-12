@@ -13,7 +13,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, Info } from "lucide-react";
 import { formatGuardrailMode } from "@/app/(dashboard)/guardrails/_components/guardrail_info_helpers";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailInfo {
   guardrail_name: string;
@@ -41,6 +41,7 @@ const GuardrailSelectionModal: React.FC<GuardrailSelectionModalProps> = ({
   isLoading = false,
   progressInfo,
 }) => {
+  const t = useT();
   const [selectedGuardrails, setSelectedGuardrails] = useState<Set<string>>(new Set());
 
   // Prepare guardrail info with existence status

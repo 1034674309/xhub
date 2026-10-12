@@ -7,7 +7,7 @@ import { userCreateCall } from "./networking";
 import Papa from "papaparse";
 import { CheckCircleIcon, XCircleIcon, ExclamationIcon } from "@heroicons/react/outline";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { iamRoles as iam } from "@/utils/iamRoles";
 
 interface BulkCreateUsersProps {
@@ -41,6 +41,7 @@ const BulkCreateUsersButton: React.FC<BulkCreateUsersProps> = ({
   possibleUIRoles,
   onUsersCreated,
 }) => {
+  const t = useT();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [parsedData, setParsedData] = useState<UserData[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);

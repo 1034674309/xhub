@@ -4,15 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { NuqsTestingAdapter, OnUrlUpdateFunction } from "nuqs/adapters/testing";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useTeamMetadataSchema } from "@/app/(dashboard)/hooks/teams/useTeamMetadataSchema";
-import { toast } from "@/lib/toast";
 import { fetchAvailableModelsForTeamOrKey } from "./key_team_helpers/fetch_available_models_team_key";
 import {
   fetchMCPAccessGroups,
   getDefaultTeamSettings,
   getGuardrailsList,
-  getPoliciesList,
-  getRouteTemplatesCall,
   teamCreateCall,
 } from "./networking";
 import Teams from "./Teams";

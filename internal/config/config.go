@@ -12,15 +12,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the loaded process configuration. RouterRaw and GeneralRaw keep YAML keys the typed structs do not name, so a database overlay can compare by key.
+// Config is the loaded process configuration. GeneralRaw preserves general settings for database overrides.
 type Config struct {
 	ModelList       []ModelEntry     `yaml:"model_list"`
-	RouterSettings  RouterSettings   `yaml:"router_settings"`
 	LiteLLMSettings map[string]any   `yaml:"litellm_settings"`
 	Guardrails      []map[string]any `yaml:"guardrails"`
 	GeneralSettings GeneralSettings  `yaml:"general_settings"`
 	// Raw maps keep YAML keys the typed structs do not name. Database overlay wins per key.
-	RouterRaw  map[string]any `yaml:"-"`
 	GeneralRaw map[string]any `yaml:"-"`
 }
 
@@ -45,13 +43,6 @@ type ModelEntry struct {
 func (m ModelEntry) Disabled() bool {
 	disabled, _ := m.ModelInfo["disabled"].(bool)
 	return disabled
-}
-
-// RouterSettings holds the routing strategy, retry count, and timeout. Other router keys from YAML stay in Config.RouterRaw.
-type RouterSettings struct {
-	RoutingStrategy string  `yaml:"routing_strategy"`
-	NumRetries      int     `yaml:"num_retries"`
-	Timeout         float64 `yaml:"timeout"`
 }
 
 // GeneralSettings holds the database, Redis, the platform administrator, and a
@@ -119,7 +110,9 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
-	c.RouterRaw = doc.RouterSettings
+	if len(doc.RouterSettings) != 0 {
+		return nil, fmt.Errorf("router_settings is no longer supported; configure route templates")
+	}
 	c.GeneralRaw = doc.GeneralSettings
 	if c.LiteLLMSettings == nil {
 		c.LiteLLMSettings = doc.LiteLLMSettings
@@ -130,15 +123,6 @@ func Load(path string) (*Config, error) {
 	dbURL, err := url.Parse(c.GeneralSettings.DatabaseURL)
 	if err != nil || (dbURL.Scheme != "postgres" && dbURL.Scheme != "postgresql") {
 		return nil, fmt.Errorf("general_settings.database_url must be a postgres:// or postgresql:// URL")
-	}
-	if c.RouterSettings.RoutingStrategy == "" {
-		c.RouterSettings.RoutingStrategy = "random"
-	}
-	if c.RouterSettings.NumRetries == 0 {
-		c.RouterSettings.NumRetries = 2
-	}
-	if c.RouterSettings.Timeout == 0 {
-		c.RouterSettings.Timeout = 60
 	}
 	for i := range c.ModelList {
 		for k, v := range c.ModelList[i].LiteLLMParams {

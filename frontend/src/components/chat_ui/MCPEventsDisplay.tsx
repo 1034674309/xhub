@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import type { MCPEvent } from "@/components/mcp_tools/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MCPEventsDisplayProps {
   events: MCPEvent[];
@@ -22,6 +22,7 @@ function formatArguments(raw: string | undefined): string {
 }
 
 const MCPEventsDisplay: React.FC<MCPEventsDisplayProps> = ({ events, className }) => {
+  const t = useT();
   if (!events || events.length === 0) {
     return null;
   }
@@ -64,6 +65,7 @@ interface MCPEventsPanelsProps {
 }
 
 function MCPEventsPanels({ toolsEvent, mcpCallEvents, defaultOpenKeys }: MCPEventsPanelsProps) {
+  const t = useT();
   const [openKeys, setOpenKeys] = useState<Set<string>>(defaultOpenKeys);
 
   const toggleKey = (key: string, open: boolean) => {
@@ -160,6 +162,7 @@ interface MCPEventPanelProps {
 }
 
 function MCPEventPanel({ title, open, onOpenChange, children }: MCPEventPanelProps) {
+  const t = useT();
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <CollapsibleTrigger className="relative flex min-h-5 w-full items-center gap-1 pl-5 text-left text-sm font-normal leading-5 text-muted-foreground hover:text-foreground">

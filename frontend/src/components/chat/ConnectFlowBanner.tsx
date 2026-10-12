@@ -4,7 +4,7 @@ import React from "react";
 import { CheckCircle } from "lucide-react";
 import { getProxyBaseUrl, ConnectFlowStatus } from "@/components/networking";
 import { OAuth2ConnectButton } from "@/components/chat/MCPAppsPanel";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface Props {
   flowHandle: string;
@@ -41,6 +41,7 @@ const copyFor = (flow: ConnectFlowStatus | undefined, failed: boolean): readonly
 };
 
 const ConnectFlowBanner: React.FC<Props> = ({ flowHandle, flow, accessToken, onConnected, failed }) => {
+  const t = useT();
   const action = `${getProxyBaseUrl()}/authorize/complete`;
   const state = failed || flow === undefined ? "stale" : flow.state;
   const canFinish = state === "unscoped" || (state !== "stale" && flow?.connected === true);

@@ -6,7 +6,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface FilterDraft {
   get: (columnId: string) => unknown;
@@ -54,6 +54,7 @@ export function DataTableFilterDrawer<TData>({
   onReset,
   children,
 }: DataTableFilterDrawerProps<TData>) {
+  const t = useT();
   const [draft, setDraft] = React.useState<Record<string, unknown>>(() => toDraft(table.getState().columnFilters));
   const [wasOpen, setWasOpen] = React.useState(open);
 
@@ -107,6 +108,7 @@ export function DataTableFilterDrawer<TData>({
 }
 
 export function DataTableFilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>

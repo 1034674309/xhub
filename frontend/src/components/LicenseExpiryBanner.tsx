@@ -6,7 +6,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/s
 import { Button } from "@/components/ui/button";
 import { LicenseInfo } from "@/components/networking";
 import { formatExpiryDate, getDaysUntilExpiration, getLicenseExpiryTier } from "@/utils/licenseUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const DISMISS_KEY_PREFIX = "litellm:licenseExpiryBannerDismissed:";
 
@@ -47,6 +47,7 @@ const expiryDescription = (tier: "warning" | "critical" | "expired"): React.Reac
 };
 
 export const LicenseExpiryBannerView: React.FC<LicenseExpiryBannerViewProps> = ({ licenseInfo }) => {
+  const t = useT();
   const [locallyDismissed, setLocallyDismissed] = useState(false);
 
   const expirationDate = licenseInfo?.expiration_date ?? null;
@@ -102,4 +103,4 @@ export const LicenseExpiryBannerView: React.FC<LicenseExpiryBannerViewProps> = (
   );
 };
 
-export const LicenseExpiryBanner: React.FC<LicenseExpiryBannerProps> = () => null;
+export const LicenseExpiryBanner: React.FC<LicenseExpiryBannerProps> = () => { const t = useT(); return (null); };

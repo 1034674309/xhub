@@ -19,7 +19,7 @@ import {
   userLabel,
   type TeamUserSpendRow,
 } from "./teamUserSpend";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface TeamUserSpendCardProps {
   accessToken: string | null;
@@ -66,6 +66,7 @@ const columns: ColumnDef<TeamUserSpendRow>[] = [
 /** 团队用户用量及 CSV 面板；参数为令牌、日期和团队，返回可访问表格。
  * 团队页调用；缓存按身份隔离，读取失败显示提示并禁止导出，不写入数据。 */
 const TeamUserSpendCard: React.FC<TeamUserSpendCardProps> = ({ accessToken, startTime, endTime, teamIds }) => {
+  const t = useT();
   const hasTeams = teamIds.length > 0;
   const { data, isLoading, isError } = useQuery({
     queryKey: ["teamSpendByUser", accessToken, startTime?.toISOString(), endTime?.toISOString(), teamIds],

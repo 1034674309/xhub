@@ -6,13 +6,14 @@ import { getProxyBaseUrl, getGlobalLitellmHeaderName, keyInfoV1Call } from "@/co
 import { createApiClient } from "@/lib/http/client";
 
 import { keyKeys } from "./useKeys";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // 越界详情 404 属于正常拒绝，不触发全局错误弹窗；共享客户端保留状态码及认证头。
 const personalClient = createApiClient({ getBaseUrl: getProxyBaseUrl, getAuthHeaderName: getGlobalLitellmHeaderName });
 
 /** 读取密钥详情；参数为密钥 ID 和启用/个人范围选项，返回查询状态；个人详情由后台验证本人归属，404 等错误抛出。供密钥详情页面调用，缓存按会话与范围隔离。 */
 export function useKeyInfo(keyId: string | null, options?: { enabled?: boolean; scope?: "personal" }): UseQueryResult<KeyResponse> {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   return useQuery<KeyResponse>({

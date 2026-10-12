@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // Helper functions
 export const formatEntityName = (name: string) => {
@@ -43,6 +43,7 @@ export interface CategoryFilterProps {
 }
 
 export const CategoryFilter: React.FC<CategoryFilterProps> = ({ categories, selectedCategories, onChange }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const categoryNames = categories.map((cat) => cat.category);
 
@@ -86,6 +87,7 @@ export interface QuickActionsProps {
 }
 
 export const QuickActions: React.FC<QuickActionsProps> = ({ onSelectAll, onUnselectAll, hasSelectedEntities }) => {
+  const t = useT();
   return (
     <div className="mb-6 rounded-lg border border-border bg-muted/40 p-5 shadow-xs">
       <div className="mb-4 flex items-center justify-between">
@@ -141,6 +143,7 @@ export const PiiEntityList: React.FC<PiiEntityListProps> = ({
   onActionSelect,
   entityToCategoryMap,
 }) => {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-lg border border-border shadow-xs">
       <div className="flex border-b border-border bg-muted/40 px-5 py-3">

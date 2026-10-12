@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RequestLogsPanel from "./RequestLogsPanel";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SpendLogsTableProps {
   accessToken: string | null;
@@ -15,6 +15,7 @@ interface SpendLogsTableProps {
 }
 /** 日志页入口：接收登录凭据并提供非失败请求和失败请求两个独立视图；未登录完成时显示加载状态，查询权限由后台校验。 */
 export default function SpendLogsTable({ accessToken, token, userRole, userID }: SpendLogsTableProps) {
+  const t = useT();
   const [activeTab, setActiveTab] = useState("logs");
   if (!accessToken || !token || !userRole || !userID) {
     return (

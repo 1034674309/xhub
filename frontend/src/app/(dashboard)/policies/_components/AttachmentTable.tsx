@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { PolicyAttachment } from "@/components/policies/types";
 
 import { getAttachmentTableColumns } from "./AttachmentTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AttachmentTableProps {
   attachments: PolicyAttachment[];
@@ -21,6 +21,7 @@ interface AttachmentTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -41,6 +42,7 @@ const AttachmentTable: React.FC<AttachmentTableProps> = ({
   isAdmin,
   accessToken,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => {

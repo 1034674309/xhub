@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACTION_ITEMS, SEVERITY_ITEMS } from "./action_options";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ContentCategory {
   id: string;
@@ -31,6 +31,7 @@ const CategoryTable: React.FC<CategoryTableProps> = ({
   onRemove,
   readOnly = false,
 }) => {
+  const t = useT();
   const columns: ColumnDef<ContentCategory>[] = [
     {
       header: t("Category"),

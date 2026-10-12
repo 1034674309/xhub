@@ -25,7 +25,7 @@ import {
 } from "../networking";
 import MemberModal from "../team/EditMembership";
 import { OrgSettingsForm } from "./org-settings/OrgSettingsForm";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface OrganizationInfoProps {
   organizationId: string;
@@ -46,6 +46,7 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
   userModels,
   editOrg,
 }) => {
+  const t = useT();
   const queryClient = useQueryClient();
   const { data: orgData, isLoading: loading } = useOrganization(organizationId);
   const [isEditing, setIsEditing] = useState(false);

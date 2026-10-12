@@ -7,10 +7,11 @@ import { DEFAULT_PAGE_SIZE_OPTIONS } from "@/components/shared/DataTable";
 import { useDeletedTeams } from "@/app/(dashboard)/hooks/teams/useTeams";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { DeletedTeamsTable } from "./DeletedTeamsTable/DeletedTeamsTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /** 展示服务端分页记录，无参数，返回列表；路由调用，占位旧页期间禁用分页，查询失败由列表状态处理，无数据库写入。 */
 export default function DeletedTeamsPage() {
+  const t = useT();
   const { premiumUser } = useAuthorized();
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,

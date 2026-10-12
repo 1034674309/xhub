@@ -3,7 +3,7 @@ import { ArrowLeft, Check, Copy, Link2 } from "lucide-react";
 import { cn } from "@/lib/cva.config";
 import { buildMarketplaceSettingsSnippet, formatInstallCommand } from "./helpers";
 import { Plugin } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { clientSampleBaseUrl } from "@/lib/http/resolveApiBase";
 
 interface SkillDetailProps {
@@ -15,6 +15,7 @@ interface SkillDetailProps {
 }
 
 const SkillDetail: React.FC<SkillDetailProps> = ({ skill, onBack }) => {
+  const t = useT();
   const [activeTab, setActiveTab] = useState("overview");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 

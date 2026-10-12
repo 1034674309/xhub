@@ -6,9 +6,10 @@ import DefaultProxyAdminTag from "@/components/common_components/DefaultProxyAdm
 import { KeyResponse } from "@/components/key_team_helpers/key_list";
 import { CellTooltip, DateCell, IdentityCell } from "@/components/shared/table_cells";
 import { keyDetailHref } from "@/utils/entityLinks";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function OwnerCell({ record }: { record: KeyResponse }) {
+  const t = useT();
   const email = record.user?.user_email ?? record.user_id ?? null;
   if (!email) return <span className="text-sm">—</span>;
   return (

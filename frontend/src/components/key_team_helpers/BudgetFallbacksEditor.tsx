@@ -3,7 +3,7 @@ import { SearchSelect } from "@/components/shared/SearchSelect";
 import { Button } from "@/components/ui/button";
 import { ArrowDown, Plus, X } from "lucide-react";
 import React, { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface FallbackEntry {
   id: string;
@@ -42,6 +42,7 @@ const dictToEntries = (dict: Record<string, string[]>): FallbackEntry[] => {
  * 密钥与团队设置页调用本组件；空行只保留在本地，不会写入 onChange，显示文案始终按当前语言读取。
  */
 export function BudgetFallbacksEditor({ value, onChange, availableModels }: BudgetFallbacksEditorProps) {
+  const t = useT();
   const [entries, setEntries] = useState<FallbackEntry[]>(() => dictToEntries(value));
 
   const emitChange = (updated: FallbackEntry[]) => {

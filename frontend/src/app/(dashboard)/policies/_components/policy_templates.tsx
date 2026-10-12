@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/lib/toast";
 import { ShieldCheck, ShieldAlert, FlaskConical, CircleDollarSign, CheckCircle2 } from "lucide-react";
 import { getPolicyTemplates } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PolicyTemplateCardProps {
   title: string;
@@ -34,6 +34,7 @@ const PolicyTemplateCard: React.FC<PolicyTemplateCardProps> = ({
   complexity,
   onUseTemplate,
 }) => {
+  const t = useT();
   return (
     <Card className="h-full transition-shadow hover:shadow-md">
       <CardContent className="flex h-full flex-col">
@@ -107,6 +108,7 @@ const PolicyTemplates: React.FC<PolicyTemplatesProps> = ({
   onTemplatesLoaded,
   accessToken,
 }) => {
+  const t = useT();
   const [templates, setTemplates] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
@@ -122,7 +124,7 @@ const PolicyTemplates: React.FC<PolicyTemplatesProps> = ({
     });
     // Sort alphabetically
     return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
-  }, [templates]);
+  }, [templates, t]);
 
   // Filter templates: show templates that have ALL selected tags (AND logic)
   const filteredTemplates = useMemo(() => {
@@ -131,7 +133,7 @@ const PolicyTemplates: React.FC<PolicyTemplatesProps> = ({
       const tags: string[] = t.tags || [];
       return Array.from(selectedTags).every((selectedTag) => tags.includes(selectedTag));
     });
-  }, [templates, selectedTags]);
+  }, [templates, selectedTags, t]);
 
   const handleTagToggle = (tag: string) => {
     setSelectedTags((prev) => {

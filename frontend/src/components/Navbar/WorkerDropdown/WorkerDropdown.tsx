@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/combobox";
 import { InputGroupAddon } from "@/components/ui/input-group";
 import { useWorker } from "@/hooks/useWorker";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface WorkerDropdownProps {
   onWorkerSwitch: (workerId: string) => void;
@@ -25,6 +25,7 @@ interface WorkerOption {
 }
 
 const WorkerDropdown: React.FC<WorkerDropdownProps> = ({ onWorkerSwitch }) => {
+  const t = useT();
   const { isControlPlane, selectedWorker, workers } = useWorker();
 
   if (!isControlPlane || !selectedWorker) return null;

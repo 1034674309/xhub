@@ -4,7 +4,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Team } from "@/components/key_team_helpers/key_list";
 import type { Organization } from "@/components/networking";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface InheritedBudgetGate {
   scope: "Team" | "Organization";
@@ -52,6 +52,7 @@ interface InheritedBudgetHintProps {
 }
 
 export function InheritedBudgetHint({ gates }: InheritedBudgetHintProps) {
+  const t = useT();
   if (gates.length === 0) return null;
   return (
     <SimpleTooltip

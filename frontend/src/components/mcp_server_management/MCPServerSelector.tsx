@@ -4,7 +4,7 @@ import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolset
 import { MultiSelect, type MultiSelectOption } from "@/components/shared/MultiSelect";
 import React from "react";
 import { ALL_PROXY_MCP_SERVERS_SENTINEL, NO_MCP_SERVERS_SENTINEL } from "@/components/mcp_tools/constants";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface MCPServerSelectorProps {
   onChange: (selected: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
@@ -35,6 +35,7 @@ const MCPServerSelector: React.FC<MCPServerSelectorProps> = ({
   allowNoMcpServers = false,
   allowAllProxyMcpServers = false,
 }) => {
+  const t = useT();
   const { data: mcpServers = [], isLoading: serversLoading } = useMCPServers(teamId);
   const { data: accessGroups = [], isLoading: groupsLoading } = useMCPAccessGroups();
   const { data: toolsets = [], isLoading: toolsetsLoading } = useMCPToolsets();

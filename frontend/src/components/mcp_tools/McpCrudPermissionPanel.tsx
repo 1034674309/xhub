@@ -13,7 +13,7 @@ import React, { useMemo, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { CrudOp, MCPToolEntry, CRUD_GROUP_META, groupToolsByCrud } from "../../utils/mcpToolCrudClassification";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface McpCrudPermissionPanelProps {
   /** List of tools available on this MCP server. */
@@ -77,6 +77,7 @@ const McpCrudPermissionPanel: React.FC<McpCrudPermissionPanelProps> = ({
   readOnly = false,
   searchFilter = "",
 }) => {
+  const t = useT();
   const [collapsed, setCollapsed] = useState<Record<CrudOp, boolean>>({
     read: false,
     create: false,
@@ -97,7 +98,7 @@ const McpCrudPermissionPanel: React.FC<McpCrudPermissionPanelProps> = ({
       return new Set(tools.map((t) => t.name));
     }
     return new Set(value);
-  }, [value, tools]);
+  }, [value, tools, t]);
 
   const locked: Set<string> = useMemo(() => new Set(lockedTools), [lockedTools]);
 

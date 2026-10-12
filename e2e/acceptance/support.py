@@ -69,8 +69,11 @@ def fallback_acceptance_deployments(deployments, model, fallback_model, fallback
     return healthy_ids, targets[0]
 
 
-def fallback_acceptance_route(model, fault_id, healthy_ids, fallback_model, fallback_id, timeout_seconds):
-    """用途：构造零权重与跨模型回退的临时密钥路由；参数为主备真实模型、故障 ID、全部健康 ID（兼容单个字符串）、备用 ID 和超时，返回完整路由模板正文；同名模型抛 ValueError，所有同名健康部署显式置零，避免未列出部署继承非零默认权重。"""
+def fallback_acceptance_route(model, fault_id, healthy_ids, fallback_model, fallback_id, timeout_seconds, excluded_fallback_ids=()):
+    """用途：构造临时密钥的确定性跨模型回退模板；参数为主备模型、故障和健康部署、备用部署、超时及其他备用部署，返回完整正文。
+
+    供真实验收及浏览器调用；主模型健康部署及其他备用部署显式置零，同名模型拒绝。专用类别按源禁用，避免空表继承默认导致意外选路；不修改部署数据。
+    """
     if model == fallback_model:
         raise ValueError("跨模型回退要求不同的公开模型")
     healthy_ids = [healthy_ids] if isinstance(healthy_ids, str) else list(healthy_ids)
@@ -82,18 +85,27 @@ def fallback_acceptance_route(model, fault_id, healthy_ids, fallback_model, fall
             ]},
             {"model": fallback_model, "strategy": "traffic-split", "allocations": [
                 {"deployment_id": fallback_id, "weight": 100},
+                *[{"deployment_id": ident, "weight": 0} for ident in excluded_fallback_ids],
             ]},
         ],
         "retry_policy": {"max_attempts": 1, "timeout_seconds": timeout_seconds,
                          "failure_threshold": 0, "cooldown_seconds": 60},
-        "fallbacks": [{model: [fallback_model]}],
-        "context_window_fallbacks": [],
-        "content_policy_fallbacks": [],
+        "fallbacks": [{model: [fallback_model]}, {fallback_model: []}],
+        "context_window_fallbacks": [{model: []}, {fallback_model: []}],
+        "content_policy_fallbacks": [{model: []}, {fallback_model: []}],
     }
 
 
-def weighted_acceptance_route(model, first_id, second_id, weights, timeout_seconds):
-    """用途：构造同一真实模型两个部署的确定性权重路由；参数为模型、两个部署 ID、两项权重和超时，返回完整模板正文；验收只使用 100:0 与 0:100，避免随机抽样结论。"""
+def weighted_acceptance_route(model, first_id, second_id, weights, timeout_seconds, excluded_ids=()):
+    """用途：构造同模型两部署的确定性权重模板；参数为模型、两个部署、两项权重、超时及其他部署 ID，返回完整正文。
+
+    供缓存权重验收调用；其他部署必须显式置零，因为未列出部署仍有权重 1。三类回退按源禁用；重复身份或非法权重抛 ValueError，无外部副作用。
+    """
+    ids = [first_id, second_id, *excluded_ids]
+    if any(not ident for ident in ids) or len(set(ids)) != len(ids):
+        raise ValueError("权重验收部署 ID 必须非空且唯一")
+    if len(weights) != 2 or any(type(value) not in (int, float) or not math.isfinite(value) or value < 0 for value in weights) or not any(weights):
+        raise ValueError("权重验收必须提供两项有限非负权重且至少一项为正")
     return {
         "model_routes": [{
             "model": model,
@@ -101,13 +113,14 @@ def weighted_acceptance_route(model, first_id, second_id, weights, timeout_secon
             "allocations": [
                 {"deployment_id": first_id, "weight": weights[0]},
                 {"deployment_id": second_id, "weight": weights[1]},
+                *[{"deployment_id": ident, "weight": 0} for ident in ids[2:]],
             ],
         }],
         "retry_policy": {"max_attempts": 1, "timeout_seconds": timeout_seconds,
                          "failure_threshold": 0, "cooldown_seconds": 60},
-        "fallbacks": [],
-        "context_window_fallbacks": [],
-        "content_policy_fallbacks": [],
+        "fallbacks": [{model: []}],
+        "context_window_fallbacks": [{model: []}],
+        "content_policy_fallbacks": [{model: []}],
     }
 
 
@@ -179,8 +192,9 @@ def load_manifest(path=MANIFEST):
             not isinstance(value, (int, float)) or value < 0 for value in (initial or []) + (updated or [])):
         raise ValueError("权重切换链必须固定为 100:0 到 0:100")
     if fallback_chain.get("primary_failure_status") != 429 or fallback_chain.get("repeat_requests", 0) < 2 \
-            or not fallback_chain.get("cache_must_remain_disabled"):
-        raise ValueError("回退链必须重复验证 429、真实回退和缓存禁用")
+            or any(fallback_chain.get(field) is not True for field in (
+                "same_session", "identical_request_bodies", "reuse_successful_target")):
+        raise ValueError("回退链必须验证 429、同会话同正文的成功响应缓存")
     required_roles = {"platform_admin", "organization_admin", "team_admin", "member"}
     if {p["role"] for p in data.get("personas", [])} != required_roles:
         raise ValueError("必须包含四类可登录身份")
@@ -357,4 +371,3 @@ def bill_check(bill, key, rates):
     if not bill.get("metadata", {}).get("cost_breakdown"):
         raise AssertionError("缺少历史价格快照")
     return float(bill["spend"])
-

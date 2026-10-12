@@ -6,7 +6,7 @@ import { createQueryKeys } from "@/app/(dashboard)/hooks/common/queryKeysFactory
 import { teamInfoCall } from "@/components/networking";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import { teamListScopeUserId } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface TeamsResponse {
   teams: Team[];
@@ -100,6 +100,7 @@ export const useTeamsTable = (
   pageSize: number,
   options: TeamListCallOptions = {},
 ): UseQueryResult<TeamsResponse> => {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   return useQuery<TeamsResponse>({
@@ -113,6 +114,7 @@ export const useTeamsTable = (
 
 const teamKeys = createQueryKeys("teams");
 export const useTeams = (): UseQueryResult<Team[]> => {
+  const t = useT();
   const { accessToken, userId, userRole } = useAuthorized();
   return useQuery<Team[]>({
     queryKey: teamKeys.list({}),
@@ -135,6 +137,7 @@ const fetchAllTeamsPaged = async (accessToken: string, userID: string | null): P
 };
 
 export const useAllTeams = (): UseQueryResult<Team[]> => {
+  const t = useT();
   const { accessToken, userId, userRole } = useAuthorized();
   const scopedUserID = teamListScopeUserId(userRole, userId);
   return useQuery<Team[]>({
@@ -153,6 +156,7 @@ export const useAllTeams = (): UseQueryResult<Team[]> => {
 };
 
 export const useTeam = (teamId?: string) => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
   return useQuery<Team>({
@@ -181,6 +185,7 @@ export const useTeam = (teamId?: string) => {
 const infiniteTeamKeys = createQueryKeys("infiniteTeams");
 
 export const useInfiniteTeams = (pageSize: number = 50, search?: string, organizationId?: string | null) => {
+  const t = useT();
   const { accessToken, userId, userRole } = useAuthorized();
   const isAdmin = userRole === "Admin" || userRole === "Admin Viewer";
 
@@ -276,6 +281,7 @@ export const useDeletedTeams = (
   pageSize: number,
   options: TeamListCallOptions = {},
 ): UseQueryResult<DeletedTeamsResponse> => {
+  const t = useT();
   const { accessToken } = useAuthorized();
 
   return useQuery<DeletedTeamsResponse>({

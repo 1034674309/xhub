@@ -1,5 +1,5 @@
 import { GuardrailModeSelect } from "./GuardrailModeSelect";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import React, { useState } from "react";
 import { createGuardrailCall, updateGuardrailCall, applyGuardrail } from "@/components/networking";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ interface Props {
  * 测试：后端 engine_test.go 校验规则语义；LocalGuardrailEditor.integration.test.tsx。
  */
 export function LocalGuardrailEditor(props: Props) {
+  const t = useT();
   return <LocalGuardrailForm key={JSON.stringify(props.rule ?? null)} {...props} />;
 }
 
@@ -37,6 +38,7 @@ export function LocalGuardrailEditor(props: Props) {
  * 测试：后端 engine_test.go 校验规则语义；LocalGuardrailEditor.integration.test.tsx。
  */
 function LocalGuardrailForm({ accessToken, rule, onSuccess, onClose, readOnly: explicitlyReadOnly = false }: Props) {
+  const t = useT();
   const p: Partial<Guardrail["litellm_params"]> = rule?.litellm_params ?? {};
   const [name, setName] = useState(rule?.guardrail_name ?? "");
   const [words, setWords] = useState(() => [...(p.blocked_words ?? []), ...(p.keywords ?? [])].join("\n"));
@@ -489,6 +491,7 @@ function LocalGuardrailForm({ accessToken, rule, onSuccess, onClose, readOnly: e
  * 测试：后端 engine_test.go 校验规则语义；LocalGuardrailEditor.integration.test.tsx。
  */
 export default function LocalGuardrailModal({ visible, ...props }: Props & { visible: boolean }) {
+  const t = useT();
   return (
     <Dialog
       open={visible}

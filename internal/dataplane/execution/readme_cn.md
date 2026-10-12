@@ -2,6 +2,36 @@
 
 [English](readme.md) · [上层架构](../readme_cn.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+HTTP 入口交给 Serve 或 ServeBypass；宿主实现 contract.Adapted/Bypass，提供鉴权、配额、HTTP、凭据、状态和结算。执行器按一次请求生命周期协调这些能力，不由调用方零散补做。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| Serve(host,w,r,op) | 统一适配入口 |
+| ServeBypass(host,w,r,hit) | 已匹配原生动作入口 |
+
+### 接入 demo
+
+先运行完整网关，配置 demo-model 指向本地模拟上游，设置具有模型调用权限的 XHUB_DEMO_TOKEN。真实宿主见 [gateway/wire.go](../../gateway/wire.go)。
+
+在仓库根目录执行以下命令。
+
+```sh
+curl -sS -i "http://localhost:4000/v1/responses" \
+  -H "Authorization: Bearer $XHUB_DEMO_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"model":"demo-model","input":"Hello","stream":false}'
+```
+
+本地模拟上游可返回 response 对象；HTTP 失败时检查 error。实际模型必须支持 responses，此示例可能产生推理调用。
+
+### 错误、状态与副作用
+
+错误响应、超时、重试、计费与流终态必须一起处理；输出流后不能换源拼接，未知任务创建结果不能自动重放。
+
 ## 职责
 
 适配与原生请求的生命周期编排。不做控制台 CRUD，不直接访问 PostgreSQL 或 Redis。重试、失败计费与成功终态需一起审核。

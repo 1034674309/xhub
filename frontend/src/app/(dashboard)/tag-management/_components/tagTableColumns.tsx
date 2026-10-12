@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export const DYNAMIC_SPEND_TAG_DESCRIPTION =
   "This is just a spend tag that was passed dynamically in a request. It does not control any LLM models.";
@@ -23,6 +23,7 @@ export const DYNAMIC_SPEND_TAG_DESCRIPTION =
 const isDynamicSpendTag = (tag: Tag) => tag.description === DYNAMIC_SPEND_TAG_DESCRIPTION;
 
 function TagNameCell({ tag, onSelectTag }: { tag: Tag; onSelectTag: (tagName: string) => void }) {
+  const t = useT();
   if (isDynamicSpendTag(tag)) {
     return (
       <CellTooltip
@@ -42,6 +43,7 @@ function TagNameCell({ tag, onSelectTag }: { tag: Tag; onSelectTag: (tagName: st
 }
 
 function TagModelsCell({ tag }: { tag: Tag }) {
+  const t = useT();
   const models = tag.models ?? [];
   if (models.length === 0) {
     return <Badge variant="secondary">{t("All Models")}</Badge>;
@@ -70,6 +72,7 @@ interface TagRowActionsProps {
 }
 
 function TagRowActions({ tag, onEdit, onDelete }: TagRowActionsProps) {
+  const t = useT();
   const isDynamic = isDynamicSpendTag(tag);
 
   return (

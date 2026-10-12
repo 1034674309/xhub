@@ -1,7 +1,7 @@
 import React from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { ExportScope, EntityType } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ExportTypeSelectorProps {
   value: ExportScope;
@@ -10,6 +10,7 @@ interface ExportTypeSelectorProps {
 }
 
 const ExportTypeSelector: React.FC<ExportTypeSelectorProps> = ({ value, onChange, entityType }) => {
+  const t = useT();
   const scopes: { value: ExportScope; title: string; description: string }[] = [
     {
       value: "daily",

@@ -9,7 +9,7 @@ import { isProxyAdminRole, isUserTeamAdminForSingleTeam } from "@/utils/roles";
 import { CircleHelp } from "lucide-react";
 import type { ComponentProps } from "react";
 import { TeamData } from "./TeamInfo";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TeamMemberTabProps {
   teamData: TeamData;
@@ -32,6 +32,7 @@ export default function TeamMemberTab({
   setIsEditMemberModalVisible,
   setIsAddMemberModalVisible,
 }: TeamMemberTabProps) {
+  const t = useT();
   /** 格式化限速数字；参数为可能为空的金额/次数，返回去除多余零的字符串，无副作用。 */
   const formatNumber = (value: number | null): string => {
     if (value === null || value === undefined) return "0";

@@ -2,7 +2,7 @@ import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { createQueryKeys } from "@/app/(dashboard)/hooks/common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 /**
  * The capabilities the gateway says this session holds.
@@ -97,6 +97,7 @@ const fetchIdentity = async (accessToken: string): Promise<SessionIdentity> => {
  * question directly, so the page reads the answer instead of guessing.
  */
 export const useSessionIdentity = (): UseQueryResult<SessionIdentity> => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   return useQuery<SessionIdentity>({
     queryKey: identityKeys.list({}),
@@ -115,21 +116,24 @@ export const useSessionIdentity = (): UseQueryResult<SessionIdentity> => {
  * positive offers an action that fails at the server.
  */
 export const useCan = (capability: Capability): boolean => {
+  const t = useT();
   const { data } = useSessionIdentity();
   return Boolean(data?.capabilities?.includes(capability));
 };
 
 /** useCapabilities returns the whole set, for a page that gates several things. */
 export const useCapabilities = (): ReadonlySet<Capability> => {
+  const t = useT();
   const { data } = useSessionIdentity();
   return new Set(data?.capabilities ?? []);
 };
 
 /** useIsPlatformAdmin reports the account-level administrator role. */
-export const useIsPlatformAdmin = (): boolean => useCan(CAPABILITIES.platformAdmin);
+export const useIsPlatformAdmin = (): boolean => { const t = useT(); return (useCan(CAPABILITIES.platformAdmin)); };
 
 /** useSessionTeamRole reports the role this session holds in one team, if any. */
 export const useSessionTeamRole = (teamId: string | null | undefined): SessionTeam["role"] | null => {
+  const t = useT();
   const { data } = useSessionIdentity();
   if (!data || !teamId) return null;
   return data.teams.find((team) => team.team_id === teamId)?.role ?? null;
@@ -144,6 +148,7 @@ export const useSessionTeamRole = (teamId: string | null | undefined): SessionTe
  * whether to offer team-level management, not whether the caller is powerful.
  */
 export const useIsTeamAdminForAnyTeam = (): boolean => {
+  const t = useT();
   const { data } = useSessionIdentity();
   return Boolean(data?.teams?.some((team) => team.role === "team_admin"));
 };

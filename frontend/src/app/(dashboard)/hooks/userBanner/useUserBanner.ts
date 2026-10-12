@@ -3,11 +3,12 @@ import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { createQueryKeys } from "../common/queryKeysFactory";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { isProxyAdminRole } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const userBannerKeys = createQueryKeys("userBanner");
 
 export const useUserBanner = (accessToken: string | null) => {
+  const t = useT();
   const { userRole } = useAuthorized();
   const queryOptions: UseQueryOptions<UserBanner> = {
     queryKey: userBannerKeys.list({}),

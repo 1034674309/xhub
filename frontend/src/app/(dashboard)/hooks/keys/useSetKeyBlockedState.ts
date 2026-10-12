@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { keyKeys } from "./useKeys";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface SetKeyBlockedStateInput {
   keyToken: string;
@@ -29,6 +29,7 @@ export const setKeyBlockedState = async (
 };
 
 export const useSetKeyBlockedState = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

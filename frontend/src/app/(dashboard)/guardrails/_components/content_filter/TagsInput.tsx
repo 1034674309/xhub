@@ -14,7 +14,7 @@ import {
   ComboboxValue,
   useComboboxAnchor,
 } from "@/components/ui/combobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface TagsInputOption {
   label: string;
@@ -53,6 +53,7 @@ export const TagsInput = ({
   disabled = false,
   id,
 }: TagsInputProps) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [query, setQuery] = useState("");
 

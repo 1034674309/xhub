@@ -2,6 +2,45 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Use these functions for admission estimates and utility endpoints. Settle completed calls using reported vendor usage and catalog rate snapshots.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| CountTokens(model, prompt, messages) | Return a count, counting model, and error |
+| TokenCost(prompt, completion, inputRate, outputRate) | Multiply token counts by per-token rates |
+| NormalizeServiceTier(value, isString) | Normalize recognized service tiers |
+
+### Integration demo
+
+Save the code as `demo/main.go` inside the repository and run `go run ./demo` from the repository root. Remove the demo directory after use.
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/llm/estimate"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	input, output := estimate.TokenCost(100, 20, 0.000001, 0.000002)
+	fmt.Printf("%.6f %.6f\n", input, output)
+	tier, known := estimate.NormalizeServiceTier("auto", true)
+	fmt.Printf("%q %t\n", tier, known)
+}
+```
+
+Prints 0.000100 0.000040 and "" false. auto is not an observed billing tier.
+
+### Errors, state, and side effects
+
+Estimates are not supplier billing facts. Rate units must match the input quantities; preserve unknown tier status.
+
 ## Overview
 
 This package provides deterministic helpers for previewing token counts, token-based cost, discounts, margins, and service tiers. Rates are dollars per token. Results support admission, UI estimates, and LiteLLM-compatible token-count responses; they are not authoritative provider settlement evidence.

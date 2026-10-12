@@ -15,7 +15,7 @@ import { FormField } from "@/components/shared/form/FormField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface MetadataPair {
   key: string;
@@ -23,7 +23,7 @@ export interface MetadataPair {
 }
 
 export const metadataPairsSchema = z
-  .array(z.object({ key: z.string().min(1, t("Missing key")), value: z.string().optional() }))
+  .array(z.object({ key: z.string().min(1, { error: () => t("Missing key") }), value: z.string().optional() }))
   .superRefine((pairs, ctx) => {
     pairs.forEach((pair, index) => {
       if (pair.key && pairs.filter((other) => other.key === pair.key).length > 1) {
@@ -86,6 +86,7 @@ const MetadataKeyValueFields = <TFieldValues extends FieldValues>({
   schemaFields = [],
   schemaLoading = false,
 }: MetadataKeyValueFieldsProps<TFieldValues>) => {
+  const t = useT();
   const { fields, append, remove } = useFieldArray({ control, name });
   const seededRef = useRef(false);
 

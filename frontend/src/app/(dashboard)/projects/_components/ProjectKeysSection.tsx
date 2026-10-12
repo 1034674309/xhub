@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { ProjectKeysTable } from "./ProjectKeysTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ProjectKeysSectionProps {
   projectId: string;
@@ -15,6 +15,7 @@ const PAGE_SIZE = 5;
 
 /** 参数 projectId 指定项目，返回密钥列表；筛选或项目变化回首，占位旧页期间禁用分页，项目详情调用，无写入副作用。 */
 export function ProjectKeysSection({ projectId }: ProjectKeysSectionProps) {
+  const t = useT();
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
   const [keyAlias, setKeyAlias] = useState<string>("");
 

@@ -42,6 +42,7 @@ export const zhCN = {
   "measurement": "TPS 为总 Token 除以首字节之后的耗时；TTFT 为首个上游响应字节到达时间。性能均值使用成功、非缓存的有效文本请求样本，包含流式与非流式。费用与 Token 汇总包含所有已记录的终态请求。日期按浏览器时区显示。"
 },
  enterprise: {
+  providers: {oidc: "OpenID Connect", entra: "Microsoft Entra ID", okta: "Okta", keycloak: "Keycloak", auth0: "Auth0"},
   copyToken: "复制 SCIM 凭据", tokenCopied: "已复制 SCIM 凭据。", tokenCopyError: "复制失败，请选择凭据手动复制。",
   configureSCIM: "配置 SCIM",
   ssoName: "单点登录名称", editSCIMName: "配置 {name} 的 SCIM", deleteSSOName: "删除 {name} 的单点登录", deleteSSOHint: "移除本单点登录配置及待完成登录事务。SCIM 同步、本地用户和历史计费数据保留。",

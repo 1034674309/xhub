@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDownUp, Boxes, Pencil, Plus, Rocket, RotateCcw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ function ModelCard({
   onDelete?: (row: PriceCatalogRow) => void;
   onReset?: (row: PriceCatalogRow) => void;
 }) {
+  const t = useT();
   const editable = Boolean(onEdit || onDelete || onReset);
   return (
     <article
@@ -287,6 +288,7 @@ function CatalogToolbar({
   activeFilters: number;
   onAdd?: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row">
       <div className="relative min-w-0 flex-1">
@@ -353,11 +355,13 @@ export type PriceCatalogProps = {
 
 /** 价格目录入口；参数为价格行及操作回调，返回对应目录布局；市场元数据存在时使用完整筛选，旧手工目录继续兼容原布局。 */
 export function PriceCatalog(props: PriceCatalogProps) {
+  const t = useT();
   return props.rows?.some(row => row.raw.market_catalog === true) ? <MarketPriceCatalog {...props} /> : <LegacyPriceCatalog {...props} />;
 }
 
 /** 旧手工目录布局；参数为价格行与操作回调，返回可编辑列表，保持无市场元数据目录的展示兼容性。 */
 function LegacyPriceCatalog({costMap, rows: providedRows, isLoading, isError, onRetry, onAdd, onEdit, onDelete, onReset}: PriceCatalogProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [provider, setProvider] = useState("all");

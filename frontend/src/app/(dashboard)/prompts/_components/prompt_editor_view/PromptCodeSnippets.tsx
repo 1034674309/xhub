@@ -11,11 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const LANGUAGE_ITEMS = [
   { value: "curl", label: "cURL" },
-  { value: "python", label: t("Python (OpenAI SDK)") },
-  { value: "javascript", label: t("JavaScript (OpenAI SDK)") },
+  { value: "python", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Python (OpenAI SDK)"); } },
+  { value: "javascript", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("JavaScript (OpenAI SDK)"); } },
 ] as const;
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { clientSampleBaseUrl } from "@/lib/http/resolveApiBase";
 
 interface PromptCodeSnippetsProps {
@@ -40,6 +40,7 @@ const PromptCodeSnippets: React.FC<PromptCodeSnippetsProps> = ({
   environment,
   proxySettings,
 }) => {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(coy);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<"curl" | "python" | "javascript">("curl");

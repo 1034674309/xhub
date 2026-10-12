@@ -1,10 +1,5 @@
 model_list: []
 
-router_settings:
-  routing_strategy: simple-shuffle
-  num_retries: 2
-  timeout: 60
-
 general_settings:
   database_url: postgres://xhub:xhub@127.0.0.1:5432/xhub?sslmode=disable
   redis_url: redis://127.0.0.1:6379/1

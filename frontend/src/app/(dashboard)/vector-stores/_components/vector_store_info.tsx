@@ -8,7 +8,7 @@ import {
   CredentialItem,
 } from "@/components/networking";
 import { VectorStore } from "@/components/vector_store_management/types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { Providers, provider_map } from "@/components/provider_info_helpers";
 import { getVectorStoreProviderLogoAndName } from "@/components/vector_store_providers";
 import { Logo } from "@/components/molecules/logo/Logo";
@@ -43,10 +43,10 @@ interface VectorStoreInfoViewProps {
 }
 
 const vectorStoreEditShape = {
-  vector_store_id: z.string().min(1, t("Please input a vector store ID")),
+  vector_store_id: z.string().min(1, { error: () => t("Please input a vector store ID") }),
   vector_store_name: z.string().nullish(),
   vector_store_description: z.string().nullish(),
-  custom_llm_provider: z.string().min(1, t("Please select a provider")),
+  custom_llm_provider: z.string().min(1, { error: () => t("Please select a provider") }),
   litellm_credential_name: z.string().nullable().optional(),
 };
 
@@ -89,6 +89,7 @@ const VectorStoreInfoView: React.FC<VectorStoreInfoViewProps> = ({
   is_admin,
   editVectorStore,
 }) => {
+  const t = useT();
   const form = useZodForm(vectorStoreEditSchema, { defaultValues: EMPTY_VALUES });
   const [vectorStoreDetails, setVectorStoreDetails] = useState<VectorStore | null>(null);
   const [loadFailed, setLoadFailed] = useState<boolean>(false);

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface CreatedKeyDisplayProps {
   apiKey: string;
@@ -13,6 +13,7 @@ interface CreatedKeyDisplayProps {
  * Used on the Virtual Keys page and in the Add Agent wizard.
  */
 const CreatedKeyDisplay: React.FC<CreatedKeyDisplayProps> = ({ apiKey }) => {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {

@@ -9,6 +9,7 @@ const LEGACY_PAGE_ROUTES: ReadonlyMap<string, string> = new Map(
     "llm-playground": "playground",
     projects: "projects",
     chat: "chat",
+    "model-monitor": "model-monitor",
     "guardrails-monitor": "guardrails-monitor",
     guardrails: "guardrails",
     logs: "logs",

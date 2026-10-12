@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -15,6 +17,9 @@ import (
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
+// officialHost 初始化适用于原生任务测试的逻辑宿主。
+// 参数 up 为本地 HTTP 服务，models 为显式测试部署；返回使用 up.Client 的宿主并初始化任务归属表。
+// 仅初始化内存，不启动或关闭服务器；所属测试负责 Close，不访问真实供应商。
 func officialHost(up *httptest.Server, models ...config.ModelEntry) *logicHost {
 	return &logicHost{cfg: &config.Config{}, client: up.Client(), models: models, pins: map[string]string{}}
 }
@@ -51,7 +56,10 @@ func TestOfficialModelDefaultWeightsAndCredentialPin(t *testing.T) {
 	}
 }
 
-// TestOfficialTemplateTrafficSplitUsesLiveModelWeights 验证模板只选择策略，部署分配实时读取模型默认权重。
+// TestOfficialTemplateTrafficSplitUsesLiveModelWeights 验证请求模板只选调度策略，分流采用当前模型默认权重，零权重部署不会接收请求。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及本地 HTTP 假上游，不依赖外部供应商凭据。
+// 服务器通过 defer/Cleanup 关闭，测试状态只存在本例内存，不产生持久化数据。
 func TestOfficialTemplateTrafficSplitUsesLiveModelWeights(t *testing.T) {
 	var seen []string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +85,10 @@ func TestOfficialTemplateTrafficSplitUsesLiveModelWeights(t *testing.T) {
 	}
 }
 
+// TestOfficialTemplateRetriesHTTPFailure 验证异步创建遇到明确 429 时按模板重试，成功后记录一次失败且上游只调用两次。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及本地 HTTP 假上游，不依赖外部供应商凭据。
+// 服务器通过 defer/Cleanup 关闭，测试状态只存在本例内存，不产生持久化数据。
 func TestOfficialTemplateRetriesHTTPFailure(t *testing.T) {
 	var calls atomic.Int32
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +110,10 @@ func TestOfficialTemplateRetriesHTTPFailure(t *testing.T) {
 	}
 }
 
+// TestOfficialTimeoutDoesNotReplayAmbiguousCreate 验证异步创建超时即终止，即使模板允许多次尝试也只创建一次，避免重复付费任务。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及本地 HTTP 假上游，不依赖外部供应商凭据。
+// 服务器通过 defer/Cleanup 关闭，测试状态只存在本例内存，不产生持久化数据。
 func TestOfficialTimeoutDoesNotReplayAmbiguousCreate(t *testing.T) {
 	var calls atomic.Int32
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +135,10 @@ func TestOfficialTimeoutDoesNotReplayAmbiguousCreate(t *testing.T) {
 	}
 }
 
+// TestOfficialTaskScopesAndPendingUsage 验证任务归属键隔离调用方与传输，进行中响应携带进度用量仍不能扣最终费用。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及本地 HTTP 假上游，不依赖外部供应商凭据。
+// 服务器通过 defer/Cleanup 关闭，测试状态只存在本例内存，不产生持久化数据。
 func TestOfficialTaskScopesAndPendingUsage(t *testing.T) {
 	p := &auth.Principal{Hash: "a"}
 	key := officialTaskScope(p, "ark", "same")
@@ -138,6 +158,10 @@ func TestOfficialTaskScopesAndPendingUsage(t *testing.T) {
 	}
 }
 
+// TestOfficialForwardDoesNotLeakGatewayCredentials 验证原生请求剥离 Cookie、调用方 API Key 和 Connection 指定头，仅发送部署提供的供应商鉴权。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及本地 HTTP 假上游，不依赖外部供应商凭据。
+// 服务器通过 defer/Cleanup 关闭，测试状态只存在本例内存，不产生持久化数据。
 func TestOfficialForwardDoesNotLeakGatewayCredentials(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, name := range []string{"Cookie", "X-Api-Key", "Api-Key", "X-Litellm-Api-Key", "X-Private"} {

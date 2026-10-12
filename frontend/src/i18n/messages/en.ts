@@ -41,6 +41,7 @@ export const en = {
   "measurement": "TPS = total tokens / (total time − TTFT). TTFT measures the first upstream response byte. Successful uncached text requests include streaming and synchronous calls. Cost and token totals include all recorded terminal requests. Dates use your browser timezone."
 },
  enterprise: {
+  providers: {oidc: "OpenID Connect", entra: "Microsoft Entra ID", okta: "Okta", keycloak: "Keycloak", auth0: "Auth0"},
   copyToken: "Copy SCIM token", tokenCopied: "SCIM token copied.", tokenCopyError: "Copy failed. Select and copy the token manually.",
   configureSCIM: "Configure SCIM",
   ssoName: "SSO name", editSCIMName: "Configure SCIM for {name}", deleteSSOName: "Delete SSO for {name}", deleteSSOHint: "Remove this sign-in configuration and pending login transactions. SCIM synchronization, local users and billing history are retained.",

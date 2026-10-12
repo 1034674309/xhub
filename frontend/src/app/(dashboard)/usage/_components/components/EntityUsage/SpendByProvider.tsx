@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import React, { useState } from "react";
 import { ProviderLogo } from "@/components/molecules/models/ProviderLogo";
 import { ChartLoader } from "@/components/shared/chart_loader";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 type ProviderSpendData = {
   provider: string;
@@ -65,6 +65,7 @@ const columns: ColumnDef<ProviderSpendData>[] = [
 ];
 
 const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChanging, providerSpend }) => {
+  const t = useT();
   const [includeZeroSpend, setIncludeZeroSpend] = useState(false);
   const [includeUnknown, setIncludeUnknown] = useState(false);
 

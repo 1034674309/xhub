@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { userSetPasswordCall } from "@/components/networking";
 
 /**
@@ -44,6 +44,7 @@ interface SetPasswordModalProps {
  * here and tells the person what it is.
  */
 export default function SetPasswordModal({ open, onOpenChange, accessToken, user, onSuccess }: SetPasswordModalProps) {
+  const t = useT();
   const form = useForm<SetPasswordFormValues>({ defaultValues: EMPTY_FORM });
 
   const close = () => {

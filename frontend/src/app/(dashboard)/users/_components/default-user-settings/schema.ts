@@ -7,14 +7,14 @@ const amountOrEmpty = z
   .string()
   .refine(
     (value) => isBlank(value) || (Number.isFinite(Number(value)) && Number(value) >= 0),
-    t("Must be a non-negative number"),
+    { error: () => t("Must be a non-negative number") },
   );
 
 const defaultTeamRowSchema = z.object({
   team_id: z
     .string()
     .nullable()
-    .pipe(z.string({ error: "Select a team" }).min(1, t("Select a team"))),
+    .pipe(z.string({ error: "Select a team" }).min(1, { error: () => t("Select a team") })),
   max_budget_in_team: amountOrEmpty,
   user_role: z.enum(["user", "admin"]),
 });

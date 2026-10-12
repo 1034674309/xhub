@@ -36,7 +36,6 @@ import {
   PanelLeftOpen,
   PlayCircle,
   Waypoints,
-  Settings as SettingsIcon,
   Shield,
   ScrollText,
   User,
@@ -44,9 +43,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/cva.config";
-import { rolesWithCapability } from "../utils/capabilities";
 import { useSessionIdentity, CAPABILITIES } from "@/app/(dashboard)/hooks/sessionIdentity/useSessionIdentity";
 import BetaBadge from "./BetaBadge";
 import SidebarAccountMenu from "./SidebarAccountMenu/SidebarAccountMenu";

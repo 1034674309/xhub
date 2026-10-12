@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import LoggingSettings from "../team/LoggingSettings";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PremiumLoggingSettingsProps {
   value: any[];
@@ -18,6 +18,7 @@ export function PremiumLoggingSettings({
   disabledCallbacks = [],
   onDisabledCallbacksChange,
 }: PremiumLoggingSettingsProps) {
+  const t = useT();
   if (!premiumUser) {
     return (
       <div>

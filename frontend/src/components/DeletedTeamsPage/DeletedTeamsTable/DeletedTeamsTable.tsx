@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { DeletedTeam } from "@/app/(dashboard)/hooks/teams/useTeams";
 
 import { getDeletedTeamsTableColumns } from "./DeletedTeamsTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DeletedTeamsTableProps {
   teams: DeletedTeam[];
@@ -21,6 +21,7 @@ interface DeletedTeamsTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "deleted_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -39,6 +40,7 @@ export function DeletedTeamsTable({
   onPaginationChange,
   rowCount,
 }: DeletedTeamsTableProps) {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => getDeletedTeamsTableColumns(), []);

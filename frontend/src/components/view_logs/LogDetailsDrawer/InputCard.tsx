@@ -10,7 +10,7 @@ import { SectionHeader } from "./SectionHeader";
 import { CollapsibleMessage } from "./CollapsibleMessage";
 import { HistoryTree } from "./HistoryTree";
 import { SimpleMessageBlock } from "./SimpleMessageBlock";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { ROLE_STYLES } from "./prettyMessagesUtils";
 
 interface InputCardProps {
@@ -25,6 +25,7 @@ interface InputCardProps {
  * PrettyMessagesView 调用；复制只处理最后一条非系统消息，已知角色从 ROLE_STYLES 读取当前语言标签，未知角色保留大写标识。
  */
 export function InputCard({ messages, promptTokens, inputCost }: InputCardProps) {
+  const t = useT();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (messages.length === 0) {

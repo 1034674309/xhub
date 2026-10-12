@@ -4,7 +4,7 @@ import SyntaxHighlighter from "@/components/SyntaxHighlighter";
 import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
 
 import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface CodeBlockProps {
   code: string;
@@ -12,6 +12,7 @@ interface CodeBlockProps {
 }
 
 const CodeBlock = ({ code, language }: CodeBlockProps) => {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(oneLight);
   const [copied, setCopied] = useState(false);
   const copyToClipboard = () => {

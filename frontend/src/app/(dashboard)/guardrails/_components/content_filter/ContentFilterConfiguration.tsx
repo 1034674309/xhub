@@ -12,7 +12,7 @@ import PatternTable from "./PatternTable";
 import KeywordTable from "./KeywordTable";
 import ContentCategoryConfiguration from "./ContentCategoryConfiguration";
 import CompetitorIntentConfiguration, { CompetitorIntentConfig } from "./CompetitorIntentConfiguration";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PrebuiltPattern {
   name: string;
@@ -103,6 +103,7 @@ const ContentFilterConfiguration: React.FC<ContentFilterConfigurationProps> = ({
   competitorIntentConfig = null,
   onCompetitorIntentChange,
 }) => {
+  const t = useT();
   const [patternModalVisible, setPatternModalVisible] = useState(false);
   const [keywordModalVisible, setKeywordModalVisible] = useState(false);
   const [customPatternModalVisible, setCustomPatternModalVisible] = useState(false);

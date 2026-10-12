@@ -18,7 +18,7 @@ import {
   type UsageUnits,
 } from "@/components/GuardrailsMonitor/usageUnits";
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { scrubBrand } from "@/i18n/brand";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
@@ -57,6 +57,7 @@ const EMPTY_METRICS = {
 };
 
 function UsageUnitsCell({ units }: { units: GuardrailUsageOverviewRow["usageUnits"] }) {
+  const t = useT();
   const counters = Object.entries(units);
   if (counters.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
@@ -84,6 +85,7 @@ function TotalCostMath({
   total: number | null;
   untracked: UsageUnits;
 }) {
+  const t = useT();
   return (
     <CalcPopover title={t("How this cost is calculated")} formula="guardrail + guardrail + … = guardrail cost">
       <MathTable
@@ -101,6 +103,7 @@ function TotalCostMath({
 }
 
 function CostCell({ row }: { row: GuardrailUsageOverviewRow }) {
+  const t = useT();
   const unpriced = unpricedSummary(row.untrackedUsageUnits);
   return (
     <span className="inline-flex w-full items-center justify-end gap-1">
@@ -122,6 +125,7 @@ export function GuardrailsOverview({
   onSelectGuardrail,
   dateRangeControl,
 }: GuardrailsOverviewProps) {
+  const t = useT();
   const [sortBy, setSortBy] = useState<SortKey>("failRate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);

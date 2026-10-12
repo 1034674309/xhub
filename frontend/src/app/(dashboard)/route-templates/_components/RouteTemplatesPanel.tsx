@@ -26,7 +26,6 @@ import {
   loadTemplateUsage,
   removeRouteTemplate,
   saveRouteTemplate,
-  summarizeTemplate,
   type RouteTemplateRow,
 } from "@/components/route_templates/routeTemplatePayload";
 import TemplateEditor from "@/components/route_templates/TemplateEditor";

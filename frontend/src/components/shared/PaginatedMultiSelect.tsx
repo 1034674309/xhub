@@ -19,7 +19,7 @@ import {
 
 import type { SearchSelectOption } from "./SearchSelect";
 import { usePaginatedCombobox } from "./usePaginatedCombobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface PaginatedMultiSelectProps {
   options: SearchSelectOption[];
@@ -62,6 +62,7 @@ export function PaginatedMultiSelect({
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
 }: PaginatedMultiSelectProps) {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [query, setQuery] = useState("");
   const [pickedOptions, setPickedOptions] = useState<ReadonlyMap<string, SearchSelectOption>>(new Map());

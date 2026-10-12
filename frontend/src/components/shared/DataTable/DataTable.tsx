@@ -27,7 +27,7 @@ import {
 } from "@tanstack/react-table";
 import { SearchX } from "lucide-react";
 import * as React from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Fragment, useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -183,6 +183,7 @@ interface HeadCellProps<TData> {
 }
 
 function DataTableHeadCell<TData>({ header, size, stickyHeader, enableColumnResizing }: HeadCellProps<TData>) {
+  const t = useT();
   const { column } = header;
   const meta = column.columnDef.meta;
   const sticky = computeStickyStyle(column, true, stickyHeader);
@@ -230,6 +231,7 @@ interface BodyCellProps<TData> {
 }
 
 function DataTableBodyCell<TData>({ cell, size, stickyHeader, enableColumnResizing }: BodyCellProps<TData>) {
+  const t = useT();
   const { column } = cell;
   const meta = column.columnDef.meta;
   const sticky = computeStickyStyle(column, false, stickyHeader);
@@ -269,6 +271,7 @@ function DataTableBodyRow<TData>({
   rowClassName,
   renderSubComponent,
 }: BodyRowProps<TData>) {
+  const t = useT();
   const clickable = onRowClick !== undefined;
   const cells = row.getVisibleCells();
 
@@ -315,6 +318,7 @@ function DataTableBodyRow<TData>({
 }
 
 function MessageRow({ colSpan, children }: { colSpan: number; children: React.ReactNode }) {
+  const t = useT();
   return (
     <TableRow className="hover:bg-transparent">
       <TableCell
@@ -328,6 +332,7 @@ function MessageRow({ colSpan, children }: { colSpan: number; children: React.Re
 }
 
 function DefaultEmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -342,6 +347,7 @@ function DefaultEmptyState() {
 const SKELETON_WIDTHS = ["w-[58%]", "w-[44%]", "w-[70%]", "w-[50%]", "w-[64%]", "w-[48%]"] as const;
 
 function SkeletonCell<TData>({ column, index }: { column: Column<TData, unknown> | undefined; index: number }) {
+  const t = useT();
   const meta = column?.columnDef.meta;
   const width = SKELETON_WIDTHS[index % SKELETON_WIDTHS.length];
   const shape = meta?.skeleton;
@@ -390,6 +396,7 @@ function SkeletonRows<TData>({
   size: DataTableSize;
   message?: string;
 }) {
+  const t = useT();
   const rowKeys = Array.from({ length: Math.max(rowCount, 1) }, (_, index) => index);
   const cells = columns.length > 0 ? columns : [undefined];
   return (
@@ -419,6 +426,7 @@ function useControllable<T>(
   controlledOnChange: OnChangeFn<T> | undefined,
   initial: T,
 ): { value: T; onChange: OnChangeFn<T> } {
+  const t = useT();
   const [internal, setInternal] = useState<T>(initial);
   if (controlled !== undefined) {
     return { value: controlled, onChange: controlledOnChange ?? noop };
@@ -431,6 +439,7 @@ function useServerPageClamp(
   rowCount: number | undefined,
   pagination: { value: PaginationState; onChange: OnChangeFn<PaginationState> },
 ): void {
+  const t = useT();
   const { pageIndex, pageSize } = pagination.value;
   const { onChange } = pagination;
   useEffect(() => {
@@ -444,6 +453,7 @@ function useServerPageClamp(
 function useDataTableInstance<TData extends RowData, TValue>(
   props: DataTableResolvedProps<TData, TValue>,
 ): Table<TData> {
+  const t = useT();
   const {
     data,
     columns,
@@ -537,6 +547,7 @@ function useDataTableInstance<TData extends RowData, TValue>(
 
 /** 根据列、数据及受控状态渲染表格；返回表格与分页，管理页面调用。页大小变化回首，服务器总数校正在加载完成后运行；回调可能触发请求。 */
 export function DataTable<TData extends RowData, TValue>(props: DataTableProps<TData, TValue>) {
+  const t = useT();
   const resolved: DataTableResolvedProps<TData, TValue> = props;
 
   const {

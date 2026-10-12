@@ -1,6 +1,6 @@
 import { Search, ArrowUpRight, Code, ShieldCheck, Filter } from "lucide-react";
 import { useState } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { PARTNER_GUARDRAIL_CARDS } from "./guardrail_garden_data";
@@ -20,6 +20,7 @@ interface Props {
  * 测试：guardrail_garden.integration.test.tsx。
  */
 export default function GuardrailGarden({ accessToken, onGuardrailCreated, onCreateLocal, onCreateXGo }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [support, setSupport] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);

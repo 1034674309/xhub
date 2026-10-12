@@ -38,17 +38,17 @@ ui:
 tidy:
 	go mod tidy
 
-# 清空指定 xhub/public 与 Redis DB 1，仅按清单构造数据与配置，不调用模型或供应商。
+# 连接现有 E2E_GATEWAY（默认 127.0.0.1:4000），在空租户环境通过管理 API 建数；不清库、不启动服务、不调用模型。
 testdata:
 	python3 scripts/e2e.py --shared-target --phase seed --directory .e2e/real-acceptance-current
 
-# 每类路由只选一把代表，逐项打印编号/内容/结果；覆盖模型、业务浏览器、计量和后台回归，81密钥基线保留。
+# 默认媒体并发 4（E2E_JOBS=1 可串行）；复用 E2E_GATEWAY（默认 localhost:4000）和现有前端；不启动网关、不改写供应商地址；隔离 regression 另行执行。
 e2e:
-	python3 scripts/e2e.py --shared-target --phase verify --with-regression $(foreach category,$(E2E_SELECTED),--category $(category)) --directory .e2e/real-acceptance-current
+	python3 scripts/e2e.py --shared-target --phase verify $(foreach category,$(E2E_SELECTED),--category $(category)) --directory .e2e/real-acceptance-current
 
-# 只列分类，不读供应商凭据、不启动服务、不改测试数据。
+# 显示每类验收目的、使用示例、共享基线前提、费用边界与报告位置；只显示帮助，无服务或数据副作用。
 e2e-list:
-	python3 scripts/e2e.py --list-categories
+	@python3 scripts/e2e.py --list-categories
 
 # 原有全套隔离验收保留为显式入口。
 e2e-all:

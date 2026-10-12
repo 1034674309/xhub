@@ -7,7 +7,7 @@ const repeatsEarlierValue = (values: readonly string[], index: number): boolean 
   values[index] !== "" && values.indexOf(values[index]) !== index;
 
 const modelLimitSchema = z.object({
-  model: z.string().min(1, t("Missing model")),
+  model: z.string().min(1, { error: () => t("Missing model") }),
   tpm: z.number().optional(),
   rpm: z.number().optional(),
   itpm: z.number().optional(),
@@ -16,11 +16,11 @@ const modelLimitSchema = z.object({
 
 export const projectFormSchema = z
   .object({
-    project_alias: z.string().min(1, t("Please enter a project name")),
+    project_alias: z.string().min(1, { error: () => t("Please enter a project name") }),
     team_id: z
       .string()
       .nullable()
-      .pipe(z.string({ error: "Please select a team" }).min(1, t("Please select a team"))),
+      .pipe(z.string({ error: "Please select a team" }).min(1, { error: () => t("Please select a team") })),
     description: z.string().optional(),
     models: z.array(z.string()),
     max_budget: z.number().nullish(),
@@ -30,8 +30,8 @@ export const projectFormSchema = z
     metadata: z
       .array(
         z.object({
-          key: z.string().min(1, t("Missing key")),
-          value: z.string().min(1, t("Missing value")),
+          key: z.string().min(1, { error: () => t("Missing key") }),
+          value: z.string().min(1, { error: () => t("Missing value") }),
         }),
       )
       .optional(),

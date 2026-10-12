@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /**
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  * 约束：当前后端只执行 pre_call；不能允许保存尚未接通的阶段，避免配置成功却没有执行检查。
  */
 export function GuardrailModeSelect({ disabled = false }: { disabled?: boolean }) {
+  const t = useT();
   const id = useId();
   return (
     <div className="space-y-2 text-sm font-medium text-muted-foreground">

@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParsedTool } from "./types";
 import { FormattedToolView } from "./FormattedToolView";
 import { JsonToolView } from "./JsonToolView";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 type ViewMode = "formatted" | "json";
 
@@ -16,6 +16,7 @@ interface ToolExpandedContentProps {
 }
 
 export function ToolExpandedContent({ tool }: ToolExpandedContentProps) {
+  const t = useT();
   const [viewMode, setViewMode] = useState<ViewMode>("formatted");
 
   return (

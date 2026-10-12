@@ -8,7 +8,7 @@ import { cn } from "@/lib/cva.config";
 import { makeModelGroupPublic } from "../../networking";
 import ModelFilters from "../../model_filters";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const stepTitles = () => [t("Select Models"), t("Confirm")];
 
@@ -45,6 +45,7 @@ const MakeModelPublicForm: React.FC<MakeModelPublicFormProps> = ({
   modelHubData,
   onSuccess,
 }) => {
+  const t = useT();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [filteredData, setFilteredData] = useState<ModelGroupInfo[]>([]);

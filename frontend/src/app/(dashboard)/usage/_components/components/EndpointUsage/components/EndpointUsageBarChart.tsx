@@ -2,13 +2,14 @@ import React from "react";
 import { BarChart, CustomLegend, CustomTooltip } from "@/components/shared/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricWithMetadata } from "@/components/UsagePage/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EndpointUsageBarChartProps {
   endpointData?: Record<string, MetricWithMetadata>;
 }
 
 const EndpointUsageBarChart: React.FC<EndpointUsageBarChartProps> = ({ endpointData }) => {
+  const t = useT();
   // Transform endpoint data into chart format
   const chartData = React.useMemo(() => {
     return Object.entries(endpointData || {}).map(([endpoint, data]) => ({

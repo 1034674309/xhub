@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { formatNumberWithCommas } from "@/utils/dataUtils";
 import { CacheLeakageDimension, CacheLeakageRow, computeCacheLeakage, pct, usd } from "./costOptimizationUtils";
 import { DailyActivityRange } from "./useDailyActivityRange";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface CacheLeakageCardProps {
   activity: DailyActivityRange;
@@ -38,14 +38,14 @@ const compareRows = (a: CacheLeakageRow, b: CacheLeakageRow, sort: SortState): n
   return sort.dir === "asc" ? av - bv : bv - av;
 };
 
-const InfoTooltip = ({ info }: { info: string }) => (
+const InfoTooltip = ({ info }: { info: string }) => { const t = useT(); return ((
   <Tooltip>
     <TooltipTrigger render={<span className="inline-flex" aria-label={info} />}>
       <Info className="h-3 w-3 text-muted-foreground" />
     </TooltipTrigger>
     <TooltipContent className="max-w-xs">{info}</TooltipContent>
   </Tooltip>
-);
+)); };
 
 const SortableHead = ({
   column,
@@ -60,6 +60,7 @@ const SortableHead = ({
   sort: SortState;
   onSort: (column: SortColumn) => void;
 }) => {
+  const t = useT();
   const active = sort.column === column;
   const ActiveArrow = sort.dir === "asc" ? ArrowUp : ArrowDown;
   const Arrow = active ? ActiveArrow : ArrowUpDown;
@@ -82,6 +83,7 @@ const SortableHead = ({
 };
 
 const CacheLeakageCard: React.FC<CacheLeakageCardProps> = ({ activity }) => {
+  const t = useT();
   const { dateValue, onDateChange, results, loading, isFetchingMore } = activity;
   const [dimension, setDimension] = useState<CacheLeakageDimension>("key");
   const [sort, setSort] = useState<SortState>({ column: "potentialSavings", dir: "desc" });

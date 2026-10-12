@@ -53,7 +53,7 @@ docker compose up -d postgres
 cp configs/config.example.yaml configs/config.yaml
 ```
 
-把 `configs/config.yaml` 中的 `general_settings` 替换为以下配置，保留 `model_list` 和 `router_settings`：
+把 `configs/config.yaml` 中的 `general_settings` 替换为以下配置，保留 `model_list`：
 
 ```yaml
 general_settings:

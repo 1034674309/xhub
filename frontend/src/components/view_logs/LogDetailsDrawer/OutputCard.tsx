@@ -9,7 +9,7 @@ import { COLOR_BORDER } from "./constants";
 import { ParsedMessage } from "./prettyMessagesTypes";
 import { SectionHeader } from "./SectionHeader";
 import { SimpleMessageBlock } from "./SimpleMessageBlock";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { ROLE_STYLES } from "./prettyMessagesUtils";
 
 interface OutputCardProps {
@@ -24,6 +24,7 @@ interface OutputCardProps {
  * PrettyMessagesView 调用；空响应展示本地化占位，复制跳过空消息，角色从 ROLE_STYLES 读取当前语言标签。
  */
 export function OutputCard({ message, completionTokens, outputCost }: OutputCardProps) {
+  const t = useT();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const handleCopy = () => {

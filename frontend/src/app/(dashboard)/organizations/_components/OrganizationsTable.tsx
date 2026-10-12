@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Organization } from "@/components/networking";
 
 import { getOrganizationsTableColumns } from "./OrganizationsTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface OrganizationsTableProps {
   organizations: Organization[];
@@ -23,6 +23,7 @@ interface OrganizationsTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState({ searchActive }: { searchActive: boolean }) {
+  const t = useT();
   const Icon = searchActive ? SearchX : Building2;
   return (
     <div className="flex flex-col items-center gap-1 py-6">
@@ -50,6 +51,7 @@ const OrganizationsTable: React.FC<OrganizationsTableProps> = ({
   onEditClick,
   onDeleteClick,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => {

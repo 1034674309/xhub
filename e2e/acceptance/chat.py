@@ -8,8 +8,27 @@ from .support import acceptance_run_id, header_value, bill_check
 class ChatCases:
     """用途：封装 chat 场景；通过 self 访问本轮状态、管理 API 和证据，供 Dataset 调用，不自行启动全套测试。"""
 
+    def validate_browser_codex_sessions(self):
+        """用途：启动浏览器前只读复验它实际选中的 GPT/GLM 三轮证据；无参数、无返回值。
+
+        共享验收调用；不发模型请求或修改历史账单。缺失、过时或归属错误立即说明刷新命令，
+        避免 browser 单类运行沿用旧报告并在页面流程末尾才失败；网络错误原样上抛。
+        """
+        for model in self.data["verification_order"][:2]:
+            saved = next((row for row in self.report.get("agent_conversations", [])
+                          if row.get("model") == model), None)
+            key = next((row for row in self.state["keys"]
+                        if saved and row["token_id"] == saved.get("key_id")), None)
+            if key is not None:
+                key = {**key, "call_model": model, "profile": saved.get("profile")}
+            if key is None or self.codex_conversation(key, revalidate=True) is None:
+                raise AssertionError(
+                    "浏览器 Codex 前置会话缺失或历史账单不符合当前契约：model=%s。"
+                    "browser 分类不会重新生成模型会话；请运行 make e2e gpt-1 gpt-2 gpt-3 gpt-4 glm browser 刷新并验收。"
+                    "已落库的空 session_source 不会自动回填。" % model)
+
     def codex_conversation(self, key, revalidate=False):
-        """用途：执行或复验一把个人密钥的 Codex 三轮 Responses 会话；参数为密钥及只复验开关，返回完整会话证据或空；逐轮检查上下文、会话头、五级归属、usage 和价格，完整成功后保存，失败不写完整成功回执。"""
+        """用途：执行或复验一把个人密钥的 Codex 三轮 Responses 会话；参数为密钥及只复验开关，返回完整会话证据或空；逐轮检查上下文、会话头与来源、五级归属、usage 和价格，执行时用观察器唯一定位部署，完整成功后保存，失败不写成功回执。"""
         config = self.data["agent_conversation"]
         saved = next((row for row in self.report.get("agent_conversations", [])
                       if row.get("key_id") == key["token_id"] and row.get("model") == key["call_model"]), None)
@@ -43,6 +62,7 @@ class ChatCases:
                    "Confirm the same project marker once more. Reply with only the marker."]
         previous = None
         provider = None
+        deployment_id = None
         for index, prompt in enumerate(prompts, 1):
             self.progress(f"    [会话第 {index}/3 轮] {key['call_model']} / {key['profile']}：" +
                           ("建立上下文" if index == 1 else "续接历史、核对上下文与独立账单"))
@@ -76,21 +96,32 @@ class ChatCases:
                 if len(successful) != 1:
                     raise AssertionError("Codex 每轮必须具有一次真实供应商转发证据")
                 row = successful[0]
+                expected_provider = {"fenno-only": "fennoai", "qiniu-only": "qiniu"}.get(key["profile"])
+                if expected_provider and row["provider"] != expected_provider:
+                    raise AssertionError("Codex 会话违反单供应商路由配置")
                 messages = json.loads(row["messages"])
                 if len(messages) != 2 * index or messages[0].get("role") != "system" or messages[-1].get("content") != prompt:
                     raise AssertionError("Codex 上游历史条数、指令或当前输入错误")
                 for prior_index, prior in enumerate(conversation["turns"]):
                     if messages[2 * prior_index + 1].get("content") != prior["prompt"] or marker not in messages[2 * prior_index + 2].get("content", ""):
                         raise AssertionError("Codex 上游丢失前轮用户或助手历史")
-                if provider is not None and provider != row["provider"]:
-                    raise AssertionError("Codex 同一会话未保持供应商粘滞")
+                # 同品牌甚至同上游型号可能对应不同部署；需合并本轮独立地址标签唯一定位，禁止用品牌相同替代父响应归属。
+                targets = [dep for dep in self.state["deployments"]
+                           if dep["public_name"] == key["call_model"] and dep["provider"] == row["provider"]
+                           # 基线显式保存 null；缺省、null 和空标签都表示未分流的默认地址。
+                           and dep["model"] == row["model"] and (dep.get("route_tag") or "default") == (row.get("route_tag") or "default")]
+                if len(targets) != 1:
+                    raise AssertionError("Codex 上游证据不能唯一定位实际部署：provider=%s，model=%s，route_tag=%s，匹配数量=%d" %
+                                         (row["provider"], row["model"], row.get("route_tag") or "default", len(targets)))
+                actual_id = targets[0]["id"]
+                if deployment_id is not None and deployment_id != actual_id:
+                    raise AssertionError(f"Codex 父响应续接切换部署：预期={deployment_id}，实际={actual_id}")
+                deployment_id = actual_id
+                turn["deployment_id"] = actual_id
                 if any(int(row.get("usage", {}).get(field, -1)) != int(turn[field])
                        for field in ("prompt_tokens", "completion_tokens")):
                     raise AssertionError("Codex 网关计量与真实供应商不一致")
                 provider = row["provider"]
-                expected_provider = {"fenno-only": "fennoai", "qiniu-only": "qiniu"}.get(key["profile"])
-                if expected_provider and provider != expected_provider:
-                    raise AssertionError("Codex 会话违反单供应商路由配置")
             conversation["turns"].append(turn)
             self.progress(f"    [会话第 {index}/3 轮通过] 上下文、usage、归属、费用与供应商粘滞已核对")
             previous = answer["id"]
@@ -111,7 +142,9 @@ class ChatCases:
         proxy = bill.get("proxy_server_request", {})
         body = proxy.get("body", {})
         headers = proxy.get("headers", {})
-        for field, expected in (("session_id", conversation["session_id"]), ("model", key["call_model"])):
+        expected_source = "parent" if turn["previous_response_id"] else "explicit"
+        for field, expected in (("session_id", conversation["session_id"]), ("model", key["call_model"]),
+                                ("session_source", expected_source)):
             if bill.get(field) != expected:
                 raise AssertionError("Codex 第 %d 轮账单归属错误：call_id=%s，字段=%s，预期=%r，实际=%r" %
                                      (turn["turn"], turn["call_id"], field, expected, bill.get(field)))

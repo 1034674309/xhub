@@ -10,9 +10,10 @@ import { CreateProjectModal } from "./ProjectModals/CreateProjectModal";
 import { ProjectDetail } from "./ProjectDetailsPage";
 import { ProjectGuide } from "./ProjectGuide";
 import { ProjectsTable } from "./ProjectsTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export function ProjectsPage() {
+  const t = useT();
   const { data: projects, isLoading } = useProjects();
   const { data: teams, isLoading: isTeamsLoading } = useTeams();
 

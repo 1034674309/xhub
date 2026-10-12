@@ -6,20 +6,8 @@ CREATE TABLE IF NOT EXISTS bootstrap_state (
     completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Named router settings that organizations, teams and keys select from.
---
--- body is one router_settings document, the same shape /config/update already
--- accepts, so an existing settings blob can be copied in without translation.
--- It is JSON rather than a column per field because the field set is still
--- growing and each addition would otherwise be a schema change; the shape is
--- defined by prefs/page.go, which is already the single source of it.
---
--- There is deliberately no "platform default" row. The platform default is the
--- global router_settings document the gateway already keeps, so a scope that
--- selects nothing inherits that. A copy here would give the same settings two
--- homes and make whichever one the console does not read a lie.
---
--- Declared before organizations because that table references it.
+-- 具名路由模板保存完整 JSON 策略，router 编译并校验；身份未绑定时使用内置默认值。
+-- 放在 organizations 前声明，因为组织表引用模板。
 CREATE TABLE IF NOT EXISTS route_templates (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name       TEXT NOT NULL UNIQUE CHECK (name <> ''),

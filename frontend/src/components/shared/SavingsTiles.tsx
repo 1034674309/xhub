@@ -15,12 +15,12 @@ import {
 } from "@/app/(dashboard)/cost-optimization/_components/costOptimizationUtils";
 import { DailyData } from "@/components/UsagePage/types";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // The total sums SAVINGS_DRIVERS, so it is by construction the sum of what the
 // charts plot; the donut and timelines derive from the same list in costOptimizationUtils.
 const useSavingsTotals = (results: DailyData[]) =>
-  useMemo(
+  { const t = useT(); return (useMemo(
     () => ({
       compression: sumOverDays(results, compressionOf),
       caching: sumOverDays(results, cachingOf),
@@ -30,9 +30,10 @@ const useSavingsTotals = (results: DailyData[]) =>
       total: SAVINGS_DRIVERS.reduce((sum, { of }) => sum + sumOverDays(results, of), 0),
     }),
     [results],
-  );
+  )); };
 
 const SavingsTiles = ({ results, isLoading }: { results: DailyData[]; isLoading: boolean }) => {
+  const t = useT();
   const totals = useSavingsTotals(results);
 
   return (

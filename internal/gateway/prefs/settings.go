@@ -1,4 +1,4 @@
-// Package prefs reads and writes router settings and general settings. A key present in the database overrides YAML. A key that is absent stays.
+// Package prefs reads and writes general settings. A key present in the database overrides YAML. A key that is absent stays.
 package prefs
 
 import (
@@ -18,44 +18,6 @@ type invalidPreferenceError struct{ message string }
 // 调用：设置更新处理器。
 // 测试：gateway/retired_preferences_test.go。
 func (e invalidPreferenceError) Error() string { return e.message }
-
-// Base is the router-settings baseline from YAML and code defaults. allowed_fails is fixed at 3 here. A merged allowed_fails of at least 1 records the failure in Redis and starts cooldown. A cooldown_time of 0 means one minute. Only an explicit value below 1 skips recording the failure.
-// 参数 s（Host）：根地址使用的数据面宿主。
-// 返回 map[string]any（map[string]any）：根地址的字段表。缺键表示上游或库里没有这个字段。
-// 调用：仅在 settings.go 内使用
-// 测试：无直接单测
-func Base(s Host) map[string]any {
-	logTraceOnceSettings.Do(func() { util.Trace("enter prefs.Base") })
-
-	rs := map[string]any{"num_retries": s.Config().RouterSettings.NumRetries, "timeout": s.Config().RouterSettings.Timeout, "allowed_fails": 3, "cooldown_time": 0}
-	for _, key := range []string{"num_retries", "timeout", "allowed_fails", "cooldown_time"} {
-		if v, ok := s.Config().RouterRaw[key]; ok {
-			rs[key] = v
-		}
-	}
-
-	return rs
-}
-
-// MergedRouter overlays database router settings on the baseline. Keys absent from the database keep the YAML value.
-// 参数 s（Host）：Merged路由使用的数据面宿主。
-// 返回 map[string]any（map[string]any）：Merged路由的字段表。缺键表示上游或库里没有这个字段。
-// 调用：gateway/prefs/page.go、gateway/server.go、gateway/wire.go
-// 测试：无直接单测
-func MergedRouter(s Host) map[string]any {
-	db, err := s.RecordStore().ListConfig("router_settings")
-	if err != nil || db == nil {
-		db = map[string]any{}
-	}
-	// 全局设置仅投影当前执行字段；已废弃数据不参与运行，也不转换成新规则。
-	merged := Base(s)
-	for _, key := range []string{"num_retries", "timeout", "allowed_fails", "cooldown_time"} {
-		if value, exists := db[key]; exists {
-			merged[key] = value
-		}
-	}
-	return merged
-}
 
 // MergedGeneral overlays database general settings on YAML. master_key, database_url, and redis_url are not exposed from the database.
 // 参数 s（Host）：MergedGeneral使用的数据面宿主。
@@ -77,27 +39,17 @@ func MergedGeneral(s Host) map[string]any {
 	return Overlay(base, db)
 }
 
-// saveNamespacePatch writes a partial update into one namespace. Only keys present in the patch are stored, and a router-settings change refreshes the in-process strategy.
+// saveNamespacePatch writes a partial update into one namespace. Only keys present in the patch are stored.
 // 参数 s（Host）：保存NamespacePatch使用的数据面宿主；namespace（string）：保存NamespacePatch使用的namespace。空串表示调用方没有提供这项；patch（map[string]any）：调用方提交的补丁。只覆盖出现的键。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：仅在 settings.go 内使用
 // 测试：无直接单测
 func saveNamespacePatch(s Host, namespace string, patch map[string]any) error {
-	// 全局执行设置只接受当前四个参数，禁止把废弃字段重新写入数据库。
-	// 与模板策略独立校验，避免客户模板结构改变全局设置的接口契约。
 	if namespace == "router_settings" {
-		for key := range patch {
-			switch key {
-			case "num_retries", "timeout", "allowed_fails", "cooldown_time":
-			default:
-				return invalidPreferenceError{message: "unsupported router setting field: " + key}
-			}
-		}
+		return invalidPreferenceError{message: "global router settings are not supported; use route templates"}
 	}
 	var current map[string]any
 	switch namespace {
-	case "router_settings":
-		current = MergedRouter(s)
 	case "general_settings":
 		current = MergedGeneral(s)
 	default:
@@ -113,29 +65,7 @@ func saveNamespacePatch(s Host, namespace string, patch map[string]any) error {
 			return err
 		}
 	}
-	if namespace == "router_settings" {
-		ApplyTyped(s, MergedRouter(s))
-	}
 	return nil
-}
-
-// ApplyTyped copies strategy, retries, and timeout from the merged document into the typed config. Fields that are absent are left unchanged.
-// 参数 s（Host）：应用Typed使用的数据面宿主；m（map[string]any）：已经解析的 JSON 对象，键是上游或配置里的字段名。
-// 返回：无。合并文档里的策略、重试次数和超时已写进类型化配置。文档没写的字段保持原值。
-// 调用：gateway/server.go
-// 测试：无直接单测
-func ApplyTyped(s Host, m map[string]any) {
-	if _, ok := m["num_retries"]; ok {
-		s.Config().RouterSettings.NumRetries = asInt(m["num_retries"])
-	}
-	if _, ok := m["timeout"]; ok {
-		switch t := m["timeout"].(type) {
-		case float64:
-			s.Config().RouterSettings.Timeout = t
-		case int:
-			s.Config().RouterSettings.Timeout = float64(t)
-		}
-	}
 }
 
 // enablesDroppedAlert reports whether a general-settings value turns alerts back on.
@@ -160,7 +90,7 @@ func enablesDroppedAlert(v any) bool {
 	return false
 }
 
-// Update accepts a partial update of router, general, or LiteLLM settings. It requires a management identity.
+// Update accepts a partial update of general or LiteLLM settings. It requires a management identity.
 // 参数 s（Host）：更新使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/keys/generate.go、gateway/keys/mount.go、gateway/models/admin.go、gateway/models/mount.go
@@ -170,7 +100,11 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := readMap(r)
-	for _, ns := range []string{"router_settings", "general_settings", "litellm_settings"} {
+	if _, exists := body["router_settings"]; exists {
+		util.WriteError(w, 400, "invalid_request", "global router settings are not supported; use route templates")
+		return
+	}
+	for _, ns := range []string{"general_settings", "litellm_settings"} {
 		patch, ok := body[ns].(map[string]any)
 		if !ok || patch == nil {
 			continue
@@ -189,8 +123,7 @@ func Update(s Host, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	util.WriteJSON(w, 200, map[string]any{
-		"status":          "success",
-		"router_settings": MergedRouter(s),
+		"status": "success",
 	})
 }
 

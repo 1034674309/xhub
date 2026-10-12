@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { CogIcon, BanIcon } from "@heroicons/react/outline";
 import { callbackInfo, callback_map, reverse_callback_map } from "./callback_info_helpers";
 import { Logo } from "@/components/molecules/logo/Logo";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface LoggingConfig {
   callback_name: string;
@@ -24,6 +24,7 @@ export function LoggingSettingsView({
   variant = "card",
   className = "",
 }: LoggingSettingsViewProps) {
+  const t = useT();
   const getLoggingDisplayName = (callbackName: string) => {
     // Find the display name for the callback
     const callbackDisplayName = Object.entries(callback_map).find(([_, value]) => value === callbackName)?.[0];

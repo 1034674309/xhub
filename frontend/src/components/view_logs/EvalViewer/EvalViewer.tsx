@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EvalVerdict {
   criterion_name: string;
@@ -31,6 +31,7 @@ interface EvalViewerProps {
 }
 
 export default function EvalViewer({ data }: EvalViewerProps) {
+  const t = useT();
   const entries: EvalInformation[] = Array.isArray(data) ? data : [data];
 
   if (!entries.length) return null;
@@ -52,6 +53,7 @@ export default function EvalViewer({ data }: EvalViewerProps) {
 }
 
 function EvalEntryCard({ entry }: { entry: EvalInformation }) {
+  const t = useT();
   const passed = entry.passed;
   const scoreColor = passed ? "#52c41a" : "#ff4d4f";
 

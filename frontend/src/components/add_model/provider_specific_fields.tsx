@@ -16,7 +16,7 @@ import {
 import { CredentialItem, ProviderCredentialFieldMetadata } from "../networking";
 import { provider_map, Providers } from "../provider_info_helpers";
 import { labelWithHint } from "@/components/shared/form/LabelWithHint";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface ProviderSpecificFieldsProps {
   selectedProvider: string | null;
@@ -127,6 +127,7 @@ export const createCredentialFromModel = (provider: string, modelData: any): Cre
 
 /** 根据 selectedProvider 标识渲染当前后台认证字段；返回控件列表，供模型与凭据表单使用。默认值进入表单状态，上传读取 JSON，Azure 地址可推导版本。 */
 const ProviderSpecificFields: React.FC<ProviderSpecificFieldsProps> = ({ selectedProvider }) => {
+  const t = useT();
   const selectedProviderEnum = Providers[selectedProvider as keyof typeof Providers] as Providers;
   const form = useFormContext<MountedFormValues>();
   const credentialsFileRef = React.useRef<HTMLInputElement>(null);

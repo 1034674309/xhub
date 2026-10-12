@@ -7,7 +7,7 @@ import { uiAuditLogsCall } from "../networking";
 import { AuditLogEntry } from "./AuditLogsTableColumns";
 import { AuditLogsTable } from "./AuditLogsTable";
 import { AuditLogDrawer } from "./AuditLogDrawer/AuditLogDrawer";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AuditLogsProps {
   accessToken: string | null;
@@ -29,6 +29,7 @@ interface AuditLogsResponse {
 
 /** 参数为登录和活跃状态，返回审计列表；日志页调用，占位旧页期间暂停分页校正，接口错误由查询状态返回。 */
 export default function AuditLogsPanel({ userID, userRole, token, accessToken, isActive }: AuditLogsProps) {
+  const t = useT();
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [searchInput, setSearchInput] = useState("");

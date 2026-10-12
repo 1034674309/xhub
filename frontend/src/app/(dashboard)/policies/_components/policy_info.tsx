@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Policy } from "@/components/policies/types";
 import { PipelineInfoDisplay } from "./pipeline_flow_builder";
 import { getResolvedGuardrails } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PolicyInfoViewProps {
   policyId: string;
@@ -25,23 +25,23 @@ interface DetailRowProps {
   children: React.ReactNode;
 }
 
-const DetailRow = ({ label, children }: DetailRowProps) => (
+const DetailRow = ({ label, children }: DetailRowProps) => { const t = useT(); return ((
   <div className="grid grid-cols-1 border-b border-border last:border-b-0 sm:grid-cols-[200px_minmax(0,1fr)]">
     <dt className="bg-muted/50 px-4 py-3 text-sm font-medium">{label}</dt>
     <dd className="px-4 py-3 text-sm">{children}</dd>
   </div>
-);
+)); };
 
-const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+const SectionHeading = ({ children }: { children: React.ReactNode }) => { const t = useT(); return ((
   <div className="flex items-center gap-3">
     <span className="text-sm font-semibold">{children}</span>
     <Separator className="flex-1" />
   </div>
-);
+)); };
 
-const Muted = ({ children }: { children: React.ReactNode }) => (
+const Muted = ({ children }: { children: React.ReactNode }) => { const t = useT(); return ((
   <span className="text-muted-foreground">{children}</span>
-);
+)); };
 
 const PolicyInfoView: React.FC<PolicyInfoViewProps> = ({
   policyId,
@@ -51,6 +51,7 @@ const PolicyInfoView: React.FC<PolicyInfoViewProps> = ({
   isAdmin,
   getPolicy,
 }) => {
+  const t = useT();
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [resolvedGuardrails, setResolvedGuardrails] = useState<string[]>([]);

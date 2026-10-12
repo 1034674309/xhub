@@ -9,7 +9,7 @@ import TagTable from "./TagTable";
 import { toast } from "@/lib/toast";
 import DeleteResourceModal from "@/components/common_components/DeleteResourceModal";
 import CreateTagModal from "./components/CreateTagModal";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelInfo {
   model_name: string;
@@ -28,6 +28,7 @@ interface TagProps {
 }
 
 const TagManagement: React.FC<TagProps> = ({ accessToken, userID, userRole }) => {
+  const t = useT();
   const [tags, setTags] = useState<Tag[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(true);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);

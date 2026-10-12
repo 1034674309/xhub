@@ -22,7 +22,7 @@ import { useZodForm } from "@/lib/forms/useZodForm";
 import { CircleHelp, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/shared/Alert";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface AddPolicyFormProps {
   visible: boolean;
@@ -42,8 +42,8 @@ type ModelConditionType = "model" | "regex";
 const policyShape = {
   policy_name: z
     .string()
-    .min(1, t("Please enter a policy name"))
-    .regex(/^[a-zA-Z0-9_-]+$/, t("Policy name can only contain letters, numbers, hyphens, and underscores")),
+    .min(1, { error: () => t("Please enter a policy name") })
+    .regex(/^[a-zA-Z0-9_-]+$/, { error: () => t("Policy name can only contain letters, numbers, hyphens, and underscores") }),
   description: z.string(),
   inherit: z.string().nullable(),
   guardrails_add: z.array(z.string()),
@@ -116,12 +116,12 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
   </>
 );
 
-const SectionHeading: React.FC<{ label: string }> = ({ label }) => (
+const SectionHeading: React.FC<{ label: string }> = ({ label }) => { const t = useT(); return ((
   <div className="flex items-center gap-3 pt-2">
     <span className="text-sm font-semibold text-foreground">{label}</span>
     <Separator className="flex-1" />
   </div>
-);
+)); };
 
 interface ModePickerProps {
   selected: "simple" | "flow_builder";
@@ -140,7 +140,7 @@ const modeIconClass = (isSelected: boolean) =>
     isSelected ? "bg-info/15 text-info" : "bg-muted text-muted-foreground",
   ].join(" ");
 
-const ModePicker: React.FC<ModePickerProps> = ({ selected, onSelect }) => (
+const ModePicker: React.FC<ModePickerProps> = ({ selected, onSelect }) => { const t = useT(); return ((
   <div className="flex gap-4 py-2">
     <div onClick={() => onSelect("simple")} className={modeCardClass(selected === "simple")}>
       <div className={modeIconClass(selected === "simple")}>
@@ -184,7 +184,7 @@ const ModePicker: React.FC<ModePickerProps> = ({ selected, onSelect }) => (
       <span className="block text-[13px] text-muted-foreground">{t("Define steps, conditions, and error responses.")}</span>
     </div>
   </div>
-);
+)); };
 
 const AddPolicyForm: React.FC<AddPolicyFormProps> = ({
   visible,
@@ -198,6 +198,7 @@ const AddPolicyForm: React.FC<AddPolicyFormProps> = ({
   createPolicy,
   updatePolicy,
 }) => {
+  const t = useT();
   const form = useZodForm(policySchema, { defaultValues: EMPTY_VALUES });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolvedGuardrails, setResolvedGuardrails] = useState<string[]>([]);

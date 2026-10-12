@@ -21,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import MCPSemanticFilterTestPanel from "./MCPSemanticFilterTestPanel";
 import { getCurlCommand, runSemanticFilterTest, TestResult } from "./semanticFilterTestUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MCPSemanticFilterSettingsProps {
   accessToken: string | null;
@@ -82,6 +82,7 @@ const parseTopK = (raw: string, rawAsNumber: number): number | null =>
   raw === "" || Number.isNaN(rawAsNumber) ? null : rawAsNumber;
 
 const SaveSuccessAlert = () => {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) {
@@ -102,6 +103,7 @@ const SaveSuccessAlert = () => {
 };
 
 export default function MCPSemanticFilterSettings({ accessToken }: MCPSemanticFilterSettingsProps) {
+  const t = useT();
   const { data, isLoading, isError, error } = useMCPSemanticFilterSettings();
   const {
     mutate: updateSettings,

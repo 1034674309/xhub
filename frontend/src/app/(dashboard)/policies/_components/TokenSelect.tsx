@@ -14,7 +14,7 @@ import {
   ComboboxValue,
   useComboboxAnchor,
 } from "@/components/ui/combobox";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface TokenSelectProps {
   id: string;
@@ -53,6 +53,7 @@ export const TokenSelect: React.FC<TokenSelectProps> = ({
   ariaInvalid,
   ariaDescribedBy,
 }) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const [query, setQuery] = React.useState("");
   const selected = value ?? [];

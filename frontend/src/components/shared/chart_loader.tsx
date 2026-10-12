@@ -1,12 +1,12 @@
 import React from "react";
 import { UiLoadingSpinner } from "../ui/ui-loading-spinner";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChartLoaderProps {
   isDateChanging?: boolean;
 }
 
-export const ChartLoader: React.FC<ChartLoaderProps> = ({ isDateChanging = false }) => (
+export const ChartLoader: React.FC<ChartLoaderProps> = ({ isDateChanging = false }) => { const t = useT(); return ((
   <div className="flex items-center justify-center h-40">
     <div className="flex items-center justify-center gap-3">
       <UiLoadingSpinner className="size-5" />
@@ -20,6 +20,6 @@ export const ChartLoader: React.FC<ChartLoaderProps> = ({ isDateChanging = false
       </div>
     </div>
   </div>
-);
+)); };
 
 export default ChartLoader;

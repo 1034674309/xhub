@@ -1,4 +1,4 @@
-import { fireEvent, renderWithProviders as render, screen, waitFor } from "../../../../../../tests/test-utils";
+import { renderWithProviders as render, screen, waitFor } from "../../../../../../tests/test-utils";
 import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import UserInfoView from "./user_info_view";

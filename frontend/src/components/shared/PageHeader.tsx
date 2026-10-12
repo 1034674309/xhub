@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { ToolbarSeparator } from "./ToolbarSeparator";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EmbeddedTabsSlots {
   leadingControls: React.ReactNode;
@@ -20,6 +20,7 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, icon, primaryAction, tabs, utilities }: PageHeaderProps) {
+  const t = useT();
   const leadingControls =
     primaryAction == null ? null : (
       <div className="flex h-9 items-center">

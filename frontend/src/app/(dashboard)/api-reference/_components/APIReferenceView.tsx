@@ -2,7 +2,7 @@
 import React from "react";
 import CodeBlock from "@/components/CodeBlock";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { clientSampleBaseUrl } from "@/lib/http/resolveApiBase";
 
 interface ApiRefProps {
@@ -13,6 +13,7 @@ interface ApiRefProps {
 }
 
 const APIReferenceView: React.FC<ApiRefProps> = ({ proxySettings }) => {
+  const t = useT();
   const base_url = clientSampleBaseUrl(proxySettings, process.env.NEXT_PUBLIC_BASE_URL);
 
   return (

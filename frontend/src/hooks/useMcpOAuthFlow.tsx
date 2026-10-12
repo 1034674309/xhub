@@ -12,7 +12,7 @@ import { extractErrorMessage } from "@/utils/errorUtils";
 import { generateCodeChallenge, generateCodeVerifier } from "@/utils/pkce";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
 import { buildCallbackUrl } from "./mcpOAuthUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { randomId } from "@/utils/randomId";
 
 export type McpOAuthStatus = "idle" | "authorizing" | "exchanging" | "success" | "error";
@@ -55,6 +55,7 @@ export const useMcpOAuthFlow = ({
   onBeforeRedirect,
   flowSource,
 }: UseMcpOAuthFlowOptions): UseMcpOAuthFlowResult => {
+  const t = useT();
   const [status, setStatus] = useState<McpOAuthStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [tokenResponse, setTokenResponse] = useState<Record<string, any> | null>(null);
@@ -210,7 +211,7 @@ export const useMcpOAuthFlow = ({
       setError(message);
       toast.error(message);
     }
-  }, [accessToken, getCredentials, getTemporaryPayload, onBeforeRedirect]);
+  }, [accessToken, getCredentials, getTemporaryPayload, onBeforeRedirect, t]);
 
   const resumeOAuthFlow = useCallback(async () => {
     if (typeof window === "undefined") {
@@ -334,7 +335,7 @@ export const useMcpOAuthFlow = ({
         }, 1000);
       }
     }
-  }, [onTokenReceived]);
+  }, [onTokenReceived, t]);
 
   useEffect(() => {
     resumeOAuthFlow();

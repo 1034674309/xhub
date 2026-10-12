@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const toOptionalNumber = (raw: string): number | undefined => {
   if (raw.trim() === "") return undefined;
@@ -41,6 +41,7 @@ interface ProjectBaseFormProps {
 export type { ProjectFormValues } from "./projectFormSchema";
 
 export function ProjectBaseForm({ form, advancedOpen, onAdvancedOpenChange }: ProjectBaseFormProps) {
+  const t = useT();
   const { accessToken, userId, userRole } = useAuthorized();
   const { data: teams } = useTeams();
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { keyListCall, Member, Organization } from "../networking";
 import type { ObjectPermission } from "../object_permission_types";
 import type { ModelBudgetUsage, ModelMaxBudget } from "./ModelMaxBudgetEditor";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface Team {
   team_id: string;
@@ -162,6 +162,7 @@ const useKeyList = ({
   createClicked,
   expand = [],
 }: UseKeyListProps): UseKeyListReturn => {
+  const t = useT();
   const [keyData, setKeyData] = useState<KeyListResponse>({
     keys: [],
     total_count: 0,

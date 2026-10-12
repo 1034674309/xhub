@@ -1,4 +1,4 @@
-package prefs
+package router
 
 import (
 	"testing"

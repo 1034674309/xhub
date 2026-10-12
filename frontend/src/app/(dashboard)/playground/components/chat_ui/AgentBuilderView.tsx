@@ -31,7 +31,7 @@ import { AgentModel, fetchAvailableAgentModels, MCPToolEntry } from "../../llm_c
 import { fetchAvailableModels, ModelGroup } from "@/components/llm_calls/fetch_models";
 import ComplianceUI from "../complianceUI/ComplianceUI";
 import ChatUI from "./ChatUI";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { clientSampleBaseUrl } from "@/lib/http/resolveApiBase";
 
 export interface AgentBuilderViewProps {
@@ -86,6 +86,7 @@ function ConnectTabContent({
   createdKeyValue,
   onCreateKey,
 }: ConnectTabContentProps) {
+  const t = useT();
   const baseUrl = proxyBaseUrl ?? getConnectTabBaseUrl(proxySettings, customProxyBaseUrl);
   const apiKeyForCurl = createdKeyValue
     ? createdKeyValue.startsWith("Bearer ")
@@ -168,6 +169,7 @@ export default function AgentBuilderView({
   apiKey,
   customProxyBaseUrl,
 }: AgentBuilderViewProps) {
+  const t = useT();
   const [agentModels, setAgentModels] = useState<AgentModel[]>([]);
   const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -216,7 +218,7 @@ export default function AgentBuilderView({
     } finally {
       setLoadingAgents(false);
     }
-  }, [accessToken, userID, userRole]);
+  }, [accessToken, userID, userRole, t]);
 
   const loadModels = useCallback(async () => {
     if (!effectiveApiKey) return;

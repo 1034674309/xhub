@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import ModelSelector from "@/components/common_components/ModelSelector";
 import { TestResult } from "./semanticFilterTestUtils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MCPSemanticFilterTestPanelProps {
   accessToken: string | null;
@@ -35,6 +35,7 @@ export default function MCPSemanticFilterTestPanel({
   testError,
   curlCommand,
 }: MCPSemanticFilterTestPanelProps) {
+  const t = useT();
   const canRunTest = testQuery && testModel && filterEnabled;
   const testDisabled = isTesting || !canRunTest;
 

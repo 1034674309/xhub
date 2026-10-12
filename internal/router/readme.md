@@ -2,6 +2,45 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+Resolve the template for the identity scope, compile it and check Err, then schedule candidates using the request runtime snapshot. Attempt returned deployments in order and report the actual successful target to affinity and accounting.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| SelectRouteTemplate / Compile | Select and validate request routing settings |
+| Schedule(pool, alias, strategy, state, pin) | Return ordered deployment candidates |
+| DeploymentID / CooldownID | Distinguish stable deployment and runtime cooldown identities |
+
+### Integration demo
+
+Save the code as `demo/main.go` inside the repository and run `go run ./demo` from the repository root. Remove the demo directory after use.
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/config"
+	"github.com/sunqirui1987/xhub/internal/router"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	models := []config.ModelEntry{{ModelName: "demo-model", LiteLLMParams: map[string]any{"model": "upstream-model"}}}
+	pool := router.Schedule(models, "demo-model", "random", router.State{}, "")
+	fmt.Println(len(pool), pool[0].ModelName)
+}
+```
+
+Prints 1 demo-model and demonstrates scheduling one candidate. Production still requires capability, authorization, budget, and template checks.
+
+### Errors, state, and side effects
+
+A pin cannot bypass disabled, cooled-down, or zero-weight deployments. Group members retain real identities for authorization and pricing. Do not ignore Compile result Err.
+
 ## Overview
 
 This package converts persisted routing configuration and the current model directory into an immutable per-request RouteSettings snapshot, then selects an ordered deployment attempt list. It owns model matching, explicit groups, relative traffic weights, retry timing values, three fallback categories, scope inheritance, cooldown filtering, sticky preference, and strategy algorithms. It does not register HTTP, authenticate, call providers, record metrics, or persist configuration.
@@ -16,7 +55,7 @@ It uses config model entries, catalog price resolution, IAM route-template rows,
 
 The package registers no handler. Gateway identity exposes route-template management under /route_template/..., routing groups under /routing/groups, and settings under /router/settings; those handlers call these Go APIs. Dataplane calls compiled RouteSettings and Schedule for inference.
 
-Compile(selected, store, models) loads model_defaults, legacy groups when the template omits routing_groups, and model_fallbacks; overlays only explicitly present template fallback categories; validates all references and the merged graph; and returns errors in RouteSettings.Err without writes. Resolve selects key, then team, then organization binding; a bound ID whose row is missing stops inheritance and falls back to builtin. RequestChain constructs that order. BuiltinDocument/BuiltinSettings provide one attempt, 60 seconds, threshold three, no cooldown, and model-default traffic split.
+Compile(selected, store, models) loads model defaults and explicitly configured template policies, validates references and returns errors in RouteSettings.Err without writes. iam.SelectRouteTemplate chooses the first binding from key, team and organization; an absent selected document falls back to builtin. Builtin settings use one attempt, 60 seconds, threshold three and no cooldown.
 
 Parse/validation APIs cover FallbackPolicy, Group, Policy, default weights, template documents, catalogs, strategies, and deployment ownership. RouteSettings.ForModel resolves model rule, group, legacy template default, then model default; Candidates expands only explicit group names; Schedule applies shares and optional pin. Retries, TimeoutSeconds, AllowedFails, and CooldownSeconds expose validated execution values. All, Available, Order, Pick, DeploymentID, and CooldownID implement scheduling. CleanAllocations and CleanTemplateWeights deep-clean stale deployment references.
 

@@ -6,7 +6,7 @@ import { useController, type Control, type ControllerRenderProps, type RegisterO
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface GuardrailCriterion {
   name: string;
@@ -79,6 +79,7 @@ export const GuardrailField: React.FC<GuardrailFieldProps> = ({
   className,
   children,
 }) => {
+  const t = useT();
   const reactId = useId();
   const controlId = `${reactId}-control`;
   const descriptionId = `${reactId}-description`;
@@ -101,12 +102,13 @@ export const GuardrailField: React.FC<GuardrailFieldProps> = ({
 };
 
 const SKIP_MESSAGE_ITEMS = [
-  { label: t("Use global default"), value: "inherit" },
-  { label: t("Yes — exclude from guardrail scan"), value: "yes" },
-  { label: t("No — always include in scan"), value: "no" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Use global default"); }, value: "inherit" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Yes — exclude from guardrail scan"); }, value: "yes" },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No — always include in scan"); }, value: "no" },
 ];
 
 export const SkipMessageSelect: React.FC<{ control: GuardrailFieldControlProps }> = ({ control }) => {
+  const t = useT();
   const { id, value, onChange, "aria-invalid": ariaInvalid, "aria-describedby": ariaDescribedBy } = control;
 
   return (

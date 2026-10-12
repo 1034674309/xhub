@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface PolicyRow {
   policy_name: string;
@@ -27,6 +27,7 @@ const CONFIG_POLICY_HINT =
   "Config policies are defined in the config file and cannot be edited or deleted from the dashboard.";
 
 function GuardrailChips({ guardrails, tone }: { guardrails: string[]; tone: "success" | "error" }) {
+  const t = useT();
   if (guardrails.length === 0) {
     return <span className="text-muted-foreground">-</span>;
   }
@@ -49,6 +50,7 @@ interface PolicyRowActionsProps {
 }
 
 function PolicyRowActions({ policy, onEditClick, onDeleteClick }: PolicyRowActionsProps) {
+  const t = useT();
   const isConfigPolicy = policy.definition_location === "config";
 
   return (

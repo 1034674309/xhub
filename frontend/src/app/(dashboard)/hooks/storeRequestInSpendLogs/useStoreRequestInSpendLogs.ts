@@ -2,7 +2,7 @@ import { useMutation, UseMutationResult, useQueryClient } from "@tanstack/react-
 import { getProxyBaseUrl, getGlobalLitellmHeaderName } from "@/components/networking";
 import useAuthorized from "../useAuthorized";
 import { proxyConfigKeys } from "../proxyConfig/useProxyConfig";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface StoreRequestInSpendLogsParams {
   store_prompts_in_spend_logs: boolean;
@@ -56,6 +56,7 @@ export const useStoreRequestInSpendLogs = (): UseMutationResult<
   Error,
   StoreRequestInSpendLogsParams
 > => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

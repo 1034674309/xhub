@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -98,10 +99,12 @@ func TestResponsesNativeToolContinuation(t *testing.T) {
 }
 
 // TestResponsesFailedStreamCannotContinue 验证已发 created 但缺终态的失败流不生成续接归属。
-// 参数 t 为测试上下文；真实网关调用本地截断 Chat SSE，失败后 previous_response_id 返回 400。
+// 参数 t 为测试上下文；真实网关调用本地截断 Chat SSE，失败后 previous_response_id 返回 400 invalid_request 且不外发。
 // 服务和私有 schema 由 cleanup 清理，不使用外部供应商凭据。
 func TestResponsesFailedStreamCannotContinue(t *testing.T) {
+	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: {\"id\":\"chatcmpl_failed\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"}}]}\n\n")
 	}))
@@ -116,7 +119,7 @@ func TestResponsesFailedStreamCannotContinue(t *testing.T) {
 		t.Fatalf("截断流被标记成功: %s", failed.describe())
 	}
 	next := h.do("POST", "/responses", admin, map[string]any{"model": dep.ModelName, "input": "next", "previous_response_id": "chatcmpl_failed"})
-	if next.status != 400 || !strings.Contains(string(next.body), "response ownership is unknown") {
+	if next.status != 400 || !strings.Contains(string(next.body), "invalid_request") || calls.Load() != 1 {
 		t.Fatalf("失败流发布了响应归属: %s", next.describe())
 	}
 }

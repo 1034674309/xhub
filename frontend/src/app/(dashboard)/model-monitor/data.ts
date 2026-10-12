@@ -40,7 +40,7 @@ export function parseMonitorData(value: unknown): MonitorData {
       (row) => !row || typeof row.supplier !== "string" || typeof row.model !== "string",
     )
   ) {
-    throw new Error("Invalid model monitor response");
+    throw new TypeError("monitor_response_invalid");
   }
   return data;
 }

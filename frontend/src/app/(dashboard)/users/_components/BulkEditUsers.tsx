@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface BulkEditUserModalProps {
   open: boolean;
@@ -38,6 +38,7 @@ const BulkEditUserModal: React.FC<BulkEditUserModalProps> = ({
   userModels,
   allowAllUsers = false,
 }) => {
+  const t = useT();
   const { premiumUser } = useAuthorized();
   const [loading, setLoading] = useState(false);
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);

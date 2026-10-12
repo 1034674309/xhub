@@ -7,7 +7,7 @@ import type { ChartTooltipProps } from "@/components/shared/charts/chart_tooltip
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { components } from "@/lib/http/schema";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type CacheActivityErrorBucket = components["schemas"]["CacheActivityErrorBucket"];
 
@@ -41,6 +41,7 @@ export const groupErrorBuckets = (buckets: readonly CacheActivityErrorBucket[], 
 };
 
 export const ErrorCodeTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+  const t = useT();
   if (!active || !payload || payload.length === 0) return null;
   const datum = payload[0]?.payload as ErrorCodeDatum | undefined;
   if (!datum) return null;
@@ -70,7 +71,7 @@ interface ErrorDrilldownCardProps {
   onClose: () => void;
 }
 
-export const ErrorDrilldownCard = ({ callType, buckets, valueFormatter, onClose }: ErrorDrilldownCardProps) => (
+export const ErrorDrilldownCard = ({ callType, buckets, valueFormatter, onClose }: ErrorDrilldownCardProps) => { const t = useT(); return ((
   <Card className="mt-4">
     <CardHeader className="flex flex-row items-center justify-between">
       <CardTitle className="text-base font-semibold">{t("Failed requests by error code: {callType}", { callType })}</CardTitle>
@@ -93,4 +94,4 @@ export const ErrorDrilldownCard = ({ callType, buckets, valueFormatter, onClose 
       />
     </CardContent>
   </Card>
-);
+)); };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +36,7 @@ export function PriceProviderDialog({
   onSave: (body: Record<string, unknown>) => void;
   isSaving?: boolean;
 }) {
+  const t = useT();
   const [slug, setSlug] = useState(editing?.slug ?? "");
   const [name, setName] = useState(editing?.name ?? "");
   const [apiBase, setApiBase] = useState(editing?.apiBase ?? "");

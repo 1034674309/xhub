@@ -201,8 +201,6 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 
 | 方法与路径 | 处理器 | 注册源码 |
 | --- | --- | --- |
-| `GET /router/settings` | `Page` | [mount.go](../../../internal/gateway/prefs/mount.go) |
-| `GET /router/fields` | `Page` | [mount.go](../../../internal/gateway/prefs/mount.go) |
 | `GET /get/config/callbacks` | `Callbacks` | [mount.go](../../../internal/gateway/prefs/mount.go) |
 | `GET /config/list` | `List` | [mount.go](../../../internal/gateway/prefs/mount.go) |
 | `POST /config/update` | `Update` | [mount.go](../../../internal/gateway/prefs/mount.go) |

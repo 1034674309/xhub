@@ -10,7 +10,7 @@ import KeyModelUsageView from "./UsagePage/components/KeyModelUsageView";
 import { keyActivityLabel } from "./UsagePage/keyActivityLabel";
 import { DailyData, KeyMetricWithMetadata, ModelActivityData, TopApiKeyData, TopModelData } from "./UsagePage/types";
 import { valueFormatter } from "./UsagePage/utils/value_formatters";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ActivityMetricsProps {
   modelMetrics: Record<string, ModelActivityData>;
@@ -26,6 +26,7 @@ const ModelSection = ({
   metrics: ModelActivityData;
   hidePromptCachingMetrics?: boolean;
 }) => {
+  const t = useT();
   return (
     <div className="space-y-2">
       {/* Summary Cards */}
@@ -217,6 +218,7 @@ const ModelCollapsible = ({
   header: React.ReactNode;
   children: React.ReactNode;
 }) => {
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   const [everOpened, setEverOpened] = useState(defaultOpen);
 
@@ -243,6 +245,7 @@ const ModelCollapsible = ({
 };
 
 export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, hidePromptCachingMetrics = false }) => {
+  const t = useT();
   const modelNames = Object.keys(modelMetrics).sort((a, b) => {
     if (a === "") return 1;
     if (b === "") return -1;

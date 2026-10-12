@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { TagsInput } from "./TagsInput";
 import { ThresholdInput } from "./ThresholdInput";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface MajorAirline {
   id: string;
@@ -51,24 +51,24 @@ const DEFAULT_CONFIG: CompetitorIntentConfig = {
 };
 
 const INTENT_TYPES = [
-  { value: "airline", label: t("Airline (auto-load competitors from IATA)") },
-  { value: "generic", label: t("Generic (specify competitors manually)") },
+  { value: "airline", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Airline (auto-load competitors from IATA)"); } },
+  { value: "generic", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Generic (specify competitors manually)"); } },
 ] as const;
 
 const COMPETITOR_COMPARISON_POLICIES = [
-  { value: "refuse", label: t("Refuse (block request)") },
-  { value: "reframe", label: t("Reframe (suggest alternative)") },
+  { value: "refuse", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Refuse (block request)"); } },
+  { value: "reframe", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Reframe (suggest alternative)"); } },
 ] as const;
 
 const POSSIBLE_COMPETITOR_COMPARISON_POLICIES = [
-  { value: "refuse", label: t("Refuse (block request)") },
-  { value: "reframe", label: t("Reframe (suggest alternative to backend LLM)") },
+  { value: "refuse", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Refuse (block request)"); } },
+  { value: "reframe", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Reframe (suggest alternative to backend LLM)"); } },
 ] as const;
 
 const THRESHOLDS = [
-  { field: "threshold_high", label: t("High"), hint: "e.g. 0.7", fallback: 0.7 },
-  { field: "threshold_medium", label: t("Medium"), hint: "e.g. 0.45", fallback: 0.45 },
-  { field: "threshold_low", label: t("Low"), hint: "e.g. 0.3", fallback: 0.3 },
+  { field: "threshold_high", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("High"); }, hint: "e.g. 0.7", fallback: 0.7 },
+  { field: "threshold_medium", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Medium"); }, hint: "e.g. 0.45", fallback: 0.45 },
+  { field: "threshold_low", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Low"); }, hint: "e.g. 0.3", fallback: 0.3 },
 ] as const;
 
 const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps> = ({
@@ -77,6 +77,7 @@ const CompetitorIntentConfiguration: React.FC<CompetitorIntentConfigurationProps
   onChange,
   accessToken,
 }) => {
+  const t = useT();
   const effectiveConfig = config ?? DEFAULT_CONFIG;
   const [airlineOptions, setAirlineOptions] = useState<MajorAirline[]>([]);
   const [loadingAirlines, setLoadingAirlines] = useState(false);

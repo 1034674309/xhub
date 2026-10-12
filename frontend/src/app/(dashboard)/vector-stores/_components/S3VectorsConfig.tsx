@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface S3VectorsConfigProps {
   accessToken: string | null;
@@ -34,6 +34,7 @@ const labelWithHint = (label: string, hint: string): React.ReactNode => (
 const asText = (value: unknown): string => (typeof value === "string" ? value : "");
 
 const S3VectorsConfig: React.FC<S3VectorsConfigProps> = ({ accessToken, providerParams, onParamsChange }) => {
+  const t = useT();
   const [embeddingModels, setEmbeddingModels] = useState<ModelGroup[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 

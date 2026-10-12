@@ -42,7 +42,7 @@ This directory registers no direct HTTP route. Higher layers call its Go API; tr
 | [fallback_test.go](fallback_test.go) | `TestFallbackChain`, `TestCooldownSkipsADeployment` |
 | [guardrail_test.go](guardrail_test.go) | `TestGuardrailBlocksBeforeTheUpstreamIsDialed`, `TestGuardrailBlockIsLoggedButNotCharged`, `TestGuardrailOnlyAppliesToTheModelsItCovers`, `TestGuardrailTrialDoesNotChangeStorage`, `TestGuardrailRedactRewritesInsteadOfBlocking` |
 | [harness_test.go](harness_test.go) | `TestMain` |
-| [interaction_test.go](interaction_test.go) | `TestGuardrailBlockDoesNotConsumeBudget`, `TestCacheHitDoesNotConsumeBudget`, `TestManagerActionsAreAudited`, `TestChangingABudgetTakesEffectImmediately`, `TestBlockingAKeyTakesEffectImmediately`, `TestDeletingATeamStopsItsKeys`, `TestModelRestrictionAndBudgetAreIndependent` |
+| [interaction_test.go](interaction_test.go) | `TestGuardrailBlockDoesNotConsumeBudget`, `TestCacheHitDoesNotConsumeBudget`, `TestManagerActionsAreAudited`, `TestChangingABudgetTakesEffectImmediately`, `TestBlockingAKeyTakesEffectImmediately`, `TestDeletingATeamPreservesPersonalKeys`, `TestModelRestrictionAndBudgetAreIndependent` |
 | [internal_modules_test.go](internal_modules_test.go) | `TestInternalLLMRouteBoundary`, `TestInternalLLMProtocolHelpersBoundary`, `TestInternalEstimateBoundary`, `TestInternalCatalogClassificationBoundary`, `TestInternalCacheAndPluginBoundary`, `TestInternalLiveUnavailableBoundary`, `TestInternalProviderProtocolBoundary`, `TestInternalProxyParameterBoundary`, `TestInternalConfigLoadBoundary`, `TestInternalGeminiNativeStreamBoundary` |
 | [layout_test.go](layout_test.go) | `TestProductionModulesExcludeRegressionFixtures` |
 | [live_mode_test.go](live_mode_test.go) | Fixture/helpers; no top-level Test |

@@ -57,7 +57,7 @@ import LLMJudgeFields from "./llm_judge/LLMJudgeFields";
 import PiiConfiguration from "./pii_configuration";
 import ToolPermissionRulesEditor, { ToolPermissionConfig } from "./tool_permission/ToolPermissionRulesEditor";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 // Define human-friendly descriptions for each mode
 const modeDescriptions = {
@@ -166,8 +166,8 @@ const INITIAL_VALUES: GuardrailFormValues = {
 };
 
 const ALWAYS_ON_ITEMS = [
-  { label: t("Yes"), value: true },
-  { label: t("No"), value: false },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Yes"); }, value: true },
+  { /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No"); }, value: false },
 ];
 
 const DEFAULT_MODES = ["pre_call", "during_call", "post_call", "logging_only"];
@@ -200,6 +200,7 @@ interface ProviderParamsResponse {
 }
 
 const AddGuardrailForm: React.FC<AddGuardrailFormProps> = ({ visible, onClose, accessToken, onSuccess, preset }) => {
+  const t = useT();
   const form = useForm<GuardrailFormValues>({ defaultValues: INITIAL_VALUES });
   const [loading, setLoading] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);

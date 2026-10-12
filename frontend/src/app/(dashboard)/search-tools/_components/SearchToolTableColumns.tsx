@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/cva.config";
 
 import { AvailableSearchProvider, SearchTool } from "./types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const CONFIG_EDIT_HINT = "Config search tools cannot be edited on the dashboard. Please edit the config file.";
 const CONFIG_DELETE_HINT = "Config search tools cannot be deleted on the dashboard. Please edit the config file.";
@@ -30,6 +30,7 @@ interface SearchToolRowActionsProps {
 }
 
 function SearchToolRowActions({ tool, onEdit, onDelete }: SearchToolRowActionsProps) {
+  const t = useT();
   const isFromConfig = tool.is_from_config ?? false;
   const toolId = tool.search_tool_id;
 

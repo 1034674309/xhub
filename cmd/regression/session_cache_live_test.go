@@ -90,6 +90,7 @@ func TestLiveSessionSupplierPromptCache(t *testing.T) {
 		e.ModelName = public
 		e.LiteLLMParams["deployment_id"] = "cache-" + v.ID
 		e.ModelInfo["id"] = "cache-" + v.ID
+		e.ModelInfo["endpoint_types"] = []string{"chat", "bypass:openai-chat"}
 		u, err := url.Parse(v.Base)
 		if err != nil || u.Host == "" || hosts[u.Host] != "" {
 			t.Fatal("供应商必须配置不同且有效的主机地址")
@@ -145,7 +146,8 @@ func TestLiveSessionSupplierPromptCache(t *testing.T) {
 				map[string]any{"role": "system", "content": prefix.String()},
 				map[string]any{"role": "user", "content": fmt.Sprintf("Round %d. Reply only OK.", index)},
 			}, "max_completion_tokens": 32, "stream": false}
-			r := h.doHeaders("POST", "/v1/chat/completions", owner.key, req, map[string]string{"X-Session-Id": session})
+			// 原生透传入口保留供应商支持的 max_completion_tokens，避免统一协议默认 token 上限影响实验。
+			r := h.doHeaders("POST", "/bypass/openai/v1/chat/completions", owner.key, req, map[string]string{"X-Session-Id": session})
 			observer.mu.Lock()
 			attempts := append([]sessionCacheAttempt(nil), observer.attempts...)
 			observer.mu.Unlock()
@@ -164,11 +166,12 @@ func TestLiveSessionSupplierPromptCache(t *testing.T) {
 			}
 			h.flushSpend()
 			row := logDetail(t, h, admin, r.header("x-litellm-call-id"))
+			metadata, _ := row["metadata"].(map[string]any)
 			call["log_prompt_tokens"] = row["prompt_tokens"]
-			call["log_cached_tokens"] = row["cached_tokens"]
+			call["log_cached_tokens"] = metadata["cached_tokens"]
 			call["gateway_response_cache_hit"] = row["cache_hit"]
 			call["catalog_estimated_usd"] = parseFloatOrZero(r.header("x-litellm-response-cost"))
-			if row["cache_hit"] == true || numberOrZero(row["prompt_tokens"]) != float64(u.prompt) || numberOrZero(row["cached_tokens"]) != float64(u.cacheRead) {
+			if row["cache_hit"] != "false" || numberOrZero(row["prompt_tokens"]) != float64(u.prompt) || numberOrZero(metadata["cached_tokens"]) != float64(u.cacheRead) {
 				t.Fatal("网关响应缓存介入或日志未准确记录供应商用量")
 			}
 			t.Logf("round=%d stage=%d vendor=%s prompt=%d cached=%d elapsed_ms=%d", index, stage+1, a.Vendor, u.prompt, u.cacheRead, a.Milliseconds)

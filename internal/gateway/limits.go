@@ -9,7 +9,6 @@ import (
 	"errors"
 	"maps"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -86,13 +85,20 @@ func (s *Server) withCredential(dep config.ModelEntry) (config.ModelEntry, error
 	return out, nil
 }
 
-// enforceIdentityLimits 为数据面校验主体状态、模型权限、预算和分钟速率。
+// enforceIdentityLimits 为数据面校验主体状态、模型权限和预算。
 // 参数 w/path 为错误响应及请求路径，p 为已鉴权主体，alias 为公开模型名，est 为估算请求 token 数。
 // 返回是否允许推理；拒绝时已写出错误响应。预算合并已落库与尚未落库消费，指明耗尽层级。
 // 空预算仅取消当前层上限，无团队时不限额，有团队时继续沿额度树检查；不会免除记账或模型权限。
-// 调用场景：gateway/wire.go 的会话及密钥推理入口；速率检查会消费窗口，预算检查失败不会调用上游。
+// 调用场景：gateway/wire.go 的会话及密钥推理入口；重复复核不消费速率窗口，预算检查失败不会调用上游。
 // 测试：TestTeamlessIdentityAdmission 和真实 HTTP 预算/速率回归。
 func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
+	return s.checkIdentityLimits(w, path, p, alias, est, false)
+}
+
+// checkIdentityLimits 校验身份、模型及最新预算；initial 表示本次入站首次准入。
+// 其余参数与 enforceIdentityLimits 相同，返回是否放行；首次共用额度树生成速率计划并只占一次分钟容量。
+// 执行器复核目标时 initial=false，不保存跨请求快照或重复计数；拒绝已写入响应。
+func (s *Server) checkIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int, initial bool) bool {
 	if s.IAM == nil {
 		util.WriteTypedError(w, path, http.StatusServiceUnavailable, "authz_unavailable", "authorization is temporarily unavailable")
 		return false
@@ -132,7 +138,14 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 	if p.Key != nil {
 		kind, id = "key", p.KeyID
 	}
-	team, org, scope, err := s.IAM.QuotaPath(ctx, kind, id, s.hotSpendRef)
+	var team, org, scope string
+	var err error
+	var plan live.RatePlan
+	if initial {
+		team, org, scope, plan, err = s.IAM.QuotaAndRates(ctx, kind, id, s.hotSpendRef)
+	} else {
+		team, org, scope, err = s.IAM.QuotaPath(ctx, kind, id, s.hotSpendRef)
+	}
 	if err != nil {
 		budgetRefusal(w, path, err)
 		return false
@@ -161,7 +174,7 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 		util.WriteTypedError(w, path, 401, "invalid_request_error", "model not in allowed model list")
 		return false
 	}
-	return s.enforceRateLimits(w, path, p, est)
+	return !initial || s.admitRateLimits(w, path, plan, est)
 }
 
 // resolveSessionRouteTemplate 为控制台推理解析会话的唯一团队及继承模板。
@@ -178,8 +191,15 @@ func selectRouteTemplate(p *auth.Principal, id *string, source string) {
 	if p.RouteTemplateID != "" || id == nil {
 		return
 	}
-	if value := strings.TrimSpace(*id); value != "" {
-		p.RouteTemplateID, p.RouteTemplateSource = value, source
+	ids := make([]string, 3)
+	for i, scope := range []string{"key", "team", "organization"} {
+		if scope == source {
+			ids[i] = *id
+		}
+	}
+	selected, selectedSource := iam.SelectRouteTemplate(ids...)
+	if selected != "" {
+		p.RouteTemplateID, p.RouteTemplateSource = selected, selectedSource
 	}
 }
 
@@ -359,18 +379,10 @@ func (s *Server) hotSpendRef(kind, id string) float64 {
 	return s.Live.HotSpend(live.SpendRef(kind, id))
 }
 
-// enforceRateLimits 检查四层分配保留与汇总分钟窗口；参数为响应、路径、主体和 token 估算，返回是否放行。
-// 调用：所有推理入口；超限 429 不计入任何层，存储故障 503，不调用上游。
-func (s *Server) enforceRateLimits(w http.ResponseWriter, path string, p *auth.Principal, est int) bool {
-	kind, id := "user", p.UserID
-	if p.Key != nil {
-		kind, id = "key", p.KeyID
-	}
-	plan, err := s.IAM.RatePlan(context.Background(), kind, id)
-	if err != nil {
-		util.WriteTypedError(w, path, 503, "rate_limit_unavailable", "rate limiting is temporarily unavailable")
-		return false
-	}
+// admitRateLimits 原子检查并记录已生成的分钟计划；参数为响应、路径、计划和 token 估算。
+// 返回是否放行；首次准入调用，超限 429 不计数，存储失败 503，不调用上游。
+func (s *Server) admitRateLimits(w http.ResponseWriter, path string, plan live.RatePlan, est int) bool {
+	var err error
 	var rejected string
 	if s.Live != nil {
 		rejected, err = s.Live.AdmitRatePlan(plan, est, time.Now())

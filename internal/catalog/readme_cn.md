@@ -2,6 +2,49 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+执行链先 NormalizeUsage，再以请求开始时刻调用 CostFromRates 或 CostAt。检查 priced 后保存 Charge 对应快照，持久化由 IAM 结算链完成。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| NormalizeUsage(map) | 统一实测量及媒体计价维度 |
+| CostFromRates / CostAt | 返回 Charge 和可计价标记 |
+| Snapshot / SnapshotUsage | 序列化当次价格事实 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/catalog"
+	"time"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	usage := catalog.NormalizeUsage(map[string]any{"prompt_tokens": 100, "completion_tokens": 20})
+	rates := []catalog.Rate{
+		{Measure: "token", Side: "input", Window: "all", USD: 0.000001},
+		{Measure: "token", Side: "output", Window: "all", USD: 0.000002},
+	}
+	charge, priced := catalog.CostFromRates(rates, usage, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	fmt.Printf("%t %.6f\n", priced, charge.Total)
+}
+```
+
+输出 true 0.000140；使用显式固定费率，结果不依赖远端市场源。
+
+### 错误、状态与副作用
+
+Rate.USD 已是每基础单位单价，不能再除 UnitSize。priced=false 表示无法计价，不能解释为免费；刷新目录不能重算历史账单。
+
 ## 说明
 
 `internal/catalog` 为网关提供路由目录、模型/供应商元数据、凭据字段描述、市场价格转换、运行时价格分层、用量归一化和费用计算。进程以内嵌资源启动，接受供应商包贡献，可用远端 feed 替换生成的市场层，也允许管理接口应用运行时模型/供应商覆盖。目录在读写锁保护下驻留内存；内嵌文件是启动输入，不会在运行时监视磁盘变化。

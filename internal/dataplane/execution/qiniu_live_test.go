@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -12,7 +14,10 @@ import (
 	"github.com/sunqirui1987/xhub/internal/config"
 )
 
-// Opt-in: creates one paid, minimum-duration video. Never log API credentials.
+// TestQiniuSeedanceLive 验证真实七牛最短视频创建、轮询、可播放结果与用量/核价事实。
+// 参数 t 为测试上下文，无返回；仅在 XHUB_QINIU_SEEDANCE_LIVE=1 且配置 QINIU_API_KEY 时执行，否则跳过。
+// 这是可能付费的外部集成测试，创建 4 秒 480p 视频并每 10 秒轮询，最长等待 10 分钟；失败不能盲目重复创建。
+// 凭据不应写日志；HTTP 响应体在测试中关闭，但远程任务不会自动删除或取消，超时后应使用既有任务 ID 继续查询。
 func TestQiniuSeedanceLive(t *testing.T) {
 	if os.Getenv("XHUB_QINIU_SEEDANCE_LIVE") != "1" {
 		t.Skip("paid live test disabled")
@@ -60,14 +65,17 @@ func TestQiniuSeedanceLive(t *testing.T) {
 		if !ok || u.CompletionTokens <= 0 || u.PromptTokens != 0 || u.OutputVariant != "woiv" || video == "" || h.notes[len(h.notes)-1].SettlementID == "" {
 			t.Fatalf("incomplete settlement: usage=%+v charge=%+v priced=%v", u, c, ok)
 		}
-		// Public generation evidence, excluding secrets and prompts.
+		// 留下公开生成证据供验收，不输出密钥和请求提示词。
 		t.Logf("completed task=%s usage=%+v charge_usd=%.8f rates=%+v video_present=%t", id, u, c.Total, c.Applied, video != "")
 		return
 	}
 	t.Fatalf("poll timeout; resume existing task %s instead of creating again", id)
 }
 
-// Opt-in: exercise the Fal path model, Key auth, local queue URLs and settlement.
+// TestQiniuFalLive 验证真实七牛最短视频创建、轮询、可播放结果与用量/核价事实。
+// 参数 t 为测试上下文，无返回；仅在 XHUB_QINIU_FAL_LIVE=1 且配置 QINIU_API_KEY 时执行，否则跳过。
+// 这是可能付费的外部集成测试，创建 4 秒 480p 视频并每 10 秒轮询，最长等待 10 分钟；失败不能盲目重复创建。
+// 凭据不应写日志；HTTP 响应体在测试中关闭，但远程任务不会自动删除或取消，超时后应使用既有任务 ID 继续查询。
 func TestQiniuFalLive(t *testing.T) {
 	if os.Getenv("XHUB_QINIU_FAL_LIVE") != "1" {
 		t.Skip("paid live test disabled")

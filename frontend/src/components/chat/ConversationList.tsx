@@ -20,7 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ScrollArea } from "@/components/ui/scroll-area";
 import dayjs from "dayjs";
 import { Conversation } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Props {
   conversations: Conversation[];
@@ -70,6 +70,7 @@ interface ConversationRowProps {
 }
 
 const ConversationRow: React.FC<ConversationRowProps> = ({ conv, isActive, onSelect, onDelete, onRename }) => {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(conv.title);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -213,6 +214,7 @@ interface SearchModalProps {
 }
 
 const SearchModal: React.FC<SearchModalProps> = ({ open, conversations, onSelect, onClose }) => {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [wasOpen, setWasOpen] = useState(open);
 
@@ -272,6 +274,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ open, conversations, onSelect
 };
 
 const ConversationList: React.FC<Props> = ({ conversations, activeConversationId, onSelect, onDelete, onRename }) => {
+  const t = useT();
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {

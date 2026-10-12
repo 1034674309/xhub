@@ -1,6 +1,34 @@
 # provider
 
+[English](readme.md)
+
 这里定义上游协议执行方式。已有协议通过页面添加模型供应商和部署；新协议在 `internal/provider/<supplier>/` 实现，并在 `all/all.go` 导入。具体步骤见[添加模型供应商与开发新协议](../../docs/development/zh-CN/provider-catalog.md)，包括 NewAPI 页面操作、provider 注册、执行层接入及验收。
+
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+本目录是协议体系导航，不提供根包构造函数。启动导入 all，入口由 registry.Match 获取 Hit，部署经 deployment 校验后由数据面执行；新协议需要同时登记入口、传输和计量。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| all | 启动登记全部供应商 |
+| registry.Match / deployment.ResolveHit | 匹配入口并验证绑定 |
+| measurement / contract | 事实提取与类型契约 |
+
+### 接入 demo
+
+在仓库根目录执行以下命令。
+
+```sh
+go test ./internal/provider/... -count=1
+```
+
+执行协议登记、匹配、能力与绑定测试。最小空白导入 demo 见 [all](all/readme_cn.md)，绑定 demo 见 [deployment](deployment/readme_cn.md)。
+
+### 错误、状态与副作用
+
+注册协议不创建账号或连接。配置显式选择 transport 和 endpoint_types；任务必须保存原部署与创建事实，不能随轮询换目标。
 
 ## 接入前先分类
 

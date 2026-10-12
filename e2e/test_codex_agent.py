@@ -20,6 +20,8 @@ class CodexAgentTests(unittest.TestCase):
         self.key = dict(token_id="key", key="sk-test", user_id="user", team_id="team",
                         project_id="project", organization_id="org", profile="qiniu-only", call_model="gpt-5.6-sol")
         self.dataset.state["keys"] = [self.key]
+        self.dataset.state["deployments"] = [dict(id="qiniu-deployment", provider="qiniu",
+            public_name=self.key["call_model"], model="upstream-gpt", route_tag="default")]
         self.bills = {}
         self.requests = []
         self.dataset.api = mock.Mock(side_effect=self.api)
@@ -42,7 +44,8 @@ class CodexAgentTests(unittest.TestCase):
             usage={"input_tokens": 8, "output_tokens": 2})
         call = "call-" + str(index)
         self.bills[call] = dict(api_key="key", user="user", team_id="team", project_id="project",
-            organization_id="org", model=self.key["call_model"], session_id=kwargs["request_headers"]["Session_id"],
+            organization_id="org", model=self.key["call_model"], session_id=kwargs["request_headers"]["X-Session-Id"],
+            session_source="explicit" if index == 1 else "parent",
             response=response, prompt_tokens=8, completion_tokens=2, spend=0.000012,
             metadata={"cost_breakdown": {"source": "snapshot"}},
             proxy_server_request={"body": copy.deepcopy(body), "headers": kwargs["request_headers"]})
@@ -56,8 +59,8 @@ class CodexAgentTests(unittest.TestCase):
         stored["input"] = messages[1:]
         self.assertEqual(codex_answer({"messages": messages}), marker)
         self.dataset.observer.rows.append(dict(status=200, forwarded=True, provider="qiniu",
-            messages=json.dumps(messages), usage={"prompt_tokens": 8, "completion_tokens": 2}))
-        return response, {"x-litellm-call-id": call}
+            model="upstream-gpt", route_tag="default", messages=json.dumps(messages), usage={"prompt_tokens": 8, "completion_tokens": 2}))
+        return response, {"x-litellm-call-id": call, "X-Session-Id": kwargs["request_headers"]["X-Session-Id"]}
 
     def test_three_turns_and_strict_resume(self):
         """目的：完整三轮只发本轮输入且复验不重复付费；前置隔离内存供应商，验证上下文、头、保存与404边界，目录自动清理。"""
@@ -66,7 +69,8 @@ class CodexAgentTests(unittest.TestCase):
         for index, (body, options) in enumerate(self.requests):
             self.assertEqual(len(body["input"]), 1)
             self.assertEqual(body.get("previous_response_id"), None if index == 0 else "resp-" + str(index))
-            self.assertEqual(options["request_headers"]["Session_id"], session["session_id"])
+            self.assertEqual(options["request_headers"]["X-Session-Id"], session["session_id"])
+            self.assertEqual(session["turns"][index]["deployment_id"], "qiniu-deployment")
             if index:
                 self.assertNotIn(session["marker"], body["input"][0]["content"])
         self.assertEqual(self.dataset.codex_conversation(self.key, True), session)
@@ -151,6 +155,29 @@ class CodexAgentTests(unittest.TestCase):
             return [{**row, "provider": "fennoai"} for row in original(start, marker)]
         self.dataset.observed_since = wrong_supplier
         with self.assertRaisesRegex(AssertionError, "单供应商"):
+            self.dataset.codex_conversation(self.key)
+        self.assertFalse(self.dataset.report.get("agent_conversations"))
+
+    def test_same_provider_different_deployment_and_ambiguous_evidence_rejected(self):
+        """目的：同品牌不能冒充同部署粘性；前置合法三轮夹具，分别注入续接换部署和重复身份，验证拒绝并不保存成功，临时报告目录自动清理。"""
+        original = self.dataset.observed_since
+        self.dataset.state["deployments"].append({**self.dataset.state["deployments"][0],
+                                                "id": "other-deployment", "route_tag": "other"})
+
+        def changed_target(start, marker):
+            """用途：第二轮切换同供应商另一个已声明部署；参数为观测起点和标记，返回篡改副本，不修改真实证据或外部数据。"""
+            return [{**row, "route_tag": "other" if start else "default"}
+                    for row in original(start, marker)]
+
+        self.dataset.observed_since = changed_target
+        with self.assertRaisesRegex(AssertionError, "父响应续接切换部署"):
+            self.dataset.codex_conversation(self.key)
+        self.assertFalse(self.dataset.report.get("agent_conversations"))
+        self.requests.clear()
+        self.dataset.observer.rows.clear()
+        self.dataset.observed_since = original
+        self.dataset.state["deployments"][1]["route_tag"] = "default"
+        with self.assertRaisesRegex(AssertionError, "不能唯一定位实际部署"):
             self.dataset.codex_conversation(self.key)
         self.assertFalse(self.dataset.report.get("agent_conversations"))
 

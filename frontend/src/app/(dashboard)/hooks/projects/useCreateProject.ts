@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { ProjectResponse, projectKeys } from "./useProjects";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,7 @@ const createProject = async (accessToken: string, params: ProjectCreateParams): 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export const useCreateProject = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

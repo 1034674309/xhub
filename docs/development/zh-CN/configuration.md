@@ -6,7 +6,7 @@
 
 ~~~bash
 rg 'OverlayDB|MergePatch' internal/config internal/store
-rg 'RequestChain|Resolve' internal/router internal/gateway
+rg 'SelectRouteTemplate|Compile' internal/iam internal/router internal/gateway
 ~~~
 
 | 数据 | 保存位置 | 生效位置 |
@@ -19,7 +19,7 @@ rg 'RequestChain|Resolve' internal/router internal/gateway
 | 完整响应缓存 | 进程内 | 重启丢失 |
 | 用量与价格快照 | PostgreSQL | 历史账务 |
 
-OverlayDB 替换顶层值，保留 null、0、false 和数组。MergePatch 递归合并 map、替换数组。Resolve 选择一整份模板，不做逐字段继承。身份或模板读取失败不能变成放行。
+OverlayDB 替换顶层值，保留 null、0、false 和数组。MergePatch 递归合并 map、替换数组。iam.SelectRouteTemplate 选择一整份模板，不做逐字段继承。身份或模板读取失败不能变成放行。
 
 ## 源码与验证
 

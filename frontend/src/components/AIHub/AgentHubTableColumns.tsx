@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
 import { copyToClipboard } from "@/utils/dataUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface AgentHubData {
   agent_id?: string;
@@ -49,6 +49,7 @@ interface AgentHubRowActionsProps {
 }
 
 function AgentHubRowActions({ agent, onAgentClick }: AgentHubRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

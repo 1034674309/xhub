@@ -24,7 +24,7 @@ import { Logo } from "@/components/molecules/logo/Logo";
 import { toast } from "@/lib/toast";
 import { useUserMcpOAuthFlow } from "@/hooks/useUserMcpOAuthFlow";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface OAuth2ConnectButtonProps {
   server: Pick<MCPServer, "server_id" | "server_name" | "alias">;
@@ -41,6 +41,7 @@ export const OAuth2ConnectButton: React.FC<OAuth2ConnectButtonProps> = ({
   variant = "badge",
   autoStartKey = null,
 }) => {
+  const t = useT();
   const name = server.server_name ?? server.alias ?? server.server_id;
   const { startOAuthFlow, status } = useUserMcpOAuthFlow({
     accessToken,
@@ -114,6 +115,7 @@ type TabKey = "all" | "connected";
 const TOOLS_FETCH_CONCURRENCY = 5;
 
 const MCPAppsPanel: React.FC<Props> = ({ accessToken, selectedServers, onChange, connectMode }) => {
+  const t = useT();
   const [servers, setServers] = useState<MCPServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");

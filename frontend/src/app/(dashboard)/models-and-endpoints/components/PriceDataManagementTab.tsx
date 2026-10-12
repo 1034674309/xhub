@@ -5,7 +5,7 @@ import { Settings2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import PriceDataReload from "@/components/price_data_reload";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +30,7 @@ import { priceCatalogProviders, priceCatalogRows, type PriceCatalogRow } from ".
 
 /** 管理模型广场及本地快照；无参数，返回页面。刷新只同步目录并提示配置，保存操作需要管理会话。 */
 const PriceDataManagementTab = () => {
+  const t = useT();
   const { accessToken, userId, userRole } = useAuthorized();
   const { data, isPending, isError, refetch } = usePriceCatalog(accessToken);
   const queryClient = useQueryClient();

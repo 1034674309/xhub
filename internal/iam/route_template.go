@@ -19,19 +19,9 @@ type TemplateOwner struct {
 	TeamID string
 }
 
-// RouteTemplate is one named router settings document.
-//
-// Body is a whole router_settings document rather than a column per field: the
-// field set is still growing, and every addition would otherwise be a schema
-// change plus a new read path on three screens. The shape is defined by
-// prefs/page.go, which is already the single source of it.
-//
-// There is deliberately no "platform default" row in this table. The platform
-// default is the global router_settings document the gateway already keeps, and
-// putting a copy here would give the same settings two homes: whichever one
-// billing reads, the other becomes a lie the console shows. A scope that selects
-// nothing inherits that global document, so "bind to the default" and "select
-// nothing" are the same state and there is nothing to bind to.
+// RouteTemplate 保存一份具名路由模板；Body 为 JSON 文档，由 router 校验并编译。
+// 组织、团队和密钥可绑定整份模板，未绑定时使用内置默认值；不复制全局执行设置。
+// OrganizationID/TeamID 标识可见范围，管理接口负责授权，读取本结构不产生副作用。
 type RouteTemplate struct {
 	ID   string `xorm:"pk 'id'" json:"id"`
 	Name string `xorm:"'name'" json:"name"`
@@ -122,10 +112,10 @@ func (db *DB) GetRouteTemplate(ctx context.Context, id string) (*RouteTemplate, 
 }
 
 // CreateRouteTemplate inserts a template. The name must be free.
-// 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者，写进审计；name（string）：模板名，空名会被拒绝；body（string）：一份 router_settings 文档。
+// 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者，写进审计；name（string）：模板名，空名会被拒绝；body（string）：一份 路由模板文档。
 // 返回 *RouteTemplate（*RouteTemplate）：新插入的那一行；error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/route_template.go
-// 参数 owner（ScopeRef）：这份模板的归属，平台模板传两个空值；name（string）：模板名；body（string）：一份 router_settings 文档。
+// 参数 owner（TemplateOwner）：这份模板的归属，平台模板传两个空值；name（string）：模板名；body（string）：一份 路由模板文档。
 // 返回 *RouteTemplate（*RouteTemplate）：新插入的那一行；error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/route_template.go
 // 测试：route_template_test.go
@@ -149,7 +139,7 @@ func (db *DB) CreateRouteTemplate(ctx context.Context, by Actor, owner TemplateO
 }
 
 // UpdateRouteTemplate replaces a template's name and body.
-// 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者，写进审计；id（string）：模板 id；name（string）：新名字；body（string）：新的一份 router_settings 文档。
+// 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者，写进审计；id（string）：模板 id；name（string）：新名字；body（string）：新的一份 路由模板文档。
 // 返回 *RouteTemplate（*RouteTemplate）：更新后的那一行，不存在时为 nil；error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/route_template.go
 // 测试：route_template_test.go
@@ -394,4 +384,18 @@ func (db *DB) ScopeRouteTemplate(ctx context.Context, scope, scopeID string) (st
 		return "", nil
 	}
 	return strings.TrimSpace(*rows[0].TemplateID), nil
+}
+
+// SelectRouteTemplate 选择从窄到宽的首个非空模板 ID，并返回其来源。
+// 参数 ids 按 key、team、organization 排列；不足三项视为未绑定，多余项忽略。
+// 运行时和控制台共用；不查询模板内容，选中的模板被删除时调用方回到模型默认，不能改选父级。
+func SelectRouteTemplate(ids ...string) (string, string) {
+	for i, scope := range []string{"key", "team", "organization"} {
+		if i < len(ids) {
+			if id := strings.TrimSpace(ids[i]); id != "" {
+				return id, scope
+			}
+		}
+	}
+	return "", "builtin"
 }

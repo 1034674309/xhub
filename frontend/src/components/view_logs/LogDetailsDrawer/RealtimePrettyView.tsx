@@ -9,7 +9,7 @@ import { ChevronDown, ChevronUp, MessageSquare, Mic, Settings, Volume2 } from "l
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SectionHeader } from "./SectionHeader";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { ROLE_STYLES } from "./prettyMessagesUtils";
 
 interface RealtimeEvent {
@@ -84,6 +84,7 @@ export function isRealtimeResponse(response: any): boolean {
 }
 
 export function RealtimePrettyView({ response, metrics }: RealtimePrettyViewProps) {
+  const t = useT();
   const events: RealtimeEvent[] = response?.results || [];
   const usage = response?.usage;
 
@@ -124,6 +125,7 @@ export function RealtimePrettyView({ response, metrics }: RealtimePrettyViewProp
 }
 
 function SessionCard({ session, turnCount }: { session: RealtimeSession; turnCount: number }) {
+  const t = useT();
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   return (
@@ -268,6 +270,7 @@ function ConversationCard({
   totalUsage?: any;
   metrics?: RealtimePrettyViewProps["metrics"];
 }) {
+  const t = useT();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const totalTokens = totalUsage?.total_tokens;
@@ -318,6 +321,7 @@ function ConversationCard({
 }
 
 function ResponseTurn({ response, index }: { response: RealtimeResponse; index: number }) {
+  const t = useT();
   const outputs = response.output || [];
   const usage = response.usage;
 
@@ -377,6 +381,7 @@ function ResponseTurn({ response, index }: { response: RealtimeResponse; index: 
  * RealtimePrettyView 遍历 response.done 输出时调用；已知角色读取 ROLE_STYLES，未知协议角色保留大写原值且不修改响应。
  */
 function OutputMessage({ output }: { output: RealtimeOutputItem }) {
+  const t = useT();
   const contents = output.content || [];
   const hasTranscripts = contents.some((c) => c.transcript || c.text);
 
@@ -446,6 +451,7 @@ function OutputMessage({ output }: { output: RealtimeOutputItem }) {
 }
 
 function TokenBreakdown({ label, details }: { label: string; details: Record<string, any> }) {
+  const t = useT();
   const entries = Object.entries(details).filter(
     ([, v]) => typeof v === "number" || (typeof v === "object" && v !== null),
   );
@@ -483,6 +489,7 @@ function TokenBreakdown({ label, details }: { label: string; details: Record<str
 }
 
 function ConfigRow({ label, value }: { label: string; value: any }) {
+  const t = useT();
   if (value === undefined || value === null) return null;
   return (
     <div>

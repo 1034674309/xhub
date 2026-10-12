@@ -37,8 +37,7 @@ def run_isolated(args):
     env = {**os.environ, "E2E_DATASET_PASSWORD": password, "E2E_DATASET_ADMIN": "admin"}
     gateway = "http://127.0.0.1:" + str(gateway_port)
     env["XHUB_PUBLIC_ORIGIN"] = gateway
-    config = {"model_list": [], "router_settings": {"num_retries": 1, "timeout": 90},
-              "general_settings": {"master_key": "sk-" + secrets.token_hex(24), "admin_email": "admin", "admin_name": "admin",
+    config = {"model_list": [], "general_settings": {"master_key": "sk-" + secrets.token_hex(24), "admin_email": "admin", "admin_name": "admin",
               "admin_password": password, "store_model_in_db": True, "store_prompts_in_spend_logs": True,
               "database_url": "postgres://xhub:xhub_dev_password@127.0.0.1:5433/xhub?sslmode=disable&search_path=" + schema,
               "redis_url": "redis://127.0.0.1:" + str(redis_port) + "/0"}}
@@ -74,6 +73,7 @@ def run_isolated(args):
         os.environ["E2E_DATASET_PASSWORD"] = password
         os.environ["E2E_DATASET_ADMIN"] = "admin"
         dataset = module.Dataset(gateway, directory, data, observer)
+        dataset.isolated_upstreams = True
         if args.resume:
             saved = json.loads((directory / "access.json").read_text())
             dataset.state = {k: v for k, v in saved.items() if k not in ("admin", "gateway")}

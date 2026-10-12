@@ -22,15 +22,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/cva.config";
 import type { Team } from "@/components/key_team_helpers/key_list";
 import { splitWildcardModels } from "./modelUtils";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const MODEL_SELECT_ALL_PROXY_MODELS_SPECIAL_VALUE = {
-  label: t("All Proxy Models"),
+  /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("All Proxy Models"); },
   value: "all-proxy-models",
 } as const;
 
 const MODEL_SELECT_NO_DEFAULT_MODELS_SPECIAL_VALUE = {
-  label: t("No Default Models"),
+  /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("No Default Models"); },
   value: "no-default-models",
 } as const;
 
@@ -136,6 +136,7 @@ const filterModels = (
 };
 
 export const ModelSelect = (props: ModelSelectProps) => {
+  const t = useT();
   const anchor = useComboboxAnchor();
   const { id, teamID, organizationID, options, context, dataTestId, value = [], onChange, style, disabled } = props;
   const { showAllProxyModelsOverride, includeSpecialOptions } = options || {};

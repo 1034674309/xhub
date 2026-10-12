@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { userUpdateUserCall, type UserInfoV2Response } from "@/components/networking";
 import { normalizeAccountRole, type IamRole } from "@/utils/iamRoles";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /** 管理员账户编辑表单。参数 user 为已加载账户、accessToken 为会话、onSaved/onCancel 为保存/取消回调；返回表单。
  * 供用户详情调用，仅提交后台支持的字段；预算留空共享唯一团队余额，无团队时留空不限额，填写预算限制个人累计消费。
@@ -19,6 +19,7 @@ export default function UserAccountEditor({ user, accessToken, onSaved, onCancel
   onSaved: () => Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [email, setEmail] = useState(user.user_email ?? "");
   const [alias, setAlias] = useState(user.user_alias ?? "");
   const [role, setRole] = useState(normalizeAccountRole(user.user_role));

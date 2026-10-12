@@ -8,13 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cva.config";
 import { ParsedTool } from "./types";
 import { ToolExpandedContent } from "./ToolExpandedContent";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ToolItemProps {
   tool: ParsedTool;
 }
 
 export function ToolItem({ tool }: ToolItemProps) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
 
   return (

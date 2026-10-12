@@ -13,12 +13,12 @@ import { Eye, EyeOff, Info, Plus, Trash2 } from "lucide-react";
 import { callbackInfo, callback_map, mapDisplayToInternalNames } from "../callback_info_helpers";
 import { Logo } from "@/components/molecules/logo/Logo";
 import NumericalInput from "../shared/numerical_input";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const CALLBACK_TYPE_ITEMS = [
-  { value: "success", label: t("Success Only") },
-  { value: "failure", label: t("Failure Only") },
-  { value: "success_and_failure", label: t("Success & Failure") },
+  { value: "success", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Success Only"); } },
+  { value: "failure", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Failure Only"); } },
+  { value: "success_and_failure", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Success & Failure"); } },
 ];
 
 const CallbackVarInput: React.FC<{
@@ -27,6 +27,7 @@ const CallbackVarInput: React.FC<{
   value: string;
   onValueChange: (value: string) => void;
 }> = ({ sensitive, placeholder, value, onValueChange }) => {
+  const t = useT();
   const [revealed, setRevealed] = React.useState(false);
 
   if (!sensitive) {
@@ -73,6 +74,7 @@ const LoggingSettings: React.FC<LoggingSettingsProps> = ({
   disabledCallbacks = [],
   onDisabledCallbacksChange,
 }) => {
+  const t = useT();
   // Get callbacks that support team and key logging
   const supportedCallbacks = Object.entries(callbackInfo)
     .filter(([_, info]) => info.supports_key_team_logging)

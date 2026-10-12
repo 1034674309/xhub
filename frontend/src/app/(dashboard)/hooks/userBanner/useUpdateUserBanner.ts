@@ -1,9 +1,10 @@
 import { updateUserBanner, UserBannerUpdate } from "@/components/networking";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { userBannerKeys } from "./useUserBanner";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const useUpdateUserBanner = (accessToken: string | null) => {
+  const t = useT();
   const queryClient = useQueryClient();
 
   return useMutation({

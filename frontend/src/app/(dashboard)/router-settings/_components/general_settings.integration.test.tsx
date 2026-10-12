@@ -13,8 +13,6 @@ vi.mock("@/components/networking", () => ({
   deleteConfigFieldSetting: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock("@/components/router_settings", () => ({ default: () => null }));
-vi.mock("@/components/Settings/RouterSettings/Fallbacks/Fallbacks", () => ({ default: () => null }));
 // Mirrors the /config/list ordering: the two prompt-caching rows sit between the
 // General-tab rows in the unfiltered response but are filtered out of the General
 // tab's table, so any index-based lookup into the unfiltered array reads the wrong

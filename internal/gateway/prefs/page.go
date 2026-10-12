@@ -3,81 +3,11 @@ package prefs
 
 import (
 	"net/http"
-	"sync"
 
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-var logTraceOncePage sync.Once
-
-// Page writes the merged router settings and field descriptions for the dashboard to render.
-// 参数 s（Host）：分页使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
-// 返回：无。状态码和正文写进调用方的响应。
-// 调用：gateway/prefs/mount.go
-// 测试：无直接单测
-func Page(s Host, w http.ResponseWriter, r *http.Request) {
-	logTraceOncePage.Do(func() { util.Trace("enter prefs.Page") })
-
-	if s.RequireManage(w, r) == nil {
-		return
-	}
-	rs := MergedRouter(s)
-	util.WriteJSON(w, 200, map[string]any{
-		"num_retries":                   rs["num_retries"],
-		"timeout":                       rs["timeout"],
-		"router_settings":               rs,
-		"fields":                        Fields(s, rs),
-		"current_values":                rs,
-		"routing_strategy_descriptions": routingStrategyDescriptions(),
-	})
-}
-
-// routingStrategyDescriptions returns the help text for each known strategy name. An unknown strategy is omitted.
-// 参数：无。
-// 返回 map[string]string（map[string]string）：routingStrategyDescriptions的字符串表。没有该键表示这项没有填。
-// 调用：仅在 page.go 内使用
-// 测试：无直接单测
-func routingStrategyDescriptions() map[string]string {
-	return map[string]string{"random": "简单随机", "traffic-split": "按部署百分比分配", "least-busy": "最少并发", "cost-based-routing": "最低成本", "latency-based-routing": "最低延迟", "usage-based-routing": "最低用量"}
-}
-
-// Fields splits router settings into the dashboard field list, with the current value and the default.
-// 参数 s（Host）：Fields使用的数据面宿主；rs（map[string]any）：Fields读到的 JSON 对象。缺键表示没有该字段。
-// 返回 []map[string]any（[]map[string]any）：一组map[string]any。没有匹配时为空切片，不是 nil 分页。
-// 调用：仅在 page.go 内使用
-// 测试：无直接单测
-func Fields(s Host, rs map[string]any) []map[string]any {
-	type spec struct {
-		name, typ, desc, ui string
-		def                 any
-		opts                []string
-	}
-	specs := []spec{
-		{"num_retries", "Integer", "失败请求的尝试次数", "尝试次数", 1, nil},
-		{"timeout", "Float", "请求超时秒数", "超时", 60, nil},
-		{"allowed_fails", "Integer", "触发冷却的失败次数；0表示关闭", "失败阈值", 3, nil},
-		{"cooldown_time", "Float", "冷却秒数；0表示一分钟", "冷却时间", 0, nil},
-	}
-	out := make([]map[string]any, 0, len(specs))
-	for _, sp := range specs {
-		item := map[string]any{
-			"field_name":        sp.name,
-			"field_type":        sp.typ,
-			"field_value":       rs[sp.name],
-			"field_description": sp.desc,
-			"field_default":     sp.def,
-			"ui_field_name":     sp.ui,
-			"link":              nil,
-		}
-		if sp.opts != nil {
-			item["options"] = sp.opts
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
-// Callbacks returns the callback view. Its router_settings match the merged document.
+// Callbacks returns general callback and cache configuration; routing policy belongs to templates.
 // 参数 s（Host）：Callbacks使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/prefs/mount.go
@@ -112,7 +42,6 @@ func Callbacks(s Host, w http.ResponseWriter, r *http.Request) {
 		"available_callbacks":          map[string]any{},
 		"alerts":                       []any{},
 		"active_alerting_destinations": []any{},
-		"router_settings":              MergedRouter(s),
 	})
 }
 

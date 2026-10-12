@@ -19,7 +19,7 @@ import { getSpendString } from "@/utils/dataUtils";
 import { normalizeGuardrailEntries, sortSessionLogs, SessionLogSortMode } from "./utils";
 import { DRAWER_WIDTH } from "./constants";
 import { useLogDetails } from "@/app/(dashboard)/hooks/logDetails/useLogDetails";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface LogDetailsDrawerProps {
   open: boolean;
@@ -58,6 +58,7 @@ interface TraceEventRowProps {
 const TRACE_EVENT_ICON_CLASS = "text-muted-foreground shrink-0";
 
 function TraceEventIcon({ callType, isAutoRouted }: { callType: string; isAutoRouted: boolean }) {
+  const t = useT();
   if (MCP_CALL_TYPES.includes(callType)) return <Wrench size={12} className={TRACE_EVENT_ICON_CLASS} />;
   if (AGENT_CALL_TYPES.includes(callType)) return <Bot size={12} className={TRACE_EVENT_ICON_CLASS} />;
   if (isAutoRouted) return <AutoRouterIcon size={12} className={TRACE_EVENT_ICON_CLASS} />;
@@ -65,6 +66,7 @@ function TraceEventIcon({ callType, isAutoRouted }: { callType: string; isAutoRo
 }
 
 function TraceEventRow({ row, isSelected, onClick }: TraceEventRowProps) {
+  const t = useT();
   const isAutoRouted = useIsAutoRoutedModelGroup(row.model_group);
   const durationValue =
     row.request_duration_ms != null
@@ -129,6 +131,7 @@ export function LogDetailsDrawer({
   onSelectLog,
   startTime,
 }: LogDetailsDrawerProps) {
+  const t = useT();
   const isSessionMode = Boolean(sessionId);
   const [selectedSessionRequestId, setSelectedSessionRequestId] = useState<string | null>(null);
   const [sessionSortMode, setSessionSortMode] = useState<SessionLogSortMode>("duration");

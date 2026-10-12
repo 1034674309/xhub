@@ -1,9 +1,9 @@
 import { useTeamMetadataSchema } from "@/app/(dashboard)/hooks/teams/useTeamMetadataSchema";
 import * as networking from "@/components/networking";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chooseSelectOption, renderWithProviders, testQueryClient } from "../../../tests/test-utils";
+import { renderWithProviders } from "../../../tests/test-utils";
 import { toast } from "@/lib/toast";
 import type { EffectiveMcpServer } from "../mcp_server_management/effectiveMcpServers";
 import type { MCPServer } from "../mcp_tools/types";
@@ -12,7 +12,6 @@ import TeamInfoView, {
   type McpGrantInput,
   retainedMcpToolPermissions,
   standingToolPermissionServerIds,
-  type TeamData,
 } from "./TeamInfo";
 
 const authState = vi.hoisted(() => ({ userRole: "Admin" }));
@@ -45,7 +44,6 @@ vi.mock("@/components/networking", () => ({
   fetchMCPAccessGroups: vi.fn(),
   getTeamPermissionsCall: vi.fn(),
   organizationInfoCall: vi.fn(),
-  getRouterSettingsCall: vi.fn().mockResolvedValue({ fields: [] }),
   getRouteTemplatesCall: vi.fn().mockResolvedValue([]),
   getRouteTemplateBindingCall: vi.fn().mockResolvedValue({
     route_template_id: "",

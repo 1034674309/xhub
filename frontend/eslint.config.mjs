@@ -84,6 +84,7 @@ const eslintConfig = [
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}", "src/data/**"],
     rules: {
+      "local/no-module-hook-call": "error",
       "max-lines": ["error", { max: 800, skipBlankLines: true, skipComments: true }],
     },
   },

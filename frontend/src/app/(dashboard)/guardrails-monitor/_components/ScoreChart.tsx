@@ -1,7 +1,7 @@
 import React from "react";
 import { BarChart } from "@/components/shared/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /**
  * Overview chart: Request Outcomes Over Time (passed vs blocked).
@@ -12,6 +12,7 @@ interface ScoreChartProps {
 }
 
 export function ScoreChart({ data }: ScoreChartProps) {
+  const t = useT();
   const chartData = data && data.length > 0 ? data : [];
 
   return (

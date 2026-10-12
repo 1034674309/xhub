@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import NumericalInput from "../shared/numerical_input";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export const CACHE_CONTROL_LABEL = "Cache Control Injection Points";
 
@@ -40,7 +40,7 @@ const roleLabel = (role: (typeof ROLE_VALUES)[number]): string => {
   return t("Assistant");
 };
 
-const LabelWithHint: React.FC<{ label: string; hint: string }> = ({ label, hint }) => (
+const LabelWithHint: React.FC<{ label: string; hint: string }> = ({ label, hint }) => { const t = useT(); return ((
   <div className="flex items-center">
     <Label>{label}</Label>
     <TooltipProvider>
@@ -60,7 +60,7 @@ const LabelWithHint: React.FC<{ label: string; hint: string }> = ({ label, hint 
       </Tooltip>
     </TooltipProvider>
   </div>
-);
+)); };
 
 interface CacheControlInjectionPointsProps {
   value?: CacheControlInjectionPoint[];
@@ -73,6 +73,7 @@ interface CacheControlInjectionPointsProps {
  * independently; both hand a child exactly `value` and `onChange`.
  */
 const CacheControlInjectionPoints: React.FC<CacheControlInjectionPointsProps> = ({ value, onChange }) => {
+  const t = useT();
   const points = value ?? [];
 
   const replaceAt = (index: number, point: CacheControlInjectionPoint) =>

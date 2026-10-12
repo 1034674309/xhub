@@ -207,29 +207,22 @@ func TestBlockingAKeyTakesEffectImmediately(t *testing.T) {
 	}
 }
 
-// TestDeletingATeamStopsItsKeys 证明删掉团队之后，它下面的密钥也跟着失效。
-//
-// 删团队时如果只删了团队行，密钥会挂在一个已经不存在的归属上继续能用——
-// 这是权限系统里最难发现的一种残留。
-// 参数 t（*testing.T）：当前测试。
-// 返回：无。
-func TestDeletingATeamStopsItsKeys(t *testing.T) {
+// TestDeletingATeamPreservesPersonalKeys 验证删除团队解除归属但保留个人密钥。
+// 参数 t 为测试上下文；前置真实网关、独立 schema 和本地上游，删除后应仍能推理且不沿用旧团队计费。
+// harness 自动清理数据库和服务；新请求使用不同正文避免缓存掩盖真实上游结果。
+func TestDeletingATeamPreservesPersonalKeys(t *testing.T) {
 	h := newHarness(t, chatDeployment("regression-delteam"))
 	admin := h.adminSession()
 	a := h.provision(t, admin, "delteam")
-
-	request := map[string]any{
-		"model": "regression-delteam", "messages": []any{map[string]any{"role": "user", "content": "one"}},
-	}
-	// 删之前能用。
-	h.ok(http.MethodPost, "/v1/chat/completions", a.key, request)
-
+	h.ok(http.MethodPost, "/v1/chat/completions", a.key, chatRequest("regression-delteam", "Before team deletion."))
 	h.ok(http.MethodPost, "/team/delete", admin, map[string]any{"team_id": a.teamID})
-
-	// 删之后这把密钥不该还能调。
-	r := h.do(http.MethodPost, "/v1/chat/completions", a.key, request)
-	if r.status < 300 {
-		t.Fatalf("a key under a deleted team still worked: %s", r.describe())
+	result := h.ok(http.MethodPost, "/v1/chat/completions", a.key, chatRequest("regression-delteam", "After team deletion."))
+	if len(h.upstreamCalls()) != 2 {
+		t.Fatalf("个人密钥删除团队后未调用上游: %s", result.describe())
+	}
+	detail := logDetail(t, h, admin, result.header("x-litellm-call-id"))
+	if firstString(detail, "team_id") != "" || firstString(detail, "organization_id") != "" {
+		t.Fatalf("删除团队后仍使用旧归属计费: %v", detail)
 	}
 }
 

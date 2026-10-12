@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AdditionalModelSettingsProps {
   temperature?: number;
@@ -38,6 +38,7 @@ const AdditionalModelSettings: React.FC<AdditionalModelSettingsProps> = ({
   onStreamingChange,
   showAdvancedParams = true,
 }) => {
+  const t = useT();
   const [internalUseAdvancedParams, setInternalUseAdvancedParams] = useState(false);
   const useAdvancedParams =
     externalUseAdvancedParams !== undefined ? externalUseAdvancedParams : internalUseAdvancedParams;

@@ -4,7 +4,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CHAT_ATTACHMENT_ACCEPT, validateChatAttachment } from "./uploadValidation";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChatImageUploadProps {
   chatUploadedImage: File | null;
@@ -15,6 +15,7 @@ interface ChatImageUploadProps {
 }
 
 const ChatImageUpload: React.FC<ChatImageUploadProps> = ({ chatUploadedImage, onImageUpload, disabled = false }) => {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
 

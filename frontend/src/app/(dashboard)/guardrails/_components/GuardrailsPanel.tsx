@@ -19,7 +19,7 @@ import { isAdminRole } from "@/utils/roles";
 import GuardrailInfoView from "./guardrail_info";
 import GuardrailTestPlayground from "./GuardrailTestPlayground";
 import { toast } from "@/lib/toast";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { Guardrail } from "@/components/guardrails/types";
 import DeleteResourceModal from "@/components/common_components/DeleteResourceModal";
 import { formatGuardrailMode, getGuardrailLogoAndName } from "./guardrail_info_helpers";
@@ -44,6 +44,7 @@ interface GuardrailsResponse {
  * 测试：子组件集成测试；主面板尚无专门集成测试。
  */
 const GuardrailsPanel: React.FC<GuardrailsPanelProps> = ({ accessToken, userRole }) => {
+  const t = useT();
   const [guardrailsList, setGuardrailsList] = useState<Guardrail[]>([]);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isCustomCodeModalVisible, setIsCustomCodeModalVisible] = useState(false);
@@ -81,7 +82,7 @@ const GuardrailsPanel: React.FC<GuardrailsPanelProps> = ({ accessToken, userRole
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   useEffect(() => {
     fetchGuardrails();

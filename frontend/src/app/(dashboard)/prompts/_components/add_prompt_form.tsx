@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface AddPromptFormProps {
   visible: boolean;
@@ -32,13 +32,13 @@ interface CreatePromptRequest {
   };
 }
 
-const PROMPT_INTEGRATION_OPTIONS = [{ label: t("dotprompt"), value: "dotprompt" }];
+const PROMPT_INTEGRATION_OPTIONS = [{ /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("dotprompt"); }, value: "dotprompt" }];
 
 const addPromptSchema = z.object({
   prompt_id: z
     .string()
-    .min(1, t("Please enter a prompt ID"))
-    .regex(/^[a-zA-Z0-9_-]+$/, t("Prompt ID can only contain letters, numbers, underscores, and hyphens")),
+    .min(1, { error: () => t("Please enter a prompt ID") })
+    .regex(/^[a-zA-Z0-9_-]+$/, { error: () => t("Prompt ID can only contain letters, numbers, underscores, and hyphens") }),
   prompt_integration: z.string(),
 });
 
@@ -47,6 +47,7 @@ type AddPromptFormValues = z.infer<typeof addPromptSchema>;
 const EMPTY_VALUES: AddPromptFormValues = { prompt_id: "", prompt_integration: "dotprompt" };
 
 const AddPromptForm: React.FC<AddPromptFormProps> = ({ visible, onClose, accessToken, onSuccess }) => {
+  const t = useT();
   const form = useZodForm(addPromptSchema, { defaultValues: EMPTY_VALUES });
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

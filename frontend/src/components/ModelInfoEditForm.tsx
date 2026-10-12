@@ -42,7 +42,7 @@ import {
   isPositiveWholePtuCount,
   ptuWindowIsOrdered,
 } from "../utils/ptuValidation";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface PtuEditField {
   name: string;
@@ -53,10 +53,10 @@ interface PtuEditField {
 }
 
 const PTU_EDIT_FIELDS: PtuEditField[] = [
-  { name: PTU_COUNT_FIELD, label: t("PTU Count"), input: "number", placeholder: "e.g. 15", isCount: true },
-  { name: PTU_RATE_FIELD, label: t("Cost per PTU / Hour (USD)"), input: "number", placeholder: "e.g. 2.00" },
-  { name: PTU_START_FIELD, label: t("PTU Effective From (UTC)"), input: "datetime" },
-  { name: PTU_END_FIELD, label: t("PTU Effective To (UTC)"), input: "datetime" },
+  { name: PTU_COUNT_FIELD, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("PTU Count"); }, input: "number", placeholder: "e.g. 15", isCount: true },
+  { name: PTU_RATE_FIELD, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Cost per PTU / Hour (USD)"); }, input: "number", placeholder: "e.g. 2.00" },
+  { name: PTU_START_FIELD, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("PTU Effective From (UTC)"); }, input: "datetime" },
+  { name: PTU_END_FIELD, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("PTU Effective To (UTC)"); }, input: "datetime" },
 ];
 
 export type TouchedPricingField = "input_cost" | "output_cost" | "cache_read_cost" | "cache_write_cost";
@@ -289,31 +289,32 @@ interface ModelInfoEditFormProps {
   healthCheckModelOptions: { value: string; label: string }[];
 }
 
-const Display: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const Display: React.FC<{ children: React.ReactNode }> = ({ children }) => { const t = useT(); return ((
   <div className="mt-1 rounded-sm bg-muted p-2">{children}</div>
-);
+)); };
 
 const FIELD_LABEL_CLASS = "text-sm font-medium text-foreground";
 
 const FieldLabel: React.FC<{ htmlFor?: string; children: React.ReactNode }> = ({ htmlFor, children }) =>
-  htmlFor === undefined ? (
+  { const t = useT(); return (htmlFor === undefined ? (
     <p className={FIELD_LABEL_CLASS}>{children}</p>
   ) : (
     <label htmlFor={htmlFor} className={FIELD_LABEL_CLASS}>
       {children}
     </label>
-  );
+  )); };
 
-const Hint: React.FC<{ text: string }> = ({ text }) => (
+const Hint: React.FC<{ text: string }> = ({ text }) => { const t = useT(); return ((
   <Tooltip>
     <TooltipTrigger
       render={<CircleHelp className="ml-1 inline size-3.5 shrink-0 cursor-help text-muted-foreground" />}
     />
     <TooltipContent className="max-w-xs">{text}</TooltipContent>
   </Tooltip>
-);
+)); };
 
 const DocsHint: React.FC<{ text: string; href: string }> = ({ text, href }) => {
+  const t = useT();
   if (/litellm\.ai|berri\.ai|github\.com\/BerriAI/i.test(href)) {
     return <Hint text={text} />;
   }
@@ -325,6 +326,7 @@ const DocsHint: React.FC<{ text: string; href: string }> = ({ text, href }) => {
 };
 
 const ChipList: React.FC<{ values: unknown; emptyLabel: string }> = ({ values, emptyLabel }) => {
+  const t = useT();
   if (!values) {
     return <>{t("Not Set")}</>;
   }
@@ -364,6 +366,7 @@ const ModelInfoEditForm: React.FC<ModelInfoEditFormProps> = ({
   credentialsList,
   healthCheckModelOptions,
 }) => {
+  const t = useT();
   // Neither RHF's blur-based touchedFields nor its resettable dirtyFields matches antd's touched-on-change.
   const touchedRef = React.useRef<ReadonlySet<string>>(new Set<string>());
   const isFieldTouched = React.useCallback((field: TouchedPricingField) => touchedRef.current.has(field), []);

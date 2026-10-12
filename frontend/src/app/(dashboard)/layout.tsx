@@ -14,18 +14,20 @@ import { UserBanner } from "@/components/UserBanner";
 import { PluginModeProvider, usePluginMode } from "@/contexts/PluginModeContext";
 import { createApiClient } from "@/lib/http/client";
 import { getProxyBaseUrl } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const pluginApiClient = createApiClient({ getBaseUrl: () => getProxyBaseUrl() ?? "" });
 
 // Wrapper so PluginModeProvider receives the live accessToken from auth context,
 // which means plugin data refreshes on login/logout without stale cookie reads.
 function PluginModeProviderWithAuth({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const { accessToken } = useAuth();
   return <PluginModeProvider accessToken={accessToken}>{children}</PluginModeProvider>;
 }
 
 export function AgentControlPlaneView() {
+  const t = useT();
   const { activePlugin } = usePluginMode();
   const activePluginName = activePlugin?.name;
   const agentPlatformUrl = activePlugin?.url ?? "";
@@ -96,6 +98,7 @@ export function AgentControlPlaneView() {
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const { accessToken } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { mode } = usePluginMode();
@@ -147,6 +150,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 }
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const { accessToken, authLoading } = useAuth();
 
   if (authLoading) {
@@ -161,6 +165,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const t = useT();
   return (
     <Suspense fallback={<LoadingScreen />}>
       <PluginModeProviderWithAuth>

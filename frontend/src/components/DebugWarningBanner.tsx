@@ -4,13 +4,14 @@ import React from "react";
 import { TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/shared/Alert";
 import { useHealthReadinessDetails } from "@/app/(dashboard)/hooks/healthReadiness/useHealthReadinessDetails";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DebugWarningBannerProps {
   accessToken: string | null;
 }
 
 export const DebugWarningBanner: React.FC<DebugWarningBannerProps> = ({ accessToken }) => {
+  const t = useT();
   const { data: healthData } = useHealthReadinessDetails(accessToken);
 
   // Only show banner if detailed debug mode is explicitly enabled

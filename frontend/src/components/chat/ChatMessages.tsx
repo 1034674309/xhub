@@ -15,7 +15,7 @@ import ReasoningContent from "@/components/chat_ui/ReasoningContent";
 import MCPEventsDisplay from "@/components/chat_ui/MCPEventsDisplay";
 import ResponseMetrics from "@/components/chat_ui/ResponseMetrics";
 import { ChatMessage } from "./types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const REDACTED_KEY_PATTERNS = /token|key|secret|password|auth/i;
 
@@ -52,6 +52,7 @@ function MarkdownCodeRenderer({
   children,
   ...props
 }: React.ComponentPropsWithoutRef<"code"> & { node?: unknown }) {
+  const t = useT();
   const syntaxTheme = useSyntaxTheme(coy);
   const match = /language-(\w+)/.exec(className || "");
   return match ? (
@@ -72,6 +73,7 @@ interface UserBubbleProps {
 }
 
 function UserBubble({ message, onEdit, isStreaming }: UserBubbleProps) {
+  const t = useT();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
@@ -190,6 +192,7 @@ interface AssistantBubbleProps {
 }
 
 function AssistantBubble({ message, isLastMessage, isStreaming, isTypingIndicator, mcpEvents }: AssistantBubbleProps) {
+  const t = useT();
   const [reasoningKey, setReasoningKey] = useState(0);
   const prevStreamingRef = useRef<boolean>(isStreaming);
 
@@ -258,6 +261,7 @@ function AssistantBubble({ message, isLastMessage, isStreaming, isTypingIndicato
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -296,6 +300,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function ThinkingPlaceholder() {
+  const t = useT();
   return (
     <>
       <style>{`
@@ -315,6 +320,7 @@ function ThinkingPlaceholder() {
 }
 
 function TypingDots() {
+  const t = useT();
   return (
     <>
       <style>{`
@@ -344,6 +350,7 @@ interface ToolCardProps {
 }
 
 function ToolCard({ message }: ToolCardProps) {
+  const t = useT();
   const redactedArgs = message.toolArgs ? redactSensitiveValues(message.toolArgs) : undefined;
   const [open, setOpen] = useState(false);
 
@@ -389,6 +396,7 @@ interface Props {
 }
 
 const ChatMessages: React.FC<Props> = ({ messages, isStreaming, onEditMessage }) => {
+  const t = useT();
   const lastIndex = messages.length - 1;
   const lastMsg = messages[lastIndex] ?? null;
   const isTypingIndicator = isStreaming && lastMsg !== null && lastMsg.role === "assistant" && lastMsg.content === "";

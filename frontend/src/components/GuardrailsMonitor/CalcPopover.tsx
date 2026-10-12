@@ -2,9 +2,10 @@ import { CircleHelp } from "lucide-react";
 import React, { type ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import type { MathRow } from "./usageUnits";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export function CalcPopover({ title, formula, children }: { title: string; formula: string; children: ReactNode }) {
+  const t = useT();
   return (
     <Popover>
       <PopoverTrigger
@@ -31,6 +32,7 @@ export function CalcPopover({ title, formula, children }: { title: string; formu
 }
 
 export function MathTable({ rows, total }: { rows: readonly MathRow[]; total: string }) {
+  const t = useT();
   const width = 1 + Math.max(...rows.map((row) => row.parts.length), 1);
   return (
     <table className="w-full text-xs">

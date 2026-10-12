@@ -4,7 +4,7 @@ import { Meter, MeterIndicator, MeterTrack } from "@/components/shared/Meter";
 import { DataTable } from "@/components/shared/DataTable";
 import { MoneyCell } from "@/components/shared/table_cells";
 import { MetricWithMetadata } from "@/components/UsagePage/types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface EndpointUsageTableProps {
   endpointData: Record<string, MetricWithMetadata>;
@@ -22,6 +22,7 @@ interface EndpointRow {
 }
 
 const EndpointUsageTable: React.FC<EndpointUsageTableProps> = ({ endpointData }) => {
+  const t = useT();
   const calculateSuccessRate = (successful: number, total: number): number => {
     if (total === 0) return 0;
     return (successful / total) * 100;

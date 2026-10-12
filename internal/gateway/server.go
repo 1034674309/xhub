@@ -19,11 +19,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/gateway/affinity"
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
-	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
 	"github.com/sunqirui1987/xhub/internal/store"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -51,8 +48,6 @@ type Server struct {
 	engine     *gin.Engine
 	registered map[string]struct{}
 	Cache      *util.DualCache
-	Hooks      *hooks.Engine
-	extensions *plugin.Registry
 	// Busy counts in-flight calls per deployment id inside this process.
 	Busy map[string]int
 	// Live is Redis. Nil means spend is written to PostgreSQL inside the request
@@ -108,7 +103,7 @@ type tokHit struct {
 
 var logTraceOnceServer sync.Once
 
-// New assembles the gateway. It loads the catalog, merges router settings, and registers dedicated routes plus the remaining catalog routes. The identity store is required: a gateway without one could not tell who is calling.
+// New assembles the gateway. It loads the catalog and registers dedicated routes plus the remaining catalog routes. The identity store is required: a gateway without one could not tell who is calling.
 // 调用：authz/authz.go、authz/decide.go、cache/util.go、dataplane/execution/serve.go
 // 测试：activity_http_test.go、authz_test.go、builtin_providers_test.go
 // 参数 cfg（*config.Config）：进程配置，含模型表和路由策略；st（*store.Store）：此刻的冷却、延迟、用量和并发，用来排序；db（*iam.DB）：身份和用量库。
@@ -121,12 +116,10 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 		Store:              st,
 		IAM:                db,
 		Authz:              authz.New(db),
-		Client:             &http.Client{Timeout: time.Duration(cfg.RouterSettings.Timeout) * time.Second},
+		Client:             &http.Client{},
 		engine:             newEngine(),
 		registered:         map[string]struct{}{},
 		Cache:              util.NewCache(),
-		Hooks:              hooks.New(),
-		extensions:         plugin.New(),
 		Busy:               map[string]int{},
 		rpmHits:            map[string][]time.Time{},
 		tpmHits:            map[string][]tokHit{},
@@ -145,7 +138,6 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 	if s.Live != nil {
 		s.State = *affinity.New(s.Live)
 	}
-	prefs.ApplyTyped(s, prefs.MergedRouter(s))
 	models.LoadStored(s)
 	// Hand-entered price rows and suppliers are laid over the embedded price
 	// catalog before any request is served.
@@ -163,7 +155,7 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 // Run accepts connections on addr. The process entry uses it instead of handing a ServeMux to ListenAndServe.
 // 参数 addr（string）：Run使用的addr。空串表示调用方没有提供这项。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
-// 调用：dataplane/execution/serve.go、live/redis.go、plugin/registry.go
+// 调用：dataplane/execution/serve.go、live/redis.go
 // 测试：authz_test.go、catalog_reads_test.go、chains_test.go
 func (s *Server) Run(addr string) error {
 	if s.Live != nil {

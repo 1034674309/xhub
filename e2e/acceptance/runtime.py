@@ -76,7 +76,7 @@ class RuntimeCases:
                  ("model-lifecycle", "模型创建、下架、恢复与删除"), ("guard-lifecycle", "护栏编辑、默认启用与删除"),
                  ("global-guards", "全局拦截无外发与个人信息转发前脱敏"), ("profile-isolation", "单供应商路由隔离"),
                  ("cache-weight", "缓存零费用、跨密钥隔离、封禁及权重更新失效"),
-                 ("fallback", "429 回退、不缓存、目标权限与禁用回退"),
+                 ("fallback", "429 回退、成功目标复用、真实调用与目标权限"),
                  ("media-logs", "精确媒体日志与终态证据复验"), ("database", "事件、日报、token、五级金额与结算去重"),
                  ("browser", "真实数据的控制台、日志、护栏与角色页面"),
                  ("business-browser", "去重浏览器业务：密钥、模型、用户、护栏、Playground、错误及任务日志")]
@@ -184,4 +184,3 @@ class RuntimeCases:
         """用途：判断续跑场景已有成功证据；参数为唯一场景名，返回布尔；只跳过明确通过项，失败和未执行项继续运行。"""
         # 编号清单表示本轮执行，不能把旧通过记录当成本轮执行结果；非清单续跑仍保留历史兼容。
         return not self.checklist and any(c["name"] == name and c.get("passed") for c in self.report["checks"])
-

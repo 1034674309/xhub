@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import useCan from "@/app/(dashboard)/hooks/useCan";
 import { ToolDetail } from "@/components/ToolDetail";
 import { ToolPoliciesPanel } from "@/components/ToolPolicies/ToolPoliciesPanel";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 type View = { type: "overview" } | { type: "detail"; toolName: string };
 
@@ -13,6 +13,7 @@ interface ToolPoliciesViewProps {
 }
 
 export default function ToolPoliciesView({ accessToken }: ToolPoliciesViewProps) {
+  const t = useT();
   const canViewToolPolicies = useCan("viewToolPolicies");
   const [view, setView] = useState<View>({ type: "overview" });
 

@@ -7,7 +7,7 @@ import { getSkillHubTableColumns } from "@/components/AIHub/SkillHubTableColumns
 import SkillDetail from "@/components/claude_code_plugins/skill_detail";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const ALL_DOMAINS = "__all_domains__";
 
@@ -21,6 +21,7 @@ interface SkillHubDashboardProps {
 }
 
 function SkillsEmptyState({ filtered }: { filtered: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -44,6 +45,7 @@ const SkillHubDashboard: React.FC<SkillHubDashboardProps> = ({
   publicPage = false,
   onPublishSuccess,
 }) => {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string | undefined>(undefined);
   const [selectedSkill, setSelectedSkill] = useState<Plugin | null>(null);
@@ -81,7 +83,7 @@ const SkillHubDashboard: React.FC<SkillHubDashboardProps> = ({
 
   const domainItems = useMemo(
     () => [{ value: ALL_DOMAINS, label: t("All Domains") }, ...domains.map((d) => ({ value: d, label: d }))],
-    [domains],
+    [domains, t],
   );
 
   const hasActiveFilter = search.trim().length > 0 || domainFilter != null;

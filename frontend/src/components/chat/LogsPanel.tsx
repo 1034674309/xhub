@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const LOGS_QUERY_KEY = "chat-user-logs";
 const PAGE_SIZE = 50;
@@ -85,6 +85,7 @@ function formatDuration(row: LogRow): string {
 }
 
 function StatusBadge({ status }: { status?: string }) {
+  const t = useT();
   const isFailure = status === "failure";
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs ${isFailure ? "text-destructive" : "text-success"}`}>
@@ -110,6 +111,7 @@ function prettyText(value: unknown): string {
 }
 
 function JsonBlock({ value }: { value: unknown }) {
+  const t = useT();
   if (value == null || value === "") {
     return <p className="m-0 text-xs text-muted-foreground">{t("Not available")}</p>;
   }
@@ -121,6 +123,7 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 
 function LogsSkeleton() {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-lg border">
       <div className="flex flex-col gap-px">
@@ -138,6 +141,7 @@ function LogsSkeleton() {
 }
 
 function LogsEmpty() {
+  const t = useT();
   return (
     <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
       <ScrollText className="mx-auto mb-3 h-6 w-6 text-muted-foreground/50" />
@@ -147,6 +151,7 @@ function LogsEmpty() {
 }
 
 function LogsError({ onRetry }: { onRetry: () => void }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
       <AlertCircle className="h-6 w-6 text-destructive/70" />
@@ -159,6 +164,7 @@ function LogsError({ onRetry }: { onRetry: () => void }) {
 }
 
 function LogsTable({ rows, onRowClick }: { rows: LogRow[]; onRowClick: (row: LogRow) => void }) {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-lg border">
       <Table>
@@ -206,6 +212,7 @@ function LogDetailDialog({
   isLoading: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={!!log} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
@@ -257,6 +264,7 @@ function LogDetailDialog({
 }
 
 const LogsPanel: React.FC<Props> = ({ accessToken, userId }) => {
+  const t = useT();
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);

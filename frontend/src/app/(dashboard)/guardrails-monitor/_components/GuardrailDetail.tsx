@@ -13,7 +13,7 @@ import { GuardrailUsageBreakdown } from "./GuardrailUsageBreakdown";
 import { LogViewer } from "@/components/GuardrailsMonitor/LogViewer";
 import { MetricCard } from "@/components/GuardrailsMonitor/MetricCard";
 import type { LogEntry } from "@/components/GuardrailsMonitor/mockData";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface GuardrailDetailProps {
   guardrailId: string;
@@ -30,6 +30,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
 };
 
 export function GuardrailDetail({ guardrailId, onBack, accessToken = null, startDate, endDate }: GuardrailDetailProps) {
+  const t = useT();
   const [activeTab, setActiveTab] = useState("overview");
   const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);
   const [logsPage] = useState(1);

@@ -6,7 +6,7 @@ import { Check, ChevronDown, ChevronsUpDown, ChevronUp, X } from "lucide-react";
 import type * as React from "react";
 
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export type DataTableSortVariant = "header-cycle" | "dropdown-tristate";
 
@@ -18,6 +18,7 @@ interface DataTableSortHeaderProps<TData, TValue> {
 }
 
 function SortIndicator({ sorted }: { sorted: false | SortDirection }) {
+  const t = useT();
   if (sorted === "asc") {
     return <ChevronUp className="size-3.5" data-sort-indicator="asc" />;
   }
@@ -36,6 +37,7 @@ export function DataTableSortHeader<TData, TValue>({
   variant = "header-cycle",
   className,
 }: DataTableSortHeaderProps<TData, TValue>) {
+  const t = useT();
   const sorted = column.getIsSorted();
 
   if (!column.getCanSort()) {
@@ -115,6 +117,7 @@ interface DataTableMultiSortHeaderProps<TData> {
  * without opening the menu. The chevron opens a menu offering each field in both directions.
  */
 export function DataTableMultiSortHeader<TData>({ table, fields, className }: DataTableMultiSortHeaderProps<TData>) {
+  const t = useT();
   const active = table.getState().sorting[0];
   const activeField = active !== undefined && fields.some((field) => field.id === active.id) ? active : undefined;
   const activeDirection: SortDirection = activeField?.desc === true ? "desc" : "asc";

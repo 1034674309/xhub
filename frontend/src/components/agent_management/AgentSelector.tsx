@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { MultiSelect, type MultiSelectOption } from "@/components/shared/MultiSelect";
 import { getAgentsList } from "../networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface Agent {
   agent_id: string;
@@ -30,6 +30,7 @@ const AgentSelector: React.FC<AgentSelectorProps> = ({
   placeholder = t("Select agents"),
   disabled = false,
 }) => {
+  const t = useT();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [accessGroups, setAccessGroups] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);

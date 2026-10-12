@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import VariableTextArea from "../variable_textarea";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DeveloperMessageCardProps {
   value: string;
@@ -9,6 +9,7 @@ interface DeveloperMessageCardProps {
 }
 
 const DeveloperMessageCard: React.FC<DeveloperMessageCardProps> = ({ value, onChange }) => {
+  const t = useT();
   return (
     <Card>
       <CardContent className="p-3">

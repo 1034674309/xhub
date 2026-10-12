@@ -36,7 +36,7 @@ func TestMalformedNativeTerminalCannotPublishOwnership(t *testing.T) {
 		t.Fatalf("损坏终态被记为成功或计费: %v", detail)
 	}
 	next := h.do("POST", "/responses", admin, map[string]any{"model": dep.ModelName, "input": "next", "previous_response_id": "resp_broken"})
-	if next.status != 400 || !strings.Contains(next.text(), "response ownership is unknown") {
+	if next.status != 400 || !strings.Contains(next.text(), "response ownership is unavailable") {
 		t.Fatalf("损坏终态发布了归属: %s", next.describe())
 	}
 }

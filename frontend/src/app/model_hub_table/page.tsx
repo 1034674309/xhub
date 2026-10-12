@@ -2,8 +2,9 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ModelHubTable from "@/components/AIHub/ModelHubTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 function PublicModelHubContent() {
+  const t = useT();
   const searchParams = useSearchParams()!;
   const key = searchParams.get("key");
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -11,5 +12,6 @@ function PublicModelHubContent() {
   return <ModelHubTable accessToken={accessToken} publicPage={true} premiumUser={false} userRole={null} />;
 }
 export default function PublicModelHubTablePage() {
+  const t = useT();
   return (<Suspense fallback={<div className="flex items-center justify-center min-h-screen">{t("Loading...")}</div>}><PublicModelHubContent /></Suspense>);
 }

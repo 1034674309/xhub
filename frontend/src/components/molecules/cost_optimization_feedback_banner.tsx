@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { MessageSquare, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const STORAGE_KEY = "hideCostOptimizationFeedbackBanner";
 
 const CostOptimizationFeedbackBanner: React.FC = () => {
+  const t = useT();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem(STORAGE_KEY) === "true";

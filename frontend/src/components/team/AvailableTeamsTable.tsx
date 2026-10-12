@@ -7,7 +7,7 @@ import React, { useMemo, useState } from "react";
 import { DataTable } from "@/components/shared/DataTable";
 
 import { AvailableTeam, getAvailableTeamsTableColumns } from "./AvailableTeamsTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface AvailableTeamsTableProps {
   teams: AvailableTeam[];
@@ -18,6 +18,7 @@ interface AvailableTeamsTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "team_alias", desc: false }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -35,6 +36,7 @@ function EmptyState() {
 }
 
 const AvailableTeamsTable: React.FC<AvailableTeamsTableProps> = ({ teams, isLoading, onJoinTeam }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(() => getAvailableTeamsTableColumns({ onJoinTeam }), [onJoinTeam]);

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import React, { useId, useState } from "react";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface GuardrailConfigProps {
   guardrailName: string;
@@ -27,28 +27,29 @@ const versions = [
 ];
 
 const ACTION_ITEMS = [
-  { value: "block", label: t("Block Request") },
-  { value: "flag", label: t("Flag for Review") },
-  { value: "log", label: t("Log Only") },
-  { value: "fallback", label: t("Use Fallback Response") },
+  { value: "block", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Block Request"); } },
+  { value: "flag", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Flag for Review"); } },
+  { value: "log", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Log Only"); } },
+  { value: "fallback", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Use Fallback Response"); } },
 ];
 
 const PROVIDER_ITEMS = [
-  { value: "bedrock", label: t("AWS Bedrock Guardrails") },
-  { value: "google", label: t("Google Cloud AI Safety") },
-  { value: "litellm", label: t("LiteLLM Built-in") },
-  { value: "custom", label: t("Custom Code") },
+  { value: "bedrock", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("AWS Bedrock Guardrails"); } },
+  { value: "google", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Google Cloud AI Safety"); } },
+  { value: "litellm", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("LiteLLM Built-in"); } },
+  { value: "custom", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Custom Code"); } },
 ];
 
 const GUARDRAIL_TYPE_ITEMS = [
-  { value: "Content Safety", label: t("Content Safety") },
-  { value: "PII", label: t("PII Detection") },
-  { value: "Topic", label: t("Topic Restriction") },
-  { value: "prompt_injection", label: t("Prompt Injection") },
-  { value: "custom", label: t("Custom") },
+  { value: "Content Safety", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Content Safety"); } },
+  { value: "PII", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("PII Detection"); } },
+  { value: "Topic", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Topic Restriction"); } },
+  { value: "prompt_injection", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Prompt Injection"); } },
+  { value: "custom", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Custom"); } },
 ];
 
 export function GuardrailConfig({ guardrailName, guardrailType, provider }: GuardrailConfigProps) {
+  const t = useT();
   const [action, setAction] = useState("block");
   const [enabled, setEnabled] = useState(true);
   const [customCode, setCustomCode] = useState("");

@@ -26,7 +26,7 @@ import {
   useScopedDailyActivityRange,
   type ActivityDateRange,
 } from "@/app/(dashboard)/cost-optimization/_components/useDailyActivityRange";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface KeySavingsTabProps {
   accessToken: string | null;
@@ -38,6 +38,7 @@ interface KeySavingsTabProps {
 }
 
 const KeySavingsTab: React.FC<KeySavingsTabProps> = ({ accessToken, keyToken, userId, userRole, activity }) => {
+  const t = useT();
   // Proxy admins read the whole key. For anyone else the endpoint applies the caller's own user_id
   // alongside the key filter, so the figures cover only that viewer's requests on this key -- said
   // plainly in the scope note below rather than left to be misread as the key's total.

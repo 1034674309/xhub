@@ -1,6 +1,6 @@
 import React from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export const NEVER_RESETS_BUDGET_DURATION = "none";
 
@@ -31,6 +31,7 @@ const BudgetDurationDropdown: React.FC<BudgetDurationDropdownProps> = ({
   placeholder = "n/a",
   showNeverResets = false,
 }) => {
+  const t = useT();
   return (
     <Select items={DURATION_LABELS} value={value || null} onValueChange={onChange}>
       <SelectTrigger id={id} className={`w-full ${className}`} style={style}>

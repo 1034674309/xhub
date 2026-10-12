@@ -18,7 +18,7 @@ import { getInvalidTeamEntries } from "./scope_validation";
 import ImpactPreviewAlert from "./impact_preview_alert";
 import { TokenSelect } from "./TokenSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface AddAttachmentFormProps {
   visible: boolean;
@@ -48,7 +48,7 @@ const EMPTY_VALUES: AttachmentFormValues = {
 };
 
 const attachmentShape = {
-  policy_names: z.array(z.string()).min(1, t("Please select at least one policy")),
+  policy_names: z.array(z.string()).min(1, { error: () => t("Please select at least one policy") }),
   teams: z.array(z.string()),
   keys: z.array(z.string()),
   models: z.array(z.string()),
@@ -91,6 +91,7 @@ const AddAttachmentForm: React.FC<AddAttachmentFormProps> = ({
   policies,
   createAttachment,
 }) => {
+  const t = useT();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scopeType, setScopeType] = useState<ScopeType>("global");
   const [availableTeams, setAvailableTeams] = useState<string[]>([]);

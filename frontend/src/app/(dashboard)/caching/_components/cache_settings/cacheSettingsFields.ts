@@ -89,7 +89,7 @@ const numberRule: CacheFieldRule = (value) => {
 export const CACHE_FIELDS: readonly CacheField[] = [
   {
     name: "url",
-    label: t("Redis URL"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Redis URL"); },
     type: "string",
     section: "connection",
     helpText:
@@ -99,7 +99,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "host",
-    label: t("Host"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Host"); },
     type: "string",
     section: "connection",
     helpText: "Redis server hostname or IP address",
@@ -107,7 +107,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "port",
-    label: t("Port"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Port"); },
     type: "string",
     section: "connection",
     helpText: "Redis server port number",
@@ -117,7 +117,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "db",
-    label: t("Database Index"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Database Index"); },
     type: "integer",
     section: "connection",
     helpText: "Logical database index to isolate the cache (e.g. 1 for redis://host:6379/1)",
@@ -126,7 +126,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "password",
-    label: t("Password"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Password"); },
     type: "password",
     section: "connection",
     helpText: "Redis server password",
@@ -135,7 +135,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "username",
-    label: t("Username"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Username"); },
     type: "string",
     section: "connection",
     helpText: "Redis server username (if required)",
@@ -143,7 +143,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "redis_startup_nodes",
-    label: t("Startup Nodes"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Startup Nodes"); },
     type: "list",
     section: "cluster",
     helpText: 'List of startup nodes for Redis Cluster (e.g., [{"host": "127.0.0.1", "port": "7001"}])',
@@ -152,7 +152,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "sentinel_nodes",
-    label: t("Sentinel Nodes"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Sentinel Nodes"); },
     type: "list",
     section: "sentinel",
     helpText: 'List of Sentinel nodes (e.g., [["localhost", 26379]])',
@@ -161,7 +161,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "service_name",
-    label: t("Service Name"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Service Name"); },
     type: "string",
     section: "sentinel",
     helpText: "Master service name for Redis Sentinel",
@@ -169,7 +169,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "sentinel_password",
-    label: t("Sentinel Password"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Sentinel Password"); },
     type: "password",
     section: "sentinel",
     helpText: "Password for Redis Sentinel authentication",
@@ -178,7 +178,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "similarity_threshold",
-    label: t("Similarity Threshold"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Similarity Threshold"); },
     type: "float",
     section: "semantic",
     helpText: "Similarity threshold for semantic cache",
@@ -188,7 +188,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "redis_semantic_cache_embedding_model",
-    label: t("Embedding Model"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Embedding Model"); },
     type: "model-select",
     section: "semantic",
     helpText: "Embedding model for semantic cache",
@@ -196,7 +196,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "semantic_cache_scope",
-    label: t("Semantic Cache Scope"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Semantic Cache Scope"); },
     type: "select",
     section: "semantic",
     helpText:
@@ -204,8 +204,8 @@ export const CACHE_FIELDS: readonly CacheField[] = [
     redisType: "semantic",
     defaultValue: "key",
     options: [
-      { value: "key", label: t("Key (shared by all end users of the key/team/org)") },
-      { value: "end_user", label: t("End user (isolated per end user)") },
+      { value: "key", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Key (shared by all end users of the key/team/org)"); } },
+      { value: "end_user", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("End user (isolated per end user)"); } },
     ],
   },
   {
@@ -219,7 +219,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "ssl_cert_reqs",
-    label: t("SSL Cert Reqs"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("SSL Cert Reqs"); },
     type: "string",
     section: "ssl",
     helpText: "SSL certificate requirements (None, CERT_REQUIRED, CERT_OPTIONAL)",
@@ -227,7 +227,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "ssl_check_hostname",
-    label: t("SSL Check Hostname"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("SSL Check Hostname"); },
     type: "boolean",
     section: "ssl",
     helpText: "Enable SSL hostname verification",
@@ -236,7 +236,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "namespace",
-    label: t("Namespace"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Namespace"); },
     type: "string",
     section: "cacheManagement",
     helpText: "Namespace prefix for cache keys",
@@ -244,7 +244,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "ttl",
-    label: t("TTL (seconds)"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("TTL (seconds)"); },
     type: "float",
     section: "cacheManagement",
     helpText: "Time-to-live for cached items in seconds",
@@ -253,7 +253,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "max_connections",
-    label: t("Max Connections"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Max Connections"); },
     type: "integer",
     section: "cacheManagement",
     helpText: "Maximum number of connections in the connection pool",
@@ -262,7 +262,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "gcp_service_account",
-    label: t("GCP Service Account"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("GCP Service Account"); },
     type: "string",
     section: "gcp",
     helpText:
@@ -271,7 +271,7 @@ export const CACHE_FIELDS: readonly CacheField[] = [
   },
   {
     name: "gcp_ssl_ca_certs",
-    label: t("GCP SSL CA Certs"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("GCP SSL CA Certs"); },
     type: "string",
     section: "gcp",
     helpText: "Path to SSL CA certificate file for GCP Memorystore Redis",

@@ -2,6 +2,7 @@
 from contextlib import redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import subprocess
@@ -10,6 +11,8 @@ from unittest import mock
 from acceptance import Dataset, load_manifest
 from acceptance import runner_runtime as RUNNER
 from acceptance import runner_browser as BROWSER, runner_shared as SHARED
+from acceptance import cli as CLI
+from acceptance.category_help import category_help, CATEGORY_DESCRIPTIONS
 
 
 class AcceptanceTests(unittest.TestCase):
@@ -31,12 +34,37 @@ class AcceptanceTests(unittest.TestCase):
         self.assertNotIn("scripts/e2e.py", invalid.stdout, "拼错分类不能意外运行全套付费用例")
         listed = subprocess.run(["make", "e2e-list"], cwd=root, capture_output=True, text=True)
         self.assertEqual(listed.returncode, 0, listed.stderr)
-        self.assertEqual(tuple(listed.stdout.splitlines()[2:]), RUNNER.E2E_CATEGORIES)
+        direct = subprocess.run(["python3", "scripts/e2e.py", "--list-categories"], cwd=root, capture_output=True, text=True)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(listed.stdout, direct.stdout)
+        self.assertEqual(listed.stdout, category_help() + "\n")
+        rows = [line.split()[0] for line in listed.stdout.splitlines() if line.startswith("  ")]
+        self.assertEqual(tuple(rows), RUNNER.E2E_CATEGORIES)
         for args in (["--category", "limtis"], ["--category", "limits"],
                      ["--shared-target", "--phase", "seed", "--category", "limits"],
                      ["--shared-target", "--phase", "verify", "--category", "regression"]):
             invalid = subprocess.run(["python3", "scripts/e2e.py", *args], cwd=root, capture_output=True, text=True)
             self.assertEqual(invalid.returncode, 2, invalid.stderr)
+
+    def test_category_help_complete_boundaries_and_no_services(self):
+        """目的：中文列表覆盖全部分类并解释使用前提；前置为内存参数，验证完整/空/未知分类及 CLI 零副作用；模拟自动恢复，无数据需清理。"""
+        self.assertEqual(set(CATEGORY_DESCRIPTIONS), set(RUNNER.E2E_CATEGORIES))
+        rendered = category_help()
+        for category, description in CATEGORY_DESCRIPTIONS.items():
+            self.assertIn(description, rendered, category + " 必须显示业务说明")
+            self.assertTrue(any("\u4e00" <= character <= "\u9fff" for character in description))
+        for text in ("make e2e limits permissions", "make testdata", "清空", "计费", "模拟供应商", ".e2e/real-acceptance-current"):
+            self.assertIn(text, rendered)
+        self.assertFalse(any(line.startswith("  ") for line in category_help([]).splitlines()))
+        with self.assertRaisesRegex(ValueError, "缺少 E2E 分类中文说明: unknown"):
+            category_help(["unknown"])
+        with mock.patch("sys.argv", ["e2e.py", "--list-categories"]), \
+                mock.patch.object(CLI.module, "load_manifest", side_effect=AssertionError("列表不得读取供应商配置")), \
+                mock.patch.object(CLI, "shared_main", side_effect=AssertionError("列表不得启动共享服务")), \
+                mock.patch.object(CLI, "run_isolated", side_effect=AssertionError("列表不得启动隔离服务")), \
+                redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(CLI.main(), 0)
+        self.assertEqual(output.getvalue(), rendered + "\n")
 
 
     def test_selected_categories_skip_unrelated_calls_and_validate_plan(self):
@@ -85,17 +113,72 @@ class AcceptanceTests(unittest.TestCase):
                     if mode != "missing":
                         path.mkdir()
                         (path / "results.json").write_text(json.dumps({"stats": {
-                            "expected": 19 if mode == "passed" else 18,
+                            "expected": 73 if mode == "passed" else 72,
                             "unexpected": 0 if mode == "passed" else 1, "flaky": 0, "skipped": 0}}))
 
                 with mock.patch.object(BROWSER, "command_stream", side_effect=command):
                     if mode == "passed":
                         result = BROWSER.run_business_browser(report_dir, mock.Mock())
-                        self.assertEqual(result["cases"], 19)
+                        self.assertEqual(result["cases"], 73)
                     else:
                         with self.assertRaisesRegex(AssertionError, "缺少本轮浏览器报告" if mode == "missing" else "未全部执行通过"):
                             BROWSER.run_business_browser(report_dir, mock.Mock())
                 self.assertEqual((report_dir / "business-browser-results.json").exists(), mode != "missing")
+
+
+    def test_business_browser_selection_preserves_split_lifecycles_pages_and_roles(self):
+        """目的：迁移后保留原业务范围；前置真实清单，验证生命周期、所有页面、四角色及路径，无外部访问与清理。"""
+        catalog = json.loads((BROWSER.ROOT / "frontend/e2e/scenario-catalog.json").read_text())
+        selected = BROWSER.business_browser_selection(catalog)
+        self.assertEqual(len(selected), 73)
+        ids = {row["id"] for row in selected}
+        self.assertTrue({"SC-252", "SC-252-rotation", "SC-252-block", "SC-252-unblock", "SC-252-delete",
+                         "SC-253", "SC-253-connection", "SC-253-delete",
+                         "SC-214", "SC-221", "SC-226", "SC-231"}.issubset(ids))
+        self.assertEqual({row["id"] for row in selected if "/pages/" in row["file"]},
+                         {row["id"] for row in catalog if "/scenarios/pages/" in row["file"]})
+        self.assertTrue(all((BROWSER.ROOT / "frontend" / row["file"]).is_file() for row in selected))
+
+    def test_business_browser_selection_rejects_missing_duplicate_and_invalid_bindings(self):
+        """目的：清单漂移提前失败；前置真实清单变体，验证缺失、重复、旧后缀、越界路径和缺标题；仅操作内存，无清理。"""
+        catalog = json.loads((BROWSER.ROOT / "frontend/e2e/scenario-catalog.json").read_text())
+        row = next(row for row in catalog if row["id"] == "SC-252")
+        remaining = [item for item in catalog if item is not row]
+        cases = [remaining, [*catalog, row],
+                 *[[*remaining, {**row, "file": file}] for file in
+                   ("e2e/writes.spec.ts", "e2e/scenarios/../escape.test.ts", "/outside.test.ts")],
+                 [*remaining, {**row, "title": ""}],
+                 [*remaining, {**row, "file": next(item["file"] for item in catalog if item["id"] == "SC-253")}]]
+        for invalid in cases:
+            with self.subTest(binding=invalid[-1]), self.assertRaisesRegex(ValueError, "去重浏览器场景"):
+                BROWSER.business_browser_selection(invalid)
+
+    def test_business_browser_selection_is_discovered_by_real_playwright(self):
+        """目的：真实 Playwright 必须发现全部选中场景且无串选；前置已安装依赖，验证实际标题集合；只列举，不启动服务或调用供应商，临时证据自动清理。"""
+        frontend = BROWSER.ROOT / "frontend"
+        catalog = json.loads((frontend / "e2e/scenario-catalog.json").read_text())
+        selected = BROWSER.business_browser_selection(catalog)
+        with tempfile.TemporaryDirectory() as directory:
+            env = {**BROWSER.os.environ, "E2E_RUN_DIR": directory}
+            files = [r"(^|/)" + BROWSER.re.escape(row["file"]) + "$" for row in selected]
+            pattern = "(" + "|".join(BROWSER.re.escape(row["title"]) + "$" for row in selected) + ")"
+            result = subprocess.run(["node", "node_modules/@playwright/test/cli.js", "test", *files,
+                                     "--grep", pattern, "--list", "--reporter=json"],
+                                    cwd=frontend, env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["errors"], [])
+            discovered = []
+
+            def collect(suite):
+                """用途：递归读取发现报告；参数为 suite，无返回；供契约测试收集标题，仅修改本地列表。"""
+                discovered.extend(spec["title"] for spec in suite.get("specs", []))
+                for child in suite.get("suites", []):
+                    collect(child)
+
+            for suite in report["suites"]:
+                collect(suite)
+            self.assertCountEqual(discovered, [row["title"] for row in selected])
 
 
     def test_shared_target_requires_exact_urls(self):
@@ -146,25 +229,47 @@ class AcceptanceTests(unittest.TestCase):
             self.assertEqual(checkpoint.read_text(), "existing")
 
 
+    def test_shared_seed_missing_password_preserves_baseline(self):
+        """目的：已有供应商凭据但缺管理员密码时在联网前失败；前置保留文件，验证不清库、不覆盖证据；临时目录自动清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory, "keep.txt")
+            checkpoint.write_text("existing")
+            args = type("Args", (), {"phase": "seed", "directory": directory})()
+            with mock.patch.dict(os.environ, {"FENNO_AI_API_KEY": "fixture", "QINIU_API_KEY": "fixture"}, clear=True), \
+                    mock.patch.object(SHARED, "local_admin_credentials", return_value={}), \
+                    mock.patch.object(SHARED, "http") as health, \
+                    mock.patch.object(SHARED, "reset_shared_target") as reset:
+                with self.assertRaisesRegex(SystemExit, "E2E_DATASET_PASSWORD"):
+                    SHARED.shared_main_locked(args, load_manifest())
+                health.assert_not_called()
+                reset.assert_not_called()
+            self.assertEqual(checkpoint.read_text(), "existing")
+
     def test_shared_seed_never_starts_observer_or_verification(self):
-        """目的：共享 testdata 编排只启动网关和建数，无真实上游观察器或验收；前置替代进程及建数器，验证报告、零调用提示和进程退出，临时目录自动清理。"""
+        """目的：共享 testdata 仅连接现有网关建数；前置替代健康检查及建数器，验证报告、零调用、零清库和零启动，临时目录自动清理。"""
         with tempfile.TemporaryDirectory() as directory:
             args = type("Args", (), {"phase": "seed", "directory": directory})()
             dataset = mock.Mock()
             dataset.report = {}
             dataset.state = {name: [] for name in ("organizations", "teams", "users", "projects", "keys")}
-            with mock.patch.object(SHARED, "reset_shared_target"), \
+            with mock.patch.object(SHARED, "reset_shared_target") as reset, \
+                    mock.patch.object(SHARED, "http", return_value=(200, {}, {})), \
                     mock.patch.object(SHARED, "command"), \
                     mock.patch.object(SHARED, "ready"), \
                     mock.patch.object(RUNNER.subprocess, "Popen") as process, \
                     mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
                     mock.patch.object(SHARED.observer_module, "Observer") as observer, \
-                    mock.patch.dict(RUNNER.os.environ, {"FENNO_AI_API_KEY": "seed-fenno", "QINIU_API_KEY": "seed-qiniu"}, clear=True), redirect_stdout(io.StringIO()):
+                    mock.patch.dict(RUNNER.os.environ, {"FENNO_AI_API_KEY": "seed-fenno", "QINIU_API_KEY": "seed-qiniu", "E2E_DATASET_PASSWORD": "existing-password"}, clear=True), redirect_stdout(io.StringIO()):
                 self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 0)
+                for failure in (ConnectionRefusedError("offline"), AssertionError("401")):
+                    with mock.patch.object(SHARED, "http", side_effect=failure):
+                        self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 1)
             dataset.seed.assert_called_once_with()
             dataset.verify.assert_not_called()
             observer.assert_not_called()
-            process.return_value.terminate.assert_called_once_with()
+            process.assert_not_called()
+            reset.assert_not_called()
+            self.assertEqual(dataset.report["gateway"], "http://127.0.0.1:4000")
             self.assertEqual(dataset.report["status"], "seeded")
             self.assertIn("模型调用=0", (Path(directory) / "testdata.log").read_text())
 
@@ -256,6 +361,7 @@ class AcceptanceTests(unittest.TestCase):
         """目的：验收观察器只接管聊天请求，防止图片和视频被改发聊天端点；前置聊天、图片和视频部署，验证仅 observed 部署更新，无网络或持久化数据需清理。"""
         with tempfile.TemporaryDirectory() as directory:
             dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
+            dataset.isolated_upstreams = True
             dataset.state["deployments"] = [
                 {"id": "chat-a", "provider": "fennoai", "kind": "chat", "observed": True, "endpoint_types": ["chat"]},
                 {"id": "image-a", "provider": "fennoai", "kind": "image", "observed": False},
@@ -270,3 +376,55 @@ class AcceptanceTests(unittest.TestCase):
             self.assertEqual(calls[0][1]["model_info"], {"id": "chat-a"})
             self.assertEqual(dataset.state["deployments"][0]["endpoint_types"], ["chat"])
             self.assertEqual(calls[0][1]["litellm_params"]["api_base"], "http://127.0.0.1:4567/fennoai")
+
+    def test_observer_rejects_shared_deployments_before_any_write(self):
+        """目的：共享目标在接入观察器或创建聊天部署前立即拒绝；前置普通数据集和本地观察器，验证零管理写入，临时目录自动清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            observer = type("ObserverStub", (), {"base": "http://127.0.0.1:4567"})()
+            dataset = Dataset("http://127.0.0.1:1", directory, load_manifest(), observer=observer)
+            dataset.api = mock.Mock()
+            for isolated in (False, None):
+                dataset.isolated_upstreams = isolated
+                with self.assertRaisesRegex(ValueError, "禁止改写共享部署"):
+                    SHARED.attach_chat_observer(dataset, observer)
+                definition = next(row for row in dataset.data["models"] if row["kind"] == "chat")
+                with self.assertRaisesRegex(ValueError, "禁止改写共享部署"):
+                    dataset.deployment(definition, dataset.data["providers"][0])
+            dataset.api.assert_not_called()
+
+    def test_running_gateway_reuses_service_without_address_changes(self):
+        """目的：真实网关模式仅复用现有服务；前置最小基线及替代业务验证，覆盖正常、不可达、认证失败与不支持分类，验证无启动/编译/地址写入，临时文件自动清理。"""
+        for mode in ("success", "legacy-report", "invalid-report", "offline", "unauthorized", "unsupported"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                Path(directory, "access.json").write_text(json.dumps({"admin": "saved-session", "keys": []}))
+                Path(directory, "report.json").write_text(json.dumps(json.dumps({"checks": []}) if mode == "legacy-report" else [] if mode == "invalid-report" else {"checks": []}))
+                dataset = mock.Mock()
+                dataset.report = {}
+                dataset.case_enabled.return_value = False
+                args = type("Args", (), {"phase": "verify", "directory": directory,
+                                           "category": ["fallback"] if mode == "unsupported" else ["entities"]})()
+                with mock.patch.object(SHARED, "local_admin_credentials", return_value={}), \
+                        mock.patch.object(SHARED, "http", return_value=(200, {}, {})) as health, \
+                        mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
+                        mock.patch.object(SHARED, "command") as command, \
+                        mock.patch.object(SHARED.subprocess, "Popen") as process, \
+                        mock.patch.object(SHARED.observer_module, "Observer") as observer, \
+                        mock.patch.dict(os.environ, {}, clear=True), redirect_stdout(io.StringIO()):
+                    if mode == "offline":
+                        health.side_effect = ConnectionRefusedError("offline")
+                    if mode == "unauthorized":
+                        dataset.api.side_effect = AssertionError("401")
+                    self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 0 if mode in ("success", "legacy-report") else 1)
+                    process.assert_not_called()
+                    command.assert_not_called()
+                    observer.assert_not_called()
+                    if mode in ("success", "legacy-report"):
+                        dataset.verify.assert_called_once_with()
+                        self.assertEqual(dataset.gateway if isinstance(dataset.gateway, str) else dataset.report["gateway"], "http://127.0.0.1:4000")
+                    else:
+                        dataset.verify.assert_not_called()
+                    if mode == "offline":
+                        failed_report = json.loads(Path(directory, "report.json").read_text())
+                        self.assertEqual(failed_report["status"], "failed")
+                        self.assertIn("ConnectionRefusedError", failed_report["error"])
+                    self.assertFalse(any(call.args[0] == "/model/update" for call in dataset.api.call_args_list))

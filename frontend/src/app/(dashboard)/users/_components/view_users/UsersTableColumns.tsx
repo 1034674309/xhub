@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cva.config";
 import { accountRoleKind, isTeamAdminMembership } from "@/utils/iamRoles";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { copyToClipboard } from "@/utils/dataUtils";
 
 const SSO_ID_HINT =
@@ -38,6 +38,7 @@ interface UserRowActionsProps {
 
 /** 用户行操作菜单；接收账户及编辑/删除/密码回调，返回菜单，编辑时通知列表打开该账户的编辑视图。 */
 function UserRowActions({ user, onUserClick, onDeleteUser, onResetPassword }: UserRowActionsProps) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

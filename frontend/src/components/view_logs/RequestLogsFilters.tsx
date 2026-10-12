@@ -26,7 +26,7 @@ import { useIsPlatformAdmin, useIsTeamAdminForAnyTeam } from "@/app/(dashboard)/
 import type { Team } from "../key_team_helpers/key_list";
 import { ERROR_CODE_OPTIONS } from "./constants";
 import { LOG_FILTER_IDS, type LogsWindow } from "./log_filter_logic";
-import { getActiveLocale, t } from "@/i18n";
+import { useT, getActiveLocale } from "@/i18n";
 import { translate } from "@/i18n/translate";
 
 const ALL_VALUE = "all";
@@ -57,6 +57,7 @@ function TeamFilterField({
   onChange: (value: string | undefined) => void;
   teams: Team[];
 }) {
+  const t = useT();
   const options = useMemo<SearchSelectOption[]>(
     () =>
       teams.map((team) => ({
@@ -89,6 +90,7 @@ function KeyAliasFilterField({
   onChange: (value: string | undefined) => void;
   teamId: string;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteKeyAliases(
     PAGE_SIZE,
@@ -127,6 +129,7 @@ function KeyAliasFilterField({
 
 /** 模型筛选：接收当前模型和查询回调，按登录凭据异步读取可用模型；退出登录立即隐藏选项，卸载时忽略迟到响应。 */
 function ModelFilterField({ value, onChange }: { value: string; onChange: (value: string | undefined) => void }) {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const [options, setOptions] = useState<SearchSelectOption[]>([]);
 
@@ -183,6 +186,7 @@ function UserIdFilterField({
   onChange: (value: string | undefined) => void;
   logsWindow: LogsWindow;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteSpendLogUsers(
     logsWindow,
@@ -231,6 +235,7 @@ function EndUserFilterField({
   onChange: (value: string | undefined) => void;
   logsWindow: LogsWindow;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteSpendLogEndUsers(
     logsWindow,
@@ -269,6 +274,7 @@ function EndUserFilterField({
 
 /** 错误码筛选：接收当前 HTTP 码及变更回调，按页面语言显示已知码且支持自定义码；仅变更查询，不写入后台。 */
 function ErrorCodeFilterField({ value, onChange }: { value: string; onChange: (value: string | undefined) => void }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const locale = getActiveLocale();
   const errorCodeOptions = useMemo(() => ERROR_CODE_OPTIONS.map((option) => ({ ...option, label: translate(locale, option.label) })), [locale]);
@@ -282,7 +288,7 @@ function ErrorCodeFilterField({ value, onChange }: { value: string; onChange: (v
     );
     if (trimmed === "" || isKnownCode) return matches;
     return [...matches, { label: t("Use custom code: {trimmed}", { trimmed }), value: trimmed }];
-  }, [query, errorCodeOptions]);
+  }, [query, errorCodeOptions, t]);
 
   const selected = useMemo<SearchSelectOption | null>(() => {
     if (value === "") return null;
@@ -340,6 +346,7 @@ interface RequestLogsFiltersProps {
 
 /** 渲染日志筛选项；接收表格读写回调和授权范围，普通视图不提供失败选项，错误视图隐藏状态选择；返回筛选表单，无数据写入副作用。 */
 export function RequestLogsFilters({ get, set, teams, logsWindow, errorsOnly = false }: RequestLogsFiltersProps) {
+  const t = useT();
   // 标签随当前页面语言翻译，不能在模块加载时固定为默认语言。
   const STATUS_FILTER_ITEMS = STATUS_FILTER_KEYS.map((item) => ({ ...item, label: t(item.label) }));
   const CACHE_FILTER_ITEMS = CACHE_FILTER_KEYS.map((item) => ({ ...item, label: t(item.label) }));

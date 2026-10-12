@@ -13,9 +13,7 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/hooks"
 	"github.com/sunqirui1987/xhub/internal/iam"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
@@ -58,16 +56,13 @@ func TestHandlerDialFailureLogKeepsHostWithoutURL(t *testing.T) {
 					"api_base": "http://" + addr + "/v1",
 				},
 			}},
-			RouterSettings: config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 1},
 		},
 		Cache: util.NewCache(),
-		Hooks: hooks.New(),
 		Busy:  map[string]int{},
 		Client: &http.Client{
 			Timeout: 2 * time.Second,
 		},
 	}
-	s.extensions = plugin.New()
 	s.Handle("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		s.dataPlane(w, r, "chat")
 	})

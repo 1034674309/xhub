@@ -18,7 +18,7 @@ import { useCurrentUser } from "@/app/(dashboard)/hooks/users/useCurrentUser";
 import { hasCapability } from "@/utils/capabilities";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
 import { all_admin_roles } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 import { formatClosedRangeLabel } from "@/components/shared/advanced_date_picker";
 import { ActivityMetrics, processActivityData } from "@/components/activity_metrics";
 import UserDropdown from "@/components/common_components/UserDropdown";
@@ -48,7 +48,7 @@ import {
   type GatewayActivity,
 } from "./gatewayActivity";
 import EndpointUsage from "./EndpointUsage/EndpointUsage";
-import EntityUsage, { EntityList } from "./EntityUsage/EntityUsage";
+import EntityUsage from "./EntityUsage/EntityUsage";
 import ModelViewToggle, { ModelViewType } from "./ModelViewToggle";
 import SpendByProvider from "./EntityUsage/SpendByProvider";
 import { TOP_MODEL_LIMITS } from "./EntityUsage/TopModelView";
@@ -62,6 +62,7 @@ interface UsagePageProps {
 
 /** 用量路由调用的页面组件；参数为可见团队及组织，返回按日期与身份隔离的统计视图；读取失败回退分页，禁止沿用旧筛选数据。 */
 const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
+  const t = useT();
   const { accessToken, userRole, userId: userID, premiumUser } = useAuthorized();
   // Aggregated endpoint: try first, fall back to paginated if unavailable
   const [aggregatedData, setAggregatedData] = useState<FetchedForRange<{

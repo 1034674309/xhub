@@ -2,6 +2,45 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+请求先解析身份范围对应的模板，Compile 并检查 Err，再用候选目录和本次运行状态调用 Schedule。按返回顺序执行，实际成功目标交给 affinity 和结算链。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| SelectRouteTemplate / Compile | 选择并校验单请求路由快照 |
+| Schedule(pool, alias, strategy, state, pin) | 返回有序部署候选 |
+| DeploymentID / CooldownID | 区分稳定部署与运行冷却身份 |
+
+### 接入 demo
+
+将下面代码保存为仓库内的 `demo/main.go`，在仓库根目录执行 `go run ./demo`；运行后删除本次创建的 demo 目录。
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sunqirui1987/xhub/internal/config"
+	"github.com/sunqirui1987/xhub/internal/router"
+)
+
+// main 演示本页 API 的最小调用；无参数和返回值，打印上述预期结果，依赖与副作用见本页说明。
+func main() {
+	models := []config.ModelEntry{{ModelName: "demo-model", LiteLLMParams: map[string]any{"model": "upstream-model"}}}
+	pool := router.Schedule(models, "demo-model", "random", router.State{}, "")
+	fmt.Println(len(pool), pool[0].ModelName)
+}
+```
+
+输出 1 demo-model；只演示单候选调度。生产调用之前仍需完成能力、授权、预算和模板校验。
+
+### 错误、状态与副作用
+
+pin 不能绕过停用、冷却或零权重；组中的真实模型身份仍需授权和计费。Compile 的错误存在结果 Err 中，不能忽略。
+
 ## 说明
 
 本包把持久化路由配置和当前模型目录编译成不可变的单请求 RouteSettings 快照，再生成有序部署尝试列表。它负责模型匹配、显式组、相对流量权重、重试时间值、三类回退、身份范围继承、冷却过滤、粘性优先和策略算法；不注册 HTTP、不鉴权、不调用供应商、不记录指标，也不持久化配置。
@@ -16,7 +55,7 @@
 
 本包不注册 handler。gateway identity 在 /route_template/... 提供模板管理，在 /routing/groups 提供组，在 /router/settings 提供设置；这些 handler 调用本包 API。dataplane 使用编译后的 RouteSettings 与 Schedule。
 
-Compile(selected, store, models) 读取 model_defaults；模板缺少 routing_groups 时读取旧全局组；读取 model_fallbacks；只覆盖模板明确出现的回退类别；校验引用和合并图；错误写入 RouteSettings.Err，不执行写入。Resolve 按 key、team、organization 选择；已绑定 ID 但模板丢失时停止继承并回到 builtin。RequestChain 构造顺序。Builtin 默认一次尝试、60 秒、阈值三、无冷却及模型默认分流。
+Compile(selected, store, models) 读取模型默认值与模板显式配置，校验引用，并通过 RouteSettings.Err 返回错误，不执行写入。iam.SelectRouteTemplate 按 key、team、organization 选择首个绑定；所选文档不存在时使用内置模板。内置设置为一次尝试、60 秒、阈值三、无冷却。
 
 解析/校验 API 覆盖 FallbackPolicy、Group、Policy、默认权重、模板、目录、策略和部署归属。RouteSettings.ForModel 按模型规则、组、旧模板默认、模型默认解析；Candidates 只展开显式组名；Schedule 应用权重和可选 pin。Retries、TimeoutSeconds、AllowedFails、CooldownSeconds 返回已校验值。All、Available、Order、Pick、DeploymentID、CooldownID 执行调度。CleanAllocations 与 CleanTemplateWeights 深度清理悬空引用。
 

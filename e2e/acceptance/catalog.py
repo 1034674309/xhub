@@ -141,6 +141,9 @@ class CatalogCases:
         else:
             info.update(pricing_source="catalog", base_model=definition["base_model"])
         if self.observer and definition["kind"] == "chat":
+            # 不依赖退出清理保证共享部署安全：任何写入前必须确认目标已隔离。
+            if not getattr(self, "isolated_upstreams", False):
+                raise ValueError("请求观察器只允许连接隔离验收副本，禁止改写共享部署地址")
             tag = "fault" if fault else route_tag
             params["api_base"] = self.observer.base + "/" + provider["id"] + ("/" + tag if tag else "")
         self.action_start(public_name, definition["transport"], "添加模型与端点",
@@ -207,4 +210,3 @@ class CatalogCases:
             self.api("/model/delete", {"id": ident})
             self.state["deployments"] = [d for d in self.state["deployments"] if d["id"] != ident]
             self.api("/team/update", {"team_id": key["team_id"], "models": allowed})
-

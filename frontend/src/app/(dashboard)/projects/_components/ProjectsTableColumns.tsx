@@ -8,7 +8,7 @@ import { DataTableSortHeader } from "@/components/shared/DataTable";
 import { CellTooltip, DateCell, IdentityCell, StatusBadge } from "@/components/shared/table_cells";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 function ProjectTeamCell({
   project,
@@ -19,6 +19,7 @@ function ProjectTeamCell({
   teamAliasMap: Map<string, string>;
   isTeamsLoading: boolean;
 }) {
+  const t = useT();
   if (!project.team_id) return <span className="text-sm">—</span>;
   const alias = teamAliasMap.get(project.team_id);
   if (alias) {
@@ -37,6 +38,7 @@ function ProjectTeamCell({
 }
 
 function ProjectModelsCell({ project }: { project: ProjectResponse }) {
+  const t = useT();
   const models = project.models ?? [];
   return (
     <CellTooltip

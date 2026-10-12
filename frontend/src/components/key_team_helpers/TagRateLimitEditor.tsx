@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface TagRateLimitEntry {
   // Stable identity for React list keys so deleting a middle row doesn't shift
@@ -57,6 +57,7 @@ interface TagRateLimitEditorProps {
 }
 
 export function TagRateLimitEditor({ value, onChange }: TagRateLimitEditorProps) {
+  const t = useT();
   const addRow = () => {
     onChange([...value, { id: newRowId(), tag: "", rpm_limit: null }]);
   };

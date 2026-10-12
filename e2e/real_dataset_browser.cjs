@@ -87,7 +87,8 @@ async function main() {
   const ui = process.env.E2E_DATASET_UI;
   log('打开登录页并使用管理员真实登录');
   await page.goto(ui + '/ui/login/');
-  await page.getByRole('textbox', {name: '用户名', exact: true}).fill('admin');
+  // 复用真实环境指定的管理员账号，与验收编排的认证参数保持一致。
+  await page.getByRole('textbox', {name: '用户名', exact: true}).fill(process.env.E2E_DATASET_ADMIN || 'admin@xhub.local');
   await page.locator('input[type=password]').fill(process.env.E2E_DATASET_PASSWORD);
   await page.locator('input[type=password]').press('Enter');
   await expect(page.getByTestId('create-key-button')).toBeVisible({timeout: 60000});

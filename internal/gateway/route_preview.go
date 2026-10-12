@@ -9,7 +9,6 @@ import (
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/config"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
@@ -69,7 +68,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 		util.WriteTypedError(w, r.URL.Path, 403, "forbidden", "model is not allowed")
 		return
 	}
-	settings := prefs.BuiltinSettings()
+	settings := router.BuiltinSettings()
 	object := authz.Object{Type: authz.ObjectRouteTemplate, OrgID: input.OrgID, TeamID: input.TeamID}
 	if input.TemplateID != "" {
 		if s.IAM == nil {
@@ -95,7 +94,7 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 		} else {
 			object.TeamID = ""
 		}
-		settings = prefs.RouteSettings{Settings: row.Settings(), TemplateID: row.ID, TemplateName: row.Name, Source: "selected"}
+		settings = router.RouteSettings{Settings: row.Settings(), TemplateID: row.ID, TemplateName: row.Name, Source: "selected"}
 	} else if id := p.RouteTemplateID; id != "" {
 		// 复用最窄绑定；指定模板被删除时与推理一致，回到平台默认，不猜测父级。
 		row, err := s.IAM.GetRouteTemplate(r.Context(), id)
@@ -115,14 +114,14 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request) {
 			if s.WriteAuthz(w, r, permission) {
 				return
 			}
-			settings = prefs.RouteSettings{Settings: row.Settings(), TemplateID: row.ID, TemplateName: row.Name, Source: p.RouteTemplateSource}
+			settings = router.RouteSettings{Settings: row.Settings(), TemplateID: row.ID, TemplateName: row.Name, Source: p.RouteTemplateSource}
 		}
 	}
 	if input.Body != nil {
 		if s.WriteAuthz(w, r, s.Authorize(r, p, authz.ActionRouteTemplateWrite, object)) {
 			return
 		}
-		if err := prefs.ValidateRouteTemplateDocument(input.Body); err != nil {
+		if err := router.ValidateRouteTemplateDocument(input.Body); err != nil {
 			util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
 			return
 		}

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { keyKeys } from "./useKeys";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,7 @@ export const resetKeySpend = async (accessToken: string, keyToken: string): Prom
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export const useResetKeySpend = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

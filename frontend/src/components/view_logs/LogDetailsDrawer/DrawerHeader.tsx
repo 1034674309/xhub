@@ -18,7 +18,7 @@ import {
   FONT_SIZE_MEDIUM,
   FONT_FAMILY_MONO,
 } from "./constants";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DrawerHeaderProps {
   log: LogEntry;
@@ -47,6 +47,7 @@ export function DrawerHeader({
   isSidebarCollapsed,
   onToggleSidebar,
 }: DrawerHeaderProps) {
+  const t = useT();
   const provider = log.custom_llm_provider || "";
   const providerInfo = provider ? getProviderLogoAndName(provider) : null;
   const showToggleWithProvider = isSidebarCollapsed && Boolean(providerInfo || log.model);
@@ -112,6 +113,7 @@ function ModelProviderSection({
   providerLogo?: string;
   providerName?: string;
 }) {
+  const t = useT();
   return (
     <div className="flex min-w-0 items-center gap-2">
       {providerLogo && (
@@ -145,6 +147,7 @@ function ModelProviderSection({
  * Request ID display with copy functionality
  */
 function RequestIdSection({ requestId }: { requestId: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -206,6 +209,7 @@ function NavigationSection({
   onNext: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const keyboardShortcutStyle = {
     border: "1px solid var(--color-border)",
     borderRadius: 4,
@@ -255,6 +259,7 @@ function StatusBar({
   statusColor: "error" | "success";
   environment: string;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-3">
       <Badge variant={statusColor === "error" ? "destructive" : "secondary"}>{statusLabel}</Badge>

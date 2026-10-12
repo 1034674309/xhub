@@ -6,13 +6,14 @@ import { Waypoints } from "lucide-react";
 import { useAutoRouterModelGroups } from "@/app/(dashboard)/hooks/models/useModels";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const NO_AUTO_ROUTERS: ReadonlySet<string> = new Set<string>();
 
 const AutoRouterModelGroupsContext = createContext<ReadonlySet<string>>(NO_AUTO_ROUTERS);
 
 export function AutoRouterModelGroupsProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const autoRouterModelGroups = useAutoRouterModelGroups();
 
   return (
@@ -23,12 +24,14 @@ export function AutoRouterModelGroupsProvider({ children }: { children: ReactNod
 }
 
 export function useIsAutoRoutedModelGroup(modelGroup?: string | null): boolean {
+  const t = useT();
   const autoRouterModelGroups = useContext(AutoRouterModelGroupsContext);
 
   return Boolean(modelGroup) && autoRouterModelGroups.has(modelGroup as string);
 }
 
 export function AutoRouterIcon({ size = 12, className }: { size?: number; className?: string }) {
+  const t = useT();
   return <Waypoints size={size} className={className} aria-hidden />;
 }
 
@@ -38,6 +41,7 @@ export interface AutoRouterTagProps {
 }
 
 export function AutoRouterTag({ modelGroup, className }: AutoRouterTagProps) {
+  const t = useT();
   const isAutoRouted = useIsAutoRoutedModelGroup(modelGroup);
 
   if (!isAutoRouted) return null;

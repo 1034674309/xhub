@@ -60,28 +60,28 @@ export const CRUD_GROUP_META: Record<
   { label: string; description: string; risk: "low" | "medium" | "high" | "unknown" }
 > = {
   read: {
-    label: t("Read"),
-    description: t("Safe operations — fetch, list, search. No side effects."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Read"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Safe operations — fetch, list, search. No side effects."); },
     risk: "low",
   },
   create: {
-    label: t("Create"),
-    description: t("Add new resources — insert, upload, register."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Create"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Add new resources — insert, upload, register."); },
     risk: "medium",
   },
   update: {
-    label: t("Update"),
-    description: t("Modify existing resources — edit, patch, rename."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Update"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Modify existing resources — edit, patch, rename."); },
     risk: "medium",
   },
   delete: {
-    label: t("Delete"),
-    description: t("Destructive operations — remove, purge, destroy."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Delete"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Destructive operations — remove, purge, destroy."); },
     risk: "high",
   },
   unknown: {
-    label: t("Other"),
-    description: t("Operations that could not be automatically classified."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Other"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Operations that could not be automatically classified."); },
     risk: "unknown",
   },
 };

@@ -87,8 +87,8 @@ func Open(ctx context.Context, dsn string, delay time.Duration) (_ *Environment,
 	e.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { e.serveUpstream(w, r, delay) }))
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
-		ModelList:       []config.ModelEntry{{ModelName: Model, LiteLLMParams: map[string]any{"model": Model, "api_base": e.upstream.URL + "/v1", "api_key": "sk-local-benchmark", "custom_llm_provider": "openai", "input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008}, ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}}}},
-		RouterSettings:  config.RouterSettings{RoutingStrategy: "simple-shuffle", NumRetries: 0, Timeout: 30},
+		ModelList: []config.ModelEntry{{ModelName: Model, LiteLLMParams: map[string]any{"model": Model, "api_base": e.upstream.URL + "/v1", "api_key": "sk-local-benchmark", "custom_llm_provider": "openai", "input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008}, ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}}}},
+
 		GeneralRaw:      map[string]any{},
 		GeneralSettings: config.GeneralSettings{DatabaseURL: u.String(), MasterKey: "sk-benchmark-" + hex.EncodeToString(random[:]), StorePromptsInSpendLogs: true},
 	}

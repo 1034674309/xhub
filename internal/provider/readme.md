@@ -1,6 +1,34 @@
 # provider
 
+[简体中文](readme_cn.md)
+
 This package defines upstream execution protocols. Add providers and deployments for existing protocols in the UI. Implement new protocols in `internal/provider/<supplier>/` and import them in `all/all.go`. See [Add model providers and implement new protocols](../../docs/development/en/provider-catalog.md) for NewAPI page operations, provider registration, execution wiring and acceptance checks.
+
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+This directory navigates the protocol system without a root constructor. Import all at startup, match Hits through registry, validate deployments, and execute through dataplane. New protocols require endpoint, transport, and measurement registration.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| all | Register all suppliers at startup |
+| registry.Match / deployment.ResolveHit | Match entry points and validate bindings |
+| measurement / contract | Fact extraction and type contracts |
+
+### Integration demo
+
+Run the following commands from the repository root.
+
+```sh
+go test ./internal/provider/... -count=1
+```
+
+Runs registration, matching, capability, and binding tests. See [all](all/readme.md) for the minimal blank-import demo and [deployment](deployment/readme.md) for binding.
+
+### Errors, state, and side effects
+
+Registration creates neither accounts nor connections. Configure transport/endpoint_types explicitly and retain task deployment/creation facts across polling.
 
 ## Choose the integration level
 

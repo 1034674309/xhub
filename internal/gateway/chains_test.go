@@ -36,7 +36,6 @@ var liveChains = []struct {
 	{"projects", "/project/list"},
 	{"users", "/user/list"},
 	{"organizations", "/organization/list"},
-	{"router-settings", "/router/settings"},
 	{"admin-panel", "/config/list?config_type=general_settings"},
 	{"ui-settings", "/get/ui_settings"},
 	{"spend-tags", "/spend/tags"},

@@ -2,6 +2,50 @@
 
 [简体中文](readme_cn.md)
 
+## Integration from other modules
+
+Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.
+
+After authentication, construct a request-scoped Guard and authorize a concrete Action/Object. For lists, apply Scope to the database query before reading rows.
+
+| Entry point or resource | Usage and result |
+| --- | --- |
+| New(db) | Construct an authorizer with IAM |
+| Guard(ctx, actor) | Load current relationships; stop on errors |
+| Authorize(ctx, guard, action, object) | Check the action and trusted resource ownership |
+| Scope(ctx, guard, action) | Return a scope that must constrain the query |
+
+### Integration demo
+
+This is a Go integration helper for a host. It compiles as a separate package inside the repository; callers must supply the real dependencies described below before execution.
+
+```go
+package demo
+
+import (
+	"context"
+	"github.com/sunqirui1987/xhub/internal/auth"
+	"github.com/sunqirui1987/xhub/internal/authz"
+	"github.com/sunqirui1987/xhub/internal/iam"
+)
+
+// CanReadUser 演示已鉴权请求的授权；传入真实 IAM、身份和目标，返回授权错误，不写入数据。
+func CanReadUser(ctx context.Context, db *iam.DB, p *auth.Principal, userID string) error {
+	az := authz.New(db)
+	g, err := az.Guard(ctx, p.Actor())
+	if err != nil {
+		return err
+	}
+	return az.Authorize(ctx, g, authz.ActionUserRead, authz.Object{Type: authz.ObjectUser, ID: userID})
+}
+```
+
+This integration helper compiles but requires real IAM and an authenticated principal. A nil error permits the specified read; it does not perform it.
+
+### Errors, state, and side effects
+
+Do not trust ownership supplied in request bodies. Do not reuse Guards across requests. Deny access when relationships cannot be loaded, and distinguish unauthenticated, forbidden, not-found, and internal errors.
+
 ## Overview
 
 `internal/authz` is the gateway's central policy layer. It receives an authenticated `Actor`, resolves the stored ownership and lifecycle state of an `Object`, decides one `Action`, and builds SQL scopes for list operations. Handlers supply resource identity and requested action; they do not establish authority by claiming a team, organization, project, or owner. Existing rows are reloaded from IAM before a session decision, and dependency uncertainty closes access.

@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -12,13 +14,13 @@ import (
 	"testing"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
 // TestFallbackTransportFailures 验证连接错误和超时在输出前能回退，网关开关不会泄漏上游。
 // 前置无网络的确定性HTTP传输；分别执行适配和原生入口，断言仅a/b两次及成功响应，无资源需清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestFallbackTransportFailures(t *testing.T) {
 	for _, failure := range []struct {
 		name string
@@ -44,7 +46,7 @@ func TestFallbackTransportFailures(t *testing.T) {
 					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(bytes.NewReader(raw))}, nil
 				})}
 				models := []config.ModelEntry{Deployment("a", "a", "local", "https://example.invalid", "bypass_openai_chat", nil), Deployment("b", "b", "local", "https://example.invalid", "bypass_openai_chat", nil)}
-				settings := prefs.BuiltinSettings()
+				settings := router.BuiltinSettings()
 				settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"b"}}}
 				// 适配宿主的chatConfig会规范化入口；原生场景保留部署声明的bypass入口。
 				cfg := &config.Config{ModelList: models}

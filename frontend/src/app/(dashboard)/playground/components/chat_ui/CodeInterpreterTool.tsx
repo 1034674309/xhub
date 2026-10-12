@@ -3,7 +3,7 @@ import { toast } from "@/lib/toast";
 import { Code, Info, TriangleAlert } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface CodeInterpreterToolProps {
   accessToken: string;
@@ -35,6 +35,7 @@ const CodeInterpreterTool: React.FC<CodeInterpreterToolProps> = ({
   selectedModel,
   disabled = false,
 }) => {
+  const t = useT();
   const isOpenAI = supportsCodeInterpreter(selectedModel);
   const isDisabled = disabled || !isOpenAI;
 

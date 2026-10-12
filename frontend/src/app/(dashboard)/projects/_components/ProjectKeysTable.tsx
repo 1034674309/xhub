@@ -8,7 +8,7 @@ import { KeyResponse } from "@/components/key_team_helpers/key_list";
 import { DataTable } from "@/components/shared/DataTable";
 
 import { getProjectKeysTableColumns } from "./ProjectKeysTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ProjectKeysTableProps {
   keys: KeyResponse[];
@@ -21,6 +21,7 @@ interface ProjectKeysTableProps {
 const PAGE_SIZE_OPTIONS = [5, 10, 25];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -39,6 +40,7 @@ export function ProjectKeysTable({
   pagination,
   onPaginationChange,
 }: ProjectKeysTableProps) {
+  const t = useT();
   const columns = useMemo(() => getProjectKeysTableColumns(), []);
 
   return (

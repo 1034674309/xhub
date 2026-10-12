@@ -1,3 +1,5 @@
+// 本文件验证 execution 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package execution
 
 import (
@@ -20,6 +22,7 @@ import (
 // TestNativeBypassJSONAndUsage 验证原生路径、协议鉴权、模型替换、数字精度和用量合并，并阻止客户端凭据泄露。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeBypassJSONAndUsage(t *testing.T) {
 	for _, spec := range []struct{ transport, path, upstream, protocol, response string }{
 		{"bypass_openai_responses", "/bypass/openai/v1/responses", "/v1/responses", "openai", `{"id":"r1","usage":{"input_tokens":100,"output_tokens":4,"input_tokens_details":{"cached_tokens":25}}}`},
@@ -83,6 +86,7 @@ func TestNativeBypassJSONAndUsage(t *testing.T) {
 // TestNativeImageEditMultipart 验证图片编辑保留 multipart 边界、文件字节与字段，并正确记录图片规格和用量。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeImageEditMultipart(t *testing.T) {
 	for _, mode := range []struct{ transport, path string }{{"openai_image_edit", "/v1/images/edits"}, {"bypass_openai_image_edit", "/bypass/openai/v1/images/edits"}} {
 		t.Run(mode.transport, func(t *testing.T) {
@@ -151,6 +155,7 @@ func TestNativeImageEditMultipart(t *testing.T) {
 // TestNativeBypassStreamingFlushAndMergedUsage 验证 SSE 首个事件立即送达，保留原始换行，并合并 Anthropic 分散报告的缓存和 token 事实。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeBypassStreamingFlushAndMergedUsage(t *testing.T) {
 	first := "event: message_start\r\ndata: {\"message\":{\"usage\":{\"input_tokens\":20,\"output_tokens\":0,\"cache_read_input_tokens\":30}}}\r\n\r\n"
 	last := "event: message_delta\ndata: {\"usage\":{\"output_tokens\":4}}\n\nevent: message_stop\ndata: {}\n\n"
@@ -205,6 +210,7 @@ func TestNativeBypassStreamingFlushAndMergedUsage(t *testing.T) {
 // TestNativeCreateServerErrorIsNotReplayed 验证异步创建操作返回 5xx 后不会因路由重试设置生成第二个付费任务。
 // 参数 t：Go 测试上下文。返回：无；断言失败时报告协议或计费契约回归。
 // 调用：go test；使用本地注册表、价格目录或假上游，不创建真实付费任务。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeCreateServerErrorIsNotReplayed(t *testing.T) {
 	calls := 0
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +232,8 @@ func TestNativeCreateServerErrorIsNotReplayed(t *testing.T) {
 
 // TestCustomQiniuTransportDoesNotDependOnHostname 验证 Custom 凭据显式选择七牛传输后可使用任意配置地址，
 // 并只按传输定义移除 qiniu 路由前缀；测试使用纯 URL 组合，不访问外部服务。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestCustomQiniuTransportDoesNotDependOnHostname(t *testing.T) {
 	hit, ok := providerregistry.Match("POST", "/v3/contents/generations/tasks")
 	if !ok || hit.Transport.ID != "qiniu_contents_generation" {
@@ -242,6 +250,7 @@ func TestCustomQiniuTransportDoesNotDependOnHostname(t *testing.T) {
 // TestNativeMultipleImageEventsRemainUnpriced 验证多张流式图片不会按最后一张的规格错误结算。
 // 参数 t：Go 测试上下文。返回：无；同时断言原始流保真、完成图片数和待核价原因。
 // 调用：go test；使用本地假上游，不消耗图片生成额度。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeMultipleImageEventsRemainUnpriced(t *testing.T) {
 	const events = "event: image_generation.completed\ndata: {\"quality\":\"high\",\"size\":\"1024x1024\",\"usage\":{\"output_tokens\":3}}\n\nevent: image_generation.completed\ndata: {\"quality\":\"low\",\"size\":\"1536x1024\",\"usage\":{\"output_tokens\":5}}\n\n"
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

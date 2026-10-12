@@ -9,7 +9,7 @@ import { modelHubCall, PromptSpec } from "@/components/networking";
 
 import { getPromptTableColumns } from "./PromptTableColumns";
 import { ModelGroupInfo } from "./prompt_utils";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface PromptTableProps {
   promptsList: PromptSpec[];
@@ -23,6 +23,7 @@ interface PromptTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -42,6 +43,7 @@ const PromptTable: React.FC<PromptTableProps> = ({
   accessToken,
   isAdmin,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
   const [modelHubData, setModelHubData] = useState<Map<string, ModelGroupInfo>>(new Map());
 

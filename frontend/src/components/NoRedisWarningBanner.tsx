@@ -3,13 +3,14 @@
 import React from "react";
 import { TriangleAlert } from "lucide-react";
 import { useHealthReadinessDetails } from "@/app/(dashboard)/hooks/healthReadiness/useHealthReadinessDetails";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface NoRedisWarningBannerProps {
   accessToken: string | null;
 }
 
 export const NoRedisWarningBanner: React.FC<NoRedisWarningBannerProps> = ({ accessToken }) => {
+  const t = useT();
   const { data: healthData } = useHealthReadinessDetails(accessToken);
 
   if (!healthData?.show_no_redis_warning) {

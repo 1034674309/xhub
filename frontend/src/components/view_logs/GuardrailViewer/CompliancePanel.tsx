@@ -6,7 +6,7 @@ import {
   ComplianceResponse,
   ComplianceCheckRequest,
 } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface CompliancePanelProps {
   accessToken: string | null;
@@ -21,26 +21,26 @@ interface CompliancePanelProps {
 
 // -- Icons --
 
-const CheckIcon = () => (
+const CheckIcon = () => { const t = useT(); return ((
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <circle cx="8" cy="8" r="7" stroke="#16A34A" strokeWidth="1.5" fill="#F0FDF4" />
     <path d="M5 8l2 2 4-4" stroke="#16A34A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-);
+)); };
 
-const CrossIcon = () => (
+const CrossIcon = () => { const t = useT(); return ((
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <circle cx="8" cy="8" r="7" stroke="#DC2626" strokeWidth="1.5" fill="#FEF2F2" />
     <path d="M6 6l4 4M10 6l-4 4" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
-);
+)); };
 
-const SpinnerIcon = () => (
+const SpinnerIcon = () => { const t = useT(); return ((
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="animate-spin">
     <circle cx="8" cy="8" r="6" stroke="#D1D5DB" strokeWidth="2" />
     <path d="M8 2a6 6 0 0 1 6 6" stroke="#6366F1" strokeWidth="2" strokeLinecap="round" />
   </svg>
-);
+)); };
 
 // -- Sub-components --
 
@@ -76,6 +76,7 @@ const ComplianceCard = ({
   loading: boolean;
   error: string | null;
 }) => {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -159,6 +160,7 @@ const ComplianceCard = ({
 // -- Main Component --
 
 const CompliancePanel: React.FC<CompliancePanelProps> = ({ accessToken, logEntry }) => {
+  const t = useT();
   const [euAiActData, setEuAiActData] = useState<ComplianceResponse | null>(null);
   const [gdprData, setGdprData] = useState<ComplianceResponse | null>(null);
   const [euAiActLoading, setEuAiActLoading] = useState(false);

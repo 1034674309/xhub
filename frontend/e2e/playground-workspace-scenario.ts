@@ -23,7 +23,7 @@ async function deployment(page: Page, name: string, key = true) {
     data: {
       model_name: name,
       litellm_params: {
-        model: "playground-local",
+        model: name,
         custom_llm_provider: "openai",
         api_base: UPSTREAM,
         ...(key ? { api_key: "sk-fake" } : {}),
@@ -122,6 +122,8 @@ test("single workspace has no comparison controls and preserves bilingual chat",
   await loginAdmin(page);
   const name = "e2e-single-workspace";
   const id = await deployment(page, name);
+  const switchedName = name + "-switched";
+  const switchedID = await deployment(page, switchedName);
   const headers = { Authorization: "Bearer " + (await sessionBearer(page)) };
   try {
     await page.evaluate(() => {
@@ -173,11 +175,36 @@ test("single workspace has no comparison controls and preserves bilingual chat",
     await expect(page.getByText("e2e-ok", { exact: true })).toBeVisible();
     expect(await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"))).toBe(sessionId);
     await page.getByRole("button", { name: "中文", exact: true }).click();
-    await selectChat(page, "gpt-4o-mini");
+    await selectChat(page, switchedName);
     await page.getByPlaceholder(t("Select an endpoint"), { exact: true }).click();
     await page.getByRole("option").filter({ hasText: /\/v1\/responses$/ }).click();
     expect(await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"))).toBe(sessionId);
+    // 实际发送不同模型及端点，验证同一会话归组，而不是仅检查选择器和本地存储。
+    const switchedInput = page.getByPlaceholder(t("Type your message... (Shift+Enter for new line)"));
+    await switchedInput.fill("Continue after changing the model and endpoint.");
+    const switchedPending = page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/responses") && r.request().method() === "POST");
+    await page.getByRole("button", { name: t("Send message"), exact: true }).click();
+    const switched = await switchedPending;
+    expect(switched.status()).toBe(200);
+    expect(switched.request().postDataJSON().model).toBe(switchedName);
+    expect(switched.headers()["x-session-id"]).toBe(sessionId);
+    // 响应完成后输入框会清空，发送按钮因此禁用；等待下一条输入可用再继续切换。
+    await expect(switchedInput).toHaveValue("");
     await selectChat(page, name);
+    await switchedInput.fill("Continue after returning to the original model and endpoint.");
+    const returnedPending = page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/chat/completions") && r.request().method() === "POST");
+    await page.getByRole("button", { name: t("Send message"), exact: true }).click();
+    const returned = await returnedPending;
+    expect(returned.status()).toBe(200);
+    expect(returned.headers()["x-session-id"]).toBe(sessionId);
+    for (const [result, requestedModel, endpoint] of [[response, name, "chat/completions"], [switched, switchedName, "responses"], [returned, name, "chat/completions"]] as const) {
+      await expect.poll(async () => {
+        const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + result.headers()["x-litellm-call-id"], { headers });
+        if (!detail.ok()) return null;
+        const log = await detail.json();
+        return [log.model, log.session_id, log.session_source, String(log.inbound_endpoint).endsWith(endpoint)];
+      }).toEqual([requestedModel, sessionId, "explicit", true]);
+    }
     const callId = response.headers()["x-litellm-call-id"];
     expect(callId).toBeTruthy();
     await expect
@@ -186,7 +213,7 @@ test("single workspace has no comparison controls and preserves bilingual chat",
         return detail.ok() ? (await detail.json()).model : "";
       })
       .toBe(name);
-    await expect(page.getByText("e2e-ok", { exact: true })).toBeVisible();
+    await expect(page.getByText("e2e-ok", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: t("Clear Chat"), exact: true }).click();
     await expect(page.getByText("e2e-ok", { exact: true })).toHaveCount(0);
     const nextSessionId = await page.evaluate(() => sessionStorage.getItem("playgroundSessionId"));
@@ -205,6 +232,7 @@ test("single workspace has no comparison controls and preserves bilingual chat",
       return log.ok() ? (await log.json()).session_id : "";
     }).toBe(nextSessionId);
   } finally {
+    expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: switchedID } })).status()).toBe(200);
     expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id } })).status()).toBe(200);
   }
 });

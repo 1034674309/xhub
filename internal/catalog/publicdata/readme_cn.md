@@ -2,6 +2,39 @@
 
 [English](readme.md)
 
+## 如何由其他模块接入
+
+这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。
+
+本目录是构建期资源，不提供 Go API。修改 JSON 后由父包 embed 载入；保持数据格式、来源与许可证，重新构建/重启才影响内嵌基线。运行时覆盖走 catalog 管理接口。
+
+| 入口或资源 | 调用方式与返回结果 |
+| --- | --- |
+| pricedata.json | 价格/供应商内嵌基线 |
+| cn_holidays.json | 北京时间计费日历 |
+| provider_fields.json | 供应商凭据字段描述 |
+
+### 接入 demo
+
+在仓库根目录执行以下命令。
+
+```sh
+python3 - <<'PY'
+import json
+from pathlib import Path
+for name in ("pricedata.json", "cn_holidays.json", "provider_fields.json"):
+    json.loads((Path("internal/catalog/publicdata") / name).read_text())
+    print(name, "valid JSON")
+PY
+go test ./internal/catalog -count=1
+```
+
+在仓库根目录运行，先显示三个 valid JSON，再执行父包测试；不更新线上资源。
+
+### 错误、状态与副作用
+
+JSON 语法通过不证明费率、假期或供应商字段正确；还要检查消费方语义测试。修改文件不会热更新已运行进程。
+
 ## 说明
 
 `internal/catalog/publicdata` 保存父级 `catalog` 包使用的构建期数据。本目录没有 Go package、可变状态或 HTTP handler。资源包括基础价格/供应商目录、北京时间计费日历、供应商凭据字段快照及许可证，以及保留的自动路由预设。`go:embed` 把字节编入二进制，修改文件不会改变运行中的进程；运行时市场刷新和运营覆盖是独立层。

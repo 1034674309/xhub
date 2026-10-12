@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 export interface SidebarToggleProps {
   isCollapsed: boolean;
@@ -10,6 +10,7 @@ export interface SidebarToggleProps {
 }
 
 export function SidebarToggle({ isCollapsed, onToggle, className }: SidebarToggleProps) {
+  const t = useT();
   return (
     <Button
       variant="ghost"

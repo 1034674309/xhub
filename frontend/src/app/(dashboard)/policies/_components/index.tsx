@@ -33,7 +33,7 @@ import {
 import { Policy, PolicyAttachment } from "@/components/policies/types";
 import { Guardrail } from "@/components/guardrails/types";
 import DeleteResourceModal from "@/components/common_components/DeleteResourceModal";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DismissibleAlertProps {
   title: string;
@@ -42,6 +42,7 @@ interface DismissibleAlertProps {
 }
 
 const DismissibleAlert: React.FC<DismissibleAlertProps> = ({ title, icon, children }) => {
+  const t = useT();
   const [isDismissed, setIsDismissed] = useState(false);
 
   if (isDismissed) return null;
@@ -60,7 +61,7 @@ const DismissibleAlert: React.FC<DismissibleAlertProps> = ({ title, icon, childr
   );
 };
 
-const AboutPoliciesAlert = () => (
+const AboutPoliciesAlert = () => { const t = useT(); return ((
   <DismissibleAlert title={t("About Policies")} icon={<Info />}>
     <p className="mb-3">
       {t("Use policies to group guardrails and control which ones run for specific teams, keys, or models.")}
@@ -75,7 +76,7 @@ const AboutPoliciesAlert = () => (
       {t("Learn more in the documentation ->")}
     
   </DismissibleAlert>
-);
+)); };
 
 interface PoliciesPanelProps {
   accessToken: string | null;
@@ -83,6 +84,7 @@ interface PoliciesPanelProps {
 }
 
 const PoliciesPanel: React.FC<PoliciesPanelProps> = ({ accessToken, userRole }) => {
+  const t = useT();
   const [policiesList, setPoliciesList] = useState<Policy[]>([]);
   const [attachmentsList, setAttachmentsList] = useState<PolicyAttachment[]>([]);
   const [guardrailsList, setGuardrailsList] = useState<Guardrail[]>([]);
@@ -126,7 +128,7 @@ const PoliciesPanel: React.FC<PoliciesPanelProps> = ({ accessToken, userRole }) 
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   const fetchAttachments = useCallback(async () => {
     if (!accessToken) return;
@@ -141,7 +143,7 @@ const PoliciesPanel: React.FC<PoliciesPanelProps> = ({ accessToken, userRole }) 
     } finally {
       setIsAttachmentsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   const fetchGuardrails = useCallback(async () => {
     if (!accessToken) return;

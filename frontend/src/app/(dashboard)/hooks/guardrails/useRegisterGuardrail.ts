@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { createQueryKeys } from "../common/queryKeysFactory";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +53,7 @@ const registerGuardrail = async (
 const guardrailKeys = createQueryKeys("guardrails");
 
 export const useRegisterGuardrail = () => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

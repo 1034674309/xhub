@@ -1,7 +1,7 @@
 import CopyButton from "@/components/shared/CopyButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DEFAULT_MAX_WIDTH, FONT_FAMILY_MONO } from "./constants";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface TruncatedValueProps {
   value?: string;
@@ -13,6 +13,7 @@ interface TruncatedValueProps {
  * Useful for displaying long IDs, URLs, or other text that may overflow.
  */
 export function TruncatedValue({ value, maxWidth = DEFAULT_MAX_WIDTH }: TruncatedValueProps) {
+  const t = useT();
   if (!value) return <span className="text-muted-foreground">-</span>;
 
   return (

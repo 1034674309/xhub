@@ -1,3 +1,5 @@
+// 本文件串联统一入口的鉴权、预算、护栏、缓存、调度、重试、协议转换及最终用量记录。
+// 调用关系与边界：数据面执行编排；具体参数、返回及副作用见各方法说明。
 package execution
 
 import (
@@ -18,7 +20,6 @@ import (
 	dptransport "github.com/sunqirui1987/xhub/internal/dataplane/transport"
 	dpusage "github.com/sunqirui1987/xhub/internal/dataplane/usage"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
-	"github.com/sunqirui1987/xhub/internal/plugin"
 	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
 	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 	"github.com/sunqirui1987/xhub/internal/router"
@@ -26,26 +27,33 @@ import (
 )
 
 var (
+	// 已收到 429/5xx 的内部哨兵；最终对外状态统一为 502，原始状态和正文另行记录。
 	errUpstreamStatus = errors.New("upstream_error")
-	errEmptyUpstream  = errors.New("empty upstream stream")
+	// 流读取正常结束但未输出内容时不能提交成功归属，仍可在未写出前尝试下一候选。
+	errEmptyUpstream = errors.New("empty upstream stream")
 )
 
-// Serve runs one inference. It picks deployments with the routing strategy, encodes the upstream request, and tries the next deployment after a failure.
-// Serve 跑一次适配推理。预算或护栏拒绝时响应已经写好，函数直接返回。
-// 扩展按注册顺序在缓存和上游之前运行。重试次数小于 1 时按 1 次。没有 api_base
-// 时拒绝调用。没有密钥或地址的部署跳过。
+// Serve 执行一次统一推理请求，将调用方协议适配成部署登记的上游协议，并把结果转换回来。
+// 参数 h 提供身份、路由、凭据、缓存、护栏与记账能力；w 接收 HTTP 响应；r 提供上下文、头和只读取一次的 JSON 正文；op 是目录操作名，如 chat、responses、embedding。
+// 返回值：无；所有成功、拒绝和失败结果直接写入 w。网关统一推理入口调用本方法。
 //
-// 参数 h：Adapted，不含官方任务钉。w：调用方响应。r：入站请求，正文只读一次。
-// 参数 op：目录操作名，例如 chat、embedding。
-// 返回：无。成功、失败和拒绝都写在 w 上。
-// Responses 先恢复已校验归属的历史，再执行预算和护栏；成功终态发布前保存下一轮上下文。
-// 调用：gateway/limits.go dataPlane。测试：failure_log_test.go 的 TestServeLogs*。
+// 执行顺序有业务约束：先鉴权并建立会话计划；Responses 恢复授权历史后检查预算与护栏；
+// 随后执行并发钩子和扩展，解析请求级模板与协议，检查缓存，再选择兼容部署和动态偏好。
+// 每轮发送前补齐服务端凭据并检查实际目标权限；失败时按模板尝试同池部署或跨模型回退。
+// 成功路径记录真实出站诊断、会话归属、响应正文和用量；释放并发名额、正文和尝试上下文。
+//
+// 会话偏好只影响顺序，不能绕过当前能力、冷却、权限和预算。Required 父响应归属禁止换目标。
+// 流式响应一旦写出便不能重试，否则客户端会混合两次回复且可能重复计费；断流只记失败。
+// Responses 在发布完成事件前保存已验证历史，使客户端收到终态后立即续接也能找到上下文。
+// 响应缓存隔离租户、会话、查询及完整路由配置，命中后复核实际模型权限；Responses 不读此缓存。
+// 副作用包括上游 HTTP 请求、流式写出、进程/Redis 路由状态、会话缓存和用量记账。
 func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op string) {
 	dpdiagnostics.TraceHop(r.URL.Path)
 	util.Trace("process path=%s step=start op=%s", r.URL.Path, op)
 	start := time.Now()
 	callID := util.CallID()
 	util.SetCallID(w, callID)
+	// 第一阶段：先取得可信身份，再读取客户端模型和会话信号；这些信号不能自行授予权限。
 	p := h.RequireLLMPrincipal(w, r)
 	if p == nil {
 		util.Debug("process path=%s step=auth ok=false", r.URL.Path)
@@ -70,6 +78,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "model required")
 		return
 	}
+	// 会话计划先于调度生成；这里只读偏好或父响应归属，最终候选仍要按当前配置重新验证。
 	plan := h.PlanRoute(r, alias, body, p)
 	w.Header().Set("X-Session-Id", plan.SessionID)
 	h.AnnotateCall(callID, dpcontract.CallNote{SessionID: plan.SessionID, SessionSource: plan.SessionSource})
@@ -77,6 +86,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", plan.Err.Error())
 		return
 	}
+	// 恢复经过授权的历史后才检查输入额度和护栏，避免只检查本轮短输入而漏掉真实出站上下文。
 	if op == "responses" {
 		body, err = dpdialogue.ResponsesRequestBody(body, plan.History)
 		if err != nil {
@@ -85,48 +95,31 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		}
 	}
 	est := dpusage.EstimateTokens(body)
-	if !h.EnforceIdentityLimits(w, r.URL.Path, p, alias, est) {
+	if !h.AdmitRequest(w, r.URL.Path, p, alias, est) {
 		util.Debug("process path=%s step=limits refused model=%s", r.URL.Path, alias)
 		return
 	}
 	if op == "chat" || op == "responses" || op == "messages" || op == "gemini" || op == "vertex" || op == "" {
 		if blocked, msg := h.GuardrailBlocks(callID, body); blocked {
 			util.Error("process path=%s step=guardrail blocked model=%s", r.URL.Path, alias)
-			// The refusal is still a request. Record it so the logs drawer can
-			// show which guardrail stopped the call.
+			// 护栏拒绝也属于一次真实请求：保存交互并记零费用失败行，控制台才能定位拦截原因。
 			h.RememberExchange(callID, r, raw, nil)
 			h.RecordSpend(w, p, callID, alias, op, nil, start, false, http.StatusBadRequest, "")
 			util.WriteTypedError(w, r.URL.Path, 400, "guardrail_failed", msg)
 			return
 		}
-		// Guardrails can redact the parsed request. Cache and exchange logs must
-		// describe the same request that the encoder sends upstream.
+		// 脱敏可能原地修改 body，必须重编码，让缓存键、交互日志和出站编码器看到同一份输入。
 		raw, err = json.Marshal(body)
 		if err != nil {
 			util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", "invalid guarded request")
 			return
 		}
 	}
-	// Budget was already checked against the whole hierarchy by
-	// EnforceIdentityLimits. This only bounds in-flight calls for one key.
-	done := h.HookEngine().Begin(p.KeyID)
-	if done != nil {
-		defer done()
-	}
-	if refused := applyExtensions(w, r, h, op, alias); refused {
-		util.Debug("process path=%s step=extension refused model=%s", r.URL.Path, alias)
-		return
-	}
 
 	cfg := h.GatewayConfig()
-	// The settings this request runs under, resolved once. Its scope was already
-	// picked out by the identity chain during the budget check, so this reads
-	// one template row rather than walking anything.
-	//
-	// Every read below - the strategy, the retry count, the cooldown thresholds -
-	// goes through this value rather than through cfg.RouterSettings, which is
-	// the process-global document. That is what makes a scope that selected a
-	// template and one that did not run the same code with different inputs.
+	// 第二阶段：读取身份链选中的请求级路由模板，再应用模型默认设置。
+	// 策略、重试、超时与冷却都从这个快照读取，不能混入进程 cfg.RouterSettings。
+	// 保留未套用模型的 baseRouteCfg，跨模型回退时重新解析目标的默认设置。
 	routeCfg := h.RouteSettingsFor(p)
 	if routeCfg.Err != nil {
 		util.WriteTypedError(w, r.URL.Path, 503, "unavailable", "route template unavailable")
@@ -152,7 +145,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	}
 	scope := map[string]any{
 		"models": cfg.ModelList, "router": routeCfg.Settings,
-		"session": plan.SessionID, "query": r.URL.RawQuery,
+		"model_defaults": routeCfg.ModelDefaults,
+		"session":        plan.SessionID, "query": r.URL.RawQuery,
 	}
 	// 路由文档完整参与缓存隔离；空配置和非空配置使用同一键结构。
 	scope["routing_groups"] = routeCfg.RoutingGroups
@@ -164,17 +158,28 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	}
 	ck := util.CacheKey(tenant, op, alias, string(raw), string(cacheScope))
 	stream, _ := body["stream"].(bool)
-	// 跨模型结果不从响应缓存读取：权限或预算可能在两次请求之间变化。
+	// 路由与回退配置已经进入缓存键，不再用配置是否存在决定缓存读取。
 	// Responses 的响应 ID 必须对应本次执行和上下文，不能复用已过期的响应缓存 ID。
-	if op != "responses" && !stream && len(baseRouteCfg.ModelFallbacks) == 0 && len(baseRouteCfg.RoutingGroups) == 0 {
+	if op != "responses" && !stream {
 		if hit, ok := h.ResponseCache().Get(ck); ok {
+			// 缓存记录实际执行模型和组；复用成功正文前仍检查当前权限和预算，
+			// 与首次调用检查同一范围，不能靠禁用整个回退功能来代替授权。
+			checked := map[string]bool{alias: true}
+			for _, model := range hit.Models {
+				if model != "" && !checked[model] {
+					if !h.EnforceIdentityLimits(w, r.URL.Path, p, model, est) {
+						return
+					}
+					checked[model] = true
+				}
+			}
 			elapsed := time.Since(start)
-			pt, ct := dpusage.BodyUsage(hit)
+			pt, ct := dpusage.BodyUsage(hit.Body)
 			util.Debug("process path=%s step=cache hit=true model=%s", r.URL.Path, alias)
 			dpdiagnostics.LogMetrics(r.URL.Path, alias, true, pt, ct, elapsed, elapsed)
-			h.RememberExchange(callID, r, raw, hit)
+			h.RememberExchange(callID, r, raw, hit.Body)
 			h.AnnotateCall(callID, dpcontract.CallNote{SessionID: plan.SessionID, CacheKey: ck, CacheHit: true})
-			h.WriteCacheHit(w, p, callID, alias, ck, op, hit, start)
+			h.WriteCacheHit(w, p, callID, alias, ck, op, hit.Body, start)
 			return
 		}
 		util.Trace("process path=%s step=cache hit=false model=%s", r.URL.Path, alias)
@@ -185,6 +190,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		util.WriteTypedError(w, r.URL.Path, 400, "invalid_request", err.Error())
 		return
 	}
+	// 第三阶段：先过滤停用和协议不兼容项，再调度；偏好不能把已剔除的部署塞回候选。
 	// 权重仅取自解析后的模板，旧部署权重不会参与任何策略。
 	models := cfg.ModelList
 	models, _ = dprouting.DropDisabled(models)
@@ -233,8 +239,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		util.WriteTypedError(w, r.URL.Path, status, kind, message)
 		return
 	}
-	// Retries already clamps to at least one, so a template that leaves the key
-	// out cannot turn a request into one that is never attempted.
+	// 第四阶段：外层遍历模型回退图，中层遍历部署池，内层按该目标模板重试。
+	// Retries 至少返回 1，省略重试字段也会执行首次尝试；这不是额外重试次数。
 
 	var lastErr error
 	var lastStatus int
@@ -242,11 +248,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	var lastProvider string
 	triedHTTP := false
 	missingCredential := false
-	// unimplementedProvider records that a deployment was skipped because the
-	// gateway has no protocol implementation for its provider name. It is
-	// tracked separately from lastProvider, which is set before the provider is
-	// checked and therefore cannot tell the two failures apart: an operator who
-	// misspelled a provider name used to be told their API key was missing.
+	// 分开保存“尚未发 HTTP”“凭据缺失”“构造失败”和“上游失败”的事实，
+	// 使最终错误能指出配置或协议问题，避免一律归因为缺少密钥。
 
 	for len(pool) > 0 {
 		kind := "general"
@@ -259,9 +262,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				return
 			}
 			if triedHTTP {
-				// A retry is a new request against the upstream, so the credential
-				// is resolved again: a key revoked between attempts must not carry
-				// the retry, and the hierarchy is re-checked before spend is added.
+				// 重新解析的是调用方身份，确认密钥未在两次出站之间撤销；不是重新附加供应商凭据。
+				// 身份与预算必须在继续执行前复核，不能沿用首次鉴权作为整个重试链的许可。
 				p2, err := h.ResolveRequest(r)
 				if err != nil || p2 == nil || !p2.CanInfer() {
 					util.WriteTypedError(w, r.URL.Path, 401, "invalid_api_key", "Authentication Error, No api key passed in.")
@@ -330,10 +332,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				triedHTTP = true
 				util.Trace("process path=%s step=attempt n=%d provider=%s model=%s base_host=%s", r.URL.Path, try+1, supplier, realModel, dpdiagnostics.BaseHost(apiBase))
 				h.IncBusy(did)
-				// The timeout belongs to this request's document, not to the process
-				// client. The shared client is copied so its Timeout of 0 lets the
-				// context be the only deadline; otherwise a template that says 10
-				// seconds still waits for the timeout frozen at startup.
+				// 每次尝试拥有独立 deadline；复制客户端并清零 Timeout，让当前模板控制完整读取时限。
+				// cancelAttempt、正文 Close 和 DecBusy 必须在每条退出路径配对，不能只清理成功路径。
 				attemptCtx, cancelAttempt := context.WithTimeout(r.Context(), time.Duration(routeCfg.TimeoutSeconds()*float64(time.Second)))
 				req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, built.URL, bytes.NewReader(built.Body))
 				if err != nil {
@@ -426,6 +426,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						h.NoteFailure(did, routeCfg)
 						util.Error("upstream stream path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(streamErr))
 						if wrote {
+							// 客户端已收到部分回复，不能重试或换模型；记录已有用量和 502 事实后结束。
 							h.RememberExchange(callID, r, raw, streamed)
 							h.AnnotateCall(callID, dpcontract.CallNote{Streamed: true, TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck, SessionID: plan.SessionID})
 							h.RecordSpend(w, p, callID, alias, op, usage, start, false, http.StatusBadGateway, did)
@@ -500,7 +501,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				if resp.StatusCode < 400 {
 					h.CommitRoute(plan, router.DeploymentID(rawDep), dpstream.ResponseID(respBody))
 				}
-				h.WriteChatJSON(w, p, callID, alias, ck, op, "", respBody, resp.StatusCode, start, depID)
+				h.WriteChatJSON(w, p, callID, alias, ck, op, "", respBody, resp.StatusCode, start, depID, fallbacks.PoolAlias, rawDep.ModelName)
 				return
 			}
 		}
@@ -513,15 +514,8 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		}
 	}
 
-	// Every terminal failure below is still a request the caller made. It is
-	// recorded the way a 400 already is: a row with the status, no tokens and no
-	// charge. Without this the failure is visible only in the process log, so a
-	// customer reporting "my calls fail" leaves nothing to look at in the console.
-	//
-	// The three cases are told apart on purpose. Two of them used to share the
-	// 401 "no upstream API key configured" message, which sent an operator who had
-	// misspelled a provider name, or who had picked one the gateway cannot encode
-	// a request for, looking for a credential that was never the problem.
+	// 最终失败仍写交互与零费用用量行，使控制台能查到请求，而非只留下进程日志。
+	// 未发出 HTTP 时区分凭据和编码错误；已经尝试 HTTP 时保留最后上游状态/正文或安全错误。
 	if !triedHTTP {
 		switch {
 		case missingCredential:
@@ -530,9 +524,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 			h.RecordSpend(w, p, callID, alias, op, nil, start, false, http.StatusUnauthorized, "")
 			util.WriteTypedError(w, r.URL.Path, 401, "authentication_error", "This model has no upstream API key configured.")
 		case lastErr != nil:
-			// The provider name is known but the request could not be encoded for
-			// it. Reporting this as a missing credential would be a lie, and the
-			// encode error is the only thing that says what to fix.
+			// 部署存在但不能构造所需协议请求，报告安全编码错误才能指出应修复的配置或能力。
 			util.Error("dataplane path=%s status=400 code=provider_not_implemented provider=%s err=%s",
 				r.URL.Path, lastProvider, dpdiagnostics.SafeErr(lastErr))
 			detail := dpdiagnostics.SafeErr(lastErr)
@@ -571,32 +563,4 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	h.RememberExchange(callID, r, raw, []byte("all deployments failed"))
 	h.RecordSpend(w, p, callID, alias, op, nil, start, false, http.StatusBadGateway, "")
 	util.WriteTypedError(w, r.URL.Path, 502, "upstream_error", "all deployments failed")
-}
-
-// applyExtensions 按注册顺序跑推理前扩展。任一扩展拒绝时响应已写好，并返回真。
-// 参数 w、r：写拒绝和读取路径。h：提供扩展注册表。op、alias：传给扩展的操作和模型名。
-// 返回：true 表示调用方应停止，不再访问上游。
-// 调用：Serve。测试夹具的扩展注册表是空的，所以现有测试走 false 这条。
-func applyExtensions(w http.ResponseWriter, r *http.Request, h dpcontract.Adapted, op, alias string) bool {
-	d := h.Extensions().Run(plugin.Call{Op: op, Model: alias, Path: r.URL.Path})
-	for k, v := range d.Header {
-		w.Header().Set(k, v)
-	}
-	if !d.Refuse {
-		return false
-	}
-	status := d.Status
-	if status == 0 {
-		status = 400
-	}
-	code := d.Code
-	if code == "" {
-		code = "extension_refused"
-	}
-	msg := d.Message
-	if msg == "" {
-		msg = "extension refused the call"
-	}
-	util.WriteTypedError(w, r.URL.Path, status, code, msg)
-	return true
 }

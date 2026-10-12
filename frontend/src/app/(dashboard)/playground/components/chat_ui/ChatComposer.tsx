@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cva.config";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ChatComposerProps {
   value: string;
@@ -39,6 +39,7 @@ export function ChatComposer({
   onSuggestionSelect,
   className,
 }: ChatComposerProps) {
+  const t = useT();
   const submitIfAllowed = () => {
     if (!submitDisabled && !isLoading) {
       onSubmit();
@@ -149,6 +150,7 @@ interface CodeInterpreterToggleProps {
 }
 
 export function CodeInterpreterToggle({ enabled, onToggle }: CodeInterpreterToggleProps) {
+  const t = useT();
   return (
     <Tooltip>
       <TooltipTrigger

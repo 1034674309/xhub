@@ -1,11 +1,40 @@
+// 本文件验证 runtime 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package runtime
 
 import (
 	"testing"
+	"time"
 
 	"github.com/sunqirui1987/xhub/internal/live"
 )
 
+// TestQueuedUsageRecordSessionAttribution 验证异步账单保留请求别名、实际供应商和会话识别来源。
+// 参数 t 为测试上下文；前置纯内存成功、失败、缓存命中及旧载荷，验证完整快照与缺失字段不被推断。
+// 返回无；不连接外部服务、不创建持久数据，无需清理。
+func TestQueuedUsageRecordSessionAttribution(t *testing.T) {
+	for _, source := range []string{"explicit", "parent", "cache_key", "prompt", "generated", ""} {
+		for _, status := range []string{"success", "error"} {
+			t.Run(source+"/"+status, func(t *testing.T) {
+				row := live.SpendLog{Model: "requested-group", Supplier: "supplier-b", UpstreamModel: "actual-model", SessionID: "session", SessionSource: source, Status: status, CacheHit: true, Start: "2026-10-12T00:00:00Z", End: "2026-10-12T00:00:01Z"}
+				got := queuedUsageRecord(row)
+				if got.Model != row.Model || got.Supplier != row.Supplier || got.UpstreamModel != row.UpstreamModel || got.SessionID != row.SessionID || got.SessionSource != source || got.Status != status || !got.CacheHit {
+					t.Fatalf("异步落库改变请求或执行归属：%+v", got)
+				}
+			})
+		}
+	}
+	before := time.Now()
+	got := queuedUsageRecord(live.SpendLog{Start: "invalid", End: "invalid", Spend: 99})
+	if got.SessionSource != "" || got.SessionID != "" || got.Supplier != "" || got.UpstreamModel != "" || got.TS.Before(before) || got.EndedAt.Before(before) || got.Cost != 0 {
+		t.Fatalf("旧载荷或非法时间不得伪造会话与计费事实：%+v", got)
+	}
+}
+
+// TestHotDeltasIncludesProject 验证花费按密钥、团队、用户、组织及项目累积，项目预算热计数不会遗漏。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败定位具体协议、路由或日志行为。
+// 前置使用独立测试配置及内存传输/纯函数输入，不依赖外部供应商凭据。
+// 测试状态只存在本例内存，不产生持久化数据。
 func TestHotDeltasIncludesProject(t *testing.T) {
 	rows := []live.SpendLog{{APIKey: "k", TeamID: "t", UserID: "u", OrgID: "o", ProjectID: "p", Spend: 0.25, SpendValid: true}, {ProjectID: "p", Spend: 100}}
 	got := hotDeltas(rows)

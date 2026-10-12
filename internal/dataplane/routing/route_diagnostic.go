@@ -1,3 +1,5 @@
+// 本文件只读解释目录、能力、权重和冷却各阶段候选数量，供接口错误与关联日志使用。
+// 调用关系与边界：请求候选选择的辅助能力；具体参数、返回及副作用见各方法说明。
 package routing
 
 import (
@@ -13,18 +15,27 @@ import (
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-// routeDiagnosis 保存当前公开模型的只读筛选事实；部署仅在内部使用，日志只输出白名单字段。
+// routeDiagnosis 保存目录匹配、停用、兼容、权重分配和冷却各阶段的只读统计。
+// 由 DiagnoseRoute 创建，Failure 映射错误类别，Log 输出关联 callID 的诊断。
+// 统计不推进随机或轮询调度、不证明权限，也不能替代 Schedule 返回的真实执行候选。
 type routeDiagnosis struct {
+	// 完整目录条目数、模型匹配数、停用数、兼容数、可调度数、冷却数和零权重数；各阶段口径不同，不可直接相加。
 	loaded, matched, disabled, compatible, available, cooling, zeroWeight int
-	endpoint                                                              string
-	decisions                                                             []providerdeployment.CandidateDecision
-	stale                                                                 []router.Allocation
-	state                                                                 router.State
+	// 请求能力入口，用于诊断协议兼容，而非出站 URL。
+	endpoint string
+	// 兼容性筛选的逐部署决定及排除理由，保留给日志解释。
+	decisions []providerdeployment.CandidateDecision
+	// 模板分配中已不对应当前部署的配置，用于提示陈旧 ID。
+	stale []router.Allocation
+	// 当前冷却与分配等只读快照，诊断不推进真实调度状态。
+	state router.State
 }
 
-// diagnoseRoute 为 Serve 解释目录、声明、请求能力、冷却及权重筛选。
-// 参数 directory 为未过滤目录，eligible 为实际兼容池，alias/endpoint 为公开请求标识，settings/state 为解析快照，
-// dialogue/adapted 控制请求能力检查；返回诊断，不调用上游、不修改目录、权重或随机/轮询状态。
+// DiagnoseRoute 只读分析候选消失在哪个路由阶段，供执行失败日志与错误响应使用。
+// 参数 directory 为完整目录，eligible 为能力候选；alias、endpoint 指定请求模型与入口；settings、state 是当前模板与运行快照；dialogue 为可选对话需求；adapted 区分适配与原生检查。
+// 返回 routeDiagnosis，含模型/组匹配、停用、能力、权重、冷却等统计与最终失败原因。
+// 执行器没有候选时调用；复制必要目录元数据以匹配停用模型，不能改变真实目录或让诊断本身推进随机/轮询调度。
+// 只观察配置与状态，不发送探测、不扣费、不修复旧权重；管理员应根据诊断修正模板或部署。
 func DiagnoseRoute(directory, eligible []config.ModelEntry, alias, endpoint string, settings router.RouteSettings, state router.State, dialogue *llmdialogue.Dialogue, adapted bool) routeDiagnosis {
 	d := routeDiagnosis{loaded: len(directory), endpoint: endpoint, state: state}
 	active, _ := DropDisabled(directory)
@@ -78,8 +89,10 @@ func DiagnoseRoute(directory, eligible []config.ModelEntry, alias, endpoint stri
 	return d
 }
 
-// log 输出本次请求的阶段计数和部署排除原因；参数为路径、关联 ID、公开名和规则快照。
-// Serve 在调度前调用，无返回值，仅写日志；凭据、正文及完整上游地址不输出，字符串引用以隔离换行。
+// Log 将路由诊断摘要写入进程日志，保留调用 ID 以关联同一次请求。
+// 参数 path、callID、alias 为入站路径、调用标识和公开模型；settings 为生效模板；返回值无。
+// 执行器在无候选分支调用；仅输出计数、模板来源和原因，不输出供应商密钥或请求正文。
+// 副作用为日志写入，不重新调度或修改诊断对象。
 func (d routeDiagnosis) Log(path, callID, alias string, settings router.RouteSettings) {
 	util.Debug("process path=%s step=route_diagnosis call_id=%q model=%q endpoint=%q loaded=%d matched=%d disabled=%d compatible=%d available=%d cooling=%d zero_weight=%d strategy=%q template_id=%q template_name=%q source=%q rule_source=%q", path, callID, alias, d.endpoint, d.loaded, d.matched, d.disabled, d.compatible, d.available, d.cooling, d.zeroWeight, settings.Strategy(), settings.TemplateID, settings.TemplateName, settings.Source, settings.RuleSource)
 	for _, decision := range d.decisions {
@@ -109,8 +122,10 @@ func (d routeDiagnosis) Log(path, callID, alias string, settings router.RouteSet
 	}
 }
 
-// failure 将空路由映射为可操作的接口错误；参数 alias 为请求公开名，返回状态、类型和安全提示。
-// Serve 仅在主模型及回退均耗尽后调用，不向客户泄漏内部部署、地址或供应商校验细节。
+// Failure 把路由诊断转换为客户端可处理的 HTTP 状态、错误类型和简短说明。
+// 参数 alias 为请求公开模型；返回 status、code、message，供执行器写路径对应的错误包络。
+// 不存在、停用或能力不兼容通常返回 400；分配不可用、冷却或没有当前可选部署返回 503。
+// 纯映射，不写 HTTP 或日志，不把诊断当作绕过资格检查的降级策略。
 func (d routeDiagnosis) Failure(alias string) (int, string, string) {
 	if d.matched == 0 {
 		if d.disabled > 0 {

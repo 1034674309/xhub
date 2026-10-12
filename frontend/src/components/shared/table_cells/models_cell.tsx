@@ -5,7 +5,7 @@ import { getModelDisplayName } from "@/components/key_team_helpers/fetch_availab
 import { Badge } from "@/components/ui/badge";
 
 import { CellTooltip } from "./cell_tooltip";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface ModelsCellProps {
   models: string[] | null | undefined;
@@ -25,6 +25,7 @@ const formatModel = (model: string): string => {
 };
 
 export function ModelsCell({ models, maxVisible = 3, allowedRoutes, keyType }: ModelsCellProps) {
+  const t = useT();
   if (!Array.isArray(models) || models.length === 0) {
     const scope = deriveKeyModelScope(allowedRoutes, keyType);
     if (!scope.hasModelAccess) {

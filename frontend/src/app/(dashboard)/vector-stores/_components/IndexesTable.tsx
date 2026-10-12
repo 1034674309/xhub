@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/DataTable";
 
 import type { VectorStoreIndex } from "./IndexesTab";
 import { getIndexesTableColumns } from "./IndexesTableColumns";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface IndexesTableProps {
   data: VectorStoreIndex[];
@@ -20,6 +20,7 @@ interface IndexesTableProps {
 const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className="flex flex-col items-center gap-1 py-6">
       <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-muted">
@@ -37,6 +38,7 @@ const IndexesTable: React.FC<IndexesTableProps> = ({
   onViewVectorStore,
   isLoading = false,
 }) => {
+  const t = useT();
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
 
   const columns = useMemo(

@@ -1,4 +1,4 @@
-package prefs
+package router
 
 import (
 	"encoding/json"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/router"
 )
 
 // TestTemplateFallbackParsing 验证模板三类策略的映射契约、类别合并和跨类别循环。
@@ -54,7 +53,7 @@ func TestTemplateFallbackParsing(t *testing.T) {
 		doc[field] = []any{map[string]any{"a": []any{"b"}}}
 	}
 	_, policies, err := TemplateRouting(doc)
-	if err != nil || !reflect.DeepEqual(policies["a"], router.FallbackPolicy{Fallbacks: []string{"b"}, ContextWindow: []string{"b"}, ContentPolicy: []string{"b"}}) {
+	if err != nil || !reflect.DeepEqual(policies["a"], FallbackPolicy{Fallbacks: []string{"b"}, ContextWindow: []string{"b"}, ContentPolicy: []string{"b"}}) {
 		t.Fatalf("跨类别合并失败: %v %v", policies, err)
 	}
 	doc["content_policy_fallbacks"] = []any{map[string]any{"b": []any{"a"}}}

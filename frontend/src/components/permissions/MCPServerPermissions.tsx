@@ -7,7 +7,7 @@ import { MCPServer, MCPToolset } from "../mcp_tools/types";
 import { ALL_PROXY_MCP_SERVERS_SENTINEL, NO_MCP_SERVERS_SENTINEL } from "../mcp_tools/constants";
 import { mcpAllowedToolsFor, mcpServersForIdentifier } from "../mcp_server_management/effectiveMcpServers";
 import { InheritedGrant, inheritedGrantTooltip } from "./inheritedGrants";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface MCPServerPermissionsProps {
   mcpServers: string[];
@@ -26,6 +26,7 @@ export function MCPServerPermissions({
   inheritedMcpServers = [],
   accessToken,
 }: MCPServerPermissionsProps) {
+  const t = useT();
   const [mcpServerDetails, setMCPServerDetails] = useState<MCPServer[]>([]);
   const [toolsetDetails, setToolsetDetails] = useState<MCPToolset[]>([]);
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());

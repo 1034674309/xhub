@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MCPTool, InputSchema, InputSchemaProperty } from "./types";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 type ToolFormValues = { args: unknown[] };
 
@@ -18,8 +18,8 @@ const argumentValues = (schema: InputSchema, values: ToolFormValues): Record<str
 const STRING_SCHEMA_MESSAGES: Readonly<Record<string, string>> = { input: "Please enter input for this tool" };
 
 const BOOLEAN_ITEMS = [
-  { value: true, label: t("True") },
-  { value: false, label: t("False") },
+  { value: true, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("True"); } },
+  { value: false, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("False"); } },
 ];
 
 const isBlank = (value: unknown): boolean => value === undefined || value === null || value === "";
@@ -233,6 +233,7 @@ interface MCPToolArgumentsFormProps {
 
 const MCPToolArgumentsForm = forwardRef<MCPToolArgumentsFormRef, MCPToolArgumentsFormProps>(
   ({ tool, className }, ref) => {
+  const t = useT();
     const schema: InputSchema = useMemo(() => {
       if (typeof tool.inputSchema === "string") {
         return {
@@ -247,7 +248,7 @@ const MCPToolArgumentsForm = forwardRef<MCPToolArgumentsFormRef, MCPToolArgument
         };
       }
       return tool.inputSchema as InputSchema;
-    }, [tool.inputSchema]);
+    }, [tool.inputSchema, t]);
 
     const actualSchema: InputSchema = useMemo(() => {
       if (schema.properties?.params?.type === "object" && schema.properties.params.properties) {

@@ -15,7 +15,7 @@ import SetPasswordModal from "@/components/SetPasswordModal";
 import useIsOrgAdmin from "@/app/(dashboard)/hooks/useIsOrgAdmin";
 import { useSessionIdentity } from "@/app/(dashboard)/hooks/sessionIdentity/useSessionIdentity";
 import { isProxyAdminRole } from "@/utils/roles";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 function hueFromString(seed: string): number {
   let h = 0;
@@ -54,7 +54,7 @@ const InfoRow: React.FC<{ icon: React.ReactNode; label: string; children: React.
   icon,
   label,
   children,
-}) => (
+}) => { const t = useT(); return ((
   <div className="flex min-h-[34px] items-center justify-between gap-3">
     <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
       {icon}
@@ -62,16 +62,16 @@ const InfoRow: React.FC<{ icon: React.ReactNode; label: string; children: React.
     </span>
     {children}
   </div>
-);
+)); };
 
-const MonoValue: React.FC<{ value: string | null; copyLabel: string }> = ({ value, copyLabel }) => (
+const MonoValue: React.FC<{ value: string | null; copyLabel: string }> = ({ value, copyLabel }) => { const t = useT(); return ((
   <span className="flex min-w-0 items-center gap-1">
     <span className="max-w-[150px] truncate font-mono text-[13px] font-medium text-foreground" title={value || "-"}>
       {value || "-"}
     </span>
     <CopyButton value={value} label={copyLabel} />
   </span>
-);
+)); };
 
 interface SidebarAccountMenuProps {
   onLogout: () => void;
@@ -79,6 +79,7 @@ interface SidebarAccountMenuProps {
 }
 
 const SidebarAccountMenu: React.FC<SidebarAccountMenuProps> = ({ onLogout, collapsed = false }) => {
+  const t = useT();
   const { userId, userEmail, userRoleLabel: userRole, accessToken } = useAuthorized();
   const isOrgAdmin = useIsOrgAdmin();
   const { data: identity } = useSessionIdentity();

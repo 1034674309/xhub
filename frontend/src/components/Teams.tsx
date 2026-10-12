@@ -11,7 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { FieldGroup } from "@/components/ui/field";
 import { FormField } from "@/components/shared/form/FormField";
 import { SearchSelect } from "@/components/shared/SearchSelect";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Users } from "lucide-react";
@@ -60,7 +60,7 @@ const numericInputSchema = z.union([z.string(), z.number()]).optional();
 const rateInputSchema = numericInputSchema.refine(isValidRateAllocation, { error: () => t("Must be a non-negative whole number") });
 
 const teamCreateFieldsSchema = z.object({
-  team_alias: z.string().min(1, t("Please input a team name")),
+  team_alias: z.string().min(1, { error: () => t("Please input a team name") }),
   team_description: z.string().optional(),
   organization_id: z.string().nullish(),
   models: z.array(z.string()).optional(),
@@ -200,6 +200,7 @@ const getAdminOrganizations = (
 
 // @deprecated
 const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, premiumUser = false }) => {
+  const t = useT();
   const { data: organizationsData } = useOrganizations();
   const organizations = organizationsData ?? null;
   const { data: teamMetadataSchemaFields = [], isLoading: isTeamMetadataSchemaLoading } = useTeamMetadataSchema();
@@ -240,7 +241,7 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, premiumUser
           ctx.addIssue({ code: "custom", message: SUPPRESSED_BY_DESCRIPTION, path: ["secret_manager_settings"] });
         }
       }),
-    [isOrgAdmin, additionalSettingsOpen, adminOrgs, organizations],
+    [isOrgAdmin, additionalSettingsOpen, adminOrgs, organizations, t],
   );
 
   const form = useZodForm(teamCreateSchema, { defaultValues: EMPTY_TEAM_CREATE_VALUES });

@@ -12,6 +12,7 @@ test("per-model fallback editor and data plane", async ({ page }) => {
   const names = ["fallback-primary-", "fallback-backup-", "fallback-third-"].map((name) => name + suffix);
   const ids = names.map((name) => "dep-" + name);
   let key = "";
+  let templateID = "";
   try {
     for (let i = 0; i < names.length; i++) {
       const result = await page.request.post(GATEWAY + "/model/new", {
@@ -87,17 +88,27 @@ test("per-model fallback editor and data plane", async ({ page }) => {
     const team = teams.teams.find((row: any) => row.team_alias === "e2e-fixture-team");
     const jwt = (await page.context().cookies()).find((c) => c.name === "token")!.value;
     const userID = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()).user_id;
+    // 此场景逐次验证三类回退和错误码，冷却另有专用用例；独立模板避免前轮失败污染后轮。
+    const template = await page.request.post(GATEWAY + "/route_template/new", { headers, data: {
+      name: "fallback-isolation-" + suffix,
+      body: { model_routes: [], routing_groups: [], fallbacks: [], context_window_fallbacks: [], content_policy_fallbacks: [],
+        retry_policy: { max_attempts: 1, timeout_seconds: 60, failure_threshold: 0, cooldown_seconds: 0 } },
+    } });
+    expect(template.status(), await template.text()).toBe(200);
+    templateID = (await template.json()).id;
     const minted = await page.request.post(GATEWAY + "/key/generate", {
       headers,
-      data: { key_alias: "fallback-" + suffix, key_type: "llm_api", team_id: team.team_id, user_id: userID },
+      data: { key_alias: "fallback-" + suffix, key_type: "llm_api", team_id: team.team_id, user_id: userID, route_template_id: templateID },
     });
     expect(minted.status(), await minted.text()).toBe(200);
     key = (await minted.json()).key;
-    /** 调用真实网关，验证回退模型或流式终结与账单；参数为路径、目标序号和流标记，无额外测试数据。 */
+    let round = 0;
+    /** call 经真实网关验证回退响应、流式终结及非零账单；参数为入口路径、预期目标序号和流标记，返回完成后的 Promise<void>。每轮使用独立英文正文避免响应缓存，接口或账单不符由 Playwright 报错；调用记录随场景私有 schema 清理。 */
     const call = async (path: string, target: number, stream = false) => {
       const result = await page.request.post(GATEWAY + path, {
         headers: { Authorization: "Bearer " + key },
-        data: { model: names[0], messages: [{ role: "user", content: path + target + stream }], stream },
+        // 每次正文独立，避免缓存命中让本应验证真实回退和计费的调用得到零费用。
+        data: { model: names[0], messages: [{ role: "user", content: "Verify fallback round " + (++round) + " " + path + target + stream }], stream },
       });
       expect(result.status(), await result.text()).toBe(200);
       if (stream) expect(await result.text()).toContain("[DONE]");
@@ -232,6 +243,7 @@ test("per-model fallback editor and data plane", async ({ page }) => {
       await page.request.put(GATEWAY + "/model/fallback", { headers, data: { model_name: name, policy: {} } });
     for (const id of ids) await page.request.post(GATEWAY + "/model/delete", { headers, data: { id } });
     if (key) await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [key] } });
+    if (templateID) await page.request.post(GATEWAY + "/route_template/" + templateID + "/delete", { headers, data: {} });
   }
 });
 }

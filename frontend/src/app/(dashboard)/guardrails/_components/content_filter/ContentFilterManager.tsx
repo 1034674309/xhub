@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import ContentFilterConfiguration from "./ContentFilterConfiguration";
 import ContentFilterDisplay from "./ContentFilterDisplay";
 import type { CompetitorIntentConfig } from "./CompetitorIntentConfiguration";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Pattern {
   id: string;
@@ -75,6 +75,7 @@ const ContentFilterManager: React.FC<ContentFilterManagerProps> = ({
   onDataChange,
   onUnsavedChanges,
 }) => {
+  const t = useT();
   const [selectedPatterns, setSelectedPatterns] = useState<Pattern[]>([]);
   const [blockedWords, setBlockedWords] = useState<BlockedWord[]>([]);
   const [selectedContentCategories, setSelectedContentCategories] = useState<SelectedContentCategory[]>([]);

@@ -31,7 +31,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       arize_api_key: "password",
       arize_space_id: "password",
     },
-    description: t("Arize Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Arize Logging Integration"); },
   },
   {
     id: "braintrust",
@@ -42,7 +42,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       braintrust_api_key: "password",
       braintrust_project_name: "text",
     },
-    description: t("Braintrust Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Braintrust Logging Integration"); },
   },
   {
     id: "custom_callback_api",
@@ -52,7 +52,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       custom_callback_api_url: "text",
       custom_callback_api_headers: "text",
     },
-    description: t("Custom Callback API Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Custom Callback API Logging Integration"); },
   },
   {
     id: "galileo",
@@ -67,7 +67,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       GALILEO_USERNAME: "text",
       GALILEO_PASSWORD: "password",
     },
-    description: t("Galileo AI Observability Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Galileo AI Observability Integration"); },
   },
   {
     id: "datadog",
@@ -78,7 +78,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       dd_api_key: "password",
       dd_site: "text",
     },
-    description: t("Datadog Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Datadog Logging Integration"); },
   },
   {
     id: "newrelic",
@@ -89,7 +89,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       newrelic_api_key: "password",
       newrelic_region: "text",
     },
-    description: t("New Relic Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("New Relic Logging Integration"); },
   },
   {
     id: "lago",
@@ -100,7 +100,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       lago_api_url: "text",
       lago_api_key: "password",
     },
-    description: t("Lago Billing Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Lago Billing Logging Integration"); },
   },
   {
     id: "langfuse",
@@ -113,7 +113,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       langfuse_host: "text",
       langfuse_environment: "text",
     },
-    description: t("Langfuse v2 Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Langfuse v2 Logging Integration"); },
   },
   {
     id: "langfuse_otel",
@@ -126,7 +126,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       langfuse_host: "text",
       langfuse_environment: "text",
     },
-    description: t("Langfuse v3 OTEL Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Langfuse v3 OTEL Logging Integration"); },
   },
   {
     id: "langsmith",
@@ -139,7 +139,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       langsmith_base_url: "text",
       langsmith_sampling_rate: "number",
     },
-    description: t("Langsmith Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("Langsmith Logging Integration"); },
   },
   {
     id: "openmeter",
@@ -150,7 +150,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       openmeter_api_key: "password",
       openmeter_base_url: "text",
     },
-    description: t("OpenMeter Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("OpenMeter Logging Integration"); },
   },
   {
     id: "otel",
@@ -162,7 +162,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       otel_headers: "text",
       otel_exporter_otlp_protocol: "select",
     },
-    description: t("OpenTelemetry Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("OpenTelemetry Logging Integration"); },
   },
   {
     id: "pointfive",
@@ -173,7 +173,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       POINTFIVE_API_KEY: "password",
       POINTFIVE_API_URL: "text",
     },
-    description: t("PointFive Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("PointFive Logging Integration"); },
   },
   {
     id: "s3",
@@ -186,7 +186,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       aws_secret_access_key: "password",
       aws_region: "text",
     },
-    description: t("S3 Bucket (AWS) Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("S3 Bucket (AWS) Logging Integration"); },
   },
   {
     id: "SQS",
@@ -199,7 +199,7 @@ export const CALLBACK_CONFIGS: CallbackConfig[] = [
       aws_secret_access_key: "password",
       aws_region: "text",
     },
-    description: t("SQS Queue (AWS) Logging Integration"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get description() { return t("SQS Queue (AWS) Logging Integration"); },
   },
 ];
 

@@ -236,7 +236,9 @@
     "fallback_cache": {
       "primary_failure_status": 429,
       "repeat_requests": 2,
-      "cache_must_remain_disabled": true
+      "same_session": true,
+      "identical_request_bodies": true,
+      "reuse_successful_target": true
     }
   },
   "guardrails": [

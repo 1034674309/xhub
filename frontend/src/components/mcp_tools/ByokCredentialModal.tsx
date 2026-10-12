@@ -9,7 +9,7 @@ import { MCPServer } from "./types";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordInput } from "@/components/shared/PasswordInput";
 import { Switch } from "@/components/ui/switch";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 const byokSaveErrorMessage = (e: unknown): string => {
   if (e instanceof ApiError) {
@@ -27,6 +27,7 @@ interface ByokCredentialModalProps {
 }
 
 export const ByokCredentialModal: React.FC<ByokCredentialModalProps> = ({ server, open, onClose, onSuccess }) => {
+  const t = useT();
   const [step, setStep] = useState<1 | 2>(1);
   const [apiKey, setApiKey] = useState("");
   const [saveKey, setSaveKey] = useState(true);

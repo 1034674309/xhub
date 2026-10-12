@@ -3,7 +3,7 @@ import { CircleHelp } from "lucide-react";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 type RateLimitType = "tpm" | "rpm";
 
@@ -76,6 +76,7 @@ export const RateLimitTypeFormItem: React.FC<RateLimitTypeFormItemProps> = ({
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
 }) => {
+  const t = useT();
   const controlId = id ?? `rate-limit-type-${name}`;
   const options = rateLimitTypeOptions(type);
 

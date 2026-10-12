@@ -14,23 +14,23 @@ const isJsonObject = (value: string): boolean => {
 
 const wholeNumberOrEmpty = z
   .string()
-  .refine((value) => isBlank(value) || (/^\d+$/.test(value.trim()) && Number(value) <= 2147483647), t("Must be a non-negative whole number"));
+  .refine((value) => isBlank(value) || (/^\d+$/.test(value.trim()) && Number(value) <= 2147483647), { error: () => t("Must be a non-negative whole number") });
 
 const amountOrEmpty = z
   .string()
   .refine(
     (value) => isBlank(value) || (Number.isFinite(Number(value)) && Number(value) >= 0),
-    t("Must be a non-negative number"),
+    { error: () => t("Must be a non-negative number") },
   );
 
 const orgSettingsShape = {
-  organization_alias: z.string().min(1, t("Please input an organization name")),
+  organization_alias: z.string().min(1, { error: () => t("Please input an organization name") }),
   models: z.array(z.string()),
   max_budget: amountOrEmpty,
   budget_duration: z.string(),
   tpm_limit: wholeNumberOrEmpty,
   rpm_limit: wholeNumberOrEmpty,
-  metadata: z.string().refine((value) => isBlank(value) || isJsonObject(value), t("Metadata must be a valid JSON object")),
+  metadata: z.string().refine((value) => isBlank(value) || isJsonObject(value), { error: () => t("Metadata must be a valid JSON object") }),
   route_template_id: z.string(),
 };
 

@@ -122,25 +122,25 @@ export interface SourceBadgeDescriptor {
 const SOURCE_BADGES: Readonly<Record<CoordinationRedisSource, SourceBadgeDescriptor>> = {
   coordination_redis: {
     tone: "success",
-    label: t("Configured here"),
-    tooltip: t("general_settings.coordination_redis is set, so coordination uses its own Redis connection."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Configured here"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get tooltip() { return t("general_settings.coordination_redis is set, so coordination uses its own Redis connection."); },
   },
   cache_backend: {
     tone: "info",
-    label: t("Borrowed from response cache"),
-    tooltip: t("No coordination Redis is configured; the proxy reuses the response cache's Redis connection."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Borrowed from response cache"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get tooltip() { return t("No coordination Redis is configured; the proxy reuses the response cache's Redis connection."); },
   },
   environment: {
     tone: "info",
-    label: t("From REDIS_* environment"),
-    tooltip: t("No coordination Redis is configured; the proxy falls back to the REDIS_* environment variables."),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("From REDIS_* environment"); },
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get tooltip() { return t("No coordination Redis is configured; the proxy falls back to the REDIS_* environment variables."); },
   },
 };
 
 const NOT_CONFIGURED_BADGE: SourceBadgeDescriptor = {
   tone: "neutral",
-  label: t("Not configured"),
-  tooltip: t("Cross-pod rate limits, spend tracking, and the pod lock manager have no Redis to coordinate through."),
+  /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Not configured"); },
+  /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get tooltip() { return t("Cross-pod rate limits, spend tracking, and the pod lock manager have no Redis to coordinate through."); },
 };
 
 export const sourceBadge = (source: string | null | undefined): SourceBadgeDescriptor => {

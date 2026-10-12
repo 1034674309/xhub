@@ -5,7 +5,7 @@ import { testSearchToolConnection } from "@/components/networking";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SearchConnectionTestProps {
   litellmParams: Record<string, any>;
@@ -14,6 +14,7 @@ interface SearchConnectionTestProps {
 }
 
 const SearchConnectionTest: React.FC<SearchConnectionTestProps> = ({ litellmParams, accessToken, onTestComplete }) => {
+  const t = useT();
   const [isLoading, setIsLoading] = useState(true);
   const [testResult, setTestResult] = useState<{
     status: "success" | "error";

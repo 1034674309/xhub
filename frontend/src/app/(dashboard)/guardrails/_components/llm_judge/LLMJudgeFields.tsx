@@ -25,7 +25,7 @@ import {
   type GuardrailFieldControlProps,
   type GuardrailFormControl,
 } from "../GuardrailFormField";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 interface LLMJudgeFieldsProps {
   availableModels: string[];
@@ -55,6 +55,7 @@ interface BoundedNumberInputProps {
 }
 
 const BoundedNumberInput: React.FC<BoundedNumberInputProps> = ({ control, min, max, suffix, placeholder }) => {
+  const t = useT();
   const { id, name, value, onChange, onBlur, ...aria } = control;
 
   return (
@@ -80,6 +81,7 @@ const BoundedNumberInput: React.FC<BoundedNumberInputProps> = ({ control, min, m
 };
 
 const LLMJudgeFields: React.FC<LLMJudgeFieldsProps> = ({ availableModels, control }) => {
+  const t = useT();
   const { field } = useController({ control, name: "criteria", defaultValue: DEFAULT_CRITERIA });
   const criteria: GuardrailCriterion[] = Array.isArray(field.value) ? field.value : [];
   const setCriteria = field.onChange;

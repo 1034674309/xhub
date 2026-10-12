@@ -8,7 +8,7 @@ import { uiSpendLogsCall } from "@/components/networking";
 import { LogDetailsDrawer } from "@/components/view_logs/LogDetailsDrawer";
 import type { LogEntry as ViewLogsLogEntry } from "@/components/view_logs/columns";
 import type { LogEntry } from "./mockData";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 const actionConfig: Record<
   "blocked" | "passed" | "flagged",
@@ -19,21 +19,21 @@ const actionConfig: Record<
     color: "text-destructive",
     bg: "bg-destructive/10",
     border: "border-destructive/20",
-    label: t("Blocked"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Blocked"); },
   },
   passed: {
     icon: CircleCheck,
     color: "text-success",
     bg: "bg-success/10",
     border: "border-success/20",
-    label: t("Passed"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Passed"); },
   },
   flagged: {
     icon: TriangleAlert,
     color: "text-warning",
     bg: "bg-warning/10",
     border: "border-warning/20",
-    label: t("Flagged"),
+    /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Flagged"); },
   },
 };
 
@@ -65,6 +65,7 @@ export function LogViewer({
   startDate = "",
   endDate = "",
 }: LogViewerProps) {
+  const t = useT();
   const [sampleSize, setSampleSize] = useState(10);
   const [activeFilter, setActiveFilter] = useState<string>(filterAction);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);

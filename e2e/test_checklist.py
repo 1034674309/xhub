@@ -146,33 +146,33 @@ class ChecklistTests(unittest.TestCase):
                 dataset.acceptance_keys()
 
     def test_business_browser_selection_and_failure(self):
-        """目的：去重流程必须完整执行且不能沿用旧报告；前置模拟报告，验证19项精确筛选包含当前继承预览标题、禁用live、跳过失败和异常传播，临时目录及补丁自动清理。"""
+        """目的：去重流程必须完整执行且不能沿用旧报告；前置模拟报告，验证73项精确筛选包含当前继承预览标题、禁用live、跳过失败和异常传播，临时目录及补丁自动清理。"""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             result = root / '.e2e/current/results.json'
             result.parent.mkdir(parents=True)
             report = root / 'report'
             report.mkdir()
-            stats = dict(expected=19, unexpected=0, flaky=0, skipped=0)
+            stats = dict(expected=73, unexpected=0, flaky=0, skipped=0)
             def execute(args, logger, **kwargs):
                 """用途：模拟本轮浏览器产物；参数为命令及环境，返回无；只写临时报告，供完整性断言使用。"""
                 self.assertIn('--grep', args)
-                self.assertEqual(args[-1].count('$'), 19)
+                self.assertEqual(args[-1].count('$'), 73)
                 self.assertIn(runner.re.escape('team session inheritance and explicitly bound key preview match inference without consuming rpm') + '$', args[-1])
                 self.assertNotIn(runner.re.escape('inherited session and key preview matches inference without consuming rpm') + '$', args[-1])
                 self.assertNotIn('E2E_LIVE', kwargs['env'])
                 current = Path(kwargs['env']['E2E_BROWSER_REPORT_DIR']) / 'results.json'
                 current.parent.mkdir(parents=True, exist_ok=True)
                 current.write_text(json.dumps(dict(stats=stats)))
-            with mock.patch.object(runner, 'ROOT', root), mock.patch.object(runner, 'command_stream', side_effect=execute):
-                self.assertEqual(runner.run_business_browser(report, mock.Mock())['cases'], 19)
+            with mock.patch.object(runner, 'command_stream', side_effect=execute):
+                self.assertEqual(runner.run_business_browser(report, mock.Mock())['cases'], 73)
                 stats['skipped'] = 1
                 with self.assertRaisesRegex(AssertionError, '未全部执行'):
                     runner.run_business_browser(report, mock.Mock())
-            with mock.patch.object(runner, 'ROOT', root), mock.patch.object(runner, 'command_stream'):
+            with mock.patch.object(runner, 'command_stream'):
                 with self.assertRaisesRegex(AssertionError, '缺少本轮'):
                     runner.run_business_browser(report, mock.Mock())
-            with mock.patch.object(runner, 'ROOT', root), mock.patch.object(runner, 'command_stream', side_effect=RuntimeError('browser failed')):
+            with mock.patch.object(runner, 'command_stream', side_effect=RuntimeError('browser failed')):
                 with self.assertRaisesRegex(RuntimeError, 'browser failed'):
                     runner.run_business_browser(report, mock.Mock())
 

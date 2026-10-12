@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import PatternTable from "./PatternTable";
 import KeywordTable from "./KeywordTable";
 import CategoryTable from "./CategoryTable";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface Pattern {
   id: string;
@@ -57,6 +57,7 @@ const ContentFilterDisplay: React.FC<ContentFilterDisplayProps> = ({
   onCategorySeverityChange,
   onCategoryRemove,
 }) => {
+  const t = useT();
   if (patterns.length === 0 && blockedWords.length === 0 && categories.length === 0) {
     return null;
   }

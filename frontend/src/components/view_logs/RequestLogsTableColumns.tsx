@@ -14,7 +14,7 @@ import { getBatchIdFromRequestId, getBatchRequestCounts, isBatchCallType } from 
 import type { LogEntry } from "./columns";
 import { AGENT_CALL_TYPES, MCP_CALL_TYPES } from "./constants";
 import { AgentBadge, AgentIcon, BatchBadge, LlmBadge, McpBadge, SparkleIcon, WrenchIcon } from "./TypeBadges";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface RequestLogsTableColumnsDeps {
   onSessionClick: (log: LogEntry) => void;
@@ -36,6 +36,7 @@ const getLogoUrl = (row: LogEntry, provider: string): string =>
   readMcpLogoUrl(row.metadata) ?? (provider ? getProviderLogoAndName(provider).logo : "");
 
 function TruncatedText({ value }: { value: string | undefined }) {
+  const t = useT();
   const display = value ?? "-";
   return <CellTooltip content={display} trigger={<span className="max-w-[15ch] truncate block">{display}</span>} />;
 }

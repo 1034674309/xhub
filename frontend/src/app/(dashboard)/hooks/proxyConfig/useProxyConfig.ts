@@ -2,7 +2,7 @@ import { useQuery, useMutation, UseMutationResult, useQueryClient } from "@tanst
 import { createQueryKeys } from "../common/queryKeysFactory";
 import useAuthorized from "../useAuthorized";
 import { proxyBaseUrl, getGlobalLitellmHeaderName, deriveErrorMessage, handleError } from "@/components/networking";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 /**
  * Enum for config types that can be fetched from the proxy config endpoint.
@@ -151,6 +151,7 @@ export const deleteProxyConfigFieldCall = async (
  * @returns React Query result with the config list data
  */
 export const useProxyConfig = (configType: ConfigType) => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   return useQuery<ProxyConfigResponse>({
     queryKey: proxyConfigKeys.list({
@@ -172,6 +173,7 @@ export const useDeleteProxyConfigField = (): UseMutationResult<
   Error,
   DeleteProxyConfigFieldRequest
 > => {
+  const t = useT();
   const { accessToken } = useAuthorized();
   const queryClient = useQueryClient();
 

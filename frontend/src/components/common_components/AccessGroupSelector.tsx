@@ -3,7 +3,7 @@ import { Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MultiSelect, type MultiSelectOption } from "@/components/shared/MultiSelect";
 import { useAccessGroups, AccessGroupResponse } from "@/app/(dashboard)/hooks/accessGroups/useAccessGroups";
-import { t } from "@/i18n";
+import { useT, t } from "@/i18n";
 
 export interface AccessGroupSelectorProps {
   value?: string[];
@@ -33,6 +33,7 @@ const AccessGroupSelector: React.FC<AccessGroupSelectorProps> = ({
   showLabel = false,
   labelText = t("Access Group"),
 }) => {
+  const t = useT();
   const { data: accessGroups, isLoading, isError } = useAccessGroups();
 
   // ── Loading skeleton ─────────────────────────────────────────────────────

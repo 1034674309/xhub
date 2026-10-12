@@ -3,13 +3,14 @@ import { VectorStoreSearchResponse } from "@/components/chat_ui/types";
 import { ChevronDown, ChevronRight, Database, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface SearchResultsDisplayProps {
   searchResults: VectorStoreSearchResponse[];
 }
 
 export function SearchResultsDisplay({ searchResults }: SearchResultsDisplayProps) {
+  const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
 

@@ -1,3 +1,5 @@
+// 本文件验证 routing 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package routing
 
 import (
@@ -5,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/sunqirui1987/xhub/internal/config"
-	"github.com/sunqirui1987/xhub/internal/gateway/prefs"
 	"github.com/sunqirui1987/xhub/internal/router"
 )
 
 // TestFallbackClassification 验证限流/服务错误与专用错误分类；成功、普通4xx和非法JSON不触发，无外部状态。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFallbackClassification(t *testing.T) {
 	for _, tc := range []struct {
 		status     int
@@ -29,8 +32,9 @@ func TestFallbackClassification(t *testing.T) {
 }
 
 // TestFallbackQueue 验证有序目标、去重、空池跳过、禁用和错误传播；前置内存路由，断言无共享配置修改，无需清理。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestFallbackQueue(t *testing.T) {
-	settings := prefs.BuiltinSettings()
+	settings := router.BuiltinSettings()
 	settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"missing", "b", "c"}}, "b": {Fallbacks: []string{"c", "a"}}}
 	models := []config.ModelEntry{{ModelName: "b", LiteLLMParams: map[string]any{"deployment_id": "b"}}, {ModelName: "c", LiteLLMParams: map[string]any{"deployment_id": "c"}}}
 	q := NewFallbackQueue(settings, "a", false)
@@ -59,8 +63,9 @@ func TestFallbackQueue(t *testing.T) {
 
 // TestFallbackQueueBoundAndCooldown 验证冷却目标跳过和请求最多访问32个模型的边界。
 // 参数 t 为测试上下文，无返回；前置内存模型目录和冷却快照，验证链不可无限放大，无持久数据。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestFallbackQueueBoundAndCooldown(t *testing.T) {
-	settings := prefs.BuiltinSettings()
+	settings := router.BuiltinSettings()
 	settings.ModelFallbacks = map[string]router.FallbackPolicy{}
 	models := []config.ModelEntry{}
 	for i := 0; i < 40; i++ {
@@ -87,8 +92,9 @@ func TestFallbackQueueBoundAndCooldown(t *testing.T) {
 }
 
 // TestFallbackGroupSource 验证组链优先、显式禁用和每次实际成员更新；仅内存队列，测试后自动释放。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
 func TestFallbackGroupSource(t *testing.T) {
-	settings := prefs.BuiltinSettings()
+	settings := router.BuiltinSettings()
 	settings.ModelFallbacks = map[string]router.FallbackPolicy{"a": {Fallbacks: []string{"backup-a"}}, "b": {ContextWindow: []string{"backup-b"}}}
 	q := NewFallbackQueue(settings, "group", false)
 	q.UseDeployment("a")

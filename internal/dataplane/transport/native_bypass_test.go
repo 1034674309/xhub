@@ -1,3 +1,5 @@
+// 本文件验证 transport 的相关执行契约，阅读顺序为测试宿主/辅助方法，再到各个 Test 场景。
+// 具体前置、期望、边界和清理方式见每个测试方法；夹具的空实现仅用于隔离当前测试。
 package transport
 
 import (
@@ -14,6 +16,7 @@ import (
 
 // TestNativeSupplierURLs 验证任何域名都只遵循配置地址与显式传输，模型前缀由所选传输处理。
 // 参数 t：测试上下文。返回：无；只组合本地声明，不访问供应商。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestNativeSupplierURLs(t *testing.T) {
 	for _, spec := range []struct{ base, path, wantURL, model, wantModel string }{
 		{"https://api.qnaigc.com/v1", "/bypass/openai/v1/responses", "https://api.qnaigc.com/v1/responses", "openai/gpt-test", "openai/gpt-test"},
@@ -38,6 +41,8 @@ func TestNativeSupplierURLs(t *testing.T) {
 
 // TestBypassSessionFields 验证原生 JSON 和 multipart 在选路后移除 session_id，保留原生缓存键和文件。
 // 前置内存载荷，检查解析投影仍含会话信号、重建正文不泄露网关字段；非法 JSON 返回错误，无外部数据。
+// 参数 t 为 Go 测试上下文；返回值无，断言失败时终止当前测试。
+// 测试只操作内存配置或本地假上游，HTTP 服务及正文由本例关闭，不创建外部付费任务或持久化数据。
 func TestBypassSessionFields(t *testing.T) {
 	raw := []byte(`{"model":"public","session_id":"session","prompt_cache_key":"native-cache","extra":true}`)
 	body, err := ParseBypassBody(raw, "application/json")

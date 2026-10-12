@@ -6,7 +6,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 
 import { filterKeyActivity } from "../keyActivityFilter";
 import type { ModelActivityData } from "../types";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface KeyActivityPanelProps {
   keyMetrics: Record<string, ModelActivityData>;
@@ -14,6 +14,7 @@ interface KeyActivityPanelProps {
 }
 
 const KeyActivityPanel: React.FC<KeyActivityPanelProps> = ({ keyMetrics, hidePromptCachingMetrics = false }) => {
+  const t = useT();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => filterKeyActivity(keyMetrics, query), [keyMetrics, query]);
   const totalKeys = Object.keys(keyMetrics).length;

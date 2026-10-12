@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { t } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface DeleteResourceModalProps {
   isOpen: boolean;
@@ -36,6 +36,7 @@ export default function DeleteResourceModal({
   confirmLoading,
   requiredConfirmation,
 }: DeleteResourceModalProps) {
+  const t = useT();
   const [requiredConfirmationInput, setRequiredConfirmationInput] = useState("");
 
   useEffect(() => {
