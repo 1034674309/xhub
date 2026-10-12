@@ -119,6 +119,11 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
   const requests: string[] = [];
   page.on("request", request => { if (/\/(agent|customer|tag)\/daily\/activity/.test(request.url())) requests.push(request.url()); });
   try {
+    // 本轮显式产生未绑定组织的真实请求，CSV 对账不能依赖之前的测试碰巧留下此类用量。
+    const personal = await page.request.post(GATEWAY + "/v1/chat/completions", {
+      headers, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "Verify unassigned usage export" }] },
+    });
+    expect(personal.status(), await personal.text()).toBe(200);
     for (const [name, upstream] of [[modelName, "usage-success"], [failedModel, "e2e-error-log-json-usage"]]) {
       const response = await page.request.post(GATEWAY + "/model/new", { headers, data: { model_name: name, litellm_params: { model: upstream, api_base: process.env.E2E_UPSTREAM || "http://127.0.0.1:4110", api_key: "sk-fake", custom_llm_provider: "custom", input_cost_per_token: 0.01, output_cost_per_token: 0.02 }, model_info: { transport: "bypass_openai_chat", pricing_source: "manual" } } });
       expect(response.status(), await response.text()).toBe(200);

@@ -168,18 +168,6 @@ test("ordinary user with a team creates and uses a personal key without choosing
       await page.keyboard.press("Escape");
       await expect(page.getByText(alias, { exact: true }).first()).toBeVisible();
       const inferenceBody = { model: "gpt-4o-mini", messages: [{ role: "user", content: alias }] };
-      if (!hasTeam) {
-        // 凭证创建不等于计费授权；无团队且未配置个人额度时拒绝，管理员授权后复用同一把 Key。
-        const pending = await page.request.post(GATEWAY + "/v1/chat/completions", {
-          headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
-        });
-        expect(pending.status()).toBe(403);
-        expect((await pending.json()).error.type).toBe("billing_source_required");
-        const granted = await page.request.post(GATEWAY + "/user/update", {
-          headers: adminHeaders, data: { user_id: user.user_id, max_budget: 100 },
-        });
-        expect(granted.ok(), await granted.text()).toBeTruthy();
-      }
       const inference = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
       });
@@ -203,6 +191,8 @@ test("ordinary user with a team creates and uses a personal key without choosing
         const cleanup = await page.request.post(GATEWAY + "/key/delete", { headers: adminHeaders, data: { keys: [id] } });
         expect(cleanup.ok(), await cleanup.text()).toBeTruthy();
       }
+      const removed = await page.request.post(GATEWAY + "/user/delete", { headers: adminHeaders, data: { user_id: user.user_id } });
+      expect(removed.status(), await removed.text()).toBe(200);
     }
   });
 }
@@ -257,18 +247,6 @@ test("ordinary user without a team creates and uses a personal key without choos
       await page.keyboard.press("Escape");
       await expect(page.getByText(alias, { exact: true }).first()).toBeVisible();
       const inferenceBody = { model: "gpt-4o-mini", messages: [{ role: "user", content: alias }] };
-      if (!hasTeam) {
-        // 凭证创建不等于计费授权；无团队且未配置个人额度时拒绝，管理员授权后复用同一把 Key。
-        const pending = await page.request.post(GATEWAY + "/v1/chat/completions", {
-          headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
-        });
-        expect(pending.status()).toBe(403);
-        expect((await pending.json()).error.type).toBe("billing_source_required");
-        const granted = await page.request.post(GATEWAY + "/user/update", {
-          headers: adminHeaders, data: { user_id: user.user_id, max_budget: 100 },
-        });
-        expect(granted.ok(), await granted.text()).toBeTruthy();
-      }
       const inference = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key.key }, data: inferenceBody,
       });
@@ -292,6 +270,8 @@ test("ordinary user without a team creates and uses a personal key without choos
         const cleanup = await page.request.post(GATEWAY + "/key/delete", { headers: adminHeaders, data: { keys: [id] } });
         expect(cleanup.ok(), await cleanup.text()).toBeTruthy();
       }
+      const removed = await page.request.post(GATEWAY + "/user/delete", { headers: adminHeaders, data: { user_id: user.user_id } });
+      expect(removed.status(), await removed.text()).toBe(200);
     }
   });
 }

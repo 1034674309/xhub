@@ -27,6 +27,7 @@ export default defineConfig({
       reuseExistingServer: false, timeout: 180_000 },
     { command: "npx next start -p " + uiPort + " -H 127.0.0.1",
       url: "http://127.0.0.1:" + uiPort + "/ui/login/", reuseExistingServer: false, timeout: 180_000,
-      env: { E2E_BUILD_DIR: ".next-e2e", XHUB_GATEWAY_ORIGIN: gateway } },
+      // 独立构建目录避免其他聊天重建前端后，浏览器登录和直接接口落在不同网关。
+      env: { E2E_BUILD_DIR: process.env.E2E_BUILD_DIR || ".next-e2e", XHUB_GATEWAY_ORIGIN: gateway } },
   ],
 });

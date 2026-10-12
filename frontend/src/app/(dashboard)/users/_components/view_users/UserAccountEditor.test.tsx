@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setActiveLocale, translate } from "@/i18n";
 import UserAccountEditor from "./UserAccountEditor";
 import type { UserInfoV2Response } from "@/components/networking";
 
@@ -10,7 +11,25 @@ vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), fromError } }));
 const account = { user_id: "u1", user_email: "user@example.com", user_alias: "Before", user_role: "internal_user", max_budget: 10 } as UserInfoV2Response;
 
 describe("UserAccountEditor", () => {
+  afterEach(() => setActiveLocale("en"));
   beforeEach(() => { vi.clearAllMocks(); update.mockResolvedValue({}); });
+
+  /** 双语说明：前置无团队空预算，验证可访问帮助和空值保存；卸载及恢复语言清理，无真实写入。 */
+  it.each(["en", "zh-CN"] as const)("explains unlimited personal budgets in %s", async (locale) => {
+    setActiveLocale(locale);
+    render(<UserAccountEditor user={{ ...account, teams: [], max_budget: null }} accessToken="session" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText(translate(locale, "pages.users.maxBudget"))).toHaveAccessibleDescription(translate(locale, "quotaGuide.personalBillingHelp"));
+    expect(screen.getByLabelText(translate(locale, "pages.users.maxBudget"))).toHaveAttribute("placeholder", translate(locale, "pages.users.unlimited"));
+    await userEvent.setup().click(screen.getByRole("button", { name: translate(locale, "pages.users.saveChanges") }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith("session", expect.objectContaining({ max_budget: null }), null));
+  });
+
+  /** 团队预算说明：前置已有团队且个人额度为空，双语占位符保持共享上级；卸载及恢复语言清理。 */
+  it.each(["en", "zh-CN"] as const)("keeps the shared budget placeholder with a team in %s", (locale) => {
+    setActiveLocale(locale);
+    render(<UserAccountEditor user={{ ...account, teams: ["team-1"], max_budget: null }} accessToken="session" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText(translate(locale, "pages.users.maxBudget"))).toHaveAttribute("placeholder", translate(locale, "quotaGuide.blank"));
+  });
 
   /** 正常保存：前置已有账户，验证邮箱、名称和零预算发送正确且刷新回调执行；组件卸载清理，无外部写入。 */
   it("saves supported fields including a zero budget", async () => {

@@ -165,6 +165,7 @@ const memberRoleOptions = () => [
 
 /** 用户详情与管理员编辑入口；参数包含目标账户、当前会话、关闭回调和初始编辑模式。返回详情及团队操作。
  * 保存后重新读取后台状态；普通用户仅查看，管理员可编辑账户、增删团队及调整团队角色，失败保留操作上下文。
+ * 预算为空时有团队共享上级额度，无团队不限额；固定个人预算限制累计消费。
  */
 export default function UserInfoView({
   userId,
@@ -384,6 +385,11 @@ export default function UserInfoView({
     }
   };
 
+  // 空预算不构成调用授权门槛：有团队共享父级，无团队没有个人消费上限。
+  const budgetLabel = userData.max_budget == null
+    ? t(teamDetails.length === 0 ? "pages.users.unlimited" : "quotaGuide.blank")
+    : `$${formatNumberWithCommas(userData.max_budget, 2)}`;
+
   return (
     <div className="p-4">
       <div className="flex justify-between items-center mb-6">
@@ -470,12 +476,7 @@ export default function UserInfoView({
               <div className="mt-2">
                 <h3 className="text-lg font-medium">${formatNumberWithCommas(userData.spend || 0, 2)}</h3>
                 <p>
-                  {t("pages.users.spendOf", {
-                    limit:
-                      userData.max_budget !== null
-                        ? `$${formatNumberWithCommas(userData.max_budget, 2)}`
-                        : t("pages.users.unlimited"),
-                  })}
+                  {userData.max_budget == null ? budgetLabel : t("pages.users.spendOf", { limit: budgetLabel })}
                 </p>
               </div>
             </Card>
@@ -643,7 +644,7 @@ export default function UserInfoView({
                   <p>
                     {userData.max_budget !== null && userData.max_budget !== undefined
                       ? `$${formatNumberWithCommas(userData.max_budget, 4)}`
-                      : t("quotaGuide.blank")}
+                      : budgetLabel}
                   </p>
                 </div>
 

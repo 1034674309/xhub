@@ -138,9 +138,8 @@ func TestRateSiblingAggregationHTTP(t *testing.T) {
 				t.Fatalf("普通个人自行解除组织上限: %s", denied.describe())
 			}
 			h.ok(http.MethodPost, "/team/member_delete", admin, map[string]any{"team_id": firstString(other, "team_id"), "user_id": firstString(member, "user_id")})
-			if revoked := h.do(http.MethodPost, "/v1/chat/completions", firstString(key, "key"), body); revoked.status != 403 {
-				t.Fatalf("退出未暂停待计费密钥: %s", revoked.describe())
-			}
+			// 离队后旧个人密钥按个人不限额调用，不继承原组织的分钟限制。
+			h.ok(http.MethodPost, "/v1/chat/completions", firstString(key, "key"), body)
 			h.ok(http.MethodPost, "/user/update", admin, map[string]any{"user_id": firstString(member, "user_id"), "max_budget": 100})
 			independent := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"user_id": firstString(member, "user_id")}).json()
 			h.ok(http.MethodPost, "/v1/chat/completions", firstString(independent, "key"), body)

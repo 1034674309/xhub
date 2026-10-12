@@ -90,6 +90,7 @@ export const en = {
   },
   providerGuideUI: providerGuideUIEn,
   quotaGuide: {
+    personalBillingHelp: "Without a team, blank means unlimited personal spending. With a team, blank shares the team budget. A value limits cumulative personal spending across sessions and keys; zero blocks spending.",
     rateAllocationError:
       "Child RPM/TPM allocations exceed the parent limit. Reduce allocations or increase the parent limit.",
     rates:

@@ -282,14 +282,15 @@ func entityKey(row activityRow, dim entityDim) string {
 	}
 }
 
-// 把这一行累加进对应维度的实体桶。id 为空时跳过。
+// 把已通过权限过滤的用量累加进对应维度的实体桶；空 id 保留为未绑定桶，避免导出遗漏。
 // 参数 day（*dayMetric）：累加实体使用的dayMetric；dim（entityDim）：聚合维度，例如团队、组织、用户或密钥；row（activityRow）：从用量或目录读出的用量行。
-// 返回：无。这一行已累加进对应维度的实体桶。id 为空时跳过。
+// 返回：无；修改 day 的实体指标与密钥明细。无实体维度时不创建桶。
 // 调用：gateway/usage/activity.go
-// 测试：无直接单测
+// 测试：TestActivityEntityTotalsIncludeUnassigned。
 func addEntity(day *dayMetric, dim entityDim, row activityRow) {
 	id := entityKey(row, dim)
-	if id == "" {
+	// 空字符串是真实的缺失归属，不能丢弃；也不能伪造可能与业务 id 冲突的名称。
+	if dim == entityNone {
 		return
 	}
 	if day.entities == nil {

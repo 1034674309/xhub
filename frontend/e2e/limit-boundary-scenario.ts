@@ -57,7 +57,8 @@ export function registerLimitBoundary(layer: "organization" | "team" | "user" | 
       organization = (await create("/organization/new", { organization_alias: suffix, max_budget: 1000 })).organization_id;
       team = (await create("/team/new", { team_alias: suffix, organization_id: organization, max_budget: 500 })).team_id;
       user = (await create("/user/new", { user_email: suffix + "@example.com", password: "limit-password", team_id: team, team_role: "user", max_budget: 100 })).user_id;
-      const key = await create("/key/generate", { user_id: user, key_alias: suffix });
+      // 密钥页面默认个人范围；密钥层使用登录管理员自己的密钥，其他层使用成员密钥验证继承链。
+      const key = await create("/key/generate", { ...(layer === "key" ? {} : { user_id: user }), key_alias: suffix });
       keyID = key.token_id; secret = key.key;
       await configure(0);
       const before = await info();

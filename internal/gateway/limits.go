@@ -86,15 +86,12 @@ func (s *Server) withCredential(dep config.ModelEntry) (config.ModelEntry, error
 	return out, nil
 }
 
-// enforceIdentityLimits checks the model allow-list, budget, and rate. On rejection it has already written the response and returns false. The budget is checked from the narrowest scope outwards, so the
-//
-//	refusal names the scope that is actually exhausted: the owner user, then the key, its project, its team, and finally the team's organization. Each scope compares its stored spend plus the spend still
-//	hot in Redis against its ceiling.
-//
-// 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；path（string）：enforceIdentityLimits要定位的路径。可能是 URL，也可能是字段路径；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；alias（string）：对外模型名；est（int）：enforceIdentityLimits使用的整数。零表示没有这项或尚未计数。
-// 返回 bool（bool）：模型允许名单、预算和速率都通过时返回真。拒绝时响应已经写好，并返回假。
-// 调用：gateway/wire.go
-// 测试：无直接单测
+// enforceIdentityLimits 为数据面校验主体状态、模型权限、预算和分钟速率。
+// 参数 w/path 为错误响应及请求路径，p 为已鉴权主体，alias 为公开模型名，est 为估算请求 token 数。
+// 返回是否允许推理；拒绝时已写出错误响应。预算合并已落库与尚未落库消费，指明耗尽层级。
+// 空预算仅取消当前层上限，无团队时不限额，有团队时继续沿额度树检查；不会免除记账或模型权限。
+// 调用场景：gateway/wire.go 的会话及密钥推理入口；速率检查会消费窗口，预算检查失败不会调用上游。
+// 测试：TestTeamlessIdentityAdmission 和真实 HTTP 预算/速率回归。
 func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
 	if s.IAM == nil {
 		util.WriteTypedError(w, path, http.StatusServiceUnavailable, "authz_unavailable", "authorization is temporarily unavailable")
@@ -141,19 +138,8 @@ func (s *Server) enforceIdentityLimits(w http.ResponseWriter, path string, p *au
 		return false
 	}
 	p.BillingTeamID, p.BillingOrgID = team, org
-	// 无团队时，管理员设置的个人预算是独立计费授权；留空仅表示待计费，
-	// Key 上限不是资金来源，不能靠创建 Key 把待计费用户变成无限额用户。
-	if team == "" {
-		owner, err := s.IAM.GetUser(ctx, p.UserID)
-		if err != nil {
-			util.WriteTypedError(w, path, 503, "billing_unavailable", "billing authorization is temporarily unavailable")
-			return false
-		}
-		if owner.MaxBudget == nil {
-			util.WriteTypedError(w, path, 403, "billing_source_required", "a team or personal billing budget is required")
-			return false
-		}
-	}
+	// 预算仅作为消费上限：无团队且个人预算留空时不限额，有团队时仍继承额度树约束。
+	// 会话和个人密钥共用 QuotaPath，有限预算（含零）照常拒绝，消费仍记入个人。
 	if scope != "" {
 		names := map[string]string{"user": "User", "key": "Key", "team": "Team", "org": "Organization"}
 		budgetRefusal(w, path, errBudget{scope: names[scope]})

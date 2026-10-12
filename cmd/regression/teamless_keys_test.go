@@ -74,12 +74,7 @@ func TestTeamlessPersonalKeys(t *testing.T) {
 		t.Fatalf("本人列表缺少独立密钥: %d", got)
 	}
 	h.ok(http.MethodGet, "/key/info?scope=personal&key="+id, session, nil)
-	markPending := len(h.upstreamCalls())
-	pending := h.do(http.MethodPost, "/v1/chat/completions", secret, chatRequest("solo-chat", "pending billing"))
-	if pending.status != 403 || !strings.Contains(pending.describe(), "billing_source_required") || len(h.upstreamSince(markPending)) != 0 {
-		t.Fatalf("待计费用户应保留Key但不调用上游: %s", pending.describe())
-	}
-	h.setUserBudget(t, admin, uid, 100)
+	// 新账号未填写个人预算时默认不限额，首个调用仍须记入个人和密钥消费。
 	h.ok(http.MethodPost, "/v1/chat/completions", secret, chatRequest("solo-chat", "teamless first"))
 	h.flushSpend()
 	k, err := h.db.GetKey(context.Background(), id)

@@ -10,7 +10,8 @@ import { toast } from "@/lib/toast";
 import { t } from "@/i18n";
 
 /** 管理员账户编辑表单。参数 user 为已加载账户、accessToken 为会话、onSaved/onCancel 为保存/取消回调；返回表单。
- * 供用户详情调用，仅提交后台支持的字段；预算留空共享唯一团队余额；分钟上限留空继承上级，失败保留输入，提交期间禁止重复操作。
+ * 供用户详情调用，仅提交后台支持的字段；预算留空共享唯一团队余额，无团队时留空不限额，填写预算限制个人累计消费。
+ * 分钟上限留空继承上级，失败保留输入，提交期间禁止重复操作。
  */
 export default function UserAccountEditor({ user, accessToken, onSaved, onCancel }: {
   user: UserInfoV2Response & { blocked?: boolean };
@@ -58,7 +59,8 @@ export default function UserAccountEditor({ user, accessToken, onSaved, onCancel
             <SelectContent>{roles.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
           </Select></Field>
         <Field><FieldLabel htmlFor="edit-user-budget">{t("pages.users.maxBudget")}</FieldLabel>
-          <Input id="edit-user-budget" type="number" min="0" step="0.01" placeholder={t("quotaGuide.blank")} value={budget} onChange={(event) => setBudget(event.target.value)} /></Field>
+          <Input id="edit-user-budget" type="number" min="0" step="0.01" aria-describedby="edit-user-budget-help" placeholder={t(user.teams?.length ? "quotaGuide.blank" : "pages.users.unlimited")} value={budget} onChange={(event) => setBudget(event.target.value)} />
+          <p id="edit-user-budget-help" className="text-sm text-muted-foreground">{t("quotaGuide.personalBillingHelp")}</p></Field>
         <p className="text-sm text-muted-foreground">{t("quotaGuide.rates")}</p>
         <Field><FieldLabel htmlFor="edit-user-rpm">{t("Requests per minute Limit (RPM)")}</FieldLabel>
           <Input id="edit-user-rpm" type="number" min="0" max="2147483647" step="1" placeholder={t("quotaGuide.rateBlank")} value={rpm} onChange={(event) => setRpm(event.target.value)} /></Field>

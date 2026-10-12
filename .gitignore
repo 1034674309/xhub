@@ -24,6 +24,7 @@ playwright-report/
 **/__pycache__/
 frontend/.e2e-report
 frontend/.next-e2e/
+frontend/.next-e2e-audit/
 frontend/tsconfig.e2e.json
 e2e-report.txt
 scripts/__pycache__/
@@ -47,3 +48,4 @@ docs/development/zh-CN/e2e-coverage-audit-20261011.md
 docs/development/zh-CN/e2e-priority-fixes-20261012.md
 docs/development/zh-CN/e2e-scenario-inventory-20261011.json
 docs/development/zh-CN/e2e-scenario-inventory-20261011.md
+frontend/.next-e2e-audit

@@ -6,11 +6,14 @@ mkdir -p "$DIR"
 UP_PORT="${E2E_UP_PORT:-4110}"
 GW_PORT="${E2E_GW_PORT:-4100}"
 MASTER="${E2E_MASTER_KEY:-sk-e2e-master}"
+DATABASE="${E2E_DATABASE:-xhub}"
+# 数据库名称只允许 SQL 标识符；专属库由调用方创建，脚本只回收自己的 schema。
+[[ "$DATABASE" =~ ^[a-z][a-z0-9_]*$ ]] || { echo "invalid E2E_DATABASE" >&2; exit 1; }
 SCHEMA="e2e_$$_$RANDOM"
 UP_PID=""
 GW_PID=""
 SCHEMA_CREATED=0
-sql() { docker exec xhub-postgres psql -X -U xhub -d xhub -v ON_ERROR_STOP=1 -q -c "$1"; }
+sql() { docker exec xhub-postgres psql -X -U xhub -d "$DATABASE" -v ON_ERROR_STOP=1 -q -c "$1"; }
 cleanup() {
   trap - EXIT INT TERM
   [[ -z "$GW_PID" ]] || { kill "$GW_PID" 2>/dev/null || true; wait "$GW_PID" 2>/dev/null || true; }

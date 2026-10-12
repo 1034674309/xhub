@@ -865,7 +865,7 @@ func (h *harness) adminSession() string {
 }
 
 // personalBillingSession 创建独立计费的管理员会话，供协议/日志等非计费来源用例使用。
-// 参数无，返回真实登录令牌；显式分配个人额度，不改变 adminSession 的待计费默认语义。
+// 参数无，返回真实登录令牌；显式分配个人额度，不改变 adminSession 默认个人不限额的语义。
 // 调用方是需要实际推理的回归测试；修改仅作用于本例隔离 schema，由 harness 清理。
 func (h *harness) personalBillingSession() string {
 	h.t.Helper()

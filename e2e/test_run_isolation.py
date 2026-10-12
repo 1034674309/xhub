@@ -9,7 +9,7 @@ import unittest
 class RunIsolationTests(unittest.TestCase):
     """验证运行目录、独立 schema 和清理错误传播。"""
 
-    def execute(self, root, name, fail=False):
+    def execute(self, root, name, fail=False, database="xhub"):
         """创建假命令并运行真实脚本；参数为临时根、运行名和故障开关，返回结果和目录，调用方回收临时文件。"""
         directory = root / name
         directory.mkdir()
@@ -32,6 +32,7 @@ class RunIsolationTests(unittest.TestCase):
         sweep.chmod(0o755)
         env = {**os.environ, 'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
                'E2E_RUN_DIR': str(directory), 'E2E_PREBUILT': '1', 'E2E_ENTERPRISE_FIXTURE': '0',
+               'E2E_DATABASE': database,
                'MOCK_SQL_LOG': str(directory / 'sql.log'), 'MOCK_FAIL_DROP': '1' if fail else '0'}
         result = subprocess.run(['bash', str(Path(__file__).with_name('start-gateway.sh'))],
                                 env=env, text=True, capture_output=True, timeout=10)
@@ -59,3 +60,14 @@ class RunIsolationTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertTrue((directory / 'schema.txt').exists())
             self.assertTrue((directory / 'cleanup.log').exists())
+
+    def test_database_isolation(self):
+        """专属库的创建与清理必须使用同一目标；非法名称在 SQL 执行前拒绝，临时目录清理。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            result, directory = self.execute(Path(temporary), "private", database="xhub_e2e_audit")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            operations = (directory / "sql.log").read_text().splitlines()
+            self.assertTrue(all("-d xhub_e2e_audit " in operation for operation in operations))
+            result, directory = self.execute(Path(temporary), "invalid", database="xhub;drop")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((directory / "sql.log").exists())

@@ -157,6 +157,14 @@ func TestUsageViewsFollowTheCallerScope(t *testing.T) {
 	record("view-a1-member", c.memberA1.user, c.teamA1, c.orgA, 2)
 	record("view-a1-admin", c.teamAdminA1.user, c.teamA1, c.orgA, 3)
 	record("view-b1-member", c.memberB1.user, c.teamB1, c.orgB, 8)
+	// 未绑定组织的请求也应计入平台实体导出，但不能扩大组织管理员的读取范围。
+	if err := c.f.db.RecordUsage(c.ctx, []iam.UsageRecord{{
+		RequestID: "view-unassigned", TS: when, UserID: c.f.admin.user.ID,
+		OwnerType: iam.OwnerPersonal, Model: "usage-view-model", CallType: "chat",
+		Status: "error", PromptTokens: 3, Cost: 0.5,
+	}}); err != nil {
+		t.Fatal(err)
+	}
 
 	window := "start_date=2026-09-27&end_date=2026-09-27"
 	get := func(a actor, path string) (int, float64, map[string]activityEntity) {
@@ -224,8 +232,12 @@ func TestUsageViewsFollowTheCallerScope(t *testing.T) {
 	}
 
 	_, total, entities = get(c.f.admin, "/team/daily/activity/aggregated?"+window)
-	if total != 13 || entities[c.teamA1.ID].spend != 5 || entities[c.teamB1.ID].spend != 8 {
+	if total != 13.5 || entities[c.teamA1.ID].spend != 5 || entities[c.teamB1.ID].spend != 8 || entities[""].spend != 0.5 {
 		t.Fatalf("platform team view: total %v %#v", total, entities)
+	}
+	_, total, entities = get(c.f.admin, "/organization/daily/activity?"+window)
+	if total != 13.5 || entities[c.orgA.ID].spend != 5 || entities[c.orgB.ID].spend != 8 || entities[""].spend != 0.5 {
+		t.Fatalf("平台组织导出不得遗漏未绑定请求: total %v entities %#v", total, entities)
 	}
 
 	status, body = c.f.call(c.teamAdminA1, http.MethodGet, "/team/spend/by_user?"+window+"&team_ids="+c.teamA1.ID, nil)

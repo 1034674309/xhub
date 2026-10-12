@@ -91,6 +91,7 @@ export const zhCN = {
   },
   providerGuideUI: providerGuideUIZhCN,
   quotaGuide: {
+    personalBillingHelp: "没有团队时，留空表示个人不限额；有团队时，留空共享团队额度。填写金额限制所有会话和密钥的个人累计消费，0 禁止消费。",
     rateAllocationError: "下级 RPM/TPM 固定分配合计超过上级限制，请减少分配或调整上级限制。",
     rates:
       "RPM、TPM 与金额额度按同一层级分配：下级固定分配合计不能超过上级。留空共享未分配容量，0 禁止调用。个人所有 Key 与会话汇总，再逐级汇总到团队和组织；固定分配的未用容量每个 UTC 自然分钟保留，TPM 按准入时预估 token 计数。",

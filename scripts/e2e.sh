@@ -11,7 +11,13 @@ export E2E_GATEWAY="http://127.0.0.1:$E2E_GW_PORT"
 export E2E_UPSTREAM="http://127.0.0.1:$E2E_UP_PORT"
 # 每轮运行使用专属证据目录，迟到的清理进程不能读取下一轮的 schema 文件。
 export E2E_RUN_DIR="${E2E_RUN_DIR:-$ROOT/.e2e/run-$$-$RANDOM}"
-export E2E_BUILD_DIR=.next-e2e
+# 调用方可指定独立构建和数据库；名称先校验，防止清理指向错误目标。
+export E2E_BUILD_DIR="${E2E_BUILD_DIR:-.next-e2e}"
+export E2E_DATABASE="${E2E_DATABASE:-xhub}"
+if [[ ! "$E2E_DATABASE" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "Invalid E2E_DATABASE" >&2
+  exit 1
+fi
 # 完整浏览器套件包含 Responses 三轮续接场景，始终装载其本地离线模型夹具。
 export E2E_RESPONSES_CONTINUATION=1
 # HTTPS 身份与官方 Kodo SDK 协议夹具仅编入测试程序。
@@ -39,7 +45,7 @@ PYCLEAN
       local schema
       schema="$(cat "$E2E_RUN_DIR/schema.txt")"
       if [[ "$schema" =~ ^e2e_[0-9]+_[0-9]+$ ]]; then
-        docker exec xhub-postgres psql -X -U xhub -d xhub -v ON_ERROR_STOP=1 -q -c "DROP SCHEMA IF EXISTS $schema CASCADE" >"$E2E_RUN_DIR/cleanup.log" 2>&1 || exit_code=1
+        docker exec xhub-postgres psql -X -U xhub -d "$E2E_DATABASE" -v ON_ERROR_STOP=1 -q -c "DROP SCHEMA IF EXISTS $schema CASCADE" >"$E2E_RUN_DIR/cleanup.log" 2>&1 || exit_code=1
       fi
     fi
   fi
@@ -70,18 +76,18 @@ for port in ports:
         try: probe.bind(("127.0.0.1", port))
         except OSError: raise SystemExit(f"E2E port {port} is occupied; set E2E_UI_PORT / E2E_GW_PORT / E2E_UP_PORT")
 PY
-docker exec xhub-postgres psql -X -U xhub -d xhub -qAt -c 'SELECT 1' >/dev/null
+docker exec xhub-postgres psql -X -U xhub -d "$E2E_DATABASE" -qAt -c 'SELECT 1' >/dev/null
 if [[ $# == 0 ]]; then export E2E_FULL_COVERAGE=1; fi
 python3 - <<'PYCONFIG'
-import json
+import json, os
 from pathlib import Path
 config = json.loads(Path("tsconfig.json").read_text())
 config["include"] = [item for item in config["include"] if not item.startswith(".next")]
-config["include"].append(".next-e2e/types/**/*.ts")
+config["include"].append(os.environ["E2E_BUILD_DIR"] + "/types/**/*.ts")
 config["exclude"] = [*config.get("exclude", []), ".next"]
 Path("tsconfig.e2e.json").write_text(json.dumps(config, indent=2) + "\n")
 PYCONFIG
-echo "Building production console (.next-e2e)..."
+echo "Building production console ($E2E_BUILD_DIR)..."
 npm run build
 echo "Building gateway and catalog sweep before the service readiness timeout..."
 (cd "$ROOT" && go build -o "$E2E_RUN_DIR/xhub" ./cmd/gateway && go build -o "$E2E_RUN_DIR/livesweep" ./e2e/livesweep)

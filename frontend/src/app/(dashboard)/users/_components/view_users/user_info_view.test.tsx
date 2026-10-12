@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { setActiveLocale, translate } from "@/i18n";
 import UserInfoView from "./user_info_view";
 import { extractMcpEntitlement } from "@/components/mcp_server_management/mcpEntitlement";
 
@@ -87,6 +88,7 @@ describe("UserInfoView", () => {
     possibleUIRoles: null,
   };
 
+  afterEach(() => setActiveLocale("en"));
   beforeEach(() => {
     vi.clearAllMocks();
     mockUserGetInfoV2.mockResolvedValue(MOCK_USER_DATA);
@@ -112,6 +114,31 @@ describe("UserInfoView", () => {
     mockUserUpdateUserCall.mockResolvedValue({});
     mockFetchMCPServers.mockResolvedValue([MCP_SERVER]);
     mockListMCPTools.mockResolvedValue({ tools: [{ name: "list_issues", description: "List issues" }] });
+  });
+
+  /** 空预算边界：前置无团队且 null/缺失预算，验证中英概览及详情为不限；卸载和恢复语言清理。 */
+  it.each([["en", null], ["zh-CN", null], ["en", undefined], ["zh-CN", undefined]] as const)("shows a teamless %s budget of %s as unlimited", async (locale, max_budget) => {
+    setActiveLocale(locale);
+    mockUserGetInfoV2.mockResolvedValue({ ...MOCK_USER_DATA_NO_TEAMS, max_budget });
+    render(<UserInfoView {...defaultProps} />);
+    expect(await screen.findAllByText(translate(locale, "pages.users.unlimited"))).toHaveLength(2);
+    await userEvent.setup().click(screen.getByRole("tab", { name: translate(locale, "common.details"), exact: true }));
+    expect(within(screen.getByRole("tabpanel", { name: translate(locale, "common.details") })).getByText(translate(locale, "pages.users.unlimited"))).toBeInTheDocument();
+  });
+
+  /** 父级共享：前置有团队空个人预算，验证概览共享父级额度；卸载清理，未写入后台。 */
+  it("shows blank budgets with a team as shared", async () => {
+    mockUserGetInfoV2.mockResolvedValue({ ...MOCK_USER_DATA, max_budget: null });
+    render(<UserInfoView {...defaultProps} />);
+    await waitFor(() => expect(screen.getAllByText(translate("en", "quotaGuide.blank"))).toHaveLength(2));
+  });
+
+  /** 数值边界：前置无团队零/有限预算，验证双语动态金额插值；卸载和恢复语言清理。 */
+  it.each([["en", 0], ["zh-CN", 0], ["en", 25], ["zh-CN", 25]] as const)("shows a personal cap in %s of %s", async (locale, max_budget) => {
+    setActiveLocale(locale);
+    mockUserGetInfoV2.mockResolvedValue({ ...MOCK_USER_DATA_NO_TEAMS, max_budget });
+    render(<UserInfoView {...defaultProps} />);
+    expect(await screen.findByText(translate(locale, "pages.users.spendOf", { limit: "$" + max_budget.toFixed(2) }))).toBeInTheDocument();
   });
 
   /** 权限边界：前置普通用户并请求初始编辑模式，仍不出现管理员编辑入口；卸载清理，无后台写入。 */

@@ -2097,42 +2097,42 @@
   },
   {
     "id": "GAP-045",
-    "file": "e2e/scenarios/budget/organization-exhaust.test.ts",
+    "file": "e2e/scenarios/budgets/organization-exhaustion.test.ts",
     "title": "organization 预算耗尽、拒绝归因、补配恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "default offline",
     "subsystem": "budget"
   },
   {
     "id": "GAP-046",
-    "file": "e2e/scenarios/budget/team-exhaust.test.ts",
+    "file": "e2e/scenarios/budgets/team-exhaustion.test.ts",
     "title": "team 预算耗尽、拒绝归因、补配恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "default offline",
     "subsystem": "budget"
   },
   {
     "id": "GAP-047",
-    "file": "e2e/scenarios/budget/project-exhaust.test.ts",
+    "file": "e2e/scenarios/budgets/project-exhaustion.test.ts",
     "title": "project 预算耗尽、拒绝归因、补配恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "default offline",
     "subsystem": "budget"
   },
   {
     "id": "GAP-048",
-    "file": "e2e/scenarios/budget/personal-exhaust.test.ts",
+    "file": "e2e/scenarios/budgets/personal-exhaustion.test.ts",
     "title": "personal 预算耗尽、拒绝归因、补配恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "default offline",
     "subsystem": "budget"
   },
   {
     "id": "GAP-049",
-    "file": "e2e/scenarios/budget/key-exhaust.test.ts",
+    "file": "e2e/scenarios/budgets/key-exhaustion.test.ts",
     "title": "key 预算耗尽、拒绝归因、补配恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "default offline",
     "subsystem": "budget"
   },
   {
@@ -2513,5 +2513,13 @@
     "kind": "implemented",
     "environment": "local-idp",
     "subsystem": "auth"
+  },
+  {
+    "id": "BUDGET-TEAMLESS-UNLIMITED",
+    "file": "e2e/scenarios/budgets/teamless-unlimited.test.ts",
+    "title": "teamless blank budgets allow streaming and personal caps can be cleared",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "budget"
   }
 ]

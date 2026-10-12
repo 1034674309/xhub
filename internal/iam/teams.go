@@ -469,7 +469,7 @@ func (db *DB) MoveTeam(ctx context.Context, by Actor, id, organizationID string)
 	return out, err
 }
 
-// DeleteTeam 删除团队及成员关系、项目；保留个人凭证，未配置个人预算者进入待计费状态。
+// DeleteTeam 删除团队及成员关系、项目；保留个人凭证及个人预算，未配置个人预算者按个人不限额继续调用。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：团队 id。空串表示没有指定团队。
 // 返回 error（error）：失败原因，nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go

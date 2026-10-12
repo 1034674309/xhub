@@ -51,13 +51,12 @@ test("testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模�
     const schema = fs.readFileSync(path.join(process.env.E2E_RUN_DIR!, "schema.txt"), "utf8").trim();
     expect(schema).toMatch(/^e2e_[0-9]+_[0-9]+$/);
     for (const [name, envName] of [["fennoai", "FENNO_AI_API_KEY"], ["qiniu", "QINIU_API_KEY"]]) {
-      // 只把布尔核对结果带出数据库，真实密钥通过标准输入传入，不进入命令参数和测试报告。
-      const key = credentials[envName].replace(/'/g, "''");
+      // SQL 不携带秘密，私有查询结果只在内存比较；断言布尔值，失败报告也不复述密钥。
       const saved = execFileSync("docker", ["exec", "-i", "xhub-postgres", "psql", "-X", "-U", "xhub", "-d", "xhub", "-qAt", "-v", "ON_ERROR_STOP=1"], {
-        input: `SELECT body->'credential_values'->>'api_key' = '${key}' FROM ${schema}.kv WHERE kind='credentials' AND id='${name}';`,
+        input: `SELECT body::jsonb->'credential_values'->>'api_key' FROM ${schema}.kv WHERE kind='credentials' AND id='${name}';`,
         encoding: "utf8",
       });
-      expect(saved.trim(), name + " 应持久化实际值").toBe("t");
+      expect(saved.trim() === credentials[envName], name + " 应持久化实际值").toBe(true);
     }
     await stableGoto(page, "/model-providers");
     await page.getByTestId("credential-actions-fennoai").click();
