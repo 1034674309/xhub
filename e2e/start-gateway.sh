@@ -34,6 +34,13 @@ E2E_UP_PORT="$UP_PORT" E2E_MASTER_KEY="$MASTER" E2E_SCHEMA="$SCHEMA" E2E_RUN_DIR
 if [[ "${E2E_PREBUILT:-0}" != 1 ]]; then
   (cd "$ROOT" && go build -o "$DIR/xhub" ./cmd/gateway && go build -o "$DIR/livesweep" ./e2e/livesweep)
 fi
+# 专属运行目录可能尚无产物；PREBUILT 只复用存在的文件，不能让目录扫描测试缺少执行程序。
+if [[ ! -x "$DIR/livesweep" ]]; then
+  (cd "$ROOT" && go build -o "$DIR/livesweep" ./e2e/livesweep)
+fi
+if [[ "${E2E_ENTERPRISE_FIXTURE:-0}" != 1 && ! -x "$DIR/xhub" ]]; then
+  (cd "$ROOT" && go build -o "$DIR/xhub" ./cmd/gateway)
+fi
 if [[ "${E2E_ENTERPRISE_FIXTURE:-0}" == 1 ]]; then
   (cd "$ROOT" && go test -c -o "$DIR/enterprise.test" ./internal/gateway)
 fi

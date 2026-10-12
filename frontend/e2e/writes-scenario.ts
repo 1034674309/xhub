@@ -75,7 +75,14 @@ export function registerKeyWrite(kind: "edit" | "block" | "unblock" | "delete", 
           expect((await page.request.get(GATEWAY + "/key/info?key=" + key.token_id, {headers})).status()).toBe(404); await rejected();
         } else {
           expect((await info()).blocked).toBe(kind === "block");
-          await expect(page.getByText(t(kind === "block" ? "Blocked" : "Active"), {exact:true}).first()).toBeVisible();
+          // 当前详情仅在封禁时显示徽标；解封后检查徽标消失及可再次封禁的操作。
+          if (kind === "block") await expect(page.getByText(t("Blocked"), {exact:true}).first()).toBeVisible();
+          else {
+            await expect(page.getByText(t("Blocked"), {exact:true})).toHaveCount(0);
+            await page.getByRole("button", {name:t("More key actions"), exact:true}).click();
+            await expect(page.getByRole("menuitem", {name:t("Block Key"), exact:true})).toBeVisible();
+            await page.keyboard.press("Escape");
+          }
           if (kind === "block") await rejected(); else expect((await invoke()).status()).toBe(200);
         }
       }
@@ -138,7 +145,8 @@ export function registerModelWrite(kind: "edit" | "connection" | "disable" | "en
         await expect(page.getByRole("heading", {name:name + "-renamed",exact:true})).toBeVisible();
         expect((await stored())[0].model_name).toBe(name + "-renamed"); expect((await invoke(name + "-renamed")).status()).toBe(200);
       } else if (kind === "disable" || kind === "enable") {
-        const changed = page.waitForResponse(r => new URL(r.url()).pathname === "/model/" + kind && r.request().method() === "POST");
+        // 页面开关通过部署 PATCH 保存 disabled；等待实际接口，避免成功写入后仍等待旧启停路由。
+        const changed = page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/update") && r.request().method() === "PATCH");
         await page.getByRole("switch", {name:name + " 启用模型",exact:true}).click(); expect((await changed).status()).toBe(200);
         await expect(page.getByRole("switch", {name:name + " 启用模型",exact:true})).toBeChecked({checked:kind === "enable"});
         expect((await stored())[0].model_info.disabled).toBe(kind === "disable");
@@ -320,7 +328,8 @@ test("admin panel saves prompt storage and hides the unused settings", async ({ 
   await loginAdmin(page);
   await page.goto(uiPath("/admin-panel"));
   await page.getByRole("tab", { name: "日志设置", exact: true }).click();
-  await expect(page.getByText(t("Logging Settings"), {exact:true})).toBeVisible({ timeout: 15_000 });
+  // 标签页与卡片共享标题；限定已激活面板，防止重复文案导致严格定位失败。
+  await expect(page.getByRole("tabpanel", { name: t("Logging Settings"), exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("tab", { name: "单点登录设置", exact:true })).toBeVisible();
   await expect(page.getByRole("tab", { name: t("Security Settings") })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "SCIM", exact:true })).toBeVisible();

@@ -66,7 +66,7 @@ def shared_main(args, data):
 def shared_main_locked(args, data):
     """用途：持锁执行共享数据构建或验收；参数为 CLI 和清单，返回退出码；仅由 shared_main 调用并覆盖完整服务生命周期。"""
     try:
-        validate_providers(data, require_credentials=args.phase != "seed")
+        validate_providers(data)
         validate_shared_target(SHARED_DATABASE_URL, SHARED_REDIS_URL)
     except ValueError as error:
         raise SystemExit(str(error))

@@ -128,13 +128,22 @@ class AcceptanceTests(unittest.TestCase):
             RUNNER.validate_providers(data, environ)
 
 
-    def test_seed_provider_validation_requires_no_credentials_but_validates_urls(self):
-        """目的：建数允许完全没有供应商密钥，但拒绝非法地址；前置清单与空环境，验证默认地址、空密钥边界及非法 URL，无网络或数据需要清理。"""
-        data = load_manifest()
-        RUNNER.validate_providers(data, {}, require_credentials=False)
-        with self.assertRaisesRegex(ValueError, "HTTPS"):
-            RUNNER.validate_providers(data, {data["providers"][0]["base_env"]: "http://invalid"},
-                                      require_credentials=False)
+    def test_shared_seed_rejects_missing_credentials_before_cleanup(self):
+        """目的：缺少实际密钥时共享建数不能清库或删证据；前置已有检查点和空环境，验证先失败且重置、构建、进程均未调用，临时目录清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "keep.txt"
+            checkpoint.write_text("existing")
+            args = type("Args", (), {"phase": "seed", "directory": directory})()
+            with mock.patch.dict(RUNNER.os.environ, {}, clear=True), \
+                    mock.patch.object(SHARED, "reset_shared_target") as reset, \
+                    mock.patch.object(SHARED, "command") as command, \
+                    mock.patch.object(RUNNER.subprocess, "Popen") as process:
+                with self.assertRaisesRegex(SystemExit, "FENNO_AI_API_KEY"):
+                    SHARED.shared_main_locked(args, load_manifest())
+            reset.assert_not_called()
+            command.assert_not_called()
+            process.assert_not_called()
+            self.assertEqual(checkpoint.read_text(), "existing")
 
 
     def test_shared_seed_never_starts_observer_or_verification(self):
@@ -150,7 +159,7 @@ class AcceptanceTests(unittest.TestCase):
                     mock.patch.object(RUNNER.subprocess, "Popen") as process, \
                     mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
                     mock.patch.object(SHARED.observer_module, "Observer") as observer, \
-                    mock.patch.dict(RUNNER.os.environ, {}, clear=True), redirect_stdout(io.StringIO()):
+                    mock.patch.dict(RUNNER.os.environ, {"FENNO_AI_API_KEY": "seed-fenno", "QINIU_API_KEY": "seed-qiniu"}, clear=True), redirect_stdout(io.StringIO()):
                 self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 0)
             dataset.seed.assert_called_once_with()
             dataset.verify.assert_not_called()
@@ -261,4 +270,3 @@ class AcceptanceTests(unittest.TestCase):
             self.assertEqual(calls[0][1]["model_info"], {"id": "chat-a"})
             self.assertEqual(dataset.state["deployments"][0]["endpoint_types"], ["chat"])
             self.assertEqual(calls[0][1]["litellm_params"]["api_base"], "http://127.0.0.1:4567/fennoai")
-

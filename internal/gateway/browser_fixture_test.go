@@ -234,6 +234,32 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/session/ttl":
+			// 仅缩短当前测试会话的存储 TTL；不删除或撤销凭据，让真实鉴权链等待到期后拒绝。
+			var body struct {
+				Session string `json:"session"`
+			}
+			if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&body) != nil {
+				http.Error(w, "session required", 400)
+				return
+			}
+			record, err := st.GetKV("ui_session", body.Session)
+			if err != nil || record == nil {
+				http.Error(w, "fixture session not found", 404)
+				return
+			}
+			expires := time.Now().Add(2 * time.Second)
+			record["expires_at"] = expires.UTC().Format(time.RFC3339Nano)
+			encoded, err := json.Marshal(record)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			if err = st.PutKV("ui_session", body.Session, string(encoded)); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"expires_at": expires})
 		case "/identity":
 			org, err := db.CreateOrg(ctx, testActor, fmt.Sprintf("Browser identity %d", time.Now().UnixNano()), nil)
 			if err != nil {

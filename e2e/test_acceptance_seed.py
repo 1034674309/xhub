@@ -1,6 +1,7 @@
 """真实验收 seed 模块的单元测试；各用例独立管理夹具与清理。"""
 import os
 import tempfile
+from pathlib import Path
 import unittest
 from unittest import mock
 from acceptance import Dataset, load_manifest
@@ -14,7 +15,7 @@ class AcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             dataset = Dataset("http://127.0.0.1:1", directory, load_manifest(), logger=lambda message: None)
             dataset.api = mock.Mock(side_effect=[({"key": "admin"}, {}), ([{"organization_id": "existing"}], {})])
-            with mock.patch.dict(os.environ, {"E2E_DATASET_PASSWORD": "password"}), \
+            with mock.patch.dict(os.environ, {"E2E_DATASET_PASSWORD": "password", "FENNO_AI_API_KEY": "seed-fenno-secret", "QINIU_API_KEY": "seed-qiniu-secret"}), \
                     mock.patch.object(dataset, "discover_catalog") as catalog, \
                     mock.patch.object(dataset, "probe_chat_candidate") as probe, \
                     mock.patch.object(dataset, "verify_acceptance_models") as models:
@@ -65,13 +66,21 @@ class AcceptanceTests(unittest.TestCase):
                 return row["id"]
 
             dataset.api = mock.Mock(side_effect=management_api)
-            with mock.patch.dict(os.environ, {"E2E_DATASET_PASSWORD": "password"}), \
+            with mock.patch.dict(os.environ, {"E2E_DATASET_PASSWORD": "password", "FENNO_AI_API_KEY": "seed-fenno-secret", "QINIU_API_KEY": "seed-qiniu-secret"}), \
                     mock.patch.object(dataset, "deployment", side_effect=register_model), \
                     mock.patch.object(dataset, "template", return_value="template"), \
                     mock.patch.object(dataset, "discover_catalog") as catalog, \
                     mock.patch.object(dataset, "probe_chat_candidate") as probe, \
                     mock.patch.object(dataset, "verify_acceptance_models") as models:
                 dataset.seed()
+            credential_posts = [call.args[1] for call in dataset.api.call_args_list
+                                if call.args[0] == "/credentials" and len(call.args) > 1]
+            self.assertEqual([row["credential_values"]["api_key"] for row in credential_posts],
+                             ["seed-fenno-secret", "seed-qiniu-secret"])
+            for artifact in Path(directory).rglob("*"):
+                if artifact.is_file():
+                    self.assertNotIn("seed-fenno-secret", artifact.read_text())
+                    self.assertNotIn("seed-qiniu-secret", artifact.read_text())
             self.assertEqual(len(dataset.state["keys"]), 81)
             self.assertEqual(dataset.state["admin_key"]["user_id"], "admin-id")
             self.assertEqual(dataset.state["admin_key"]["owner_type"], "personal")
@@ -82,4 +91,15 @@ class AcceptanceTests(unittest.TestCase):
             probe.assert_not_called()
             models.assert_not_called()
 
+    def test_seed_rejects_invalid_credentials_before_any_api(self):
+        """目的：直接建数也必须先校验所有密钥；前置缺失、空白、引用或第二供应商缺失，验证零管理调用且异常不含秘密，临时目录自动清理。"""
+        for key in ("", " ", "secret\n", "os.environ/FENNO_AI_API_KEY", "valid-first"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                dataset = Dataset("http://127.0.0.1:1", directory, load_manifest(), logger=lambda message: None)
+                dataset.api = mock.Mock()
+                env = {"FENNO_AI_API_KEY": key, "QINIU_API_KEY": "" if key == "valid-first" else "second"}
+                with mock.patch.dict(os.environ, env, clear=True):
+                    with self.assertRaises(ValueError):
+                        dataset.seed()
+                dataset.api.assert_not_called()
 

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { GATEWAY, loginAdmin, sessionBearer, stableGoto, t, watchGateway } from "./helpers";
+import { GATEWAY, login, loginAdmin, sessionBearer, stableGoto, t, watchGateway } from "./helpers";
+import { requireAuthorizationError } from "./assertions";
 /** 用途：注册独立场景「users can be edited and their team access follows membership changes」；无参数、无返回值。前置真实浏览器、私有数据库和本地上游；验证页面及原始契约，保留原套件前后置清理，运行器最终回收专属 schema。异常由 Playwright 单独记录。 */
 export function registerSC245() {
 
@@ -36,6 +37,10 @@ test("users can be edited and their team access follows membership changes", asy
     await page.getByLabel(t("pages.users.alias")).fill("未保存");
     await page.getByRole("button", { name: t("common.cancel"), exact: true }).click();
     await expect(page.getByText("编辑后", { exact: true })).toBeVisible();
+    // 入队前创建独立个人密钥，避免创建时自动派生团队绑定；离队后应继续按个人预算鉴权。
+    const keyResponse = await page.request.post(GATEWAY + "/key/generate", { headers, data: { user_id: account.user_id, key_alias: "user-edit-key" } });
+    expect(keyResponse.status(), await keyResponse.text()).toBe(200);
+    const key = await keyResponse.json();
     await page.getByRole("tab", { name: t("common.overview"), exact: true }).click();
     await page.getByRole("button", { name: t("pages.users.addTeam"), exact: true }).click();
     const dialog = page.getByRole("dialog");
@@ -53,19 +58,26 @@ test("users can be edited and their team access follows membership changes", asy
     await roleControl.click();
     await page.getByRole("option", { name: t("Team member"), exact: true }).click();
     await expect(roleControl).toContainText(t("Team member"));
-    const keyResponse = await page.request.post(GATEWAY + "/key/generate", { headers, data: { user_id: account.user_id, team_id: team.team_id, key_alias: "user-edit-key" } });
-    expect(keyResponse.ok(), await keyResponse.text()).toBeTruthy();
-    const key = await keyResponse.json();
     const inference = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key.key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "membership access" }] } });
     expect(inference.ok(), await inference.text()).toBeTruthy();
     expect((await inference.json()).choices[0].message.content).toMatch(/ok/);
     await page.getByRole("button", { name: t("Remove from {value0}").replace("{value0}", team.team_alias), exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: t("common.delete"), exact: true }).click();
     await expect(roleControl).toHaveCount(0);
-    const revoked = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key.key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "removed" }] } });
-    expect([401, 403]).toContain(revoked.status());
+    // 离队保留个人凭证；本账号已有个人预算，推理应继续成功，原团队管理权则必须消失。
+    const personal = await page.request.post(GATEWAY + "/v1/chat/completions", { headers: { Authorization: "Bearer " + key.key }, data: { model: "gpt-4o-mini", messages: [{ role: "user", content: "personal access after leaving" }] } });
+    expect(personal.status(), await personal.text()).toBe(200);
+    expect((await personal.json()).choices[0].message.content).toBe("e2e-ok");
+    const remaining = await page.request.get(GATEWAY + "/team/list?user_id=" + account.user_id, { headers });
+    expect(remaining.status()).toBe(200);
+    expect((await remaining.json()).some((row: {team_id: string}) => row.team_id === team.team_id)).toBe(false);
     await page.getByRole("button", { name: t("Back to Users"), exact: true }).click();
     await expect(page.getByText("user-edited@xhub.local", { exact: true }).first()).toBeVisible();
+    await login(page, "user-edited@xhub.local", "user-edit-password");
+    await expect(page.getByText(t("nav.apiKeys")).first()).toBeVisible();
+    const memberHeaders = { Authorization: "Bearer " + await sessionBearer(page) };
+    const denied = await page.request.get(GATEWAY + "/team/info?team_id=" + team.team_id, { headers: memberHeaders });
+    requireAuthorizationError(denied.status(), await denied.json(), 404);
     guard.assertOk();
   } finally {
     const cleanup = await page.request.post(GATEWAY + "/user/delete", { headers, data: { user_id: account.user_id } });

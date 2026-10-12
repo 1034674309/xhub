@@ -10,6 +10,7 @@ import threading
 import time
 
 from . import support as module
+from .credentials import resolve_provider_credentials
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED_DATABASE_URL = "postgres://xhub:xhub_dev_password@127.0.0.1:5433/xhub?sslmode=disable"
@@ -106,16 +107,9 @@ def ready(url, process, timeout=90):
         time.sleep(0.5)
     raise TimeoutError("隔离服务健康检查超时")
 
-def validate_providers(data, environ=None, require_credentials=True):
-    """用途：在清库或验收前验证供应商配置；参数为清单、可选环境及是否需要真实凭据，返回无；建数只校验地址，验收缺少密钥或任何阶段地址非法均立即失败，无外部请求。"""
-    environ = os.environ if environ is None else environ
-    for provider in data["providers"]:
-        if require_credentials and not environ.get(provider["key_env"]):
-            raise ValueError("缺少环境凭据: " + provider["key_env"])
-        base = environ.get(provider["base_env"], provider["base"])
-        url = module.urlsplit(base)
-        if url.scheme != "https" or not url.hostname or url.username or url.password or any(c in base for c in "[]() \n\r\t"):
-            raise ValueError("供应商地址必须是无 Markdown 的 HTTPS URL")
+def validate_providers(data, environ=None):
+    """用途：在清库或验收前验证全部供应商实际凭据与地址；参数为清单和可选环境，返回无；供 runner 调用，任何阶段缺失或非法配置均立即失败，无外部请求。"""
+    resolve_provider_credentials(data, environ)
 
 def validate_shared_target(database_url, redis_url):
     """用途：把破坏性清理限制到用户指定的 xhub 与 Redis DB 1；参数为两个 URL，返回无；任何差异都拒绝执行。"""
@@ -174,4 +168,3 @@ def shared_config(password):
             "general_settings": {"master_key": "sk-" + secrets.token_hex(24), "admin_email": "admin", "admin_name": "admin",
             "admin_password": password, "store_model_in_db": True, "store_prompts_in_spend_logs": True,
             "database_url": SHARED_DATABASE_URL, "redis_url": SHARED_REDIS_URL}}
-

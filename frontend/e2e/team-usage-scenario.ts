@@ -163,9 +163,13 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
     for (const [name, metrics] of Object.entries(providers)) {
       // 供应商图标的首字母会并入单元格可访问名称；按行内精确可见文本定位，保留各指标逐列对账。
       const row = page.getByRole("row").filter({ has: page.getByText(name, { exact: true }) });
-      await expect(row.getByRole("cell").nth(2)).toHaveText(metrics.successful_requests.toLocaleString());
-      await expect(row.getByRole("cell").nth(3)).toHaveText(metrics.failed_requests.toLocaleString());
-      await expect(row.getByRole("cell").nth(4)).toHaveText(metrics.total_tokens.toLocaleString());
+      // 表格可能插入选择列；从当前可访问列标题计算位置，不能把费用误认为成功请求。
+      const headings = await row.locator("xpath=ancestor::table[1]").getByRole("columnheader").allTextContents();
+      for (const [label, value] of [["Successful", metrics.successful_requests], ["Failed", metrics.failed_requests], ["Tokens", metrics.total_tokens]] as const) {
+        const index = headings.findIndex(text => text.trim() === t(label));
+        expect(index, "供应商表必须展示列：" + t(label)).toBeGreaterThanOrEqual(0);
+        await expect(row.getByRole("cell").nth(index)).toHaveText(value.toLocaleString());
+      }
     }
     await page.getByRole("tab", { name: t("pages.usage.modelActivity"), exact: true }).click();
     await expect(page.getByText(modelName, { exact: true }).filter({ visible: true }).first()).toBeVisible();
@@ -192,9 +196,12 @@ test("usage views reconcile stored successes, failures, dimensions, filters and 
       expect(Object.keys(endpoints).length).toBeGreaterThan(0);
       for (const [name, metrics] of Object.entries(endpoints)) {
         const row = page.getByRole("row").filter({ has: page.getByRole("cell", { name, exact: true }) });
-        await expect(row.getByRole("cell").nth(2)).toHaveText(metrics.api_requests.toLocaleString());
-        await expect(row.getByRole("cell").nth(4)).toHaveText(metrics.total_tokens.toLocaleString());
-        await expect(row.getByRole("cell").nth(3)).toHaveText((metrics.successful_requests / metrics.api_requests * 100).toFixed(2) + "%");
+        const headings = await row.locator("xpath=ancestor::table[1]").getByRole("columnheader").allTextContents();
+        for (const [label, value] of [["Total Request", metrics.api_requests.toLocaleString()], ["Total Tokens", metrics.total_tokens.toLocaleString()], ["Success Rate", (metrics.successful_requests / metrics.api_requests * 100).toFixed(2) + "%"]]) {
+          const index = headings.findIndex(text => text.trim() === t(label));
+          expect(index, "端点表必须展示列：" + t(label)).toBeGreaterThanOrEqual(0);
+          await expect(row.getByRole("cell").nth(index)).toHaveText(value);
+        }
       }
       await page.getByRole("tab", { name: t("pages.usage.cost"), exact: true }).click();
       const download = page.waitForEvent("download");

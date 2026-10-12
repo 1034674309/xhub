@@ -2035,64 +2035,64 @@
     "id": "GAP-037",
     "file": "e2e/scenarios/limits/organization-rpm.test.ts",
     "title": "organization RPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-038",
     "file": "e2e/scenarios/limits/organization-tpm.test.ts",
     "title": "organization TPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-039",
     "file": "e2e/scenarios/limits/team-rpm.test.ts",
     "title": "team RPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-040",
     "file": "e2e/scenarios/limits/team-tpm.test.ts",
     "title": "team TPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-041",
     "file": "e2e/scenarios/limits/user-rpm.test.ts",
     "title": "user RPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-042",
     "file": "e2e/scenarios/limits/user-tpm.test.ts",
     "title": "user TPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-043",
     "file": "e2e/scenarios/limits/key-rpm.test.ts",
     "title": "key RPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
     "id": "GAP-044",
     "file": "e2e/scenarios/limits/key-tpm.test.ts",
     "title": "key TPM 页面配置、真实拒绝、修正恢复",
-    "kind": "required-gap",
-    "environment": "split-expand",
+    "kind": "implemented",
+    "environment": "offline",
     "subsystem": "limits"
   },
   {
@@ -2487,8 +2487,8 @@
     "id": "GAP-003",
     "file": "e2e/scenarios/auth/session-expiry.test.ts",
     "title": "自然会话到期后页面明确跳转并恢复登录",
-    "kind": "required-gap",
-    "environment": "default offline"
+    "kind": "implemented",
+    "environment": "local-idp"
   },
   {
     "id": "GAP-002-EXPIRED",

@@ -8,6 +8,27 @@ import { requireAuthorizationError } from "./assertions";
 function control(): string {
  return JSON.parse(readFileSync(join(process.env.E2E_RUN_DIR!, "enterprise-fixture.json"), "utf8")).control;
 }
+/** 注册自然到期情况；title 为独立报告标题。私有控制端缩短当前会话 TTL，真实时钟经过边界，验证到期前 200、到期后 401 与页面重新登录；上下文及 schema 回收会话。 */
+export function registerSessionExpiry(title: string) {
+ test(title, async ({page}) => {
+  await loginAdmin(page);
+  const session = await sessionBearer(page);
+  const headers = {Authorization: "Bearer " + session};
+  const shortened = await page.request.post(control() + "/session/ttl", {data: {session}});
+  expect(shortened.status(), await shortened.text()).toBe(200);
+  expect((await page.request.get(GATEWAY + "/auth/me", {headers})).status()).toBe(200);
+  const before = await count(page);
+  await expect.poll(async () => (await page.request.get(GATEWAY + "/auth/me", {headers})).status(), {timeout: 10_000}).toBe(401);
+  const expired = await page.request.get(GATEWAY + "/auth/me", {headers});
+  requireAuthorizationError(expired.status(), await expired.json(), 401);
+  expect(await count(page)).toEqual(before);
+  await page.goto(uiPath("/api-keys"));
+  await expect(page).toHaveURL(/\/login/);
+  await loginAdmin(page);
+  expect(await sessionBearer(page)).not.toBe(session);
+  expect((await page.request.get(GATEWAY + "/auth/me", {headers: {Authorization: "Bearer " + await sessionBearer(page)}})).status()).toBe(200);
+ });
+}
 /** 读取真实上游调用计数；page 为当前浏览器，返回计数快照；控制端错误直接失败，不改变数据。 */
 async function count(page:Page) {
  const response=await page.request.get(UPSTREAM+"/e2e/request-count");expect(response.status()).toBe(200);return response.json();

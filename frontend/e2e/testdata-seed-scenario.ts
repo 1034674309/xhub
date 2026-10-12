@@ -8,22 +8,27 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { GATEWAY, MASTER, loginAdmin, sessionBearer, stableGoto, watchGateway } from "./helpers";
+import { GATEWAY, MASTER, loginAdmin, sessionBearer, stableGoto, t, watchGateway } from "./helpers";
 /** 用途：注册独立场景「testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模型」；无参数、无返回值。前置真实浏览器、私有数据库和本地上游；验证页面及原始契约，保留原套件前后置清理，运行器最终回收专属 schema。异常由 Playwright 单独记录。 */
 export function registerSC244() {
 
 
 test("testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模型", async ({ page }) => {
   // 建数需要空租户环境，必须单独选择本文件；完整浏览器套件的其他用例会先创建组织。
-  test.skip(process.env.E2E_TESTDATA_SEED !== "1", "请使用 E2E_TESTDATA_SEED=1 单独运行 testdata-seed.spec.ts");
+  test.skip(process.env.E2E_TESTDATA_SEED !== "1", "请使用 E2E_TESTDATA_SEED=1 单独运行 scenarios/legacy/testdata-seed/sc-244.test.ts");
   test.setTimeout(120_000);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "xhub-testdata-"));
+  // 真实供应商验收由调用方提供私有凭据文件；默认回归只验证持久化，不能冒充供应商支持证明。
+  const live = !!process.env.E2E_TESTDATA_CREDENTIALS_FILE;
+  const credentials: Record<string, string> = live
+    ? JSON.parse(fs.readFileSync(process.env.E2E_TESTDATA_CREDENTIALS_FILE!, "utf8"))
+    : { FENNO_AI_API_KEY: "seed-fenno-secret", QINIU_API_KEY: "seed-qiniu-secret" };
   try {
     try {
       execFileSync("python3", [path.resolve(__dirname, "../../scripts/e2e.py"),
       "--gateway", GATEWAY, "--directory", directory, "--seed-only"], {
       env: { ...process.env, E2E_DATASET_ADMIN: "admin", E2E_DATASET_PASSWORD: MASTER,
-        FENNO_AI_API_KEY: "", QINIU_API_KEY: "" }, timeout: 90_000,
+        ...credentials }, timeout: 90_000,
       });
     } catch (error) {
       const reportPath = path.join(directory, "report.json");
@@ -42,6 +47,27 @@ test("testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模�
     expect(report.media_tasks).toBeUndefined();
     const guard = watchGateway(page);
     await loginAdmin(page);
+    const headers = { Authorization: "Bearer " + await sessionBearer(page) };
+    const schema = fs.readFileSync(path.join(process.env.E2E_RUN_DIR!, "schema.txt"), "utf8").trim();
+    expect(schema).toMatch(/^e2e_[0-9]+_[0-9]+$/);
+    for (const [name, envName] of [["fennoai", "FENNO_AI_API_KEY"], ["qiniu", "QINIU_API_KEY"]]) {
+      // 只把布尔核对结果带出数据库，真实密钥通过标准输入传入，不进入命令参数和测试报告。
+      const key = credentials[envName].replace(/'/g, "''");
+      const saved = execFileSync("docker", ["exec", "-i", "xhub-postgres", "psql", "-X", "-U", "xhub", "-d", "xhub", "-qAt", "-v", "ON_ERROR_STOP=1"], {
+        input: `SELECT body->'credential_values'->>'api_key' = '${key}' FROM ${schema}.kv WHERE kind='credentials' AND id='${name}';`,
+        encoding: "utf8",
+      });
+      expect(saved.trim(), name + " 应持久化实际值").toBe("t");
+    }
+    await stableGoto(page, "/model-providers");
+    await page.getByTestId("credential-actions-fennoai").click();
+    await page.getByTestId("credential-action-edit").click();
+    const editor = page.getByRole("dialog", { name: t("Edit model provider") });
+    const displayed = await editor.getByLabel("OpenAI API Key").inputValue();
+    expect(displayed.startsWith("os")).toBe(false);
+    expect(displayed.includes("*")).toBe(true);
+    expect(displayed === credentials.FENNO_AI_API_KEY).toBe(false);
+    await editor.getByRole("button", { name: t("Cancel"), exact: true }).click();
     await stableGoto(page, "/api-keys");
     await expect(page.getByText("管理员个人密钥", { exact: true }).first()).toBeVisible();
     const logs = await page.request.get(GATEWAY + "/spend/logs/ui?page_size=200", {
@@ -57,6 +83,21 @@ test("testdata 仅构造资源，控制台可见且不执行 Codex 或媒体模�
     await page.getByRole("tab", { name: "全部模型", exact: true }).click();
     await expect(page.getByText("gpt-5.6-sol", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("z-ai/glm-5", { exact: true }).first()).toBeVisible();
+    if (live) {
+      // 网关进程没有供应商环境变量；从建数数据库读取密钥，真正发送 Responses 到 Fenno。
+      const key = access.keys.find((row: { profile: string }) => row.profile === "fenno-only");
+      const inference = await page.request.post(GATEWAY + "/v1/responses", {
+        headers: { Authorization: "Bearer " + key.key },
+        data: { model: key.call_model, input: "Reply with exactly: fenno-seeded-ok", max_output_tokens: 32 },
+        timeout: 90_000,
+      });
+      expect(inference.status(), "真实 Fenno 数据面调用应成功").toBe(200);
+      const response = await inference.json();
+      expect(response.usage.total_tokens).toBeGreaterThan(0);
+      const evidence = await page.request.get(GATEWAY + "/spend/logs/ui?page_size=200", { headers });
+      expect(evidence.status()).toBe(200);
+      expect((await evidence.json()).data.length).toBeGreaterThan(0);
+    }
     guard.assertOk();
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

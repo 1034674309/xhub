@@ -4,9 +4,13 @@ const path = require('node:path');
  * reporter 与单元测试调用；缺失、失败、跳过、重复绑定均不计通过，不读取业务数据。 */
 function evaluateScenarios(catalog, results) {
   const ids = new Set();
+  const files = new Set();
   for (const item of catalog) {
     if (!item.id || !item.file || !item.title || ids.has(item.id)) throw new Error('业务清单缺少字段或 ID 重复');
+    // 一个业务情况绑定一个独立文件，重复文件会再次串联情况并破坏独立运行结果。
+    if (!item.file.endsWith('.test.ts') || files.has(item.file)) throw new Error('业务清单必须绑定独立 .test.ts，文件重复或后缀错误');
     ids.add(item.id);
+    files.add(item.file);
   }
   if (!catalog.length) throw new Error('业务清单不能为空');
   const rows = catalog.map(item => {

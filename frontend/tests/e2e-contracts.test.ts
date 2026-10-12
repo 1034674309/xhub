@@ -57,6 +57,11 @@ describe("业务场景覆盖门禁", () => {
     expect(() => evaluateScenarios([], [])).toThrow(/不能为空/);
     expect(() => evaluateScenarios([catalog[0], catalog[0]], [])).toThrow(/ID 重复/);
   });
+  /** 每种情况必须有独立文件；重复文件或非业务测试后缀直接失败，无 I/O 与清理。 */
+  it("拒绝多个情况复用文件和非 test.ts 文件", () => {
+    expect(() => evaluateScenarios([catalog[0], {...catalog[1], file: catalog[0].file}], [])).toThrow(/文件重复/);
+    expect(() => evaluateScenarios([{...catalog[0], file: "e2e/a.spec.ts"}], [])).toThrow(/后缀错误/);
+  });
   /** 未登记测试必须单列，不能扩充通过分子。 */
   it("暴露未登记测试", () => expect(evaluateScenarios(catalog,[{file:"e2e/new.test.ts",title:"New",status:"passed"}])).toMatchObject({passed:0,unregistered:[{title:"New"}]}));
   /** 不允许最后一次通过覆盖先前失败。 */

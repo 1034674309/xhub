@@ -208,6 +208,8 @@ type generalField struct {
 // 测试：无直接单测
 func generalFieldCatalog() []generalField {
 	return []generalField{
+		// 日志表单从此目录读取初值；遗漏会让已持久化的开关在刷新后显示为默认关闭。
+		{"store_prompts_in_spend_logs", "Boolean", "Store request and response bodies in spend logs", false, nil, ""},
 		{"enable_anthropic_prompt_caching", "Boolean", "Automatically add Anthropic prompt-cache breakpoints", false, nil, "prompt_caching"},
 		{"anthropic_prompt_caching_ttl", "Select", "How long Anthropic keeps the prompt cache", nil, []string{"5m", "1h"}, "prompt_caching"},
 		{"mcp_internal_ip_ranges", "List", "Internal IP ranges treated as private for MCP", []any{}, nil, ""},

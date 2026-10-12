@@ -3,13 +3,15 @@ import os
 import secrets
 
 from .support import hierarchy
+from .credentials import resolve_provider_credentials
 
 
 class SeedCases:
     """用途：封装 seed 场景；通过 self 访问本轮状态、管理 API 和证据，供 Dataset 调用，不自行启动全套测试。"""
 
     def seed(self):
-        """用途：仅通过管理 API 构建清单声明的保留基线；无参数、无返回值；供 testdata 和验收准备调用，要求空租户库，不读取供应商目录、不探测或运行模型，异常保留检查点。"""
+        """用途：仅通过管理 API 构建清单声明的保留基线；无参数、无返回值；供 testdata 和验收准备调用，先校验全部实际凭据并要求空租户库，密钥存数据库而不存检查点，不探测或运行模型，异常保留检查点。"""
+        credentials = resolve_provider_credentials(self.data)
         login, _ = self.api("/v2/login", {"username": os.environ.get("E2E_DATASET_ADMIN", "admin"),
                                           "password": os.environ["E2E_DATASET_PASSWORD"]})
         self.admin = login["key"]
@@ -24,8 +26,7 @@ class SeedCases:
             self.action_start(provider["name"], "provider", "添加模型提供商", f"连接名={provider['id']}")
             self.api("/credentials", {"credential_name": provider["id"],
                 "credential_info": {"catalog_id": provider["id"], "custom_llm_provider": "openai", "provider_id": "OpenAI"},
-                "credential_values": {"api_base": os.environ.get(provider["base_env"], provider["base"]),
-                                      "api_key": "os.environ/" + provider["key_env"]}})
+                "credential_values": credentials[provider["id"]]})
             listed, _ = self.api("/credentials")
             if provider["id"] not in {row.get("credential_name") for row in listed.get("credentials", [])}:
                 raise AssertionError("模型提供商连接未持久化: " + provider["id"])
@@ -133,4 +134,3 @@ class SeedCases:
         self.state["selected"] = selected
         self.report.update(status="seeded", phase="seed", admin_key_count=1, total_key_count=82)
         self.save()
-
