@@ -33,6 +33,14 @@ jobs:
         working-directory: frontend
       - run: node --test scripts/test_release_workflow.cjs
       - run: python3 -m unittest scripts.test_deploy_build -v
+      # 本地配置不入库；干净 checkout 从已跟踪的示例生成测试所需配置。
+      - name: Prepare test configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f configs/config.yaml ]]; then
+            cp configs/config.example.yaml configs/config.yaml
+          fi
       - run: go test ./internal/...
       - run: docker compose up -d --wait postgres redis
       - run: bash scripts/regression.sh -v

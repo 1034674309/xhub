@@ -1,7 +1,7 @@
 /** 发布配置回归：读取真实 YAML 并执行内嵌 shell；外部发布使用临时夹具。 */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync, mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { spawnSync } = require('node:child_process');
@@ -15,6 +15,36 @@ function step(name) {
   assert.ok(result, name);
   return result;
 }
+
+/** 配置准备覆盖干净检出、已有配置和缺失示例；执行真实工作流 shell，验证生成内容、保留原配置及失败退出，finally 删除临时目录。 */
+test('verification prepares configs/config.yaml before Go tests without overwriting existing configuration', () => {
+  const steps = workflow.jobs.verify.steps;
+  const prepareIndex = steps.findIndex(item => item.name === 'Prepare test configuration');
+  const goIndex = steps.findIndex(item => /go test/.test(item.run || ''));
+  assert.ok(prepareIndex >= 0 && prepareIndex < goIndex, '配置必须在 Go 测试前准备');
+  const prepare = steps[prepareIndex];
+  assert.equal(prepare.shell, 'bash');
+  const example = readFileSync(join(__dirname, '../configs/config.example.yaml'), 'utf8');
+  for (const scenario of ['clean checkout', 'existing configuration', 'missing example']) {
+    const directory = mkdtempSync(join(tmpdir(), 'xhub-release-config-'));
+    try {
+      mkdirSync(join(directory, 'configs'));
+      if (scenario !== 'missing example') {
+        writeFileSync(join(directory, 'configs/config.example.yaml'), example);
+      }
+      const target = join(directory, 'configs/config.yaml');
+      if (scenario === 'existing configuration') writeFileSync(target, 'model_list: []\n# preserved configuration\n');
+      const result = spawnSync('bash', ['-c', prepare.run], { cwd: directory, encoding: 'utf8' });
+      if (scenario === 'missing example') {
+        assert.notEqual(result.status, 0, '缺失示例时必须报告准备失败');
+        assert.equal(existsSync(target), false, '失败时不得留下空配置');
+      } else {
+        assert.equal(result.status, 0, scenario + ': ' + result.stderr);
+        assert.equal(readFileSync(target, 'utf8'), scenario === 'clean checkout' ? example : 'model_list: []\n# preserved configuration\n', scenario);
+      }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }
+});
 
 /** 正常流程验证发布依赖真实测试且 PR 没有写权限；只读配置，无需清理。 */
 test('publication requires regression and browser verification', () => {
