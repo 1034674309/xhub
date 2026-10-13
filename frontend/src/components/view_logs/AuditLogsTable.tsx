@@ -158,7 +158,7 @@ export function AuditLogsTable({
             onOpenChange={setFiltersOpen}
             title={t("Filters")}
             description={t("Narrow down audit log entries")}
-            applyLabel={t("Apply Filters")}
+            applyLabel={t("common.applyFilters")}
             resetLabel={t("Reset")}
           >
             {({ get, set }) => (

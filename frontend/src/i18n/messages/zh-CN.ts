@@ -694,6 +694,7 @@ export const zhCN = {
     pageControls: "页面操作",
   },
   common: {
+    applyFilters: "应用筛选",
     noResults: "没有结果",
     noRows: "没有符合搜索或筛选条件的行。",
     loading: "加载中…",

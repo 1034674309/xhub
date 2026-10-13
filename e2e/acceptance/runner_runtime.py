@@ -20,7 +20,7 @@ SHARED_LOCK = ROOT / ".e2e/real-acceptance-shared.lock"
 E2E_CATEGORIES = ("entities", "gpt-1", "gpt-2", "gpt-3", "gpt-4", "glm", "image",
     "ark-video", "fal-video", "kling-video", "inheritance", "chat-bills", "permissions",
     "xgo", "limits", "model-lifecycle", "guard-lifecycle", "global-guards", "profile-isolation",
-    "cache-weight", "fallback", "media-logs", "database", "browser", "business-browser", "regression")
+    "cache-weight", "Affinity", "fallback", "media-logs", "database", "browser", "business-browser", "regression")
 
 
 class RunLogger:

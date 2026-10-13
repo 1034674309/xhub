@@ -9,6 +9,7 @@ import threading
 import time
 
 from checklist import Checklist
+from .category_help import CATEGORY_SCENARIOS
 from .support import acceptance_run_id, write_private, http
 
 
@@ -76,6 +77,7 @@ class RuntimeCases:
                  ("model-lifecycle", "模型创建、下架、恢复与删除"), ("guard-lifecycle", "护栏编辑、默认启用与删除"),
                  ("global-guards", "全局拦截无外发与个人信息转发前脱敏"), ("profile-isolation", "单供应商路由隔离"),
                  ("cache-weight", "缓存零费用、跨密钥隔离、封禁及权重更新失效"),
+                 ("Affinity", "会话粘性、路由模板、模型与端点完整链路"),
                  ("fallback", "真实供应商错误回退、会话复用、真实调用与目标权限"),
                  ("media-logs", "精确媒体日志与终态证据复验"), ("database", "事件、日报、token、五级金额与结算去重"),
                  ("browser", "真实数据的控制台、日志、护栏与角色页面"),
@@ -88,7 +90,7 @@ class RuntimeCases:
                 raise ValueError("未知或空 E2E 分类: " + ", ".join(sorted(unknown)))
             plan = [(ident, name) for ident, name in plan if ident in categories]
         self.selected_categories = None if categories is None else frozenset(categories)
-        self.checklist = Checklist(self.directory, self.logger, plan)
+        self.checklist = Checklist(self.directory, self.logger, plan, scenarios=CATEGORY_SCENARIOS)
 
     def save(self):
         """用途：落盘检查点和脱敏报告；无参数/返回，供每个阶段调用；访问材料保存在忽略目录 0600 文件。"""

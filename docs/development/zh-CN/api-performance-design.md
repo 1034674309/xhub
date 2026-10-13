@@ -26,4 +26,4 @@
 
 ## 验证边界
 
-[阶梯报告](../../../benchmarks/reports/staircase/report.md)和[验证记录](../../../benchmarks/reports/validation/summary.md)只代表记录的机器、版本、数据集和依赖配置，不能保证当前生产吞吐或延迟。供应商耗时、媒体任务时间和网关开销需要分别测量。实现测试位于 internal/config、internal/live、internal/dataplane/runtime、internal/iam 和 cmd/regression；真实 HTTP、PostgreSQL、Redis 与浏览器测试使用隔离数据并清理。外部供应商验证需要独立凭据和显式启用。
+[基准测试指南](../../../benchmarks/README.md)说明如何运行隔离测量并解读结果。`benchmarks/reports/staircase/report.md`、`benchmarks/reports/validation/summary.md` 等报告是被 Git 忽略的本地产物，不包含在全新检出或发布的网站中。每份报告只代表记录的机器、版本、数据集和依赖配置，不能保证当前生产吞吐或延迟。供应商耗时、媒体任务时间和网关开销需要分别测量。实现测试位于 internal/config、internal/live、internal/dataplane/runtime、internal/iam 和 cmd/regression；真实 HTTP、PostgreSQL、Redis 与浏览器测试使用隔离数据并清理。外部供应商验证需要独立凭据和显式启用。

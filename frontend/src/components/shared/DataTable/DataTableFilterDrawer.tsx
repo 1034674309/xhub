@@ -43,14 +43,16 @@ function toFilters(draft: Record<string, unknown>): ColumnFiltersState {
     .map(([id, value]) => ({ id, value }));
 }
 
+/** 筛选抽屉：接收表格、开关状态、可选文案及草稿渲染器，返回筛选界面。
+ * 表格调用方通过应用提交草稿、重置清除筛选；默认按钮文案跟随当前语言更新，自定义文案原样保留。 */
 export function DataTableFilterDrawer<TData>({
   table,
   open,
   onOpenChange,
   title = t("Filters"),
   description,
-  applyLabel = "Apply Filters",
-  resetLabel = "Reset",
+  applyLabel,
+  resetLabel,
   onReset,
   children,
 }: DataTableFilterDrawerProps<TData>) {
@@ -96,10 +98,10 @@ export function DataTableFilterDrawer<TData>({
         </div>
         <SheetFooter className="flex-row">
           <Button variant="outline" className="flex-1" onClick={reset} data-testid="filter-drawer-reset">
-            {resetLabel}
+            {resetLabel ?? t("Reset")}
           </Button>
           <Button className="flex-1" onClick={apply} data-testid="filter-drawer-apply">
-            {applyLabel}
+            {applyLabel ?? t("common.applyFilters")}
           </Button>
         </SheetFooter>
       </SheetContent>

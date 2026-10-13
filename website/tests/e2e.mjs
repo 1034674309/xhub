@@ -27,6 +27,22 @@ try {
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  // 目的：双语性能说明切换和刷新后仍提供已跟踪的压测指南，报告仅显示本地路径；前置真实构建服务器，无外部请求和业务写入，最终关闭上下文。
+  await scenario("性能说明 → 双语切换 → 压测指南与本地报告边界", async () => {
+    await page.goto(base + "docs/development/zh-CN/api-performance-design.html");
+    for (const [locale, label, boundary] of [["zh-CN", "基准测试指南", "被 Git 忽略的本地产物"], ["en", "benchmark guide", "local artifacts ignored by Git"]]) {
+      if (locale === "en") await page.getByRole("link", { name: "Switch to English", exact: true }).click();
+      await page.waitForURL(`**/development/${locale}/api-performance-design.html`);
+      await page.reload();
+      const response = await page.request.get(page.url());
+      assert.equal(response.status(), 200, `${locale} 性能文档必须可达`);
+      const article = page.getByRole("article");
+      await expect(article.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", "https://github.com/sunqirui1987/xhub/blob/main/benchmarks/README.md");
+      assert.ok((await article.innerText()).includes(boundary), `${locale} 必须说明报告不随仓库发布`);
+      assert.ok((await article.innerText()).includes("benchmarks/reports/staircase/report.md"));
+      assert.equal(await article.locator('a[href*="benchmarks/reports/"]').count(), 0, `${locale} 不能提供无效报告链接`);
+    }
+  });
   // 目的：双语入口可实际导航且共享翻译源不造成重复目录；前置真实构建服务器，只读页面，最终关闭上下文。
   await scenario("整体文档入口 → 开发指南 → 双语目录无重复", async () => {
     for (const [lang, home, label, locale] of [["zh", "", "开发指南", "zh-CN"], ["en", "en/", "Developer guide", "en"]]) {

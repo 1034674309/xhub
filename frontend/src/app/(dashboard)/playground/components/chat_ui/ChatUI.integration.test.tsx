@@ -38,10 +38,12 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = () => {};
 });
 
-const CHAT_REQUEST_ARG_COUNT = 26;
+const CHAT_REQUEST_ARG_COUNT = 27;
 const STREAMING_ENABLED_ARG_INDEX = 25;
-const MESSAGES_REQUEST_ARG_COUNT = 19;
+const CHAT_SESSION_ID_ARG_INDEX = 26;
+const MESSAGES_REQUEST_ARG_COUNT = 20;
 const MESSAGES_STREAMING_ENABLED_ARG_INDEX = 18;
+const MESSAGES_SESSION_ID_ARG_INDEX = 19;
 
 async function openComboboxByPlaceholder(placeholder: string) {
   const user = userEvent.setup();
@@ -87,12 +89,13 @@ describe("ChatUI", () => {
     await waitFor(() => expect(sessionStorage.getItem("endpointPath")).toBe("/v1/messages"));
     expect(sessionStorage.getItem("endpointType")).toBeNull();
   });
-  /** 前置保存的模型、端点和完成历史；验证初始化恢复不清空历史，切换模型后清空；自动卸载并清理存储。 */
-  it("恢复历史保留绑定，切换模型才重置", async () => {
+  /** 目的：恢复及切换模型保留历史与对话身份；前置保存历史、模型、端点及会话；验证显式清空才重建会话，自动卸载并清理存储。 */
+  it("恢复和切换模型保留历史与会话，显式清空才重置", async () => {
     sessionStorage.setItem("selectedModel", "Model 1");
     sessionStorage.setItem("endpointPath", "/v1/chat/completions");
     sessionStorage.setItem("chatHistory", JSON.stringify([{ role: "assistant", content: "restored-answer" }]));
     sessionStorage.setItem("codeInterpreterEnabled", "{bad");
+    sessionStorage.setItem("playgroundSessionId", "restored-session");
     render(
       <ChatUI accessToken="test" token="test" userRole="user" userID="test" disabledPersonalKeyCreation={false} />,
     );
@@ -102,8 +105,16 @@ describe("ChatUI", () => {
       ),
     );
     expect(screen.getByText("restored-answer")).toBeInTheDocument();
+    expect(sessionStorage.getItem("playgroundSessionId")).toBe("restored-session");
     await selectComboboxOption("Select a Model", "Model 2");
+    await waitFor(() => expect(sessionStorage.getItem("selectedModel")).toBe("Model 2"));
+    expect(screen.getByText("restored-answer")).toBeInTheDocument();
+    expect(sessionStorage.getItem("playgroundSessionId")).toBe("restored-session");
+    await selectComboboxOption("Select a Model", "Model 1");
+    await userEvent.click(screen.getByRole("button", { name: "Clear Chat", exact: true }));
     expect(screen.queryByText("restored-answer")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("playgroundSessionId")).toBeTruthy();
+    expect(sessionStorage.getItem("playgroundSessionId")).not.toBe("restored-session");
   });
   /** 前置会话与本地模型夹具；验证模型优先、连接默认收起并可展开，无外部写入，环境卸载清理。 */
   it("连接设置默认收起且可按需展开", async () => {
@@ -394,6 +405,7 @@ describe("ChatUI", () => {
     });
   });
 
+  /** 目的：关闭流式后仍传递当前会话 ID；前置本地模型及请求 mock，验证非流式参数与会话契约；自动卸载、重置 mock 和存储清理。 */
   it("should send the chat request non-streaming after Stream responses is unchecked", async () => {
     const user = userEvent.setup();
     render(
@@ -442,8 +454,11 @@ describe("ChatUI", () => {
     const requestArgs = vi.mocked(makeOpenAIChatCompletionRequest).mock.calls[0];
     expect(requestArgs).toHaveLength(CHAT_REQUEST_ARG_COUNT);
     expect(requestArgs[STREAMING_ENABLED_ARG_INDEX]).toBe(false);
+    expect(requestArgs[CHAT_SESSION_ID_ARG_INDEX]).toBe(sessionStorage.getItem("playgroundSessionId"));
+    expect(requestArgs[CHAT_SESSION_ID_ARG_INDEX]).toEqual(expect.any(String));
   });
 
+  /** 目的：Messages 关闭流式后保留当前会话归组；前置本地模型及请求 mock，验证非流式参数和会话 ID；自动卸载、重置 mock 和存储清理。 */
   it("should send the /v1/messages request non-streaming after Stream responses is unchecked", async () => {
     const user = userEvent.setup();
     render(
@@ -488,8 +503,11 @@ describe("ChatUI", () => {
     const requestArgs = vi.mocked(makeAnthropicMessagesRequest).mock.calls[0];
     expect(requestArgs).toHaveLength(MESSAGES_REQUEST_ARG_COUNT);
     expect(requestArgs[MESSAGES_STREAMING_ENABLED_ARG_INDEX]).toBe(false);
+    expect(requestArgs[MESSAGES_SESSION_ID_ARG_INDEX]).toBe(sessionStorage.getItem("playgroundSessionId"));
+    expect(requestArgs[MESSAGES_SESSION_ID_ARG_INDEX]).toEqual(expect.any(String));
   });
 
+  /** 目的：简化模式强制流式并建立独立会话；前置保存的非流式偏好及请求 mock，验证偏好不改写、会话 ID 非空；自动卸载及存储清理。 */
   it("should force streaming in simplified mode even when the playground setting is off", async () => {
     sessionStorage.setItem("streamingEnabled", "false");
 
@@ -524,6 +542,8 @@ describe("ChatUI", () => {
     const requestArgs = vi.mocked(makeOpenAIChatCompletionRequest).mock.calls[0];
     expect(requestArgs).toHaveLength(CHAT_REQUEST_ARG_COUNT);
     expect(requestArgs[STREAMING_ENABLED_ARG_INDEX]).toBe(true);
+    expect(requestArgs[CHAT_SESSION_ID_ARG_INDEX]).toEqual(expect.any(String));
+    expect(requestArgs[CHAT_SESSION_ID_ARG_INDEX]).not.toBe("");
     expect(sessionStorage.getItem("streamingEnabled")).toBe("false");
   });
 

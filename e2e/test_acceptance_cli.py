@@ -40,9 +40,9 @@ class AcceptanceEntryTests(unittest.TestCase):
                     self.assertEqual(cli.main(), 0)
                 self.assertEqual(existing.call_args.args[0].seed_only, seed)
             with mock.patch("sys.argv", ["e2e", "--shared-target", "--phase", "verify",
-                        "--category", "limits", "--category", "limits", "--category", "permissions", "--category", "profile-isolation", "--category", "cache-weight", "--category", "fallback"]):
+                        "--category", "limits", "--category", "limits", "--category", "permissions", "--category", "profile-isolation", "--category", "cache-weight", "--category", "fallback", "--category", "Affinity"]):
                 self.assertEqual(cli.main(), 0)
-                self.assertEqual(shared.call_args.args[0].category, ["limits", "permissions", "profile-isolation", "cache-weight", "fallback"])
+                self.assertEqual(shared.call_args.args[0].category, ["limits", "permissions", "profile-isolation", "cache-weight", "fallback", "Affinity"])
             with mock.patch("sys.argv", ["e2e"]):
                 self.assertEqual(cli.main(), 0)
                 isolated.assert_called_once()

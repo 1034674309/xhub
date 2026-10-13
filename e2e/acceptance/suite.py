@@ -84,6 +84,7 @@ class SuiteCases:
                     self.report["checks"].append({"name": "redaction-before-real-supplier", "passed": True})
         self.run_case("profile-isolation", self.verify_profile_route_isolation)
         self.run_case("cache-weight", self.verify_cache_weight_chain, key)
+        self.run_case("Affinity", self.verify_affinity_chain, key)
         self.run_case("fallback", self.verify_fallback_policy_chain, key)
         self.report["status"] = "passed"
         self.save()

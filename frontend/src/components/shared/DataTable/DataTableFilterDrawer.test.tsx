@@ -7,6 +7,13 @@ import { describe, expect, it } from "vitest";
 import { DataTable } from "./DataTable";
 import { DataTableFilterDrawer } from "./DataTableFilterDrawer";
 import { DataTableToolbar } from "./DataTableToolbar";
+import { I18nProvider, useI18n } from "@/i18n";
+
+/** 测试用语言切换按钮，无参数，返回切换控件；用于验证打开的抽屉跟随语言更新，无外部副作用。 */
+function LocaleControl() {
+  const { setLocale } = useI18n();
+  return <button onClick={() => setLocale("zh-CN")}>Switch locale</button>;
+}
 
 interface Person {
   id: string;
@@ -59,6 +66,18 @@ function Harness({ initialFilters }: { initialFilters?: ColumnFiltersState }) {
 }
 
 describe("DataTableFilterDrawer", () => {
+  /** 前置英文 Provider 和打开的抽屉；切换中文后默认按钮更新且草稿不变，测试框架卸载并清理本地状态。 */
+  it("translates default actions while preserving the draft", async () => {
+    const user = userEvent.setup();
+    render(<I18nProvider initialLocale="en"><LocaleControl /><Harness /></I18nProvider>);
+    await user.click(screen.getByTestId("datatable-filters-trigger"));
+    fireEvent.change(await screen.findByTestId("draft-name"), { target: { value: "Bob" } });
+    expect(screen.getByRole("button", { name: "Apply Filters", exact: true })).toBeVisible();
+    // 模态抽屉外的测试按钮被隐藏，因此通过其事件切换 Provider 状态。
+    fireEvent.click(screen.getByText("Switch locale"));
+    expect(screen.getByRole("button", { name: "应用筛选", exact: true })).toBeVisible();
+    expect(screen.getByTestId("draft-name")).toHaveValue("Bob");
+  });
   it("stages edits and only commits them to the table on Apply", async () => {
     const user = userEvent.setup();
     render(<Harness />);

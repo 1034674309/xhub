@@ -21,6 +21,23 @@ from acceptance import runner_browser as runner
 class ChecklistTests(unittest.TestCase):
     """验证成功、失败、待执行和去重的可观察结果。"""
 
+    def test_scenario_description_visible_in_execution_and_reports(self):
+        """目的：执行代码必须输出测什么和判断依据；前置临时清单，验证正常、空说明和失败报告，临时目录自动清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            logs = []
+            checklist = Checklist(directory, logs.append, [("demo", "示例"), ("empty", "空说明")],
+                                  scenarios={"demo": ("发送相同正文两次", "第二次缓存命中且费用为零")})
+            with self.assertRaises(RuntimeError):
+                with checklist.case("demo"):
+                    raise RuntimeError("失败夹具")
+            self.assertIn("    [测什么、怎么测] 发送相同正文两次", logs)
+            self.assertIn("    [判断依据] 第二次缓存命中且费用为零", logs)
+            report = json.loads((Path(directory) / "cases.json").read_text())
+            self.assertEqual(report["cases"][0]["example"], "发送相同正文两次")
+            self.assertEqual(report["cases"][0]["status"], "failed")
+            self.assertNotIn("example", report["cases"][1])
+            self.assertIn("判断依据：第二次缓存命中且费用为零", (Path(directory) / "cases.md").read_text())
+
     def test_probe_http_warning_and_case_terminal_results(self):
         """目的：真实本地 HTTP 探测与清单结果区分警告和失败；前置首候选502、后候选有效回答，验证重试/切换/通过、全部失败及清理异常不误报通过；服务器、环境及临时报告自动清理，不调用付费供应商。"""
         requests = []

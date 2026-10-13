@@ -9,13 +9,19 @@ import threading
 class Checklist:
     """由真实验收 runner 持有，用例只有完成全部断言后才能通过。"""
 
-    def __init__(self, directory, logger, plan):
-        """用途：初始化本轮编号清单；参数为目录、日志回调和唯一 ID/名称列表，返回实例；覆盖本轮旧清单，不读取历史通过状态，重复 ID 拒绝。"""
+    def __init__(self, directory, logger, plan, scenarios=None):
+        """用途：初始化本轮清单；参数为目录、日志、ID/名称列表及可选例子/逻辑映射，返回实例。
+
+        runner 提供实际场景说明，保存到报告并在执行时显示；覆盖旧清单，不读取历史通过状态，重复 ID 拒绝。
+        """
         if len({ident for ident, _ in plan}) != len(plan):
             raise ValueError("验收用例 ID 重复")
         self.save_lock = threading.RLock()
         self.directory, self.logger = Path(directory), logger
         self.rows = [dict(id=ident, name=name, status="pending") for ident, name in plan]
+        for row in self.rows:
+            if scenarios and row["id"] in scenarios:
+                row["example"], row["logic"] = scenarios[row["id"]]
         self.directory.mkdir(parents=True, exist_ok=True)
         self.save()
         for index, row in enumerate(self.rows, 1):
@@ -39,6 +45,10 @@ class Checklist:
         for index, row in enumerate(self.rows, 1):
             name = row['name'].replace('|', '\\|').replace('\n', ' ')
             lines.append(f"| {index:03d} {row['id']} | {name} | {labels[row['status']]} | {row.get('seconds', '')} |")
+        for row in self.rows:
+            if "example" in row:
+                lines.extend(("", "## " + row["id"] + "：" + row["name"], "",
+                              "测什么、怎么测：" + row["example"], "", "判断依据：" + row["logic"]))
         (self.directory / "cases.md").write_text("\n".join(lines) + "\n")
 
     @contextmanager
@@ -52,6 +62,9 @@ class Checklist:
         started = time.monotonic()
         self.save()
         self.logger("[开始 " + label + "]")
+        if "example" in row:
+            self.logger("    [测什么、怎么测] " + row["example"])
+            self.logger("    [判断依据] " + row["logic"])
         try:
             yield row
         except BaseException as error:

@@ -726,6 +726,7 @@ export const en = {
     pageControls: "Page controls",
   },
   common: {
+    applyFilters: "Apply Filters",
     noResults: "No results",
     noRows: "No rows match your search or filters.",
     loading: "Loading…",

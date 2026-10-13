@@ -2515,6 +2515,14 @@
     "subsystem": "auth"
   },
   {
+    "id": "REGRESSION-AUDIT-FILTER-LOCALES",
+    "file": "e2e/scenarios/regression/audit-filter-locales.test.ts",
+    "title": "audit filter actions translate and query real records in both locales",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "audit"
+  },
+  {
     "id": "BUDGET-TEAMLESS-UNLIMITED",
     "file": "e2e/scenarios/budgets/teamless-unlimited.test.ts",
     "title": "teamless blank budgets allow streaming and personal caps can be cleared",

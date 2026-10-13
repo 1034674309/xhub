@@ -12,7 +12,7 @@ from acceptance import Dataset, load_manifest
 from acceptance import runner_runtime as RUNNER
 from acceptance import runner_browser as BROWSER, runner_shared as SHARED
 from acceptance import cli as CLI
-from acceptance.category_help import category_help, CATEGORY_DESCRIPTIONS
+from acceptance.category_help import category_help, CATEGORY_DESCRIPTIONS, CATEGORY_SCENARIOS
 
 
 class AcceptanceTests(unittest.TestCase):
@@ -49,8 +49,12 @@ class AcceptanceTests(unittest.TestCase):
     def test_category_help_complete_boundaries_and_no_services(self):
         """目的：中文列表覆盖全部分类并解释使用前提；前置为内存参数，验证完整/空/未知分类及 CLI 零副作用；模拟自动恢复，无数据需清理。"""
         self.assertEqual(set(CATEGORY_DESCRIPTIONS), set(RUNNER.E2E_CATEGORIES))
+        self.assertEqual(set(CATEGORY_SCENARIOS), set(RUNNER.E2E_CATEGORIES))
         rendered = category_help()
         for category, description in CATEGORY_DESCRIPTIONS.items():
+            example, logic = CATEGORY_SCENARIOS[category]
+            self.assertIn(example, rendered)
+            self.assertIn(logic, rendered)
             self.assertIn(description, rendered, category + " 必须显示业务说明")
             self.assertTrue(any("\u4e00" <= character <= "\u9fff" for character in description))
         for text in ("make e2e limits permissions", "make testdata", "清空", "计费", "模拟供应商", ".e2e/real-acceptance-current"):

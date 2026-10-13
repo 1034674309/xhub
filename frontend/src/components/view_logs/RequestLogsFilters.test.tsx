@@ -125,8 +125,8 @@ describe("RequestLogsFilters", () => {
     const user = userEvent.setup();
     renderFilters();
     await user.click(screen.getByText("All Statuses"));
+    expect(await screen.findByRole("option", { name: "Success" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Failure" })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Success" })).toBeInTheDocument();
   });
 
   it("renders every backend-supported filter field", async () => {

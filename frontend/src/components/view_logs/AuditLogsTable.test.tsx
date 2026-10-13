@@ -226,6 +226,7 @@ describe("AuditLogsTable Hook and locale regression", () => {
     expect(screen.getByText(translate("en", "No matching audit logs"))).toBeVisible();
     await user.click(screen.getByTestId("datatable-filters-trigger"));
     expect(screen.getAllByRole("combobox")[0]).toHaveTextContent(translate("en", "audit.filters.created"));
+    expect(screen.getByTestId("filter-drawer-apply")).toHaveTextContent(translate("en", "common.applyFilters"));
     await user.click(screen.getByTestId("filter-drawer-apply"));
     await user.click(screen.getByRole("button", { name: "Switch locale" }));
     expect(screen.getByPlaceholderText(translate("zh-CN", "audit.search"))).toHaveValue("用户 original input");
@@ -233,7 +234,7 @@ describe("AuditLogsTable Hook and locale regression", () => {
     expect(screen.getByTestId("filter-chip-action")).toHaveTextContent(translate("zh-CN", "audit.filters.created"));
     await user.click(screen.getByTestId("datatable-filters-trigger"));
     expect(screen.getAllByRole("combobox")[0]).toHaveTextContent(translate("zh-CN", "audit.filters.created"));
-    expect(screen.getByTestId("filter-drawer-apply")).toHaveTextContent(translate("zh-CN", "Apply Filters"));
+    expect(screen.getByTestId("filter-drawer-apply")).toHaveTextContent(translate("zh-CN", "common.applyFilters"));
     expect(screen.getByTestId("filter-drawer-reset")).toHaveTextContent(translate("zh-CN", "Reset"));
   });
 

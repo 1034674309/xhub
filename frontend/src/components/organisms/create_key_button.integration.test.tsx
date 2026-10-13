@@ -42,7 +42,6 @@ const DEFAULT_PAYLOAD = {
   models: [],
   key_type: "llm_api",
   max_budget: undefined,
-  budget_duration: undefined,
   rpm_limit: undefined,
   tpm_limit: undefined,
   user_id: "test-user-id",
@@ -85,11 +84,12 @@ describe("CreateKey", () => {
   });
 
   describe("simplified controls and payload", () => {
-    it("shows budget, budget reset, route template, and key lifecycle", async () => {
+    /** 前置创建弹窗；验证预算、路由和生命周期控件及退役的预算重置控件缺席，自动卸载，无后台写入。 */
+    it("shows budget, route template, and key lifecycle without retired budget reset", async () => {
       await openModal();
 
       expect(screen.getByLabelText(/Max Budget \(USD\)/)).toBeInTheDocument();
-      expect(screen.getByLabelText("Reset Budget")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Reset Budget")).not.toBeInTheDocument();
       expect(screen.getByLabelText("Route Templates")).toBeInTheDocument();
       expect(screen.getByLabelText("Expire Key")).toBeInTheDocument();
       expect(screen.getByText("Enable Auto-Rotation")).toBeInTheDocument();
@@ -107,6 +107,7 @@ describe("CreateKey", () => {
       expect(screen.queryByText("Advanced Settings")).not.toBeInTheDocument();
     });
 
+    /** 前置空白创建表单及模拟接口；验证完整默认请求契约不含退役字段，框架卸载并清空模拟调用。 */
     it("submits the default simplified field set", async () => {
       await openModal();
       await nameTheKey();
@@ -133,24 +134,29 @@ describe("CreateKey", () => {
       expect((await createdPayload()).max_budget).toBe("150.75");
     });
 
-    it("submits a daily budget reset", async () => {
+    /** 前置创建弹窗及模拟接口；零预算必须原样提交且不附带退役周期字段，自动卸载和重置模拟调用。 */
+    it("submits zero budget without a reset period", async () => {
       await openModal();
       await nameTheKey();
-      await userEvent.click(await screen.findByLabelText("Reset Budget"));
-      await userEvent.click(await screen.findByRole("option", { name: "daily" }));
+      await userEvent.type(screen.getByLabelText(/Max Budget \(USD\)/), "0");
       await submit();
 
-      expect((await createdPayload()).budget_duration).toBe("24h");
+      const payload = await createdPayload();
+      expect(payload.max_budget).toBe("0");
+      expect(payload).not.toHaveProperty("budget_duration");
     });
 
-    it("submits null when the budget never resets", async () => {
+    /** 前置创建弹窗及拒绝预算的模拟接口；验证服务端失败展示错误且不生成密钥，自动卸载和重置模拟调用。 */
+    it("reports a rejected budget without showing a created key", async () => {
+      const error = new Error("Budget exceeds available allocation");
+      vi.mocked(keyCreateCall).mockRejectedValueOnce(error);
       await openModal();
       await nameTheKey();
-      await userEvent.click(await screen.findByLabelText("Reset Budget"));
-      await userEvent.click(await screen.findByRole("option", { name: /never resets/i }));
+      await userEvent.type(screen.getByLabelText(/Max Budget \(USD\)/), "150");
       await submit();
 
-      expect(await createdPayload()).toHaveProperty("budget_duration", null);
+      await waitFor(() => expect(toast.fromError).toHaveBeenCalled());
+      expect(screen.queryByText("sk-created")).not.toBeInTheDocument();
     });
 
     it("submits the selected route template", async () => {

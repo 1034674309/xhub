@@ -1,7 +1,7 @@
 .PHONY: test run ui tidy testdata e2e e2e-list e2e-all e2e-model-endpoints regression regression-live
 
 # make 的第二个词本来是另一个目标；仅在 e2e 后把白名单内的词解释为分类。
-E2E_CATEGORIES := entities gpt-1 gpt-2 gpt-3 gpt-4 glm image ark-video fal-video kling-video inheritance chat-bills permissions xgo limits model-lifecycle guard-lifecycle global-guards profile-isolation cache-weight fallback media-logs database browser business-browser regression
+E2E_CATEGORIES := entities gpt-1 gpt-2 gpt-3 gpt-4 glm image ark-video fal-video kling-video inheritance chat-bills permissions xgo limits model-lifecycle guard-lifecycle global-guards profile-isolation cache-weight Affinity fallback media-logs database browser business-browser regression
 ifneq ($(filter e2e,$(MAKECMDGOALS)),)
 E2E_SELECTED := $(filter-out e2e,$(MAKECMDGOALS))
 ifneq ($(filter-out $(E2E_CATEGORIES),$(E2E_SELECTED)),)
