@@ -60,6 +60,63 @@ test('publication requires regression and browser verification', () => {
   assert.ok(workflow.jobs.verify.steps.some(item => item.run === 'docker compose down -v' && item.if === 'always()'));
 });
 
+/** 回归日志覆盖成功、大量失败输出、无换行长行及目录创建失败；执行真实工作流 shell，验证双流落盘、输出上限和原始退出码，finally 清理临时夹具。 */
+test('backend regression stores complete logs and bounds console output without hiding failures', () => {
+  const regression = workflow.jobs.verify.steps.find(item => item.name === 'Backend regression');
+  assert.ok(regression, '后台回归步骤必须存在');
+  assert.equal(regression.shell, 'bash');
+  const directory = mkdtempSync(join(tmpdir(), 'xhub-release-regression-'));
+  try {
+    mkdirSync(join(directory, 'scripts'));
+    writeFileSync(join(directory, 'scripts/regression.sh'), '#!/bin/bash\n[[ "$1" == -v ]] || exit 99\ncat "$FIXTURE_STDOUT"\ncat "$FIXTURE_STDERR" >&2\nexit "$FIXTURE_STATUS"\n');
+    for (const [label, status, output] of [
+      ['success', 0, 'trace request\n'.repeat(100000)],
+      ['failure', 7, 'trace request\n'.repeat(100000)],
+      ['long line', 2, 'x'.repeat(1500000)],
+      ['empty failure', 1, ''],
+    ]) {
+      const stdoutPath = join(directory, 'stdout');
+      const stderrPath = join(directory, 'stderr');
+      const error = status === 0 ? 'diagnostic stderr\n' : 'specific regression failure\n';
+      writeFileSync(stdoutPath, output);
+      writeFileSync(stderrPath, error);
+      const result = spawnSync('bash', ['-c', regression.run], {
+        cwd: directory, encoding: 'utf8',
+        env: { ...process.env, FIXTURE_STDOUT: stdoutPath, FIXTURE_STDERR: stderrPath, FIXTURE_STATUS: String(status) },
+      });
+      assert.equal(result.status, status, label + ': 必须保留回归退出码 ' + result.stderr);
+      assert.equal(readFileSync(join(directory, '.e2e/release/regression.log'), 'utf8'), output + error, label + ': 必须完整保留标准输出与标准错误');
+      assert.ok(Buffer.byteLength(result.stdout + result.stderr) < 17000, label + ': 控制台日志不得超过尾部字节上限与简短提示');
+      assert.match(result.stdout, /release-test-results\/regression.log/, label + ': 必须说明完整日志位置');
+      if (status === 0) {
+        assert.match(result.stdout, /Backend regression passed/);
+        assert.equal(result.stdout.includes('trace request'), false, '成功时不向控制台打印网关日志');
+      } else {
+        assert.match(result.stdout, /Backend regression failed/);
+        assert.ok(result.stdout.endsWith(Buffer.from(output + error).subarray(-16384).toString()), label + ': 失败必须打印日志尾部诊断');
+      }
+    }
+    rmSync(join(directory, '.e2e'), { recursive: true });
+    writeFileSync(join(directory, '.e2e'), 'blocked');
+    const result = spawnSync('bash', ['-c', regression.run], { cwd: directory, encoding: 'utf8' });
+    assert.notEqual(result.status, 0, '无法保存日志时必须失败');
+    assert.equal(result.stdout.includes('passed'), false, '日志目录创建失败不得报告通过');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+/** 附件契约覆盖回归失败和浏览器未执行的场景；检查真实 YAML 中 always 上传及日志路径，纯读取无需清理。 */
+test('verification always uploads backend regression logs with browser reports', () => {
+  const steps = workflow.jobs.verify.steps;
+  const regressionIndex = steps.findIndex(item => item.name === 'Backend regression');
+  const uploadIndex = steps.findIndex(item => item.uses === 'actions/upload-artifact@v4');
+  assert.ok(uploadIndex > regressionIndex, '日志附件上传必须位于回归之后');
+  const upload = steps[uploadIndex];
+  assert.equal(upload.if, 'always()', '回归失败后仍必须上传完整日志');
+  assert.equal(upload.with.name, 'release-test-results');
+  assert.ok(upload.with.path.split('\n').includes('.e2e/release/regression.log'), '附件必须包含完整回归日志');
+  assert.ok(upload.with.path.split('\n').includes('.e2e/release/results.json'), '附件必须保留浏览器报告');
+});
+
 /** 边界覆盖正式版、预发布、非法及注入 ref；执行真实 shell，finally 清理临时输出。 */
 test('version validation accepts valid versions and rejects malformed refs', () => {
   const directory = mkdtempSync(join(tmpdir(), 'xhub-release-version-'));

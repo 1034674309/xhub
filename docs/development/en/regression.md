@@ -10,6 +10,11 @@ bash scripts/regression.sh -v Pricing
 bash scripts/regression.sh -v Fallback
 ~~~
 
+GitHub Actions saves the complete verbose output to `.e2e/release/regression.log`
+and uploads it in the `release-test-results` artifact, including on failure. The
+step prints a short success message or the final 16 KiB on failure, preserving
+the regression exit status. Local `-v` runs still print the complete log.
+
 ## Assert observable results
 
 | Scenario | Assertions |

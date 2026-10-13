@@ -43,7 +43,20 @@ jobs:
           fi
       - run: go test ./internal/...
       - run: docker compose up -d --wait postgres redis
-      - run: bash scripts/regression.sh -v
+      # 完整回归日志落盘，失败只展示最后 16 KiB，避免 Actions 截断步骤日志。
+      - name: Backend regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .e2e/release
+          if bash scripts/regression.sh -v > .e2e/release/regression.log 2>&1; then
+            echo 'Backend regression passed. Full log: release-test-results/regression.log'
+          else
+            status=$?
+            echo 'Backend regression failed. Last 16 KiB follow; full log: release-test-results/regression.log'
+            tail -c 16384 .e2e/release/regression.log
+            exit "$status"
+          fi
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       # 真实登录、密钥轮换和推理结果，无外部付费服务；运行器清理专属 schema。
@@ -55,6 +68,7 @@ jobs:
         with:
           name: release-test-results
           path: |
+            .e2e/release/regression.log
             .e2e/release/results.json
             .e2e/release/junit.xml
             .e2e/release/scenario-coverage.json
