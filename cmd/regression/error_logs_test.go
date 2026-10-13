@@ -28,8 +28,11 @@ func TestErrorLogsAreSeparateAndComplete(t *testing.T) {
 			t.Cleanup(up.Close)
 			dep := chatDeployment("error-log-" + format)
 			dep.LiteLLMParams["api_base"] = up.URL
+			dep.LiteLLMParams["litellm_credential_name"] = "error-log-supplier"
 			h := openHarness(t, false, dep)
 			admin := h.adminSession()
+			h.ok("POST", "/credentials", admin, map[string]any{"credential_name": "error-log-supplier", "credential_info": map[string]any{"custom_llm_provider": "openai"}, "credential_values": map[string]any{"api_base": up.URL, "api_key": "sk-fake"}})
+			defer h.ok("DELETE", "/credentials/error-log-supplier", admin, nil)
 			tn := h.provision(t, admin, "error-log-"+format)
 			failed := h.do(http.MethodPost, "/v1/chat/completions", tn.key, map[string]any{
 				"model": dep.ModelName, "messages": []any{map[string]any{"role": "user", "content": "private prompt"}},
@@ -39,6 +42,9 @@ func TestErrorLogsAreSeparateAndComplete(t *testing.T) {
 			}
 			id := failed.header("x-litellm-call-id")
 			detail := logDetail(t, h, admin, id)
+			if detail["api_base"] != up.URL || detail["credential_name"] != "error-log-supplier" {
+				t.Fatalf("上游失败日志丢失连接快照: %v", detail)
+			}
 			if detail["error"] != raw || !strings.Contains(string(mustJSON(detail["response"])), "terminal cause") {
 				t.Fatalf("提示词保存关闭时丢失上游完整错误: %s", truncate(string(mustJSON(detail)), 300))
 			}
@@ -50,6 +56,9 @@ func TestErrorLogsAreSeparateAndComplete(t *testing.T) {
 				t.Fatalf("未知模型应拒绝: %s", rejected.describe())
 			}
 			rejectedDetail := logDetail(t, h, admin, rejected.header("x-litellm-call-id"))
+			if rejectedDetail["api_base"] != "" || rejectedDetail["credential_name"] != "" {
+				t.Fatalf("路由前拒绝不得虚构上游: %v", rejectedDetail)
+			}
 			if rejectedDetail["error"] != rejected.text() {
 				t.Fatal("提前拒绝未保存客户端完整错误")
 			}

@@ -3,8 +3,10 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"github.com/sunqirui1987/xhub/internal/live"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,5 +102,26 @@ func TestSpendLogRoundTripReturnsPromptPayload(t *testing.T) {
 	hdrs, _ := px["headers"].(map[string]any)
 	if hdrs["Authorization"] != "***" {
 		t.Fatalf("headers %#v", hdrs)
+	}
+}
+
+// TestRequestLabelIndependentOfPrompts 验证请求备注与提示词开关独立；参数 t 为测试上下文。
+// 前置关闭正文存储；正常、缺省、非法编码与超长输入分别保存或忽略；takeExchange 清理内存。
+func TestRequestLabelIndependentOfPrompts(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"Affinity%20%7C%20%E5%8E%9F%E7%94%9F%E5%85%A5%E5%8F%A3", "Affinity | 原生入口"}, {"", ""}, {"%zz", ""}, {strings.Repeat("a", 2049), ""},
+	} {
+		s := &Server{Cfg: &config.Config{}}
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		req.Header.Set("X-Xhub-Label", tc.raw)
+		s.rememberExchange("label", req, nil, nil)
+		ex := s.takeExchange("label")
+		if ex.label != tc.want || ex.messages != "" {
+			t.Fatalf("备注保存错误: got=%q want=%q", ex.label, tc.want)
+		}
+		row := usageFromSpend(live.SpendLog{Label: ex.label}, 0, "", "", "", time.Now(), time.Now())
+		if row.Label != tc.want {
+			t.Fatal("持久化转换丢失备注")
+		}
 	}
 }

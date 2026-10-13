@@ -8030,4 +8030,6 @@ export const enPhrases: Record<string, string> = {
   "Optional passthrough endpoints": "Optional passthrough endpoints",
   "Connection test failed": "Connection test failed",
   "Connection is healthy and the model responded.": "Connection is healthy and the model responded.",
+  "logs.label": "Label",
+  "logs.labelHint": "A note supplied by the caller. Acceptance requests use it to identify test steps; verify actual results against the request ID, credential, endpoints and billing.",
 };

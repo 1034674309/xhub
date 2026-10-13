@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -183,7 +184,7 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		keyID = p.KeyID
 	}
 	row := live.SpendLog{
-		InboundEndpoint: ex.inbound, OutboundEndpoint: outbound,
+		Label: ex.label, InboundEndpoint: ex.inbound, OutboundEndpoint: outbound,
 		RequestID: callID, CallType: callType, Model: alias, APIKey: hash,
 		KeyID:  keyID,
 		Prompt: pt, Completion: ct, Spend: spend, SpendValid: true,
@@ -198,9 +199,14 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		PriceSnapshot: catalog.SnapshotUsage(charge, billed, okc),
 	}
 	// 快照保存连接名称而非仅协议名；同协议的多家供应商不会合并。
-	row.Supplier = ""
-	if dep, found := s.FindDeployment(depID); found {
+	row.Supplier, row.APIBase, row.UpstreamModel = note.Supplier, note.APIBase, note.UpstreamModel
+	if dep, found := s.FindDeployment(depID); found && !note.UpstreamSelected {
+		// 官方任务等旧调用方尚未附带快照时，解析命名凭证后保存基础地址。
+		if resolved, err := s.AttachCredential(dep); err == nil {
+			dep = resolved
+		}
 		row.Supplier, row.UpstreamModel = dep.MonitorIdentity()
+		row.APIBase = dep.LogAPIBase()
 	}
 	if status >= 400 {
 		// 失败正文是排障证据，不能受提示词保存开关影响。请求正文仍按原开关处理。
@@ -342,7 +348,7 @@ func sessionLogBinding(ownerType, teamID, orgID string, memberships []iam.Member
 func usageFromSpend(row live.SpendLog, spend float64, messages, response, proxy string, start, end time.Time) iam.UsageRecord {
 	return iam.UsageRecord{
 		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
-		Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
+		APIBase: row.APIBase, Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
 		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
 		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
 		Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
@@ -354,7 +360,7 @@ func usageFromSpend(row live.SpendLog, spend float64, messages, response, proxy 
 		KeyHash: row.KeyHash, KeyAlias: row.KeyAlias, TeamAlias: row.TeamAlias,
 		Provider: row.Provider, CachedTokens: row.CachedTokens,
 		SessionID: row.SessionID, SessionSource: row.SessionSource, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
-		PriceSnapshot: row.PriceSnapshot,
+		PriceSnapshot: row.PriceSnapshot, Label: row.Label,
 	}
 }
 
@@ -373,6 +379,7 @@ func deref(s *string) string {
 // promptExchange is the request and response saved on one spend log. Empty strings mean prompt storage was off.
 type promptExchange struct {
 	// 入站路径独立于正文保存开关。
+	label    string
 	inbound  string
 	messages string
 	response string
@@ -406,11 +413,11 @@ func (s *Server) promptsEnabled() bool {
 	}
 }
 
-// rememberExchange keeps one call's headers and bodies until recordSpend writes the row.
+// rememberExchange 暂存本次调用的路径、备注和正文，供 recordSpend 关联日志。
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；r（*http.Request）：入站 HTTP 请求，用来读路径、头和正文；reqBody（[]byte）：remember交换要读的原始字节；respBody（[]byte）：remember交换要读的原始字节。
 // 返回：无。请求与成功响应受提示词开关控制；失败候选响应始终暂存到 RecordSpend 判定状态。
 // 调用：gateway/wire.go
-// 测试：无直接单测
+// 边界：非法编码或过长备注忽略；路径和备注不受正文保存开关影响。
 func (s *Server) rememberExchange(callID string, r *http.Request, reqBody, respBody []byte) {
 	if s == nil || callID == "" {
 		return
@@ -418,6 +425,12 @@ func (s *Server) rememberExchange(callID string, r *http.Request, reqBody, respB
 	ex := promptExchange{rawResponse: string(respBody)}
 	if r != nil && r.URL != nil {
 		ex.inbound = r.URL.EscapedPath()
+		// 备注由客户端声明，只作排查线索；限制长度并解码中文，不从请求正文提取秘密。
+		if raw := r.Header.Get("X-Xhub-Label"); len(raw) <= 2048 {
+			if label, err := url.QueryUnescape(raw); err == nil && len(label) <= 1024 {
+				ex.label = label
+			}
+		}
 	}
 	if s.promptsEnabled() {
 		ex.messages, ex.response, ex.proxy = requestlog.Encode(r, reqBody, respBody)

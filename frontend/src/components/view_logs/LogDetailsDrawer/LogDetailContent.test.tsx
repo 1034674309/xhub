@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { LogEntry } from "../columns";
 import { LogDetailContent } from "./LogDetailContent";
+import { I18nProvider } from "@/i18n";
 
 /**
  * 为上游响应折叠组件测试构造最小日志；参数为覆盖字段，返回独立 LogEntry。
@@ -19,6 +20,28 @@ function logEntry(overrides: Partial<LogEntry> = {}): LogEntry {
 }
 
 describe("上游响应折叠", () => {
+  /** 前置日志凭证与协议不同；验证中英文标签及原始凭证名称，空凭证不误用协议；自动卸载清理。 */
+  it.each(["zh-CN", "en"] as const)("%s 请求详情显示凭证名称", (locale) => {
+    const { rerender } = render(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry({
+      credential_name: "七牛-production", api_base: "https://upstream.example/v1", custom_llm_provider: "openai",
+    })} /></I18nProvider>);
+    const label = locale === "zh-CN" ? "凭证名称" : "Credential Name";
+    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByText("七牛-production")).toBeVisible();
+    expect(screen.getByText("https://upstream.example/v1")).toBeVisible();
+    expect(screen.queryByText("openai")).not.toBeInTheDocument();
+    rerender(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry({ custom_llm_provider: "openai" })} /></I18nProvider>);
+    expect(screen.getByText(label).parentElement).toHaveTextContent("-");
+    expect(screen.queryByText("openai")).not.toBeInTheDocument();
+  });
+  /** 前置含普通请求备注，验证中英文原样显示并在无备注时隐藏；自动卸载，无后台数据。 */
+  it.each(["zh-CN", "en"] as const)("%s 日志显示通用备注", (locale) => {
+    const note = "make e2e Affinity | 原生端点独立七牛偏好";
+    const { rerender } = render(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry({ label: note })} /></I18nProvider>);
+    expect(screen.getByRole("region", { name: locale === "zh-CN" ? "备注" : "Label" })).toHaveTextContent(note);
+    rerender(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry()} /></I18nProvider>);
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+  });
   /** 前置正常诊断日志；验证默认折叠、鼠标展开和键盘收起及未上报用量提示；自动卸载清理。 */
   it("默认折叠并支持点击展开和键盘收起", async () => {
     const user = userEvent.setup();

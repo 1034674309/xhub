@@ -78,6 +78,7 @@ def verify_running_gateway(args, data):
 
     仅读取现有基线；认证使用显式环境或基线会话，不启动服务，不创建观察器。
     需要故障注入或自启服务的分类明确记为 unsupported；网关不可达和认证失败立即失败。
+    历史报告可缺少集合字段，恢复时补齐默认空列表；错误类型在业务写入前拒绝，保留已有证据。
     """
     directory = Path(args.directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
@@ -98,7 +99,11 @@ def verify_running_gateway(args, data):
             baseline_report = json.loads(baseline_report)
         if not isinstance(baseline_report, dict):
             raise ValueError("基线 report.json 必须为 JSON 对象")
-        dataset.report = baseline_report
+        # 健康检查失败曾只保存状态；恢复不能用这类精简报告覆盖运行时必需的集合。
+        for field in ("checks", "probe_attempts", "calls", "models"):
+            if field in baseline_report and not isinstance(baseline_report[field], list):
+                raise ValueError("基线 report.json 的 " + field + " 必须为 JSON 数组")
+        dataset.report = {"checks": [], "probe_attempts": [], "calls": [], "models": [], **baseline_report}
         dataset.report.update(status="running", gateway=gateway, phase="verify", gateway_mode="existing",
                               unsupported_categories=[], verification_scope="selected" if args.category else "real-gateway")
         dataset.report.pop("error", None)

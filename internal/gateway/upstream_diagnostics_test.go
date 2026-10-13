@@ -21,16 +21,16 @@ func TestUpstreamDiagnosticsPersistence(t *testing.T) {
 	}
 	diagnostic := &dpdiagnostics.UpstreamDiagnostics{StatusCode: 200, Headers: http.Header{"Set-Cookie": {"a=secret", "b=secret"}, "X-Request-Id": {"one", "two"}, "X-Debug": {"sk-private"}}, UsageReported: true, Usage: map[string]any{"prompt_tokens_details": map[string]any{"cached_tokens": 12}, "custom": true}}
 	s := &Server{}
-	s.AnnotateCall("call", dpcontract.CallNote{Upstream: diagnostic})
+	s.AnnotateCall("call", dpcontract.CallNote{Upstream: diagnostic, Supplier: "named-supplier", APIBase: "https://relay.example/v1", UpstreamModel: "actual", UpstreamSelected: true})
 	s.AnnotateCall("call", dpcontract.CallNote{Provider: "openai"})
 	note := s.takeNote("call")
-	if note.Upstream != diagnostic || note.Provider != "openai" || s.takeNote("call").Upstream != nil {
+	if note.Supplier != "named-supplier" || note.APIBase != "https://relay.example/v1" || note.UpstreamModel != "actual" || !note.UpstreamSelected || note.Upstream != diagnostic || note.Provider != "openai" || s.takeNote("call").Upstream != nil {
 		t.Fatal("业务附注覆盖诊断或未清理")
 	}
 	next := &dpdiagnostics.UpstreamDiagnostics{StatusCode: 502}
-	s.AnnotateCall("retry", dpcontract.CallNote{Upstream: diagnostic})
-	s.AnnotateCall("retry", dpcontract.CallNote{Upstream: next})
-	if s.takeNote("retry").Upstream != next {
+	s.AnnotateCall("retry", dpcontract.CallNote{Supplier: "first", UpstreamSelected: true, Upstream: diagnostic})
+	s.AnnotateCall("retry", dpcontract.CallNote{Supplier: "last", APIBase: "https://last.example", UpstreamSelected: true, Upstream: next})
+	if got := s.takeNote("retry"); got.Upstream != next || got.Supplier != "last" || got.APIBase != "https://last.example" {
 		t.Fatal("重试必须保存最后响应")
 	}
 	raw := requestlog.DiagnosticJSON(diagnostic, map[string]any{"prompt_tokens": 20})
@@ -54,8 +54,8 @@ func TestUpstreamDiagnosticsPersistence(t *testing.T) {
 func TestUsageMonitorSnapshot(t *testing.T) {
 	for _, supplier := range []string{"supplier-a", ""} {
 		ttft := 15
-		row := usageFromSpend(live.SpendLog{Supplier: supplier, UpstreamModel: "actual", Streamed: true, TTFTMs: &ttft}, 0.25, "", "", "", time.Now(), time.Now())
-		if row.Supplier != supplier || row.UpstreamModel != "actual" || !row.Streamed || row.TTFTMs == nil || *row.TTFTMs != 15 {
+		row := usageFromSpend(live.SpendLog{APIBase: "https://upstream.example/v1", Supplier: supplier, UpstreamModel: "actual", Streamed: true, TTFTMs: &ttft}, 0.25, "", "", "", time.Now(), time.Now())
+		if row.APIBase != "https://upstream.example/v1" || row.Supplier != supplier || row.UpstreamModel != "actual" || !row.Streamed || row.TTFTMs == nil || *row.TTFTMs != 15 {
 			t.Fatalf("监控快照转换丢失: %+v", row)
 		}
 	}

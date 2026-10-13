@@ -88,14 +88,18 @@ func RecordUsage(h Runtime, id string, tokens int) {
 // 返回值无；取消后停止 ticker，正在进行的 Flush 会完成，不额外确认或清空未提交的队列。
 // 每轮失败保留批次供下一轮重试；数据库提交后才确认 Redis，不改变可靠结算语义。
 func FlushLoop(ctx context.Context, h Runtime, interval time.Duration) {
- if interval <= 0 { interval = 5 * time.Second }
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-  select {
-  case <-ctx.Done(): return
-  case <-t.C: Flush(h)
-  }
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			Flush(h)
+		}
 	}
 }
 
@@ -157,7 +161,7 @@ func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
 	}
 	return iam.UsageRecord{
 		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
-		Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
+		APIBase: row.APIBase, Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
 		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
 		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,
 		Model: row.Model, CallType: row.CallType, Status: row.Status, HTTPStatus: row.HTTPStatus,
@@ -170,7 +174,7 @@ func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
 		Provider: row.Provider, CachedTokens: row.CachedTokens,
 		// 会话来源必须随队列快照落库；仅保留 SessionID 会让异步账单丢失 explicit/parent 归属。
 		SessionID: row.SessionID, SessionSource: row.SessionSource, CacheKey: row.CacheKey, Guardrail: row.Guardrail,
-		PriceSnapshot: row.PriceSnapshot,
+		PriceSnapshot: row.PriceSnapshot, Label: row.Label,
 	}
 }
 

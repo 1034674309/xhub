@@ -283,6 +283,8 @@ type SpendLog struct {
 	Streamed bool `json:"streamed"`
 	// 调用时供应商连接身份快照；连接修改后不重写历史归属。
 	Supplier string `json:"supplier,omitempty"`
+	// 调用时上游基础地址快照，已剥离认证信息，不随部署修改或删除改变。
+	APIBase string `json:"api_base,omitempty"`
 	// 实际发送的上游型号快照，与公开 Model 分开保存。
 	UpstreamModel string `json:"upstream_model,omitempty"`
 	// 调用日志/账单事件唯一标识，用于关联正文及结算去重；不能用 SessionID 替代。
@@ -356,6 +358,8 @@ type SpendLog struct {
 	CacheKey string `json:"cache_key,omitempty"`
 	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
 	Guardrail string `json:"guardrail,omitempty"`
+	// 客户端备注，仅用于日志关联，不授予权限或证明测试通过。
+	Label string `json:"label,omitempty"`
 	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string `json:"price_snapshot,omitempty"`
 }

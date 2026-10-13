@@ -97,13 +97,15 @@ describe("LogDetailContent", () => {
         logEntry={createLogEntry({
           model: "gpt-4o",
           custom_llm_provider: "anthropic",
+          credential_name: "fenno-production",
           call_type: "completion",
         })}
       />,
     );
 
     expect(screen.getByText("gpt-4o")).toBeInTheDocument();
-    expect(screen.getByText("anthropic")).toBeInTheDocument();
+    expect(screen.getByText("fenno-production")).toBeInTheDocument();
+    expect(screen.queryByText("anthropic")).not.toBeInTheDocument();
     expect(screen.getByText("completion")).toBeInTheDocument();
   });
 
@@ -665,7 +667,7 @@ describe("LogDetailContent", () => {
       />,
     );
 
-    const descriptions = screen.getByText("Provider").parentElement as HTMLElement;
+    const descriptions = screen.getByText("Credential Name").parentElement as HTMLElement;
     expect(descriptions).toBeInTheDocument();
     expect(within(descriptions).getByText("-")).toBeInTheDocument();
   });

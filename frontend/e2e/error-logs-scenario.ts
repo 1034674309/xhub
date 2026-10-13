@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
+import { translate } from "../src/i18n/translate";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto } from "./helpers";
 
 
@@ -84,7 +85,13 @@ async function openLogDetails(page: Page, callId: string): Promise<void> {
 async function verifyUpstreamCollapse(page: Page, headers: Record<string, string>, callId: string, status: number): Promise<void> {
   const detail = await page.request.get(GATEWAY + "/spend/logs/ui/" + callId, { headers });
   expect(detail.status()).toBe(200);
-  const upstream = (await detail.json()).metadata.upstream_response;
+  const stored = await detail.json();
+  expect(stored.api_base, "日志应保存调用时的上游基础地址").toBe(UPSTREAM);
+  expect(stored.credential_name, "内联部署应使用脱敏地址标识连接").toBe(UPSTREAM);
+  await expect(page.getByRole("dialog").getByText(UPSTREAM, { exact: true })).toHaveCount(2);
+  await expect(page.getByRole("dialog").getByText(/^(凭证名称|Credential Name)$/)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/^(API 基础|API Base)$/)).toBeVisible();
+  const upstream = stored.metadata.upstream_response;
   expect(upstream.status_code, "后台应保存真实上游 HTTP 状态").toBe(status);
   const region = page.getByRole("dialog").getByRole("region", { name: /^(上游响应|Upstream Response)$/ });
   const trigger = region.getByRole("button", { name: /^(上游响应|Upstream Response)$/ });
@@ -134,7 +141,7 @@ test("错误日志详情完整显示上游正文并可返回普通日志", async
 
     const failed = await page.request.post(GATEWAY + "/chat/completions", {
       headers,
-      data: { model: failedModel, messages: [{ role: "user", content: "记录完整上游错误正文" }] },
+      data: { model: failedModel, messages: [{ role: "user", content: "Record the full upstream error response." }] },
     });
     expect(failed.status(), await failed.text()).toBe(502);
     const failedCallId = failed.headers()["x-litellm-call-id"];
@@ -142,7 +149,7 @@ test("错误日志详情完整显示上游正文并可返回普通日志", async
 
     const succeeded = await page.request.post(GATEWAY + "/chat/completions", {
       headers,
-      data: { model: successModel, messages: [{ role: "user", content: "记录普通成功日志" }] },
+      data: { model: successModel, messages: [{ role: "user", content: "Record a successful request log." }] },
     });
     expect(succeeded.status(), await succeeded.text()).toBe(200);
     expect((await succeeded.json()).choices[0].message.content).toBe("e2e-ok");
@@ -189,6 +196,20 @@ test("错误日志详情完整显示上游正文并可返回普通日志", async
     await expect(successDialog).toContainText("e2e-ok");
     await expect(successDialog).toContainText(/成功|Success/);
     await page.screenshot({ path: "../.e2e/upstream-response-collapsed.png", fullPage: true });
+    await page.keyboard.press("Escape");
+    // 删除配置后仍读取调用时快照，切换语言不改变原始上游地址或用户请求正文。
+    for (const id of deploymentIds) {
+      const deleted = await page.request.post(GATEWAY + "/model/delete", { headers, data: { id } });
+      expect(deleted.status(), await deleted.text()).toBe(200);
+    }
+    deploymentIds.length = 0;
+    await page.getByRole("button", { name: "English", exact: true }).click();
+    await openLogDetails(page, successCallId);
+    await verifyUpstreamCollapse(page, headers, successCallId, 200);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: translate("en", "language.zhCN"), exact: true }).click();
+    await openLogDetails(page, successCallId);
+    await verifyUpstreamCollapse(page, headers, successCallId, 200);
   } finally {
     try {
       const restored = logging?.stored_in_db

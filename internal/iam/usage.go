@@ -24,6 +24,8 @@ type UsageEvent struct {
 	Streamed bool `xorm:"streamed" json:"streamed"`
 	// 调用时供应商连接身份快照；连接修改后不重写历史归属。
 	Supplier string `xorm:"'supplier'" json:"supplier"`
+	// 调用时上游基础地址快照，已剥离认证信息，不随部署修改或删除改变。
+	APIBase string `xorm:"api_base" json:"api_base"`
 	// 实际发送的上游型号快照，与公开 Model 分开保存。
 	UpstreamModel string `xorm:"'upstream_model'" json:"upstream_model"`
 	// 原异步请求的持久化结算标记，防止并发或重复轮询二次收费。
@@ -89,6 +91,8 @@ type UsageEvent struct {
 	CacheKey string `xorm:"'cache_key'" json:"cache_key"`
 	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
 	Guardrail string `xorm:"'guardrail'" json:"-"`
+	// 客户端备注，仅用于日志关联，不授予权限或证明测试通过。
+	Label string `xorm:"label" json:"label,omitempty"`
 	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string `xorm:"'price_snapshot'" json:"price_snapshot,omitempty"`
 }
@@ -158,6 +162,8 @@ type UsageRecord struct {
 	Supplier string
 	// 实际发送的上游型号快照，与公开 Model 分开保存。
 	UpstreamModel string
+	// 调用时脱敏基础地址，供直接及异步落库保存上游来源。
+	APIBase string
 	// 调用日志/账单事件唯一标识，用于关联正文及结算去重；不能用 SessionID 替代。
 	RequestID string
 	// 请求开始时间，不使用异步刷库时刻，避免账单按错误日期归属。
@@ -227,6 +233,8 @@ type UsageRecord struct {
 	CacheKey string
 	// 护栏检查结果 JSON 数组，日志抽屉读取；空值表示未记录检查结果。
 	Guardrail string
+	// 客户端备注随调用快照持久化，不受提示词保存开关影响。
+	Label string
 	// 实际费率和计费数量 JSON 快照，读取日志不按现价重算；空值表示未定价。
 	PriceSnapshot string
 }
@@ -296,14 +304,14 @@ func insertEvent(s *xorm.Session, r UsageRecord) (bool, error) {
         (request_id, ts, key_id, owner_type, user_id, team_id, project_id, organization_id,
 		 model, call_type, status, http_status, prompt_tokens, completion_tokens, cost, duration_ms,
          ended_at, ttft_ms, cache_hit, key_hash, key_alias, team_alias, provider,
-         cached_tokens, session_id, session_source, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cached_tokens, session_id, session_source, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint, label, api_base)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (request_id) DO NOTHING`,
 		r.RequestID, stamp(r.TS), r.KeyID, ownerType(r), r.UserID, r.TeamID, r.ProjectID,
 		r.OrganizationID, r.Model, r.CallType, status(r), r.HTTPStatus,
 		r.PromptTokens, r.CompletionTokens, r.Cost, r.DurationMS,
 		ended, r.TTFTMs, r.CacheHit, r.KeyHash, r.KeyAlias, r.TeamAlias, r.Provider,
-		r.CachedTokens, r.SessionID, r.SessionSource, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint)
+		r.CachedTokens, r.SessionID, r.SessionSource, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint, r.Label, r.APIBase)
 	if err != nil {
 		return false, mapErr(err)
 	}

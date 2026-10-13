@@ -284,6 +284,10 @@ type RouteTarget struct {
 // 执行器用 AnnotateCall 按本次 callID 暂存，RecordSpend 随后取走并清理；字段为空表示本次未取得该事实。
 // 轮询的 callID、创建请求的 TaskRequestID 与最终费用的 SettlementID 分别承担交互隔离、生命周期归属和结算去重。
 type CallNote struct {
+	// 上游连接快照由执行器在尝试调用时设置，重试以最后一次选择为准；仅保存公开身份。
+	Supplier, APIBase, UpstreamModel string
+	// 区分未选择部署与字段缺失的部署，防止后续业务附注覆盖执行快照。
+	UpstreamSelected bool
 	// 是否实际流式执行，供性能统计区分首字延迟与非流完整响应耗时。
 	Streamed bool
 	// 传输观察器产生的完整原始响应头和用量诊断，并未在此处脱敏；消费方负责过滤后输出，nil 表示未取得观察事实。

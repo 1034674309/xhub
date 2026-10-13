@@ -9,9 +9,18 @@ func (e ModelEntry) MonitorIdentity() (supplier, model string) {
 	model = e.ParamString("model", e.ModelName)
 	supplier = e.ParamString("litellm_credential_name", "")
 	if supplier == "" {
-		if address, err := url.Parse(e.ParamString("api_base", "")); err == nil && address.Host != "" {
-			supplier = address.Scheme + "://" + address.Host + address.EscapedPath()
-		}
+		supplier = e.LogAPIBase()
 	}
 	return supplier, model
+}
+
+// LogAPIBase 返回部署基础地址的日志快照，供调用结算保存上游来源。
+// 接收者为已解析凭证的部署；返回协议、主机与转义路径，无写入副作用。
+// 缺失或非法地址返回空串；剥离账号、密码、查询参数及片段，避免泄露认证信息。
+func (e ModelEntry) LogAPIBase() string {
+	address, err := url.Parse(e.ParamString("api_base", ""))
+	if err != nil || address.Host == "" || (address.Scheme != "http" && address.Scheme != "https") {
+		return ""
+	}
+	return address.Scheme + "://" + address.Host + address.EscapedPath()
 }

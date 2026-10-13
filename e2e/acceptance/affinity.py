@@ -1,5 +1,6 @@
 """现有真实网关的会话粘性验收；使用本轮独立部署、模板和密钥，不注入供应商故障。"""
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 
 from .support import bill_check, header_value, response_cache_hit, weighted_acceptance_route
 
@@ -7,12 +8,14 @@ from .support import bill_check, header_value, response_cache_hit, weighted_acce
 class AffinityCases:
     """供 Dataset 组合的完整会话、模板和端点场景；共享用户基线只读，临时管理资源最终清理。"""
 
-    def affinity_request(self, subject, body, path="/v1/chat/completions", request_headers=None, expected=200):
-        """用途：发送一轮独立真实请求；参数为密钥、正文、端点、头和预期状态，返回正文、头与请求 ID。
+    def affinity_request(self, subject, body, path="/v1/chat/completions", request_headers=None, expected=200, step="未命名步骤"):
+        """用途：发送一轮独立真实请求；参数为密钥、正文、端点、头、预期状态和步骤备注，返回正文、头与请求 ID。
 
         供粘性场景与并发工作线程调用；成功必须有非空回答、正 usage 和独立请求 ID，缓存不能代替真实外发。
         不保存报告，线程仅发送请求；网络或协议错误直接失败，由外层清理资源。
         """
+        marker = f"make e2e Affinity | run={self.run} | {step} | model={body.get('model', '')} | key={subject.get('key_alias', '')} | entry={path}"
+        request_headers = {**(request_headers or {}), "X-Xhub-Label": quote(marker, safe="")}
         answer, headers, status = self.api(path, body, token=subject["key"], request_headers=request_headers,
                                           expected=expected, include_status=True)
         call_id = header_value(headers, "x-litellm-call-id")
@@ -25,7 +28,7 @@ class AffinityCases:
                 raise AssertionError("Affinity 真实响应缺少正输入/输出用量")
             if response_cache_hit(headers):
                 raise AssertionError("Affinity 不同轮正文不能由响应缓存替代真实调用")
-        return answer, headers, call_id
+        return answer, {**headers, "_label": marker}, call_id
 
     def affinity_receipt(self, subject, response, session, source, definition, label):
         """用途：核对一轮会话、供应商、上游型号、外发路径及五级费用；参数为回执和预期身份，返回无。
@@ -38,12 +41,15 @@ class AffinityCases:
         if call_id in {row["call_id"] for row in self.report.get("affinity_evidence", [])}:
             raise AssertionError(label + "：请求 ID 重复")
         bill = self.wait_bill(call_id)
+        marker = headers.get("_label")
+        if marker and bill.get("label") != marker:
+            raise AssertionError(label + "：验收步骤标记未原样持久化，请确认网关已更新")
         for field, value in (("session_id", session), ("session_source", source), ("model", subject["call_model"])):
             if bill.get(field) != value:
                 raise AssertionError(f"{label}：日志 {field}={bill.get(field)!r}，预期={value!r}")
         cost = bill_check(bill, subject, self.data["billing"])
         route = self.route_evidence(call_id, definition["provider"], definition.get("stored_model", definition["upstream_model"]))
-        self.report.setdefault("affinity_evidence", []).append({"label": label, "call_id": call_id,
+        self.report.setdefault("affinity_evidence", []).append({"step": label, "label": marker, "inbound_endpoint": bill.get("inbound_endpoint"), "call_id": call_id,
             "session_id": session, "session_source": source, "model": subject["call_model"],
             "supplier": route["supplier"], "upstream_model": route["upstream_model"],
             "outbound_endpoint": route["outbound_endpoint"], "spend": cost})
@@ -92,33 +98,33 @@ class AffinityCases:
                 """更新主密钥模板的两部署分配；参数为有限权重，无返回；只修改本轮模板。"""
                 self.api("/route_template/" + templates[0] + "/update", {"body": template_body(values)})
 
-            def request(subject=primary, ident=session, path="/v1/chat/completions", messages=None, explicit=True):
+            def request(subject=primary, ident=session, path="/v1/chat/completions", messages=None, explicit=True, step="未命名步骤"):
                 """生成不同英文正文并发送一轮；参数控制密钥、会话、入口和历史，返回回执；递增局部序号以排除缓存。"""
                 nonlocal sequence
                 sequence += 1
                 body = {"model": subject["call_model"], "messages": messages or [{"role": "user", "content": f"Reply only OK. {session} round {sequence}"}], "max_tokens": 32}
                 if explicit:
                     body["session_id"] = ident
-                return self.affinity_request(subject, body, path)
+                return self.affinity_request(subject, body, path, step=f"step={sequence} | {step}")
 
             def check(response, index, label, subject=primary, ident=session, source="explicit"):
                 """核对指定供应商部署的回执；参数为响应和期望身份，无返回；调用统一账单与持久化路由核对。"""
                 self.affinity_receipt(subject, response, ident, source, definitions[index], label)
 
-            check(request(), 0, "单目标模板建立 Fenno 偏好")
+            check(request(step="单目标模板建立 Fenno 偏好"), 0, "单目标模板建立 Fenno 偏好")
             weights([1, 1])
             for turn in range(3):
-                check(request(), 0, f"双目标下同会话第 {turn + 1} 轮保持原部署")
-            check(request(isolated), 1, "同会话不同密钥按独立模板选择七牛", subject=isolated)
+                check(request(step=f"双目标下同会话第 {turn + 1} 轮保持原部署"), 0, f"双目标下同会话第 {turn + 1} 轮保持原部署")
+            check(request(isolated, step="同会话不同密钥按独立模板选择七牛"), 1, "同会话不同密钥按独立模板选择七牛", subject=isolated)
             weights([0, 100])
             alternate = session + "-other"
-            check(request(ident=alternate), 1, "另一会话建立七牛偏好", ident=alternate)
+            check(request(ident=alternate, step="另一会话建立七牛偏好"), 1, "另一会话建立七牛偏好", ident=alternate)
             native = "/bypass/openai/v1/chat/completions"
-            check(request(path=native), 1, "同会话原生端点建立独立七牛偏好")
+            check(request(path=native, step="同会话切换到原生入口；粘性按密钥+模型+session+入口隔离，不继承统一入口的 Fenno；当前权重 Fenno=0、七牛=100，预期建立七牛偏好"), 1, "同会话原生端点建立独立七牛偏好")
             weights([1, 1])
-            check(request(), 0, "统一端点保留 Fenno，未被原生端点覆盖")
-            check(request(path=native), 1, "原生端点保留七牛，未被统一端点覆盖")
-            check(request(ident=alternate), 1, "另一会话偏好独立保持", ident=alternate)
+            check(request(step="同会话切回统一入口；粘性按密钥+模型+session+入口隔离；当前权重 Fenno=1、七牛=1，预期沿用统一入口已建立的 Fenno 偏好"), 0, "统一端点保留 Fenno，未被原生端点覆盖")
+            check(request(path=native, step="同会话从统一入口切回原生入口；粘性按密钥+模型+session+入口隔离；当前权重 Fenno=1、七牛=1，预期沿用第7步原生入口已建立的七牛偏好，不继承第8步统一入口的 Fenno"), 1, "原生端点保留七牛，未被统一端点覆盖")
+            check(request(ident=alternate, step="另一会话偏好独立保持"), 1, "另一会话偏好独立保持", ident=alternate)
             # 配置恢复双目标后，三个同时发出的首次请求必须协调为同一部署；不要求上游执行串行。
             concurrent = session + "-concurrent"
             bodies = [{"model": model, "session_id": concurrent, "messages": [{"role": "user", "content": f"Reply only OK. {concurrent} round {i}"}], "max_tokens": 32} for i in range(3)]
@@ -144,34 +150,34 @@ class AffinityCases:
                 if self.wait_bill(response[2])["outbound_endpoint"] != endpoint:
                     raise AssertionError("并发同会话外发端点不一致")
             weights([0, 100])
-            check(request(), 1, "模板归零使旧 Fenno 偏好即时失效")
+            check(request(step="模板归零使旧 Fenno 偏好即时失效"), 1, "模板归零使旧 Fenno 偏好即时失效")
             weights([1, 1])
-            check(request(), 1, "恢复 Fenno 正权重不抢走合法七牛偏好")
+            check(request(step="恢复 Fenno 正权重不抢走合法七牛偏好"), 1, "恢复 Fenno 正权重不抢走合法七牛偏好")
             # 只改变临时七牛部署当前资格，必须切换并建立新的合法偏好。
             self.api("/model/update", {"id": deployments[1], "model_info": {"endpoint_types": ["responses"]}})
-            check(request(path=native), 0, "移除原生聊天端点后重新选择兼容部署")
+            check(request(path=native, step="移除原生聊天端点后重新选择兼容部署"), 0, "移除原生聊天端点后重新选择兼容部署")
             self.api("/model/update", {"id": deployments[1], "model_info": {"endpoint_types": definitions[1]["endpoint_types"]}})
-            check(request(path=native), 0, "恢复原生聊天端点不覆盖当前合法偏好")
+            check(request(path=native, step="恢复原生聊天端点不覆盖当前合法偏好"), 0, "恢复原生聊天端点不覆盖当前合法偏好")
             self.api("/model/update", {"id": deployments[0], "model_info": {"disabled": True}})
-            check(request(path=native), 1, "停用粘性部署后选择仍启用部署")
+            check(request(path=native, step="停用粘性部署后选择仍启用部署"), 1, "停用粘性部署后选择仍启用部署")
             self.api("/model/update", {"id": deployments[0], "model_info": {"disabled": False}})
-            check(request(path=native), 1, "恢复部署后保持新偏好")
+            check(request(path=native, step="恢复部署后保持新偏好"), 1, "恢复部署后保持新偏好")
             self.api("/route_template/" + templates[1] + "/update", {"body": template_body([100, 0])})
             self.api("/key/update", {"key": primary["key"], "route_template_id": templates[1]})
-            check(request(), 0, "重新绑定模板后不沿用不合法偏好")
+            check(request(step="重新绑定模板后不沿用不合法偏好"), 0, "重新绑定模板后不沿用不合法偏好")
             self.api("/key/update", {"key": primary["key"], "route_template_id": templates[0]})
-            check(request(), 0, "重新绑定双目标模板保留合法偏好")
+            check(request(step="重新绑定双目标模板保留合法偏好"), 0, "重新绑定双目标模板保留合法偏好")
             # 同密钥、同会话改用不同公开模型，必须落在另一模型的候选池；原模型偏好随后仍保持。
             other = next(row for row in self.data["models"] if row["id"] == "qiniu-glm")
             self.api("/key/update", {"key": primary["key"], "models": [model, other["public_name"]]})
             other_subject = {**primary, "call_model": other["public_name"]}
-            other_response = request(subject=other_subject)
+            other_response = request(subject=other_subject, step="同会话不同模型使用独立候选池")
             self.affinity_receipt(other_subject, other_response, session, "explicit", other, "同会话不同模型使用独立候选池")
-            check(request(), 0, "切回原模型保持原部署偏好")
+            check(request(step="切回原模型保持原部署偏好"), 0, "切回原模型保持原部署偏好")
             self.api("/key/update", {"key": primary["key"], "models": [model]})
             # 无显式 ID 的完整历史必须稳定推断；新增对话不改变首轮指纹。
             history = [{"role": "user", "content": "Reply only OK. " + session + " inferred"}]
-            first = request(messages=history, explicit=False)
+            first = request(messages=history, explicit=False, step="首轮推断会话身份")
             inferred = header_value(first[1], "x-session-id")
             if not inferred or not inferred.startswith("prompt:v1:"):
                 raise AssertionError("无显式会话未生成稳定 prompt 指纹")
@@ -185,20 +191,20 @@ class AffinityCases:
                 inferred_index = 1
             check(first, inferred_index, "首轮推断会话身份", ident=inferred, source="prompt")
             history += [first[0]["choices"][0]["message"], {"role": "user", "content": "Reply only OK again."}]
-            check(request(messages=history, explicit=False), inferred_index, "完整真实历史保持推断会话与部署", ident=inferred, source="prompt")
+            check(request(messages=history, explicit=False, step="完整真实历史保持推断会话与部署"), inferred_index, "完整真实历史保持推断会话与部署", ident=inferred, source="prompt")
             for invalid, headers in (({"session_id": "other"}, {"X-Session-Id": session}),
                                      ({"session_id": " "}, None), ({"session_id": "x" * 257}, None),
                                      ({"previous_response_id": session + "-unknown"}, None)):
                 body = {"model": model, "messages": [{"role": "user", "content": "Reply only OK."}], **invalid}
-                self.affinity_request(primary, body, request_headers=headers, expected=400)
+                self.affinity_request(primary, body, request_headers=headers, expected=400, step="非法或冲突会话明确拒绝")
                 self.action_ok(model, "bypass_openai_chat", "非法或冲突会话明确拒绝", "HTTP=400")
             # 模型权限必须先于旧粘性，不能用历史成功绕过新的白名单。
             self.api("/key/update", {"key": primary["key"], "models": [next(row["public_name"] for row in self.data["models"] if row["id"] == "qiniu-glm")]})
-            self.affinity_request(primary, {"model": model, "session_id": session, "messages": [{"role": "user", "content": "Reply only OK."}]}, expected=401)
+            self.affinity_request(primary, {"model": model, "session_id": session, "messages": [{"role": "user", "content": "Reply only OK."}]}, expected=401, step="模型权限先于历史粘性")
             self.api("/key/update", {"key": primary["key"], "models": [model]})
             self.api("/model/delete", {"id": deployments[0]})
             deleted.add(deployments[0])
-            check(request(), 1, "删除旧粘性部署后选择当前合法部署")
+            check(request(step="删除旧粘性部署后选择当前合法部署"), 1, "删除旧粘性部署后选择当前合法部署")
             self.report["checks"].append({"name": "Affinity-session-template-model-endpoint", "passed": True})
             self.save()
         finally:

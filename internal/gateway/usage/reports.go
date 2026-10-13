@@ -309,9 +309,13 @@ func eventRows(events []iam.UsageEvent) []map[string]any {
 			"project_id":          e.ProjectID,
 			"organization_id":     e.OrganizationID,
 			"custom_llm_provider": e.Provider,
-			"messages":            []any{},
-			"response":            map[string]any{},
-			"metadata":            meta,
+			// 显示调用时记录的凭证名称；协议类型不能替代凭证，未记录时保留空值。
+			"credential_name": e.Supplier,
+			"api_base":        e.APIBase,
+			"label":           e.Label,
+			"messages":        []any{},
+			"response":        map[string]any{},
+			"metadata":        meta,
 		}
 		if e.CachedTokens != nil {
 			row["cache_read_input_tokens"] = *e.CachedTokens

@@ -16,9 +16,9 @@ func TestQueuedUsageRecordSessionAttribution(t *testing.T) {
 	for _, source := range []string{"explicit", "parent", "cache_key", "prompt", "generated", ""} {
 		for _, status := range []string{"success", "error"} {
 			t.Run(source+"/"+status, func(t *testing.T) {
-				row := live.SpendLog{Model: "requested-group", Supplier: "supplier-b", UpstreamModel: "actual-model", SessionID: "session", SessionSource: source, Status: status, CacheHit: true, Start: "2026-10-12T00:00:00Z", End: "2026-10-12T00:00:01Z"}
+				row := live.SpendLog{Label: "Affinity | 并发赢家", Model: "requested-group", APIBase: "https://supplier-b.example/v1", Supplier: "supplier-b", UpstreamModel: "actual-model", SessionID: "session", SessionSource: source, Status: status, CacheHit: true, Start: "2026-10-12T00:00:00Z", End: "2026-10-12T00:00:01Z"}
 				got := queuedUsageRecord(row)
-				if got.Model != row.Model || got.Supplier != row.Supplier || got.UpstreamModel != row.UpstreamModel || got.SessionID != row.SessionID || got.SessionSource != source || got.Status != status || !got.CacheHit {
+				if got.Label != row.Label || got.Model != row.Model || got.APIBase != row.APIBase || got.Supplier != row.Supplier || got.UpstreamModel != row.UpstreamModel || got.SessionID != row.SessionID || got.SessionSource != source || got.Status != status || !got.CacheHit {
 					t.Fatalf("异步落库改变请求或执行归属：%+v", got)
 				}
 			})
@@ -26,7 +26,7 @@ func TestQueuedUsageRecordSessionAttribution(t *testing.T) {
 	}
 	before := time.Now()
 	got := queuedUsageRecord(live.SpendLog{Start: "invalid", End: "invalid", Spend: 99})
-	if got.SessionSource != "" || got.SessionID != "" || got.Supplier != "" || got.UpstreamModel != "" || got.TS.Before(before) || got.EndedAt.Before(before) || got.Cost != 0 {
+	if got.SessionSource != "" || got.SessionID != "" || got.APIBase != "" || got.Supplier != "" || got.UpstreamModel != "" || got.TS.Before(before) || got.EndedAt.Before(before) || got.Cost != 0 {
 		t.Fatalf("旧载荷或非法时间不得伪造会话与计费事实：%+v", got)
 	}
 }

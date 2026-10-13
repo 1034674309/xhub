@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     session_source    TEXT NOT NULL DEFAULT '',
     cache_key         TEXT NOT NULL DEFAULT '',
     guardrail         TEXT NOT NULL DEFAULT '',
+    label             TEXT NOT NULL DEFAULT '',
     price_snapshot    TEXT NOT NULL DEFAULT '',
     task_settled      BOOLEAN NOT NULL DEFAULT false
 );
@@ -301,3 +302,9 @@ CREATE INDEX IF NOT EXISTS model_monitor_org_time ON model_monitor_buckets (orga
 CREATE INDEX IF NOT EXISTS model_monitor_key_time ON model_monitor_buckets (key_id, bucket_start);
 CREATE INDEX IF NOT EXISTS model_monitor_project_time ON model_monitor_buckets (project_id, bucket_start);
 CREATE INDEX IF NOT EXISTS model_monitor_supplier_time ON model_monitor_buckets (supplier, model, bucket_start);
+
+-- 客户端备注独立于提示词正文；现有数据库启动时补齐日志字段。
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT '';
+
+-- 上游基础地址随调用快照保存；旧日志保持空值，不以当前配置推断历史。
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS api_base TEXT NOT NULL DEFAULT '';

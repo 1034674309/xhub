@@ -230,6 +230,7 @@ func TestEventRowCarriesTheBill(t *testing.T) {
 	}
 }
 
+// TestEventRowExposesTheConsoleColumns 验证日志接口保留调用时凭证、基础地址和计费字段；纯内存夹具，无需清理。
 func TestEventRowExposesTheConsoleColumns(t *testing.T) {
 	ttft := 420
 	cached := 100
@@ -239,9 +240,12 @@ func TestEventRowExposesTheConsoleColumns(t *testing.T) {
 		RequestID: "r-cols", Model: "gpt-oss-120b", PromptTokens: 10, CompletionTokens: 2,
 		Cost: 0.01, TS: start, EndedAt: &end, TTFTMs: &ttft, CacheHit: true,
 		KeyHash: "hash-1", KeyAlias: "key-1", TeamAlias: "team-1",
-		Provider: "openai", CachedTokens: &cached, SessionID: "sess-1", CacheKey: "ck-1",
+		Provider: "openai", Supplier: "fenno-production", APIBase: "https://fenno.example/v1", CachedTokens: &cached, SessionID: "sess-1", CacheKey: "ck-1",
 	}})
 	row := rows[0]
+	if row["credential_name"] != "fenno-production" || row["api_base"] != "https://fenno.example/v1" {
+		t.Fatalf("日志必须显示保存的凭证名称而非协议类型: %#v", row)
+	}
 	meta := row["metadata"].(map[string]any)
 	if meta["user_api_key"] != "hash-1" || meta["user_api_key_alias"] != "key-1" || meta["user_api_key_team_alias"] != "team-1" {
 		t.Fatalf("snapshot %#v", meta)
@@ -276,6 +280,17 @@ func TestCostBreakdownDoesNotRepriceUnpricedAsyncSnapshot(t *testing.T) {
 	for _, key := range []string{"input_cost", "output_cost", "original_cost"} {
 		if _, exists := got[key]; exists {
 			t.Fatalf("invented %s: %#v", key, got)
+		}
+	}
+}
+
+// TestEventRowLabel 验证日志列表及详情共同保留备注；参数 t 为测试上下文。
+// 前置含中文及空备注事件，返回原样值；纯转换，无资源清理或数据副作用。
+func TestEventRowLabel(t *testing.T) {
+	for _, label := range []string{"", "make e2e Affinity | 原生入口独立偏好"} {
+		row := eventRows([]iam.UsageEvent{{Label: label}})[0]
+		if row["label"] != label {
+			t.Fatalf("日志备注改变: %#v", row)
 		}
 	}
 }

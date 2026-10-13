@@ -7820,4 +7820,6 @@ export const zhPhrases: Record<string, string> = {
   "Optional passthrough endpoints": "可选直通接口",
   "Connection test failed": "连接测试失败",
   "Connection is healthy and the model responded.": "连接正常，模型已响应。",
+  "logs.label": "备注",
+  "logs.labelHint": "由请求方提供的备注。验收请求可用它关联测试步骤，请结合请求 ID、凭证、端点和账单核对实际结果。",
 };

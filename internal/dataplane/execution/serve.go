@@ -291,6 +291,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 			var err error
 			apiBase := dep.ParamString("api_base", "")
 			did := router.CooldownID(rawDep)
+			// 在执行时保存已解析凭证的连接身份，最终失败可能没有 depID，且配置可能随后改变。
+			connection, upstreamModel := dep.MonitorIdentity()
+			h.AnnotateCall(callID, dpcontract.CallNote{Supplier: connection, APIBase: dep.LogAPIBase(), UpstreamModel: upstreamModel, UpstreamSelected: true})
 			if dpdialogue.CallerProtocol(op) != "" {
 				built, err = dpdialogue.BuildDialogue(dep, dialogue)
 				if errors.Is(err, dpdialogue.ErrDialogueCredentials) {

@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from unittest import mock
+from urllib.parse import unquote
 
 from acceptance import Dataset, load_manifest
 
@@ -20,9 +21,12 @@ class AffinityTests(unittest.TestCase):
                         ({**valid, "usage": {"prompt_tokens": 0}}, {"x-litellm-call-id": "id"}, 200, False),
                         ({"error": "invalid session"}, {}, 400, True)]
             for answer, headers, status, passes in fixtures:
-                with self.subTest(status=status, headers=headers), mock.patch.object(dataset, "api", return_value=(answer, headers, status)):
+                with self.subTest(status=status, headers=headers), mock.patch.object(dataset, "api", return_value=(answer, headers, status)) as api:
                     if passes:
-                        dataset.affinity_request({"key": "secret"}, {}, expected=status)
+                        result = dataset.affinity_request({"key": "secret"}, {}, expected=status, step="原生入口")
+                        self.assertIn("原生入口", result[1]["_label"])
+                        self.assertEqual(unquote(api.call_args.kwargs["request_headers"]["X-Xhub-Label"]), result[1]["_label"])
+                        self.assertNotIn("secret", result[1]["_label"])
                     else:
                         with self.assertRaises(AssertionError):
                             dataset.affinity_request({"key": "secret"}, {})
@@ -34,11 +38,11 @@ class AffinityTests(unittest.TestCase):
             dataset.logger = mock.Mock()
             subject = {"call_model": "model"}
             definition = {"provider": "qiniu", "upstream_model": "upstream"}
-            response = ({}, {"x-session-id": "session"}, "call")
-            bill = {"model": "model", "session_id": "session", "session_source": "explicit"}
+            response = ({}, {"x-session-id": "session", "_label": "note"}, "call")
+            bill = {"label": "note", "model": "model", "session_id": "session", "session_source": "explicit"}
             route = {"supplier": "qiniu", "upstream_model": "upstream", "outbound_endpoint": "https://supplier/v1/chat/completions"}
             with mock.patch.object(dataset, "wait_bill", return_value=bill), mock.patch.object(dataset, "route_evidence", return_value=route), mock.patch("acceptance.affinity.bill_check", return_value=0.1):
-                for field in ("model", "session_source", "session_id"):
+                for field in ("model", "session_source", "session_id", "label"):
                     original = bill[field]
                     bill[field] = "wrong"
                     with self.subTest(field=field), self.assertRaises(AssertionError):
@@ -48,6 +52,8 @@ class AffinityTests(unittest.TestCase):
                     dataset.affinity_receipt(subject, response, "conflict", "explicit", definition, "round")
                 dataset.affinity_receipt(subject, response, "session", "explicit", definition, "round")
                 self.assertEqual(len(dataset.report["affinity_evidence"]), 1)
+                self.assertEqual(dataset.report["affinity_evidence"][0]["step"], "round")
+                self.assertEqual(dataset.report["affinity_evidence"][0]["label"], "note")
                 with self.assertRaisesRegex(AssertionError, "重复"):
                     dataset.affinity_receipt(subject, response, "session", "explicit", definition, "round")
 
@@ -113,6 +119,15 @@ class AffinityTests(unittest.TestCase):
             labels = [call.args[-1] for call in receipt.call_args_list]
             self.assertIn("同会话不同模型使用独立候选池", labels)
             self.assertIn("原生端点保留七牛，未被统一端点覆盖", labels)
+            # 同一会话切换入口的备注必须解释偏好范围和权重，避免日志归组被误解为全入口共享粘性。
+            for index, entry, expected in ((6, "/bypass/openai/v1/chat/completions", "预期建立七牛偏好"),
+                                           (7, "/v1/chat/completions", "统一入口已建立的 Fenno 偏好"),
+                                           (8, "/bypass/openai/v1/chat/completions", "不继承第8步统一入口的 Fenno")):
+                with self.subTest(step=index + 1):
+                    self.assertEqual(requests[index][2], entry)
+                    self.assertEqual(requests[index][1]["session_id"], requests[0][1]["session_id"])
+                    self.assertIn("粘性按密钥+模型+session+入口隔离", requests[index][3]["step"])
+                    self.assertIn(expected, requests[index][3]["step"])
             for call in receipt.call_args_list:
                 if call.args[-1] in ("停用粘性部署后选择仍启用部署", "恢复部署后保持新偏好"):
                     request_index = int(call.args[1][2].removeprefix("call")) - 1

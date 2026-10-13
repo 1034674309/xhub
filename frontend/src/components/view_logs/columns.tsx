@@ -29,6 +29,10 @@ export type LogEntry = {
   user?: string;
   end_user?: string;
   custom_llm_provider?: string;
+  /** 调用时持久化的模型提供商凭证名称；缺失时不以协议名称代替。 */
+  credential_name?: string;
+  /** 客户端提供的通用备注，可关联验收步骤，不代表测试结果。 */
+  label?: string;
   metadata?: Record<string, any>;
   cache_hit: string | boolean;
   cache_key?: string;

@@ -1,7 +1,9 @@
 package regression
 
 import (
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -368,4 +370,40 @@ func apiRequestsInBreakdown(row map[string]any) int {
 		}
 	}
 	return total
+}
+
+// TestLogLabelPersists 验证通用备注经真实网关写库且列表和详情一致；参数 t 为测试上下文。
+// 前置独立数据库及本地供应商，关闭提示词保存；不含备注的请求保持空值，harness 清理 schema。
+func TestLogLabelPersists(t *testing.T) {
+	h := openHarness(t, false, chatDeployment("regression-label"))
+	admin := h.personalBillingSession()
+	for _, label := range []string{"Affinity | 原生入口独立偏好", ""} {
+		req, err := http.NewRequest(http.MethodPost, h.server.URL+"/v1/chat/completions", strings.NewReader(string(mustJSON(map[string]any{
+			"model": "regression-label", "messages": []any{map[string]any{"role": "user", "content": "Verify request label " + label}},
+		}))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+admin)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Xhub-Label", url.QueryEscape(label))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("备注请求失败: %d", resp.StatusCode)
+		}
+		id := resp.Header.Get("x-litellm-call-id")
+		detail := logDetail(t, h, admin, id)
+		if detail["label"] != label {
+			t.Fatalf("详情备注丢失: %v", detail["label"])
+		}
+		row := findLogByRequestID(h.spendLogs(t, admin), id)
+		if row == nil || row["label"] != label {
+			t.Fatal("列表备注与请求不一致")
+		}
+	}
 }

@@ -18,6 +18,49 @@ from acceptance.category_help import category_help, CATEGORY_DESCRIPTIONS, CATEG
 class AcceptanceTests(unittest.TestCase):
     """验证所属业务模块的正常、边界和失败路径，资源由各测试自行隔离清理。"""
 
+    def test_verify_restores_report_collections_before_recording_actions(self):
+        """目的：历史完整、精简和重复编码报告恢复后可记录检查点，错误集合类型在业务写入前拒绝。
+
+        前置真实 Dataset 与离线接口夹具；验证四个集合、旧证据保留及失败无执行；目录自动清理，无外部写入。
+        """
+        fields = ("checks", "probe_attempts", "calls", "models")
+        old_check = {"name": "previous", "passed": True}
+        reports = [{"checks": [old_check]}, {"status": "failed", "error": "ConnectionRefusedError"},
+                   json.dumps({"status": "failed"})]
+        reports += [{field: None} for field in fields]
+        for report in reports:
+            with self.subTest(report=report), tempfile.TemporaryDirectory() as directory:
+                dataset = Dataset("http://localhost:1", directory, load_manifest(), logger=mock.Mock())
+                dataset.selected_categories = frozenset({"entities"})
+                Path(directory, "access.json").write_text(json.dumps({"admin": "fixture-token"}))
+                Path(directory, "report.json").write_text(json.dumps(report))
+                args = type("Args", (), {"directory": directory, "category": ["entities"]})()
+                invalid = isinstance(report, dict) and any(field in report and not isinstance(report[field], list) for field in fields)
+
+                def verify():
+                    """模拟部署成功后的真实检查点记录；无参数/返回，供 runner 回调，不访问供应商。"""
+                    dataset.action_ok("fixture-model", "bypass_openai_chat", "添加模型与端点", "fixture")
+
+                with mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
+                        mock.patch.object(SHARED, "http", return_value=(200, {}, {})), \
+                        mock.patch.object(SHARED, "local_admin_credentials", return_value={}), \
+                        mock.patch.object(dataset, "api", return_value=({}, {})), \
+                        mock.patch.object(dataset, "start_checklist"), \
+                        mock.patch.object(dataset, "verify", side_effect=verify) as execution, \
+                        mock.patch.dict(os.environ, {}, clear=True), redirect_stdout(io.StringIO()):
+                    self.assertEqual(SHARED.verify_running_gateway(args, load_manifest()), 1 if invalid else 0)
+                saved = json.loads(Path(directory, "report.json").read_text())
+                if invalid:
+                    execution.assert_not_called()
+                    self.assertIn("必须为 JSON 数组", saved["error"])
+                else:
+                    for field in fields:
+                        self.assertIsInstance(saved[field], list)
+                    self.assertEqual(saved["checks"][-1]["action"], "添加模型与端点")
+                    if isinstance(report, dict) and report.get("checks"):
+                        self.assertEqual(saved["checks"][0], old_check)
+                    self.assertNotIn("error", saved)
+
     def test_category_make_and_cli_contract(self):
         """目的：make e2e 分类只发一个选中命令，未知分类在执行前失败；前置无凭据，验证单类、多类、全量、列表及 seed 禁用分类；只运行 dry-run/参数校验，不启动服务，无数据需清理。"""
         root = Path(__file__).parents[1]
@@ -38,7 +81,8 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(direct.returncode, 0, direct.stderr)
         self.assertEqual(listed.stdout, direct.stdout)
         self.assertEqual(listed.stdout, category_help() + "\n")
-        rows = [line.split()[0] for line in listed.stdout.splitlines() if line.startswith("  ")]
+        # 分类说明也有缩进，只读取恰好缩进两空格的分类标题。
+        rows = [line.split()[0] for line in listed.stdout.splitlines() if line.startswith("  ") and not line.startswith("   ")]
         self.assertEqual(tuple(rows), RUNNER.E2E_CATEGORIES)
         for args in (["--category", "limtis"], ["--category", "limits"],
                      ["--shared-target", "--phase", "seed", "--category", "limits"],

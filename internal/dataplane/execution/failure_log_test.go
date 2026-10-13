@@ -37,6 +37,8 @@ type logHost struct {
 	spends []capturedSpend
 	// 按 callID 复制的响应正文，不保存原请求正文。
 	exchanges map[string][]byte
+	// 捕获执行时的公开上游快照，无数据库副作用。
+	upstreamNotes map[string]dpcontract.CallNote
 }
 
 // capturedSpend 保存日志宿主捕获的一次记账调用 ID 与状态，用来验证失败路径也经过记账。
@@ -55,10 +57,11 @@ func newLogHost(cfg *config.Config, client *http.Client) *logHost {
 		client = http.DefaultClient
 	}
 	return &logHost{
-		cfg:       cfg,
-		client:    client,
-		cache:     util.NewCache(),
-		exchanges: map[string][]byte{},
+		cfg:           cfg,
+		client:        client,
+		cache:         util.NewCache(),
+		exchanges:     map[string][]byte{},
+		upstreamNotes: map[string]dpcontract.CallNote{},
 	}
 }
 
@@ -168,9 +171,13 @@ func (h *logHost) PlanRoute(*http.Request, string, map[string]any, *auth.Princip
 func (h *logHost) CommitRoute(dpcontract.RoutePlan, string, string) {}
 
 // AnnotateCall 是 logHost 的测试接口实现。
-// 忽略调用 ID 和备注；无返回，基础日志测试只断言状态和正文，不模拟备注合并。
+// 参数为调用 ID 和附注；仅捕获已选择部署的公开快照，无返回、不模拟业务附注合并或外部写入。
 // 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
-func (h *logHost) AnnotateCall(string, dpcontract.CallNote) {}
+func (h *logHost) AnnotateCall(id string, note dpcontract.CallNote) {
+	if note.UpstreamSelected {
+		h.upstreamNotes[id] = note
+	}
+}
 
 // FindDeployment 是 logHost 的测试接口实现。
 // 忽略部署 ID，恒返回零部署与 false；测试不恢复原生任务归属。
@@ -307,6 +314,9 @@ func TestServePersistsCompleteUpstreamFailure(t *testing.T) {
 	if rec.Code != http.StatusBadGateway || len(h.spends) != 1 || h.spends[0].status != http.StatusBadGateway {
 		t.Fatalf("失败日志状态不完整: http=%d spends=%+v", rec.Code, h.spends)
 	}
+	if note := h.upstreamNotes[h.spends[0].callID]; note.APIBase != up.URL+"/v1" || note.Supplier != up.URL+"/v1" || note.UpstreamModel != "openai/failed-model" {
+		t.Fatalf("重试耗尽丢失上游快照: %+v", note)
+	}
 	if got := h.exchanges[h.spends[0].callID]; !bytes.Equal(got, rawError) {
 		t.Fatalf("上游错误正文被改写: got=%q want=%q", got, rawError)
 	}
@@ -324,6 +334,9 @@ func TestServePersistsNetworkFailure(t *testing.T) {
 	Serve(h, rec, chatRequest(t, "network-model", false), "chat")
 	if rec.Code != http.StatusBadGateway || len(h.spends) != 1 {
 		t.Fatalf("网络失败未形成一条日志: http=%d spends=%+v", rec.Code, h.spends)
+	}
+	if note := h.upstreamNotes[h.spends[0].callID]; note.APIBase != "https://example.invalid/v1" || !note.UpstreamSelected {
+		t.Fatalf("网络失败丢失上游快照: %+v", note)
 	}
 	if got := string(h.exchanges[h.spends[0].callID]); !strings.Contains(got, "connection refused") {
 		t.Fatalf("网络错误正文缺失: %q", got)

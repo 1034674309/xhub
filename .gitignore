@@ -56,4 +56,6 @@ frontend/.next-codex-source-fix
 frontend/.next-design-redis
 frontend/.next-design-cleanup
 frontend/.next-cache-review
-gateway
+# 仅忽略根目录构建产物，避免屏蔽 internal/gateway 下新增的源码和测试。
+/gateway
+frontend/.next-fixture-report-fix

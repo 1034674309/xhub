@@ -171,6 +171,11 @@ export function LogDetailContent({ logEntry, isLoadingDetails = false, accessTok
         <TagsSection tags={logEntry.request_tags} />
       )}
 
+      {logEntry.label && <section aria-label={t("logs.label")} className="mb-6 rounded-lg border p-4">
+        <h3 className="font-semibold">{t("logs.label")}</h3>
+        <p className="whitespace-pre-wrap break-all">{logEntry.label}</p>
+        <p className="text-sm text-muted-foreground">{t("logs.labelHint")}</p>
+      </section>}
       {/* Request Details */}
       <div className="bg-card rounded-lg shadow-sm w-full max-w-full overflow-hidden mb-6">
         <Card size="sm" style={{ marginBottom: 0 }}>
@@ -180,7 +185,7 @@ export function LogDetailContent({ logEntry, isLoadingDetails = false, accessTok
           <CardContent>
             <DescriptionList>
               <DescriptionItem label={t("Model")}>{logEntry.model}</DescriptionItem>
-              <DescriptionItem label={t("Provider")}>{logEntry.custom_llm_provider || "-"}</DescriptionItem>
+              <DescriptionItem label={t("Credential Name")}>{logEntry.credential_name || "-"}</DescriptionItem>
               <DescriptionItem label={t("Call Type")}>{logEntry.call_type}</DescriptionItem>
               <DescriptionItem label={t("Model ID")}>
                 <TruncatedValue value={logEntry.model_id} />

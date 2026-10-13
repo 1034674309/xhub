@@ -7,7 +7,7 @@
 package gateway
 
 import (
- "context"
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -192,6 +192,11 @@ func (s *Server) AnnotateCall(callID string, note dpcontract.CallNote) {
 	if note.SessionSource == "" {
 		note.SessionSource = s.callNotes[callID].SessionSource
 	}
+	if !note.UpstreamSelected {
+		previous := s.callNotes[callID]
+		note.Supplier, note.APIBase, note.UpstreamModel = previous.Supplier, previous.APIBase, previous.UpstreamModel
+		note.UpstreamSelected = previous.UpstreamSelected
+	}
 	if note.Upstream == nil {
 		note.Upstream = s.callNotes[callID].Upstream
 	}
@@ -326,7 +331,7 @@ func (s *Server) noteUsage(id string, tokens int) { dpruntime.RecordUsage(s, id,
 // flushLoop 按启动配置刷写日志和账单，默认 5 秒；参数 ctx 控制退出，无返回值。
 // Run 在监听成功后调用；配置不动态修改，取消停止周期任务，失败保留队列供重试。
 func (s *Server) flushLoop(ctx context.Context) {
- dpruntime.FlushLoop(ctx, s, s.Cfg.GeneralSettings.SpendLogFlushInterval())
+	dpruntime.FlushLoop(ctx, s, s.Cfg.GeneralSettings.SpendLogFlushInterval())
 }
 
 // FlushSpend writes spend and logs that are still in Redis into PostgreSQL.
