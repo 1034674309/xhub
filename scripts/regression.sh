@@ -3,6 +3,8 @@
 #
 #   ./scripts/regression.sh              # deterministic, uses the fake provider
 #   ./scripts/regression.sh --live        # also calls the real vendors (costs money)
+#   ./scripts/regression.sh -v            # show test status without gateway logs
+# Default output is a short result; full diagnostics are saved under .e2e/runs/.
 #
 # The suite needs PostgreSQL on 5433 (docker compose up -d postgres). It creates
 # a throwaway schema per test and drops it afterwards, so it is safe to run
@@ -86,4 +88,22 @@ else
   echo "running the deterministic suite (fake provider); --live to call real vendors"
 fi
 
-go test ./cmd/regression/ "${ARGS[@]}"
+# 双流完整落盘；每轮独立目录防止覆盖证据，创建失败必须中止。
+mkdir -p "$ROOT/.e2e/runs"
+LOG_DIR="$(mktemp -d "$ROOT/.e2e/runs/regression-XXXXXXXX")"
+LOG_FILE="$LOG_DIR/regression.log"
+echo "full regression log: $LOG_FILE"
+# 始终采集详细证据；pipefail 保留测试、写入与过滤失败，避免伪报通过。
+# -v 只显示测试状态并刷新缓冲，截短异常长用例名，业务日志保存在文件中。
+if go test ./cmd/regression/ "${ARGS[@]}" -v 2>&1 | tee "$LOG_FILE" | awk -v verbose="$VERBOSE" '
+  verbose == 1 && ($0 ~ /^=== RUN / || $0 ~ /^[[:space:]]*--- (PASS|FAIL|SKIP):/ || $0 ~ /^(PASS|FAIL|ok[[:space:]])/) {
+    print substr($0, 1, 400)
+    fflush()
+  }
+'; then
+  echo "backend regression passed"
+else
+  STATUS=$?
+  echo "backend regression failed (exit $STATUS); see $LOG_FILE" >&2
+  exit "$STATUS"
+fi

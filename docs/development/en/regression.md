@@ -13,7 +13,9 @@ bash scripts/regression.sh -v Fallback
 GitHub Actions saves the complete verbose output to `.e2e/release/regression.log`
 and uploads it in the `release-test-results` artifact, including on failure. The
 step prints a short success message or the final 16 KiB on failure, preserving
-the regression exit status. Local `-v` runs still print the complete log.
+the regression exit status. Local runs print a short result; `-v` also shows test
+start and pass/fail/skip status. Both modes save complete diagnostics to a unique
+`.e2e/runs/regression-*/regression.log`; CI uploads these files too.
 
 ## Assert observable results
 

@@ -33,6 +33,7 @@ jobs:
         working-directory: frontend
       - run: node --test scripts/test_release_workflow.cjs
       - run: python3 -m unittest scripts.test_deploy_build -v
+      - run: python3 -m unittest scripts.test_regression_output -v
       # 本地配置不入库；干净 checkout 从已跟踪的示例生成测试所需配置。
       - name: Prepare test configuration
         shell: bash
@@ -69,6 +70,7 @@ jobs:
           name: release-test-results
           path: |
             .e2e/release/regression.log
+            .e2e/runs/regression-*/regression.log
             .e2e/release/results.json
             .e2e/release/junit.xml
             .e2e/release/scenario-coverage.json

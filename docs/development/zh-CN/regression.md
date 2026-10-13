@@ -12,7 +12,9 @@ bash scripts/regression.sh -v Fallback
 
 GitHub Actions 将完整详细输出保存到 `.e2e/release/regression.log`，无论成功
 或失败都通过 `release-test-results` 附件上传。步骤成功时只打印简短结果，失败时
-仅打印日志最后 16 KiB，并保留回归退出码。本地使用 `-v` 仍打印完整日志。
+仅打印日志最后 16 KiB，并保留回归退出码。本地默认只显示简短结果，`-v`
+额外显示用例开始及通过、失败、跳过状态。两种模式都将完整诊断保存到每轮独立的
+`.e2e/runs/regression-*/regression.log`，CI 也会上传这些文件。
 
 ## 新用例要观察什么
 
