@@ -8,6 +8,96 @@ import unittest
 LIBRARY = Path(__file__).resolve().parent.parent / "deploy" / "build-lib.sh"
 
 
+class ConsoleStagingTests(unittest.TestCase):
+    """验证两种 Next 追踪目录布局、资源位置、启动入口和无效产物保护；所有产物自动清理。"""
+
+    def stage(self, root, *, destination=None):
+        """用途：调用打包函数；参数为临时根目录及可选输出目录，返回进程结果。
+
+        供目录布局和失败测试使用，输出仅写入测试的临时目录；调用失败由返回码表达。
+        """
+        return subprocess.run(
+            ["bash", "-e", "-c", 'source "$1"; shift; stage_console "$@"',
+             "console-stage-test", str(LIBRARY), str(root / "standalone"),
+             str(root / "static"), str(root / "public"), str(destination or root / "stage")],
+            capture_output=True, text=True,
+        )
+
+    def fixture(self, root, *, nested=False, public=True):
+        """用途：创建两种可启动的产物夹具；参数指定根目录、嵌套布局及 public 是否存在。
+
+        返回 None；供正常和边界测试调用，依赖测试临时目录清理，不调用网络或真实后台。
+        """
+        app = root / "standalone" / "frontend" if nested else root / "standalone"
+        app.mkdir(parents=True)
+        (app / "server.js").write_text(
+            'const fs = require("node:fs"); const path = require("node:path");\n'
+            'const asset = fs.readFileSync(path.join(__dirname, ".next/static/asset.txt"), "utf8");\n'
+            'console.log(require("fixture-dependency") + ":" + asset);\n'
+        )
+        dependency = root / "standalone/node_modules/fixture-dependency"
+        dependency.mkdir(parents=True)
+        (dependency / "index.js").write_text('module.exports = "ready";\n')
+        (root / "static").mkdir()
+        (root / "static/asset.txt").write_text("static")
+        if public:
+            (root / "public").mkdir()
+            (root / "public/favicon.ico").write_text("icon")
+
+    def test_both_layouts_start_and_keep_assets_with_the_application(self):
+        """前置为根入口或嵌套入口；验证 Node 真正执行、依赖解析和资源位置；临时目录自动清理。"""
+        for nested in (False, True):
+            with self.subTest(nested=nested), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.fixture(root, nested=nested)
+                result = self.stage(root)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                app = root / "stage/frontend" if nested else root / "stage"
+                self.assertEqual((app / "public/favicon.ico").read_text(), "icon")
+                started = subprocess.run(
+                    ["node", str(root / "stage/server.js")], cwd=root,
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(started.returncode, 0, started.stderr)
+                self.assertEqual(started.stdout.strip(), "ready:static")
+
+    def test_public_directory_is_optional(self):
+        """边界输入不含 public 时仍可打包静态资源和入口；不生成多余 public，临时目录自动清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root, nested=True, public=False)
+            result = self.stage(root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((root / "stage/frontend/public").exists())
+
+    def test_missing_entry_or_static_assets_preserve_previous_stage(self):
+        """前置有旧产物，新产物缺入口或静态目录；验证明确失败且旧产物保留，临时目录自动清理。"""
+        for missing in ("server", "static"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.fixture(root)
+                (root / "stage").mkdir()
+                (root / "stage/previous.txt").write_text("previous")
+                if missing == "server":
+                    (root / "standalone/server.js").unlink()
+                else:
+                    (root / "static/asset.txt").unlink()
+                    (root / "static").rmdir()
+                result = self.stage(root)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("not produced", result.stderr)
+                self.assertEqual((root / "stage/previous.txt").read_text(), "previous")
+
+    def test_root_destination_is_rejected_before_cleanup(self):
+        """危险边界参数为根目录时应在任何清理前拒绝；验证错误与返回码，临时夹具自动清理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            result = self.stage(root, destination=Path("/"))
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("invalid console staging directory", result.stderr)
+
+
 class CertificateDiscoveryTests(unittest.TestCase):
     """验证不同主机的 CA 路径选择、显式覆盖和失败结果。"""
 

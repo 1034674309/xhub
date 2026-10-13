@@ -34,18 +34,8 @@ echo "[build] console"
     npm run build
 )
 
-if [ ! -f frontend/.next/standalone/server.js ]; then
-  echo "frontend standalone server was not produced" >&2
-  exit 1
-fi
-
-rm -rf "$CONSOLE_STAGE"
-mkdir -p "$CONSOLE_STAGE/.next"
-cp -a frontend/.next/standalone/. "$CONSOLE_STAGE/"
-cp -a frontend/.next/static "$CONSOLE_STAGE/.next/static"
-if [ -d frontend/public ]; then
-  cp -a frontend/public "$CONSOLE_STAGE/public"
-fi
+# Next 追踪根目录可能生成根入口或 frontend 子目录入口；统一打包后交 Docker 启动。
+stage_console frontend/.next/standalone frontend/.next/static frontend/public "$CONSOLE_STAGE"
 
 if [ ! -s "$NODE_BINARY" ]; then
   echo "[build] node linux/${TARGET_ARCH} ${NODE_VERSION}"
