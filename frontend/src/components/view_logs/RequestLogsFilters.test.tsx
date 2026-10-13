@@ -1,12 +1,13 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chooseSelectOption, renderWithProviders, testQueryClient } from "../../../tests/test-utils";
 import { ERROR_CODE_OPTIONS } from "./constants";
 import { LOG_FILTER_IDS } from "./log_filter_logic";
 import { RequestLogsFilters } from "./RequestLogsFilters";
+import { I18nProvider, translate, setActiveLocale, type Locale } from "@/i18n";
 
 const { authorizedMock } = vi.hoisted(() => ({ authorizedMock: vi.fn() }));
 
@@ -76,6 +77,24 @@ function StatefulFilters() {
 }
 
 describe("RequestLogsFilters", () => {
+  // Provider 会更新全局翻译状态，恢复默认测试语言，避免同一文件的后续英文断言受到影响。
+  afterEach(() => setActiveLocale("en"));
+  /** 目的：验证状态及缓存选项在两种语言下使用组件顶层翻译函数；前置真实 Provider 和空查询夹具；选择结果保持协议值，组件和查询缓存由框架清理，无后台写入。 */
+  it.each(["en", "zh-CN"] as Locale[])("translates status and cache options in %s", async (locale) => {
+    const user = userEvent.setup();
+    const set = vi.fn();
+    renderWithProviders(
+      <I18nProvider initialLocale={locale}>
+        <RequestLogsFilters get={() => undefined} set={set} teams={[]} logsWindow={LOGS_WINDOW} />
+      </I18nProvider>,
+    );
+    await user.click(await screen.findByText(translate(locale, "All Statuses")));
+    await user.click(await screen.findByRole("option", { name: translate(locale, "Success"), exact: true }));
+    expect(set).toHaveBeenCalledWith(LOG_FILTER_IDS.STATUS, "success");
+    await user.click(await screen.findByText(translate(locale, "All Requests")));
+    await user.click(await screen.findByRole("option", { name: translate(locale, "Cache Miss"), exact: true }));
+    expect(set).toHaveBeenCalledWith(LOG_FILTER_IDS.CACHE_STATUS, "miss");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     authorizedMock.mockReturnValue({ accessToken: "sk-test", userId: "user-1", userRole: "Internal User" });

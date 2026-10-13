@@ -64,7 +64,7 @@ curl -i http://localhost:4000/v1/chat/completions \
 
 - 模型供应商表单的服务地址 `https://newapi.example.com/proxy/v1` 与已注册 `bypass_openai_chat` 动作 `/v1/chat/completions` 拼为 `/proxy/v1/chat/completions`：代码避免重复 `/v1`，保留 `/proxy` 前缀。客户调用 XHub 地址，不调用 NewAPI 地址。代码：`internal/provider/openai/native.go`、`internal/dataplane/transport/bypass_url.go`。
 - 兼容目录合并供应商完整列表与本地专用型号，不按本地执行白名单截断普通型号。发现失败可手动输入；目录 v1 回退不修改推理根地址或协议。实际发现实现：`internal/gateway/models`。
-- 正常页面流程通过模型供应商引用取出地址和认证。历史部署若残留内联地址，会影响供应商地址更新：运行时地址只补空值，不覆盖已有部署值。这是存量数据排查边界，不是新的配置方式。代码：`internal/llm/credentials/credential.go`。
+- 正常页面流程通过模型供应商引用取出地址和认证。部署级地址优先；运行时供应商地址只补空值。代码：`internal/llm/credentials/credential.go`。
 - 未注册 `catalog_id` 可以保留为中转元数据，不会产生执行器；已注册专用目录检查型号和 TransportID。后台从保存连接读取可信目录，不信任请求伪造值。
 
 ## 3. Suno：先确认真实协议
@@ -163,7 +163,7 @@ Actions: []providercontract.Action{
 ~~~bash
 go test ./internal/provider/... ./internal/llm/credentials ./internal/dataplane/transport
 bash scripts/regression.sh 'TestProvider(Transport|Forms)Contract'
-bash scripts/e2e.sh provider-forms.spec.ts docs-center.spec.ts
+bash scripts/e2e.sh scenarios/legacy/provider-forms scenarios/legacy/docs-center
 ~~~
 
 使用隔离数据库和本地上游，准备方式见[测试指南](testing.md)。覆盖保存/刷新、非法配置、认证、正常/失败响应、双语选择；异步任务另测处理中、多结果、身份隔离和重复查询不重复结算。外部供应商实测需单独验收。
@@ -176,7 +176,7 @@ bash scripts/e2e.sh provider-forms.spec.ts docs-center.spec.ts
 | unregistered transport | 是否导入 all、是否使用新构建并重启；改 provider 标签不能绕过 |
 | transport 不支持 provider | Providers 白名单与连接类型；使用真实协议连接或经测试扩展 |
 | 专用目录不支持型号 | catalog_id、Official、TransportID；登记真实型号或选择通用协议 |
-| 改连接地址仍拨旧地址 | 部署残留 api_base；清理覆盖并核对实际目标 |
+| 供应商地址更新未影响部署 | 部署设置了 api_base 覆盖；清理覆盖并核对实际目标 |
 | 创建成功但查询失败 | 原身份/部署、ID 字段类型、路径/query；不要把 ID 发给另一供应商 |
 | 成功但无价格 | 实测 usage、单位/费率；保留待核价，不能编造 token 或当成免费 |
 

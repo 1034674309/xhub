@@ -64,7 +64,7 @@ Account roles, organization roles, and team roles are separate assignments. A pe
 
 Only platform administrators create accounts. Account creation does not send an invitation email. Password recovery currently uses a direct administrator reset rather than an email reset link. A team administrator cannot reset a platform or organization administrator's password. Password changes invalidate older sessions, so the affected user must sign in again.
 
-The last team administrator cannot be removed or demoted. Assign a replacement before changing that membership. Detailed endpoint rules are in the [developer permission reference](development/zh-CN/permissions.md).
+The last team administrator cannot be removed or demoted. Assign a replacement before changing that membership. Detailed endpoint rules are in the [developer permission reference](development/en/permissions.md).
 
 ## 4. Organize access and budgets
 
@@ -87,7 +87,7 @@ Budgets check recorded spend plus available hot spend. They do not reserve the c
 
 | Key type | Recommended use | Management and departure behavior |
 | --- | --- | --- |
-| Personal key | An individual developer's scripts and experiments | Owned by that person within a team, optionally a project. Secret access is restricted to the owner and platform administrators. Removing the team membership revokes personal keys for that team. |
+| Personal key | An individual developer's scripts and experiments | Owned by that person within a team, optionally a project. Secret access is restricted to the owner and platform administrators. Removing team membership preserves personal keys; new requests validate current membership, key scope, and billing authorization. |
 | Service key | A shared application, backend, or scheduled job | Owned by a team or project, managed by team/platform administrators. It remains active when a member leaves; rotate it if that member knew its secret. |
 
 Open **Virtual Keys → Create New Key** and give each application a recognizable key name. Inspect model access, key type, maximum budget, RPM/TPM, budget reset, route template, expiry and rotation before creating it. The current creation dialog includes RPM/TPM; they are not restricted to editing existing keys. Blank quotas share the owner's available parent capacity; they do not bypass parent limits. Keep the generated secret in an environment variable or secret store, never in documentation screenshots.
@@ -150,10 +150,10 @@ Manage templates at `/route-templates` with an account authorized for the target
 | `simple-shuffle` / `random` | Uniform random selection, independent of deployment weights |
 | `traffic-split` | Relative weighted traffic allocation; zero weight excludes a deployment. Affinity and cooldown can change observed ratios. |
 | Cost selection | Compares input-token price, rather than estimating the full request bill |
-| Template `retry_policy.max_attempts` | Total attempts per deployment, including the first. All four reliability fields are required; counting differs from legacy `num_retries`. |
+| Template `retry_policy.max_attempts` | Total attempts per deployment, including the first. All four reliability fields are required. |
 | Timeout | Per upstream attempt; default 60 seconds, rather than a deadline for the entire request |
 
-Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/zh-CN/routing.md) for fields and inheritance semantics. Fallback happens only before response bytes are emitted and can be disabled per request with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
+Deployments of the same public model can fail over. Configure cross-public-model or model-group fallback chains for general errors, context limits, and provider content-policy errors. Templates cannot expand model access or bypass budgets; local guardrail blocks do not trigger provider content-policy fallback. See the [routing reference](development/en/routing.md) for fields and inheritance semantics. Fallback happens only before response bytes are emitted and can be disabled per request with `disable_fallbacks:true`; pinned continuations, native asynchronous creation, and Responses background requests are not replayed on another model.
 
 ## 8. Read usage, costs, and logs
 
@@ -168,7 +168,7 @@ Use `/usage` for trends and breakdowns and `/logs` for individual calls. Visibil
 
 The screenshot shows local development records, not a price quote or service-level guarantee. Both language screenshots use the same view; their recorded values can change as other requests run. Click any screenshot to open the full-size original.
 
-- Request prices are snapshotted so later price changes do not alter that request's recorded cost. Older records recalculated from current pricing are identified as such.
+- Request prices are snapshotted so later price changes do not alter that request's recorded cost. Records without a price snapshot may be recomputed from current pricing and are identified as recomputed.
 - Gateway response-cache hits have zero upstream cost. A provider's prompt-cache hit can still incur charges.
 - Failed or interrupted requests can show zero local cost even if the provider charged them. Missing usage may be estimated. Missing prices require investigation.
 - User, key, team, project, and organization totals describe the same calls from different dimensions. Adding them together double-counts spend.
@@ -176,13 +176,13 @@ The screenshot shows local development records, not a price quote or service-lev
 
 Prompt/response storage is optional, controlled by `general_settings.store_prompts_in_spend_logs`. Scoped administrators can inspect stored content. Decide whether to enable it based on your data requirements and configure retention in your operations process; this setting does not provide automatic encryption or a retention policy.
 
-The [pricing reference](development/zh-CN/pricing.md) explains rate units, snapshots, and settlement. The [runtime reference](development/zh-CN/runtime.md) describes cache, idempotency, streaming, and task boundaries.
+The [pricing reference](development/en/pricing.md) explains rate units, snapshots, and settlement. The [runtime reference](development/en/runtime.md) describes cache, idempotency, streaming, and task boundaries.
 
 ## 9. Remove access safely
 
 1. Assign another team administrator if necessary.
-2. Remove the user's team membership. Personal keys for that team are revoked; historical usage remains attributed to the original call.
-3. All existing keys belonging to the departing user are revoked. The user may create new keys after departure; historical team usage remains unchanged.
+2. Remove the user's team membership. Personal keys remain stored; subsequent requests validate current membership, key scope, and billing authorization. Recorded usage retains its original attribution.
+3. Revoke or rotate service keys whose secrets the departing member knew. Service keys belong to a team or project and do not automatically expire when a member leaves.
 4. Remove organization-administrator assignments separately. For full account offboarding, have a platform administrator disable the account.
 
 ## 10. Troubleshoot common problems
@@ -205,8 +205,8 @@ For supported provider content-generation tasks, query with the same virtual key
 
 ## 11. Operate and upgrade the instance
 
-Use the [installation guide](getting-started.md) for external URLs, environment secrets, and Docker configuration. Back up PostgreSQL and deployment configuration before upgrades; validate a restore in a separate database. The current identity schema has no automatic migration from the earlier schema.
+Use the [installation guide](getting-started.md) for external URLs, environment secrets, and Docker configuration. Back up PostgreSQL and deployment configuration before upgrades; validate a restore in a separate database.
 
-For a code change or reproducible defect, include the affected operation, public model name, call ID, expected result, and relevant redacted logs. Developers can start with the [code and AI programming guide](development/zh-CN/README.md).
+For a code change or reproducible defect, include the affected operation, public model name, call ID, expected result, and relevant redacted logs. Developers can start with the [code and AI programming guide](development/en/README.md).
 
-Administrators explicitly create providers by selecting a type and entering its authentication fields. Price refresh requires XHUB_PRICE_FEED_URL; without it, the current bundled prices and manual overrides remain in use.
+Administrators explicitly create providers by selecting a type and entering its authentication fields. Manual price refresh and enabled scheduled reload use https://api.modelink.ai/v1/market/models by default; XHUB_PRICE_FEED_URL overrides the feed. Failures preserve the current catalog and operator overrides remain independently managed.

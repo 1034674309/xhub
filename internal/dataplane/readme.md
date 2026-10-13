@@ -72,6 +72,6 @@ From repository root:
 
     go test ./internal/dataplane/... ./internal/gateway/... ./internal/llm/... ./internal/provider/... -count=1
     bash scripts/regression.sh 'TestComplianceModuleContract|TestUpstreamDiagnosticsContract|TestResponsesFailedStreamCannotContinue' -v
-    bash scripts/e2e.sh e2e/playground-transport.spec.ts e2e/responses-continuation.spec.ts e2e/model-fallback.spec.ts
+    bash scripts/e2e.sh scenarios/legacy/playground-transport scenarios/legacy/responses-continuation scenarios/legacy/model-fallback
 
 Tests use real local HTTP/PostgreSQL and isolated fixtures, cleaning private schemas without overwriting user data. Paid vendors/external guards need declared credentials; offline tests cover configuration, support, refusal and failure paths.

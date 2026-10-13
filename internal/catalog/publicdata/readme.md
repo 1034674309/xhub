@@ -46,7 +46,7 @@ The directory exports no Go symbols. Parent-package consumers are the interface:
 - `pricedata.json` is decoded at catalog initialization into `PriceDocument`; `CostAt`, `CostMap`, `Providers`, model/provider mutation, and gateway model/price endpoints consume the resulting in-memory catalog.
 - `cn_holidays.json` is parsed by `holiday.go` for `IsPeakHour`, affecting peak/off-peak billing snapshots.
 - `provider_fields.json` is parsed by `CredentialProviders`, then returned through catalog public bodies used by model-hub/provider-form endpoints.
-- `autorouter_presets.json` remains embedded for compatibility; its presence does not activate retired automatic routing.
+- `autorouter_presets.json` is an embedded resource; request routing does not read it.
 
 Actual HTTP consumers are registered above this package: public model catalog routes include `GET /public/v1/model_hub`, `/public/v1/model_hub/{facet}`, `/public/model_hub`, `/public/model_hub/info`, `/public/endpoints`, `/model_hub`, and `/model_hub/{facet}`. Administrative price and provider mutations live under `/price/catalog`, `/price/model`, and `/price/provider`. Parsing or shape errors surface through parent initialization/reload behavior; this directory itself cannot return errors.
 
@@ -60,7 +60,7 @@ Actual HTTP consumers are registered above this package: public model catalog ro
 
 `provider_fields.json` is a JSON array of provider descriptors and credential fields such as key, label, field type, required flag, defaults, and placeholders. `CredentialProviders` merges it with local provider rows, fills known default API bases, performs DeepSeek normalization, deduplicates provider/slug, deep-copies appended rows, and sorts by display name. These forms describe configuration; they do not prove that an adapter or external account is available.
 
-`provider_fields.LICENSE` records the license/provenance obligations for the credential-field snapshot and must travel with updates to that derived data. `autorouter_presets.json` is only a retained compatibility resource. All JSON must remain valid because malformed embedded resources can leave catalogs empty or cause fallback/error behavior during process startup.
+`provider_fields.LICENSE` records the license/provenance obligations for the credential-field snapshot and must travel with updates to that derived data. `autorouter_presets.json` is not read by request routing. All JSON must remain valid because malformed embedded resources can leave catalogs empty or cause fallback/error behavior during process startup.
 
 ### Verification
 
@@ -70,7 +70,7 @@ There are no direct tests in this resource-only directory. `internal/catalog` te
 
 ### `pricedata.json`
 
-Generated baseline price catalog: metadata, provider dropdown rows, model properties, aliases, flat compatibility fields, and normalized rate tables. Embedded and decoded by `pricedata.go`/`model_cost.go`; billed by `cost_at.go`; exposed and mutated through gateway model handlers.
+Generated baseline price catalog: metadata, provider dropdown rows, model properties, aliases, flat rate fields, and normalized rate tables. Embedded and decoded by `pricedata.go`/`model_cost.go`; billed by `cost_at.go`; exposed and mutated through gateway model handlers.
 
 ### `cn_holidays.json`
 

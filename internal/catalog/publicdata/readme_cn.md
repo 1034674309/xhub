@@ -46,7 +46,7 @@ JSON 语法通过不证明费率、假期或供应商字段正确；还要检查
 - `pricedata.json` 在 catalog 初始化时解码为 `PriceDocument`；`CostAt`、`CostMap`、`Providers`、模型/供应商修改及 gateway 模型价格接口消费其内存结果。
 - `cn_holidays.json` 由 `holiday.go` 解析给 `IsPeakHour`，影响峰谷计费快照。
 - `provider_fields.json` 由 `CredentialProviders` 解析，再通过 model-hub/供应商表单使用的 catalog 公共响应返回。
-- `autorouter_presets.json` 为兼容保留；文件存在不表示已退役的自动路由被启用。
+- `autorouter_presets.json` 是内嵌资源；请求路由不读取此文件。
 
 实际 HTTP 消费者在上层注册：公共模型目录包括 `GET /public/v1/model_hub`、`/public/v1/model_hub/{facet}`、`/public/model_hub`、`/public/model_hub/info`、`/public/endpoints`、`/model_hub`、`/model_hub/{facet}`；管理价格和供应商修改位于 `/price/catalog`、`/price/model`、`/price/provider`。解析或格式错误通过父包初始化/刷新行为暴露，本目录自身不能返回错误。
 
@@ -60,7 +60,7 @@ JSON 语法通过不证明费率、假期或供应商字段正确；还要检查
 
 `provider_fields.json` 是供应商描述及凭据字段数组，字段包含 key、label、类型、必填、默认值和 placeholder 等。`CredentialProviders` 将其与本地供应商合并，补已知默认 API base，规范 DeepSeek，按 provider/slug 去重，深拷贝新增行并按显示名排序。这些表单只描述配置方式，不保证适配器或外部账户可用。
 
-`provider_fields.LICENSE` 记录凭据字段快照的许可证和来源义务，更新派生数据时必须一并保留。`autorouter_presets.json` 仅为兼容保留。所有 JSON 必须有效；损坏的内嵌资源可能导致进程启动时目录为空或进入回退/错误路径。
+`provider_fields.LICENSE` 记录凭据字段快照的许可证和来源义务，更新派生数据时必须一并保留。`autorouter_presets.json` 不参与请求路由。所有 JSON 必须有效；损坏的内嵌资源可能导致进程启动时目录为空或进入回退/错误路径。
 
 ### 验证
 
@@ -70,7 +70,7 @@ JSON 语法通过不证明费率、假期或供应商字段正确；还要检查
 
 ### `pricedata.json`
 
-生成的基础价格目录，含元数据、供应商下拉行、模型属性、别名、兼容平铺字段和标准费率表。由 `pricedata.go`/`model_cost.go` 嵌入解码，由 `cost_at.go` 计费，并经 gateway 模型 handler 展示和修改。
+生成的基础价格目录，含元数据、供应商下拉行、模型属性、别名、平铺费率字段和标准费率表。由 `pricedata.go`/`model_cost.go` 嵌入解码，由 `cost_at.go` 计费，并经 gateway 模型 handler 展示和修改。
 
 ### `cn_holidays.json`
 

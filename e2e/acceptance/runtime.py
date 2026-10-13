@@ -76,7 +76,7 @@ class RuntimeCases:
                  ("model-lifecycle", "模型创建、下架、恢复与删除"), ("guard-lifecycle", "护栏编辑、默认启用与删除"),
                  ("global-guards", "全局拦截无外发与个人信息转发前脱敏"), ("profile-isolation", "单供应商路由隔离"),
                  ("cache-weight", "缓存零费用、跨密钥隔离、封禁及权重更新失效"),
-                 ("fallback", "429 回退、成功目标复用、真实调用与目标权限"),
+                 ("fallback", "真实供应商错误回退、会话复用、真实调用与目标权限"),
                  ("media-logs", "精确媒体日志与终态证据复验"), ("database", "事件、日报、token、五级金额与结算去重"),
                  ("browser", "真实数据的控制台、日志、护栏与角色页面"),
                  ("business-browser", "去重浏览器业务：密钥、模型、用户、护栏、Playground、错误及任务日志")]

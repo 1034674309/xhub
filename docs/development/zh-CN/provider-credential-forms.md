@@ -21,5 +21,5 @@
 
 ~~~bash
 go test ./internal/catalog -count=1
-bash scripts/e2e.sh provider-forms.spec.ts model-credential-protocol.spec.ts model-discovery.spec.ts
+bash scripts/e2e.sh scenarios/legacy/provider-forms scenarios/legacy/model-credential-protocol scenarios/legacy/model-discovery
 ~~~

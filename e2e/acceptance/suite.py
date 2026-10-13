@@ -82,10 +82,9 @@ class SuiteCases:
                     if not rows or any("13800138000" in r["messages"] or "qa@example.invalid" in r["messages"] for r in rows):
                         raise AssertionError("个人信息在真实供应商转发前没有脱敏")
                     self.report["checks"].append({"name": "redaction-before-real-supplier", "passed": True})
-        if self.observer:
-            self.run_case("profile-isolation", self.verify_profile_route_isolation)
-            self.run_case("cache-weight", self.verify_cache_weight_chain, key)
-            self.run_case("fallback", self.verify_fallback_policy_chain, key)
+        self.run_case("profile-isolation", self.verify_profile_route_isolation)
+        self.run_case("cache-weight", self.verify_cache_weight_chain, key)
+        self.run_case("fallback", self.verify_fallback_policy_chain, key)
         self.report["status"] = "passed"
         self.save()
 

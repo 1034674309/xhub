@@ -2,7 +2,7 @@
 
 ## 原厂协议与认证
 
-使用 XHub 公开模型名及虚拟密钥；部署必须启用对应 Bypass 协议。网关替换上游模型名并注入部署凭据，保留原厂扩展字段，同时执行权限、护栏和计费。客户端发送 Authorization: Bearer $XHUB_API_KEY。模型支持由部署决定，不表示所有原厂模型自动可用。 模型由 URL 指定。同一模型路径另有 :streamGenerateContent 与 :countTokens。Vertex 项目与区域由管理员配置在上游地址中。
+使用 XHub 公开模型名及虚拟密钥；部署必须启用对应 Bypass 协议。网关替换上游模型名并注入部署凭据，保留原厂扩展字段，同时执行权限和计费；Bypass 不执行标准入口的调用前文本护栏链。客户端发送 Authorization: Bearer $XHUB_API_KEY。模型支持由部署决定，不表示所有原厂模型自动可用。 模型由 URL 指定。同一模型路径另有 :streamGenerateContent 与 :countTokens。Gemini 上游地址与凭据由管理员配置。
 
 ## 接口概述
 

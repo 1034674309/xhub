@@ -54,7 +54,7 @@ This screenshot shows the initial unselected form. Disabled model fields mean yo
 
 - Discovery failures allow confirmed manual IDs; successful discovery does not prove inference. Verify non-streaming, streaming, tools and application parameters separately.
 - API roots can retain /proxy/v1; do not enter a full operation URL. Discovery paths do not change inference protocols.
-- Normal deployments reference model providers without repeating addresses or keys. Legacy inline api_base values may prevent provider address updates from taking effect; this is a legacy-data diagnostic boundary, not the recommended configuration workflow.
+- Normal deployments reference model providers without repeating addresses or keys. Deployment-level api_base values take precedence; provider resolution fills empty addresses.
 - Connection Test may incur charges and bypasses full quotas, routing and accounting. Make a virtual-key request and inspect usage and price snapshots.
 - A creation timeout does not prove rejection. Do not blindly resend paid tasks. Generic background polling, budget reservation and Suno callbacks are not implemented.
 

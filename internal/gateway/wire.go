@@ -7,6 +7,7 @@
 package gateway
 
 import (
+ "context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -322,12 +323,11 @@ func (s *Server) noteLatency(id string, ms float64) { dpruntime.RecordLatency(s,
 // 测试：无直接单测
 func (s *Server) noteUsage(id string, tokens int) { dpruntime.RecordUsage(s, id, tokens) }
 
-// flushLoop flushes the spend queue every 60 seconds.
-// 参数：无。
-// 调用：gateway/server.go
-// 测试：无直接单测
-// 返回：无。每 60 秒把花费队列刷进库的循环已启动。
-func (s *Server) flushLoop() { dpruntime.FlushLoop(s) }
+// flushLoop 按启动配置刷写日志和账单，默认 5 秒；参数 ctx 控制退出，无返回值。
+// Run 在监听成功后调用；配置不动态修改，取消停止周期任务，失败保留队列供重试。
+func (s *Server) flushLoop(ctx context.Context) {
+ dpruntime.FlushLoop(ctx, s, s.Cfg.GeneralSettings.SpendLogFlushInterval())
+}
 
 // FlushSpend writes spend and logs that are still in Redis into PostgreSQL.
 // 参数：无。

@@ -13,6 +13,56 @@ from acceptance import Dataset, Observer, chat_candidates, chat_probe_result, cu
 class AcceptanceTests(unittest.TestCase):
     """验证所属业务模块的正常、边界和失败路径，资源由各测试自行隔离清理。"""
 
+    def test_model_lifecycle_uses_gateway_contract_and_cleans_temporary_resources(self):
+        """目的：真实网关生命周期不依赖观察器；前置模拟目录与管理接口，验证 400/model_disabled 契约、错误拒绝、恢复和清理，临时目录自动删除。"""
+        scenarios = (("disabled", 400, {"error": {"type": "model_disabled"}}, True),
+                     ("unexpected-success", 200, {"choices": []}, False),
+                     ("upstream-failure", 502, {"error": {"type": "upstream_error"}}, False),
+                     ("wrong-reason", 400, {"error": {"type": "unknown_model"}}, False))
+        for name, status, answer, passed in scenarios:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
+                provider = dataset.data["providers"][1]
+                existing = {"id": "existing-id", "public_name": "existing-model"}
+                dataset.state.update(selected={"qiniu": {"provider": provider}}, deployments=[existing.copy()])
+                key = {"team_id": "team", "user_id": "user", "project_id": "project", "key": "base-key"}
+
+                def create_deployment(definition, provider, model, temporary):
+                    """模拟创建临时部署；参数同 deployment，返回部署 ID，向内存状态登记资源以验证 finally 删除，无外部副作用。"""
+                    dataset.state["deployments"].append({"id": "temporary-id", "public_name": model})
+                    return "temporary-id"
+
+                def management_api(path, body, **options):
+                    """模拟管理接口；参数为路径、正文和调用选项；验证下架请求状态及错误契约，生成密钥时返回临时密钥，其余返回空对象和响应头，仅记录操作。"""
+                    if path == "/v1/chat/completions":
+                        self.assertEqual(options, {"token": "temporary-key", "expected": 400, "include_status": True})
+                        if status != options["expected"]:
+                            raise AssertionError("下架请求 HTTP 状态不符合契约")
+                        return answer, {}, status
+                    return ({"key": "temporary-key"} if path == "/key/generate" else {}, {})
+
+                with mock.patch.object(dataset, "discover_catalog", return_value={"model_ids": ["qwen-extra-chat-model"]}), \
+                        mock.patch.object(dataset, "select_lifecycle_model", return_value="qwen-extra-chat-model"), \
+                        mock.patch.object(dataset, "deployment", side_effect=create_deployment), \
+                        mock.patch.object(dataset, "api", side_effect=management_api) as api, \
+                        mock.patch.object(dataset, "call") as call, \
+                        mock.patch("acceptance.catalog.http", return_value=(status, {"error": "model disabled"}, {})):
+                    if passed:
+                        dataset.verify_model_lifecycle(key)
+                    else:
+                        with self.assertRaisesRegex(AssertionError, "下架请求"):
+                            dataset.verify_model_lifecycle(key)
+                self.assertEqual(call.call_count, 2 if passed else 1, "恢复调用次数不符合生命周期结果")
+                self.assertEqual(dataset.checked("model-add-disable-refuse-enable-real-request"), passed)
+                paths = [entry.args[0] for entry in api.call_args_list]
+                self.assertEqual("/model/enable" in paths, passed)
+                self.assertEqual(api.call_args_list[-3:], [
+                    mock.call("/key/delete", {"keys": ["temporary-key"]}),
+                    mock.call("/model/delete", {"id": "temporary-id"}),
+                    mock.call("/team/update", {"team_id": "team", "models": ["existing-model"]}),
+                ], "临时密钥、部署或团队白名单未正确清理")
+                self.assertEqual(dataset.state["deployments"], [existing])
+
     def test_candidates(self):
         """目的：真实目录优先稳定真实 ID 且只保留聊天候选；前置混合目录，验证优先级、去重、空目录边界，无副作用。"""
         rows = chat_candidates({"model_ids": ["gpt-real", "gpt-real", "qwen-live", "gpt-image", "qwen-embedding", "tts"]},
@@ -338,5 +388,4 @@ class AcceptanceTests(unittest.TestCase):
                 observer.close()
         self.assertEqual(observer.rows[0]["route_tag"], "default")
         self.assertTrue(observer.rows[0]["forwarded"])
-
 

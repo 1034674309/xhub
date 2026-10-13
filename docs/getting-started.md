@@ -15,7 +15,7 @@ XHub runs as two services: a Go API gateway on port `4000` and a Next.js console
 | Redis | 7 recommended | Optional shared runtime state |
 | Docker with Compose | For the Docker path | Run the local stack |
 
-Use a **fresh PostgreSQL database**. The current identity schema has no migration path from the earlier schema.
+Use a **fresh PostgreSQL database**.
 
 ## Docker Compose
 
@@ -102,7 +102,7 @@ A new installation starts without configured providers or deployments.
 
 1. Open **Models + Endpoints**, choose a provider type, and enter its connection and authentication fields.
 2. Add a model deployment manually or from a provider catalog. Set its public model name, upstream model, and endpoint types.
-3. Create an organization and team, set the team model scope, and add members. Personal inference also requires team membership. Projects are optional.
+3. Create an organization and team, set the team model scope, and add members. Standalone users can also use personal keys; an unset personal budget imposes no monetary cap. Projects are optional.
 4. Issue a personal or service virtual key within that scope, then test in the **Playground** or call the gateway.
 
 [![Models and Endpoints console showing provider tabs, Add Model and deployment rows](assets/console-deployments.png)](assets/console-deployments.png)
@@ -138,11 +138,11 @@ The client URL points to the **gateway**, not the console.
 - Use `os.environ/VARIABLE_NAME` in configuration to read secrets from the environment. For Docker, update `configs/config.docker.yaml`, pass the corresponding environment variables to the gateway service, and rebuild its image.
 - The optional `master_key` is for bootstrap and emergency access. It is not a console login or a regular application key.
 
-See [permissions](development/zh-CN/permissions.md) for platform, organization, team, and member scopes. This implementation reference is in Chinese.
+See [permissions](development/en/permissions.md) for platform, organization, team, and member scopes.
 
 ## Development and Verification
 
-Start with the [developer and coding-agent guide](development/zh-CN/README.md), then choose checks from the [testing guide](development/zh-CN/testing.md) for the affected code. Basic Go checks and fake-provider regression:
+Start with the [developer and coding-agent guide](development/en/README.md), then choose checks from the [testing guide](development/en/testing.md) for the affected code. Basic Go checks and fake-provider regression:
 
 ```bash
 make test
@@ -151,11 +151,11 @@ make regression
 
 Some database tests skip when no database is available. Start local PostgreSQL or set `XHUB_TEST_DATABASE_URL`, and inspect the output for skipped checks. Tests use isolated schemas. Run frontend checks against affected files as described in the testing guide.
 
-For browser tests, install Chromium once with `cd frontend && npx playwright install chromium`, then run `make e2e` from the repository root. Use the test guide for the required local services. `make regression-live` is a separate paid check that calls real providers and requires explicit provider credentials.
+For browser tests, install Chromium once with `cd frontend && npx playwright install chromium`, then run `make e2e-offline` from the repository root. Offline tests use isolated data and local provider fixtures. make e2e instead verifies a prepared shared baseline and can call paid providers. See the testing guide for prerequisites. `make regression-live` is a separate paid check that calls real providers and requires explicit provider credentials.
 
 ## Documentation Boundaries
 
-The [user guide](user-guide.md) covers customer workflows; [development references](development/zh-CN/README.md) document current implementation. Package-level `readme.md` / `readme_cn.md` files explain modules in both languages. Temporary plans and execution records are not product promises.
+The [user guide](user-guide.md) covers customer workflows; [development references](development/en/README.md) document current implementation. Package-level `readme.md` / `readme_cn.md` files explain modules in both languages. Temporary plans and execution records are not product promises.
 
 
-Administrators explicitly create providers by selecting a type and entering its authentication fields. Price refresh requires XHUB_PRICE_FEED_URL; without it, the current bundled prices and manual overrides remain in use.
+Administrators explicitly create providers by selecting a type and entering its authentication fields. Manual price refresh and enabled scheduled reload use https://api.modelink.ai/v1/market/models by default. XHUB_PRICE_FEED_URL selects another feed; refresh failures preserve the current catalog. Operator overrides remain independently managed.

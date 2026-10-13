@@ -15,7 +15,7 @@ go test ./internal/gateway -run 'TestVisibilityChain|TestPermission' -count=1
 | --- | --- |
 | Platform / organization / team roles | Distinct management roles, not interchangeable |
 | List queries | Restrict in the query layer; client filters only narrow scope |
-| Personal key | Owned by the person; team attribution must be valid |
+| Personal key | Owned by the person; an explicit team binding must match current membership. Unbound keys use current ownership and personal billing authorization |
 | Service key | Uses its declared service scope, not another member's ownership |
 | Model access | Narrow along the identity chain |
 | Routing template | Cannot expand model scope or bypass budget checks |

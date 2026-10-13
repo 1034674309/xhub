@@ -52,8 +52,8 @@ def main():
     if args.category:
         if not args.shared_target or args.phase != "verify":
             parser.error("--category 只能与 --shared-target --phase verify 一起使用")
-        if set(args.category) & {"profile-isolation", "cache-weight", "fallback", "business-browser", "regression"}:
-            parser.error("所选分类需要隔离服务或故障注入；请使用 make e2e-offline 或 make regression，make e2e 只连接现有真实网关")
+        if set(args.category) & {"business-browser", "regression"}:
+            parser.error("所选分类需要隔离服务或故障注入；请使用 make regression，make e2e 只连接现有真实网关")
         args.category = list(dict.fromkeys(args.category))
     if args.shared_target:
         if not args.phase:

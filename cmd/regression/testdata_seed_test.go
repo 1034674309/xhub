@@ -12,13 +12,13 @@ import (
 // TestTestdataSeedWithoutModelCalls 验证建数器和四角色验收脚本通过真实管理路由执行且不调用任何供应商。
 // 前置条件为独立 PostgreSQL schema、管理员及无模型网关；验证 81 把成员密钥和管理员个人密钥、持久化模型和零上游调用，
 // 同时验证组织管理员可写三项团队额度、跨组织/模型/状态越权被拒绝，原配置不变；已有组织时再次建数必须失败。
-// schema 由 harness 清理，报告由临时目录清理，不依赖供应商凭据。
+// schema 由 harness 清理，报告由临时目录清理，使用离线供应商凭据且不发起上游请求。
 func TestTestdataSeedWithoutModelCalls(t *testing.T) {
 	h := newHarness(t)
 	admin := h.adminSession()
 	directory := t.TempDir()
 	command := exec.Command("python3", "../../scripts/e2e.py", "--gateway", h.server.URL, "--directory", directory, "--seed-only")
-	command.Env = append(os.Environ(), "E2E_DATASET_ADMIN=regression-admin@example.com", "E2E_DATASET_PASSWORD=regression-admin-password", "FENNO_AI_API_KEY=", "QINIU_API_KEY=")
+	command.Env = append(os.Environ(), "E2E_DATASET_ADMIN=regression-admin@example.com", "E2E_DATASET_PASSWORD=regression-admin-password", "FENNO_AI_API_KEY=offline-fenno", "QINIU_API_KEY=offline-qiniu")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("无供应商凭据建数失败: %v\n%s", err, output)
 	}

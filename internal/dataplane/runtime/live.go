@@ -83,15 +83,19 @@ func RecordUsage(h Runtime, id string, tokens int) {
 	_ = h.Redis().AddUsage(id, tokens)
 }
 
-// FlushLoop 每 60 秒尝试将 Redis 用量队列刷入身份数据库。
-// 参数 h 为运行时宿主；返回值无，gateway 在配置 Redis 后作为后台循环启动。
-// 循环没有 context 或停止信号，正常运行中不会自行返回；ticker 的 defer 只在函数退出时执行，不提供优雅停机保证。
-// 每轮由 Flush 处理缺失依赖和失败，失败批次留待后续重试；不应在请求处理协程内同步调用此无限循环。
-func FlushLoop(h Runtime) {
-	t := time.NewTicker(60 * time.Second)
+// FlushLoop 按指定周期将 Redis 用量队列刷入身份数据库；网关启动及隔离测试调用。
+// 参数 ctx 控制循环退出，h 提供存储依赖，interval 为启动时确定的周期；非正值回退到 5 秒。
+// 返回值无；取消后停止 ticker，正在进行的 Flush 会完成，不额外确认或清空未提交的队列。
+// 每轮失败保留批次供下一轮重试；数据库提交后才确认 Redis，不改变可靠结算语义。
+func FlushLoop(ctx context.Context, h Runtime, interval time.Duration) {
+ if interval <= 0 { interval = 5 * time.Second }
+	t := time.NewTicker(interval)
 	defer t.Stop()
-	for range t.C {
-		Flush(h)
+	for {
+  select {
+  case <-ctx.Done(): return
+  case <-t.C: Flush(h)
+  }
 	}
 }
 
@@ -195,7 +199,7 @@ func hotDeltas(logs []live.SpendLog) map[string]float64 {
 
 // Runtime 定义路由热状态读取和用量队列刷写所需的后台能力。
 // gateway 提供并发快照、模型目录、Redis 与身份数据库；runtime.State/Record*/Flush 消费，无 HTTP 正文依赖。
-// Redis 或数据库可为 nil，具体降级见各方法；FlushLoop 没有取消参数，应作为进程生命周期内的后台任务使用。
+// Redis 或数据库可为 nil，具体降级见各方法；FlushLoop 由宿主传入取消上下文。
 type Runtime interface {
 	// BusyMap 返回本进程内每个部署 id 正在处理的请求数。
 	// 参数：无。接收者是实现 Runtime 的进程。

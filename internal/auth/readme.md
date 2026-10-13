@@ -59,7 +59,7 @@ Primary callers are the gateway session and engine pipeline, data-plane inferenc
 
 ## Core implementation
 
-Credential resolution is deliberately ordered. The first non-empty accepted header wins, preventing a lower-priority compatibility header from overriding LiteLLM or `Authorization` credentials. Bearer matching is case-insensitive and trims surrounding whitespace. Basic parsing slices only after trimming the header, decodes standard base64, and splits once so passwords may contain colons. Invalid Basic data contributes no credential and allows later headers to be considered. Google query credentials are path-gated so unrelated endpoints never consume secrets from URLs.
+Credential resolution is deliberately ordered. The first non-empty accepted header wins, preventing a lower-priority header from overriding LiteLLM or `Authorization` credentials. Bearer matching is case-insensitive and trims surrounding whitespace. Basic parsing slices only after trimming the header, decodes standard base64, and splits once so passwords may contain colons. Invalid Basic data contributes no credential and allows later headers to be considered. Google query credentials are path-gated so unrelated endpoints never consume secrets from URLs.
 
 `Resolve` first rejects an empty extraction result. It then performs an exact comparison against a non-empty configured master key; this path has no IAM row and creates only `KindMaster`. Ordinary keys require a store. Their plaintext is hashed with `iam.HashKey`, looked up by hash, and checked for lifecycle usability. Status is evaluated before expiration: a revoked key that is also past its expiry reports `key_revoked`, while any other non-active status reports `key_blocked`. Expiration is inclusive at the boundary—when current time is no longer before `ExpiresAt`, use is denied. A successful conversion copies nullable user and project IDs and retains the row pointer and hash for downstream budget and accounting state.
 
@@ -71,6 +71,6 @@ Authentication establishes identity but does not freeze authorization. A key acc
 
 ## Source responsibilities and entry points
 
-- [auth.go](auth.go) is the only production file. It defines stable failure codes and the wrapping `Error` contract; the `Principal` representation and its authz/capability projections; compatibility credential extraction; virtual-key/master resolution; lifecycle classification; key-row conversion; and current-user session construction. Start at `APIKeyFrom` for wire-format precedence, `Resolve` for key authentication, and `SessionPrincipal` for UI-session invalidation.
+- [auth.go](auth.go) is the only production file. It defines stable failure codes and the wrapping `Error` contract; the `Principal` representation and its authz/capability projections; credential extraction; virtual-key/master resolution; lifecycle classification; key-row conversion; and current-user session construction. Start at `APIKeyFrom` for wire-format precedence, `Resolve` for key authentication, and `SessionPrincipal` for UI-session invalidation.
 - [auth_test.go](auth_test.go) exercises Basic credential whitespace handling.
 - [google_key_test.go](google_key_test.go) exercises the Gemini/Vertex-only Google credential forms.

@@ -61,13 +61,13 @@ The package also classifies paths for public, inference, data-plane, and removed
 
 `Raw`, `CostMap`, `Count`, `LoadedAt`, `ProviderModels`, and `KnownProvider` expose the live in-memory model catalog and provider index to model listing, wildcard expansion, public hub, and administration handlers. `TokenRates(model)` returns per-base-token input/output rates and `ok=false` when no suitable row exists. `Cost(model, prompt, completion)` is the simple token-only calculator; `Format` emits a compact decimal. Returned maps must be treated as catalog data, while mutation must use the write APIs.
 
-`Providers()` returns provider rows from the price document. `CredentialProviders()` merges those rows with the separately embedded credential registry and provider contributions, supplies default API bases, applies the DeepSeek compatibility fields, deduplicates by provider/slug, sorts by display name, and deep-copies appended price providers so caller mutation cannot corrupt shared state. It describes UI credential inputs and does not verify adapter support or credentials.
+`Providers()` returns provider rows from the price document. `CredentialProviders()` merges those rows with the separately embedded credential registry and provider contributions, supplies default API bases, applies the DeepSeek API-base input fields, deduplicates by provider/slug, sorts by display name, and deep-copies appended price providers so caller mutation cannot corrupt shared state. It describes UI credential inputs and does not verify adapter support or credentials.
 
 ### Pricing and usage APIs
 
 `NormalizeUsage(map[string]any) Usage` reads provider-specific usage shapes into token, cached-token, image, video-second, and query quantities. OpenAI/Responses nested cached tokens are subsets of total prompt/input and are subtracted from uncached input; Anthropic top-level cache read/write values are quantities beside `input_tokens` and are added without double counting. Explicit zero wins over aliases, invalid or contradictory quantities do not become billable usage.
 
-`CostAt(model, usage, startedAt)` selects a live catalog row and returns `(Charge, true)` only when at least one reported quantity has a compatible rate. Unknown models and unpriced measurements return `ok=false`, which means unpriced rather than free. `CostFromRates` prices caller-supplied tables; `RatesFromFlat` and `CostFromFlatOrRates` convert legacy flat fields while preserving missing-versus-zero semantics. `DecodeRates` accepts the embedded or deployment JSON shapes. `WindowAt`/`IsPeakHour` choose the window from call start time. `Snapshot` stores applied rates, and `SnapshotUsage` stores measured async usage, rates, and whether pricing succeeded.
+`CostAt(model, usage, startedAt)` selects a live catalog row and returns `(Charge, true)` only when at least one reported quantity has a compatible rate. Unknown models and unpriced measurements return `ok=false`, which means unpriced rather than free. `CostFromRates` prices caller-supplied tables; `RatesFromFlat` and `CostFromFlatOrRates` convert flat fields while preserving missing-versus-zero semantics. `DecodeRates` accepts the embedded or deployment JSON shapes. `WindowAt`/`IsPeakHour` choose the window from call start time. `Snapshot` stores applied rates, and `SnapshotUsage` stores measured async usage, rates, and whether pricing succeeded.
 
 ### Catalog mutation and feeds
 
@@ -101,7 +101,7 @@ Peak time is Monday-Friday 09:00–12:00 and 14:00–18:00 in `Asia/Shanghai`, w
 
 ### Credential metadata, failures, and verification
 
-`provider_fields.json` is parsed separately from price providers. Credential merging copies nested maps/slices, applies known API-base defaults, appends contributed fields only when no provider/slug collision exists, and adds DeepSeek's `api_base` compatibility field. The accompanying `provider_fields.LICENSE` records the upstream license; distributors must preserve it. Parsing failures are logged and produce the remaining valid sources rather than aborting model pricing.
+`provider_fields.json` is parsed separately from price providers. Credential merging copies nested maps/slices, applies known API-base defaults, appends contributed fields only when no provider/slug collision exists, and adds DeepSeek's `api_base` input field. The accompanying `provider_fields.LICENSE` records the upstream license; distributors must preserve it. Parsing failures are logged and produce the remaining valid sources rather than aborting model pricing.
 
 Tests cover route authorization regressions, credential-provider merging and isolation, feed conversion and empty-feed rejection, rate/window/cache/media/query selection, explicit zero and usage aliases, seller binding, and Chinese holiday/make-up-day boundaries. Remote fetch behavior requires network access only when explicitly exercised; adapter availability, supplier credentials, persistent operator overrides, and IAM accounting are integration boundaries outside this package.
 
@@ -109,7 +109,7 @@ Tests cover route authorization regressions, credential-provider merging and iso
 
 - [`classify.go`](classify.go) defines `Route`/`AuthClass`, parses embedded routes, classifies public/data-plane/LLM/mixed paths, matches path templates, and constructs fixed public bodies.
 - [`contribute.go`](contribute.go) defines model/provider contribution records, protected contribution/official-alias registries, `Contribute`, and `ContributeProvider`; private helpers convert contributed rows and fields into catalog JSON.
-- [`cost.go`](cost.go) provides the token-only `Cost` compatibility entry point and decimal `Format`, both backed by current catalog token rates.
+- [`cost.go`](cost.go) provides the token-only `Cost` entry point and decimal `Format`, both backed by current catalog token rates.
 - [`cost_at.go`](cost_at.go) defines normalized `Usage`, `Charge`, `AppliedRate`, and `PriceSnapshot`; it decodes rates, converts flat fields, normalizes provider usage, resolves candidate model keys, selects variants/windows, computes charges, and serializes snapshots.
 - [`credential_providers.go`](credential_providers.go) parses `provider_fields.json`, merges credential and price-provider metadata, deep-copies additions, deduplicates, fills API-base/DeepSeek defaults, and returns sorted `CredentialProviders`.
 - [`embed.go`](embed.go) embeds `routes.json`, autorouter presets, price data, and credential fields; `Embedded` validates JSON and centralizes startup logging.

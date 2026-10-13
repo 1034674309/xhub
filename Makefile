@@ -1,4 +1,4 @@
-.PHONY: test run ui tidy testdata e2e e2e-list e2e-all e2e-offline e2e-model-endpoints regression regression-live
+.PHONY: test run ui tidy testdata e2e e2e-list e2e-all e2e-model-endpoints regression regression-live
 
 # make 的第二个词本来是另一个目标；仅在 e2e 后把白名单内的词解释为分类。
 E2E_CATEGORIES := entities gpt-1 gpt-2 gpt-3 gpt-4 glm image ark-video fal-video kling-video inheritance chat-bills permissions xgo limits model-lifecycle guard-lifecycle global-guards profile-isolation cache-weight fallback media-logs database browser business-browser regression
@@ -38,7 +38,7 @@ ui:
 tidy:
 	go mod tidy
 
-# 连接现有 E2E_GATEWAY（默认 127.0.0.1:4000），在空租户环境通过管理 API 建数；不清库、不启动服务、不调用模型。
+# 自启空闲端口临时网关：清空共享 xhub 和 Redis DB 1 后建数，结束关闭网关并保留数据，不调用模型。
 testdata:
 	python3 scripts/e2e.py --shared-target --phase seed --directory .e2e/real-acceptance-current
 
@@ -53,9 +53,6 @@ e2e-list:
 # 原有全套隔离验收保留为显式入口。
 e2e-all:
 	bash scripts/e2e-all.sh
-
-e2e-offline:
-	bash scripts/e2e.sh
 
 e2e-model-endpoints:
 	bash scripts/e2e-model-endpoints.sh

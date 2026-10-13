@@ -78,7 +78,7 @@ GPT 按组织继承、团队继承、Fenno 单供应商、七牛单供应商各�
 重新读取持久化日志。浏览器按同样顺序逐轮打开 GPT 与 GLM 精确日志，再检查
 图片和视频。此模拟器验证 Codex 请求协议，不启动 Codex CLI 或本地工具。
 
-`make testdata` 是共享数据构造入口。它会先验证两家供应商的实际密钥与 HTTPS 地址，然后删除并重建 PostgreSQL `xhub` 数据库、清空 Redis DB 1，再把 `dataset.json` 的 3 个组织、9 个团队、27 个成员、9 个项目、81 把成员个人密钥及 1 把管理员个人密钥（共 82 把）写入 `public`，并保存供应商、模型、路由和护栏配置。建数前必须提供 `FENNO_AI_API_KEY` 和 `QINIU_API_KEY`；缺失、空白或 `os.environ/…` 引用会在清库前失败。创建连接时把解析后的实际密钥写入数据库，管理 API 与页面继续脱敏，密钥不写入仓库或验收报告。建数完成后网关调用这些连接无需再次设置环境变量。建数不查询真实目录、不探测模型，也不创建模型调用记录。目标 URL 有精确白名单，防止误清其他数据库或 Redis DB。
+`make testdata` 是共享数据构造入口。它会先验证两家供应商的实际密钥与 HTTPS 地址，然后删除并重建 PostgreSQL `xhub` 数据库、清空 Redis DB 1，再把 `dataset.json` 的 3 个组织、9 个团队、27 个成员、9 个项目、81 把成员个人密钥及 1 把管理员个人密钥（共 82 把）写入 `public`，并保存供应商、模型、路由和护栏配置。入口自行编译并在空闲端口启动临时网关，不连接现有 4000 服务。清库使用 DROP DATABASE WITH (FORCE) 强制断开旧连接，不要求手动停止数据库客户端；已有正常网关需在建数后重启以加载新配置。结束时关闭本轮网关并保留数据，随后使用 make run 启动正常网关。管理员读取本地配置或显式 E2E 环境。建数前必须提供 `FENNO_AI_API_KEY` 和 `QINIU_API_KEY`；缺失、空白或 `os.environ/…` 引用会在清库前失败。创建连接时把解析后的实际密钥写入数据库，管理 API 与页面继续脱敏，密钥不写入仓库或验收报告。建数完成后网关调用这些连接无需再次设置环境变量。建数不查询真实目录、不探测模型，也不创建模型调用记录。目标 URL 有精确白名单，防止误清其他数据库或 Redis DB。
 
 ```bash
 export FENNO_AI_API_KEY='…'
@@ -142,6 +142,6 @@ python3 scripts/e2e.py --resume --keep-data --directory .e2e/real-dataset-case
 - Observer 只能证明网关尝试、阻断或转发以及收到的供应商响应，不能证明供应商结算、跨地域网络或生产部署配置。
 - Redis 默认不保留，`--keep-data` 也只保留 PostgreSQL schema；依赖 Redis 瞬时状态的限流窗口不能在续跑后原样重现。
 - 前端库存包括 dashboard、Chat、公共模型中心、连接、登录和 OAuth callback。Chat/MCP/OAuth 与若干管理页属于独立套件、外部流程或当前缺口，不能由本数据集推断为已覆盖。
-- `coverage.json` 中 `declared_dataset` 表示存在 manifest 资源或本套 API/SQL/browser 证据；请继续查看每项的 `evidence`。`missing` 表示后端可能支持但本套没有对应页面验收，`unsupported` 表示当前 gateway 没有该页面所需完整能力，`external` 表示结果依赖外部授权方，`separate_suite` 表示重定向、兼容页或另一条产品流程。
+- `coverage.json` 中 `declared_dataset` 表示存在 manifest 资源或本套 API/SQL/browser 证据；请继续查看每项的 `evidence`。`missing` 表示后端可能支持但本套没有对应页面验收，`unsupported` 表示当前 gateway 没有该页面所需完整能力，`external` 表示结果依赖外部授权方，`separate_suite` 表示重定向、独立页面或另一条产品流程。
 
 优先可行动缺口是：给 users、projects、api-keys、models、route-templates、usage 和 guardrails-monitor 增加真实浏览器流程；给平台管理页补最小读写/权限流程；为 Chat/Responses/MCP 建独立真实验收；删除或明确隐藏没有完整后端能力的 vector-stores 页面。具体页面、关键后端路由、角色和逐项原因见 `coverage.json`。

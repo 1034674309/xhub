@@ -169,7 +169,10 @@ class CatalogCases:
         return row["id"]
 
     def verify_model_lifecycle(self, key):
-        """用途：在验收阶段读取真实目录并验证模型添加上架下架删除；参数为个人密钥，返回无；目录失败即停止，下架无外发，恢复后真实回答，finally 删除临时部署。"""
+        """用途：读取真实目录并验证模型创建、下架拒绝、恢复调用与删除；参数为个人密钥，返回无，供共享和隔离验收调用。
+
+        目录失败即停止；按真实网关契约检查下架错误，不依赖上游观察器；finally 清理临时密钥和部署并恢复团队模型列表。
+        """
         if self.checked("model-add-disable-refuse-enable-real-request"):
             return
         provider = self.state["selected"]["qiniu"]["provider"]
@@ -196,11 +199,12 @@ class CatalogCases:
             subject = {**key, **temp}
             self.call(subject, "model-listed-" + self.run, model=model)
             self.api("/model/disable", {"model_name": model})
-            # 禁用返回的具体状态是现有网关契约；断言拒绝且没有绕行备用部署。
-            status, answer, _ = http(self.gateway, "/v1/chat/completions", {"model": model,
-                "messages": [{"role": "user", "content": "model-unlisted-" + self.run}]}, subject["key"])
-            if status < 400 or any("model-unlisted-" + self.run in r["messages"] for r in self.observer.rows):
-                raise AssertionError("下架模型仍然外发或成功回答")
+            # 下架必须由网关明确拒绝；供应商故障或权限错误不能冒充下架成功，统一 API 包装保留动作日志。
+            answer, _, status = self.api("/v1/chat/completions", {"model": model,
+                "messages": [{"role": "user", "content": "model-unlisted-" + self.run}]},
+                token=subject["key"], expected=400, include_status=True)
+            if "model_disabled" not in json.dumps(answer):
+                raise AssertionError("下架请求未返回 model_disabled 错误")
             self.api("/model/enable", {"model_name": model})
             self.call(subject, "model-relisted-" + self.run, model=model)
             self.report["checks"].append({"name": "model-add-disable-refuse-enable-real-request", "disabled_status": status, "passed": True})

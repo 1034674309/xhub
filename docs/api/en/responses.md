@@ -32,7 +32,7 @@ curl "$XHUB_BASE_URL/v1/responses" \
 | max_output_tokens | integer | Output ceiling. |
 | stream | boolean | Typed SSE events when supported. |
 | tools / tool_choice | array / string or object | Only tools supported by upstream. |
-| previous_response_id | string | Requires upstream state support. |
+| previous_response_id | string | Uses gateway history and the original deployment, scoped by caller, request model and endpoint for one hour. Missing or expired context is rejected; instructions are not inherited. |
 
 ## Success response
 

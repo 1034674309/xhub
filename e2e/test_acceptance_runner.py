@@ -199,6 +199,15 @@ class AcceptanceTests(unittest.TestCase):
         self.assertNotIn("search_path", config["database_url"])
         self.assertEqual(config["admin_password"], "test-password")
 
+    def test_shared_reset_forces_existing_connections_closed(self):
+        """目的：已有连接不阻塞共享重建；前置替代数据库命令和Redis，验证强制断连、重建及空缓存检查，不触碰实际数据，无需清理。"""
+        with mock.patch.object(RUNNER, "command") as command, \
+                mock.patch.object(RUNNER, "redis_command", side_effect=["OK", 0]) as redis:
+            RUNNER.reset_shared_target(logger=lambda message: None)
+        self.assertEqual(command.call_args_list[0].args[0][-1], "DROP DATABASE IF EXISTS xhub WITH (FORCE)")
+        self.assertEqual(command.call_args_list[1].args[0][-1], "CREATE DATABASE xhub OWNER xhub")
+        self.assertEqual(redis.call_args_list, [mock.call("FLUSHDB"), mock.call("DBSIZE")])
+
 
     def test_provider_validation_happens_without_database_access(self):
         """目的：缺少真实供应商密钥时必须在清库前失败；前置空环境，验证缺失和非法URL边界，本测试不调用重置函数。"""
@@ -245,34 +254,58 @@ class AcceptanceTests(unittest.TestCase):
                 reset.assert_not_called()
             self.assertEqual(checkpoint.read_text(), "existing")
 
-    def test_shared_seed_never_starts_observer_or_verification(self):
-        """目的：共享 testdata 仅连接现有网关建数；前置替代健康检查及建数器，验证报告、零调用、零清库和零启动，临时目录自动清理。"""
-        with tempfile.TemporaryDirectory() as directory:
-            args = type("Args", (), {"phase": "seed", "directory": directory})()
-            dataset = mock.Mock()
-            dataset.report = {}
-            dataset.state = {name: [] for name in ("organizations", "teams", "users", "projects", "keys")}
-            with mock.patch.object(SHARED, "reset_shared_target") as reset, \
-                    mock.patch.object(SHARED, "http", return_value=(200, {}, {})), \
-                    mock.patch.object(SHARED, "command"), \
-                    mock.patch.object(SHARED, "ready"), \
-                    mock.patch.object(RUNNER.subprocess, "Popen") as process, \
-                    mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
-                    mock.patch.object(SHARED.observer_module, "Observer") as observer, \
-                    mock.patch.dict(RUNNER.os.environ, {"FENNO_AI_API_KEY": "seed-fenno", "QINIU_API_KEY": "seed-qiniu", "E2E_DATASET_PASSWORD": "existing-password"}, clear=True), redirect_stdout(io.StringIO()):
-                self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 0)
-                for failure in (ConnectionRefusedError("offline"), AssertionError("401")):
-                    with mock.patch.object(SHARED, "http", side_effect=failure):
-                        self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 1)
-            dataset.seed.assert_called_once_with()
-            dataset.verify.assert_not_called()
-            observer.assert_not_called()
-            process.assert_not_called()
-            reset.assert_not_called()
-            self.assertEqual(dataset.report["gateway"], "http://127.0.0.1:4000")
-            self.assertEqual(dataset.report["status"], "seeded")
-            self.assertIn("模型调用=0", (Path(directory) / "testdata.log").read_text())
+    def test_shared_seed_owns_gateway_lifecycle(self):
+        """目的：建数不依赖4000且关闭自建网关；前置模拟数据库和进程，验证成功、启动失败、超时清理；临时目录自动删除。"""
+        for failure in (None, RuntimeError("启动失败"), AssertionError("建数失败")):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                args = type("Args", (), {"phase": "seed", "directory": directory})()
+                dataset = mock.Mock()
+                dataset.report = {}
+                dataset.state = {name: [] for name in ("organizations", "teams", "users", "projects", "keys")}
+                process = mock.Mock()
+                if isinstance(failure, AssertionError):
+                    dataset.seed.side_effect = failure
+                    process.wait.side_effect = [subprocess.TimeoutExpired("gateway", 10), None]
+                with mock.patch.object(SHARED, "reset_shared_target") as reset, \
+                        mock.patch.object(SHARED, "free_port", return_value=45678), \
+                        mock.patch.object(SHARED, "http") as http, \
+                        mock.patch.object(SHARED, "command"), \
+                        mock.patch.object(SHARED, "ready", side_effect=failure if isinstance(failure, RuntimeError) else None), \
+                        mock.patch.object(RUNNER.subprocess, "Popen", return_value=process) as spawn, \
+                        mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \
+                        mock.patch.object(SHARED.observer_module, "Observer") as observer, \
+                        mock.patch.dict(os.environ, {"FENNO_AI_API_KEY": "fixture", "QINIU_API_KEY": "fixture", "E2E_DATASET_PASSWORD": "password", "E2E_GATEWAY": "http://unreachable.invalid"}, clear=True), redirect_stdout(io.StringIO()):
+                    self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 0 if failure is None else 1)
+                    reset.assert_called_once()
+                    spawn.assert_called_once()
+                    self.assertIn("127.0.0.1:45678", spawn.call_args.args[0])
+                    http.assert_not_called()
+                    observer.assert_not_called()
+                    dataset.verify.assert_not_called()
+                    process.terminate.assert_called_once()
+                    process.wait.assert_called()
+                    if isinstance(failure, AssertionError):
+                        process.kill.assert_called_once()
+                    if failure is None:
+                        self.assertEqual(dataset.report["gateway_mode"], "temporary")
+                        self.assertEqual(dataset.report["status"], "seeded")
 
+    def test_shared_seed_build_failure_preserves_data(self):
+        """目的：编译失败时不能清库；前置旧基线，验证错误返回和未启动，临时目录自动清理。"""
+        for failure in (RuntimeError("编译失败"),):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                checkpoint = Path(directory, "access.json")
+                checkpoint.write_text("existing")
+                args = type("Args", (), {"phase": "seed", "directory": directory})()
+                with mock.patch.object(SHARED, "reset_shared_target") as reset, \
+                        mock.patch.object(SHARED, "free_port", return_value=45678), \
+                        mock.patch.object(SHARED, "command", side_effect=failure), \
+                        mock.patch.object(RUNNER.subprocess, "Popen") as spawn, \
+                        mock.patch.dict(os.environ, {"FENNO_AI_API_KEY": "fixture", "QINIU_API_KEY": "fixture", "E2E_DATASET_PASSWORD": "password"}, clear=True), redirect_stdout(io.StringIO()):
+                    self.assertEqual(SHARED.shared_main_locked(args, load_manifest()), 1)
+                reset.assert_not_called()
+                spawn.assert_not_called()
+                self.assertEqual(checkpoint.read_text(), "existing")
 
     def test_run_logger_writes_identical_timestamped_terminal_and_file_lines(self):
         """目的：完整过程日志同时显示并持久化；前置临时日志，验证多行均带时间且正文一致，临时目录自动清理。"""
@@ -402,7 +435,7 @@ class AcceptanceTests(unittest.TestCase):
                 dataset.report = {}
                 dataset.case_enabled.return_value = False
                 args = type("Args", (), {"phase": "verify", "directory": directory,
-                                           "category": ["fallback"] if mode == "unsupported" else ["entities"]})()
+                                           "category": ["regression"] if mode == "unsupported" else ["entities"]})()
                 with mock.patch.object(SHARED, "local_admin_credentials", return_value={}), \
                         mock.patch.object(SHARED, "http", return_value=(200, {}, {})) as health, \
                         mock.patch.object(SHARED.module, "Dataset", return_value=dataset), \

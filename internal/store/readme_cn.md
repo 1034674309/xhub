@@ -58,7 +58,7 @@ Store 在 xorm 上配置 10,000 项内存 LRU。写入后同时清理带 schema 
 
 - `ProxyModel` 是公开模型记录。`UpsertProxyModel`、`ListProxyModels`、`DeleteProxyModel` 编解码 params/info 并清模型缓存；损坏 JSON 读为空 map。网关组装目录时数据库行覆盖同名 YAML 部署。
 - `PutConfig(namespace, key, value)` JSON 编码并 upsert。`ListConfig(namespace)` 解码全部值，损坏 JSON 回退原始字符串；nil store 返回空 map，使 YAML 保持权威。`DeleteConfig` 删除一行。模型价格刷新、路由默认值/组和偏好设置是直接调用方。
-- `SaveModelDirectory(entry, deletedID, directory)` 在管理接口事务中增删部署，并清理模型默认值、全局路由组及 IAM 路由模板中的失效引用。序列化、损坏 JSON、查询、锁或提交任一失败都回滚；提交后清缓存，不修改内存目录。启动加载只读当前结构，不执行旧数据升级或修复。
+- `SaveModelDirectory(entry, deletedID, directory)` 在管理接口事务中增删部署，并清理模型默认值、全局路由组及 IAM 路由模板中的失效引用。序列化、损坏 JSON、查询、锁或提交任一失败都回滚；提交后清缓存，不修改内存目录。启动加载只读当前结构。
 
 ### 实际 HTTP 边界
 

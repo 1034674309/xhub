@@ -57,7 +57,7 @@ The package registers no handler. Gateway identity exposes route-template manage
 
 Compile(selected, store, models) loads model defaults and explicitly configured template policies, validates references and returns errors in RouteSettings.Err without writes. iam.SelectRouteTemplate chooses the first binding from key, team and organization; an absent selected document falls back to builtin. Builtin settings use one attempt, 60 seconds, threshold three and no cooldown.
 
-Parse/validation APIs cover FallbackPolicy, Group, Policy, default weights, template documents, catalogs, strategies, and deployment ownership. RouteSettings.ForModel resolves model rule, group, legacy template default, then model default; Candidates expands only explicit group names; Schedule applies shares and optional pin. Retries, TimeoutSeconds, AllowedFails, and CooldownSeconds expose validated execution values. All, Available, Order, Pick, DeploymentID, and CooldownID implement scheduling. CleanAllocations and CleanTemplateWeights deep-clean stale deployment references.
+Parse/validation APIs cover FallbackPolicy, Group, Policy, default weights, template documents, catalogs, strategies, and deployment ownership. RouteSettings.ForModel resolves an exact model rule, otherwise a group, otherwise model defaults; Candidates expands only explicit group names; Schedule applies shares and optional pin. Retries, TimeoutSeconds, AllowedFails, and CooldownSeconds expose validated execution values. All, Available, Order, Pick, DeploymentID, and CooldownID implement scheduling. CleanAllocations and CleanTemplateWeights deep-clean stale deployment references.
 
 ## Core implementation
 

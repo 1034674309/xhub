@@ -6,7 +6,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
+"sync"
+"time"
 
 	"github.com/sunqirui1987/xhub/internal/util"
 	"gopkg.in/yaml.v3"
@@ -52,6 +53,8 @@ func (m ModelEntry) Disabled() bool {
 // admin_email account. An empty master key means there is no emergency
 // credential.
 type GeneralSettings struct {
+ // SpendLogFlushIntervalSeconds 控制 Redis 请求日志及账单的周期刷写；省略默认 5 秒，配置范围 1～86400 秒，重启生效。
+ SpendLogFlushIntervalSeconds int `yaml:"spend_log_flush_interval_seconds"`
 	MasterKey               string `yaml:"master_key"`
 	DatabaseURL             string `yaml:"database_url"`
 	RedisURL                string `yaml:"redis_url"`
@@ -79,6 +82,16 @@ type GeneralSettings struct {
 }
 
 var logTraceOnceConfig sync.Once
+
+// SpendLogFlushInterval 返回后台刷写周期；无参数，由网关启动及隔离夹具调用。
+// 返回有效秒数对应的时长；程序直接构造的零值或非法值回退到 5 秒，避免 ticker panic 或溢出。
+// YAML 中显式非法值由 Load 拒绝；本方法只读配置，不修改状态。
+func (g GeneralSettings) SpendLogFlushInterval() time.Duration {
+ if g.SpendLogFlushIntervalSeconds < 1 || g.SpendLogFlushIntervalSeconds > 86400 {
+  return 5 * time.Second
+ }
+ return time.Duration(g.SpendLogFlushIntervalSeconds) * time.Second
+}
 
 // Load reads YAML and requires a postgres:// or postgresql:// database URL.
 // 参数 path（string）：YAML 配置文件的磁盘路径，不是请求 URL。
@@ -114,6 +127,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("router_settings is no longer supported; configure route templates")
 	}
 	c.GeneralRaw = doc.GeneralSettings
+ // 显式零不能与省略混淆；错误配置启动时拒绝，避免操作员误以为刷写已停用。
+ if _, present := c.GeneralRaw["spend_log_flush_interval_seconds"]; present {
+  if c.GeneralSettings.SpendLogFlushIntervalSeconds < 1 || c.GeneralSettings.SpendLogFlushIntervalSeconds > 86400 {
+   return nil, fmt.Errorf("general_settings.spend_log_flush_interval_seconds must be an integer between 1 and 86400")
+  }
+ } else {
+  c.GeneralSettings.SpendLogFlushIntervalSeconds = 5
+ }
 	if c.LiteLLMSettings == nil {
 		c.LiteLLMSettings = doc.LiteLLMSettings
 	}

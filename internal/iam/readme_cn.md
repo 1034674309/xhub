@@ -64,7 +64,7 @@ func ReadDemoUser(ctx context.Context, dsn, userID string) (*iam.User, error) {
 
 ### 用户、组织、团队、项目与密钥
 
-`Bootstrap`、`EnsureAdmin`、`Login`、`CreateUser`、`GetUser`、`UserByEmail`、`UpdateProfile`、`SetPassword`、`AdminUpdateUser`、`DeleteUser` 实现账号生命周期。输入会被规范化和校验，密码只保存哈希，删除或降级最后一个平台管理员会被拒绝。`ListUsersPage(UserListQuery)` 把搜索、状态、角色、团队、组织筛选与调用方提供的授权范围取交集，仅允许白名单排序字段，默认页大小 100、上限 500，返回 `(rows, total, error)`。IAM 当前不存 SSO 标识，因此指定 SSO 条件会返回空结果。
+`Bootstrap`、`EnsureAdmin`、`Login`、`CreateUser`、`GetUser`、`UserByEmail`、`UpdateProfile`、`SetPassword`、`AdminUpdateUser`、`DeleteUser` 实现账号生命周期。输入会被规范化和校验，密码只保存哈希，删除或降级最后一个平台管理员会被拒绝。`ListUsersPage(UserListQuery)` 把搜索、状态、角色、团队、组织筛选与调用方提供的授权范围取交集，仅允许白名单排序字段，默认页大小 100、上限 500，返回 `(rows, total, error)`。用户列表的 SSOID 条件没有对应用户查询字段，指定时返回空结果；企业 OIDC 绑定另存于 enterprise_login_identities，该列表条件不会查询这些绑定。
 
 组织和团队入口包括 `CreateOrg(..., rates ...RateLimits)`、`UpdateOrg`、`CreateTeam`、`UpdateTeamProfile`、`AdminUpdateTeam(..., rates ...RatePatch)`、`MoveTeam` 及相应查询、列表和删除方法。成员方法负责组织管理员和团队成员的增删改，保留至少一个团队管理员，并拒绝同一用户进入第二个团队。项目方法保证项目模型和预算不超出所属团队。变更在事务内写审计；外键、配额或速率分配失败会回滚整个变更。
 
@@ -100,7 +100,7 @@ RPM 和 TPM 复用相同拓扑。`rateAllocated` 累加固定子节点，并让�
 
 ### 身份不变量与审计快照
 
-邮箱按不区分大小写方式规范化，密码使用 bcrypt，存储角色和控制台兼容角色分别转换。成员变更要求活跃用户，禁止多个团队归属路径，并保留最后一个团队/平台管理员。退出团队保留个人密钥，新调用按当前归属和计费授权检查，历史事件保持原归属；用户删除或目录停用时可以撤销凭证。模型和预算范围按团队、项目、密钥逐层求交集或上限。审计写入尽量捕获 actor/object 名称；读取时不会为补全名称扩大授权，因此已删除资源可能保持无名。
+邮箱按不区分大小写方式规范化，密码使用 bcrypt，存储角色和控制台角色分别转换。成员变更要求活跃用户，禁止多个团队归属路径，并保留最后一个团队/平台管理员。退出团队保留个人密钥，新调用按当前归属和计费授权检查，历史事件保持原归属；用户删除或目录停用时可以撤销凭证。模型和预算范围按团队、项目、密钥逐层求交集或上限。审计写入尽量捕获 actor/object 名称；读取时不会为补全名称扩大授权，因此已删除资源可能保持无名。
 
 ### 用量账务与失败边界
 

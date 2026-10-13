@@ -1,0 +1,11 @@
+# CI 预构建 standalone；保留仓库目录层级以支持 tracing 和内置文档。
+FROM node:24-bookworm-slim
+WORKDIR /app/frontend
+COPY bin/console /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV XHUB_GATEWAY_ORIGIN=http://gateway:4000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3000
+ENTRYPOINT ["node", "/app/frontend/server.js"]

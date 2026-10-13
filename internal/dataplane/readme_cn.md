@@ -72,6 +72,6 @@ SDK 是调用客户端，不提供完整网关 bypass、跨协议转换、配额
 
     go test ./internal/dataplane/... ./internal/gateway/... ./internal/llm/... ./internal/provider/... -count=1
     bash scripts/regression.sh 'TestComplianceModuleContract|TestUpstreamDiagnosticsContract|TestResponsesFailedStreamCannotContinue' -v
-    bash scripts/e2e.sh e2e/playground-transport.spec.ts e2e/responses-continuation.spec.ts e2e/model-fallback.spec.ts
+    bash scripts/e2e.sh scenarios/legacy/playground-transport scenarios/legacy/responses-continuation scenarios/legacy/model-fallback
 
 测试用真实本地 HTTP、PostgreSQL 与隔离夹具，结束清理私有 schema，不覆盖用户数据。线上付费供应商和外部护栏需单独声明凭据；离线测试验证配置、支持状态、拒绝和失败路径。

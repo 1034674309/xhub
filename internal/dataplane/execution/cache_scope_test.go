@@ -73,6 +73,12 @@ func (h *cacheScopeHost) EnforceIdentityLimits(w http.ResponseWriter, _ string, 
 	return true
 }
 
+// AdmitRequest 将本测试的请求准入委托给同一宿主的权限记录器；参数为响应、路径、身份、模型和估算量。
+// 返回是否允许请求；缓存目标复核测试调用，避免嵌入宿主内部方法绕过本例覆写的模型检查，无外部副作用。
+func (h *cacheScopeHost) AdmitRequest(w http.ResponseWriter, path string, p *auth.Principal, alias string, est int) bool {
+	return h.EnforceIdentityLimits(w, path, p, alias, est)
+}
+
 // WriteChatJSON 是 cacheScopeHost 的测试接口实现。
 // 参数 w 为测试响应，key 为缓存键，body/status 为执行结果，models 为缓存目标授权范围；其余记账参数忽略。
 // 仅成功状态将正文及模型范围写入夹具私有缓存，然后向 w 输出原状态和正文；无返回，不写真实账单。

@@ -112,12 +112,12 @@ export const docsExpandedEn = {
   },
   models: {
     detail:
-      "## Protocol behavior\nGET /models allows anonymous discovery of enabled public model names. Explicit credentials retain permission filtering and invalid keys return 401. GET /v1/models remains authenticated. id is callable; created is a fixed compatibility timestamp and owned_by a compatibility label, not the real provider. Empty data can mean no granted models.",
+      "## Protocol behavior\nGET /models allows anonymous discovery of enabled public model names. Explicit credentials retain permission filtering and invalid keys return 401. GET /v1/models remains authenticated. id is callable; created is always 1677610602 and owned_by is always openai, not the actual provider. Empty data can mean no granted models.",
     fields: {
       "0": "Empty or expand; other values return 400. expand broadens administrator visibility.",
-      "1": "Team filter for sessions; keys keep their bound scope.",
-      "2": "Include permitted wildcard names; default false.",
-      "3": "Legacy flag; true returns an empty list.",
+      "1": "Authenticated session team filter; keys keep their bound scope. Ignored for anonymous discovery.",
+      "2": "Include permitted wildcard names for authenticated callers; default false. Ignored for anonymous discovery.",
+      "3": "When true, returns an empty list.",
     },
   },
   chat: {
@@ -150,7 +150,7 @@ export const docsExpandedEn = {
       "3": "Output ceiling.",
       "4": "Typed SSE events when supported.",
       "5": "Only tools supported by upstream.",
-      "6": "Requires upstream state support.",
+      "6": "Uses gateway history and the original deployment, scoped by caller, request model and endpoint for one hour. Missing or expired context is rejected; instructions are not inherited.",
     },
   },
   messages: {
@@ -198,7 +198,7 @@ export const docsExpandedEn = {
     body3: "",
     fields: {
       "0": "Public model name; deployment must support this protocol.",
-      "1": "Legacy completion prompt.",
+      "1": "Text completion prompt.",
       "2": "Output ceiling, sampling and SSE.",
     },
   },

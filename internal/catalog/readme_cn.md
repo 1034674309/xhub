@@ -59,15 +59,15 @@ Rate.USD 已是每基础单位单价，不能再除 UnitSize。priced=false 表�
 
 `Load() []Route` 解码内嵌 `routes.json`，非法 JSON 会记录日志并返回空路由。`AuthOf`、`IsMixedPath`、`IsPublicPath`、`IsDataPlanePath`、`IsLLMPrefix` 对规范化路径分类。`HasPrefix` 遵守路径段边界，`PathMatch` 支持单段 `{name}` 和剩余路径 `:path`/`{name:path}` 占位。`PublicBody(path)` 为受支持公共路径返回内嵌固定结构，普通目录项返回空列表。这些函数只读，不自行完成请求认证。
 
-`Raw`、`CostMap`、`Count`、`LoadedAt`、`ProviderModels`、`KnownProvider` 向模型列表、通配展开、公共模型中心和管理接口提供当前内存目录及供应商索引。`TokenRates(model)` 返回每基础 token 的输入/输出价格，没有合适目录行时 `ok=false`。`Cost(model, prompt, completion)` 是仅 token 的兼容计算器，`Format` 输出无多余尾零的小数字符串。返回映射应作为目录数据读取，修改必须走写入 API。
+`Raw`、`CostMap`、`Count`、`LoadedAt`、`ProviderModels`、`KnownProvider` 向模型列表、通配展开、公共模型中心和管理接口提供当前内存目录及供应商索引。`TokenRates(model)` 返回每基础 token 的输入/输出价格，没有合适目录行时 `ok=false`。`Cost(model, prompt, completion)` 是仅 token 的计算器，`Format` 输出无多余尾零的小数字符串。返回映射应作为目录数据读取，修改必须走写入 API。
 
-`Providers()` 返回价格文档中的供应商行。`CredentialProviders()` 将其与独立内嵌的凭据注册表和供应商贡献合并，补充默认 API base、应用 DeepSeek 兼容字段、按 provider/slug 去重、按显示名排序，并深拷贝追加的价格供应商，避免调用方修改共享状态。该结果只描述 UI 凭据输入，不验证适配器或凭据可用性。
+`Providers()` 返回价格文档中的供应商行。`CredentialProviders()` 将其与独立内嵌的凭据注册表和供应商贡献合并，补充默认 API base、应用 DeepSeek 地址输入字段、按 provider/slug 去重、按显示名排序，并深拷贝追加的价格供应商，避免调用方修改共享状态。该结果只描述 UI 凭据输入，不验证适配器或凭据可用性。
 
 ### 计价与用量 API
 
 `NormalizeUsage(map[string]any) Usage` 把供应商不同格式归一为 token、缓存 token、图片、视频秒数和查询次数。OpenAI/Responses 的嵌套 cached token 是 prompt/input 总量子集，会从未缓存输入中扣除；Anthropic 顶层 cache read/write 与 `input_tokens` 并列，需要相加且不能重复计算。显式零优先于别名，非法或互相矛盾的数量不会变成可计费用量。
 
-`CostAt(model, usage, startedAt)` 选择当前目录行；只有至少一个上报量有兼容费率时才返回 `(Charge, true)`。未知模型或无法计价的度量返回 `ok=false`，含义是未计价而不是免费。`CostFromRates` 对调用方费率表计价；`RatesFromFlat` 和 `CostFromFlatOrRates` 转换旧平铺字段，同时保留缺失与零的差别。`DecodeRates` 接受内嵌或部署 JSON 形状。`WindowAt`/`IsPeakHour` 根据调用开始时间选择时段。`Snapshot` 保存应用费率，`SnapshotUsage` 保存异步实测量、费率和是否成功计价。
+`CostAt(model, usage, startedAt)` 选择当前目录行；只有至少一个上报量有兼容费率时才返回 `(Charge, true)`。未知模型或无法计价的度量返回 `ok=false`，含义是未计价而不是免费。`CostFromRates` 对调用方费率表计价；`RatesFromFlat` 和 `CostFromFlatOrRates` 转换平铺字段，同时保留缺失与零的差别。`DecodeRates` 接受内嵌或部署 JSON 形状。`WindowAt`/`IsPeakHour` 根据调用开始时间选择时段。`Snapshot` 保存应用费率，`SnapshotUsage` 保存异步实测量、费率和是否成功计价。
 
 ### 目录修改与 feed
 
@@ -101,7 +101,7 @@ Rate.USD 已是每基础单位单价，不能再除 UnitSize。priced=false 表�
 
 ### 凭据元数据、失败边界与验证
 
-`provider_fields.json` 与价格供应商分开解析。凭据合并会复制嵌套 map/slice，应用已知 API base 默认值，只在 provider/slug 不冲突时追加贡献字段，并为 DeepSeek 加入 `api_base` 兼容字段。随附 `provider_fields.LICENSE` 记录上游许可，分发时必须保留。解析失败会记录日志并返回其他仍有效来源，不会中止模型计价。
+`provider_fields.json` 与价格供应商分开解析。凭据合并会复制嵌套 map/slice，应用已知 API base 默认值，只在 provider/slug 不冲突时追加贡献字段，并为 DeepSeek 加入 `api_base` 输入字段。随附 `provider_fields.LICENSE` 记录上游许可，分发时必须保留。解析失败会记录日志并返回其他仍有效来源，不会中止模型计价。
 
 测试覆盖路由授权回归、凭据供应商合并与隔离、feed 转换和空 feed 拒绝、费率/时段/缓存/媒体/查询选择、显式零和用量别名、seller 绑定、中国节假日与调休边界。只有明确执行远端拉取时才需要网络；适配器可用性、供应商凭据、操作员覆盖持久化和 IAM 账务属于本包外部集成边界。
 
@@ -109,7 +109,7 @@ Rate.USD 已是每基础单位单价，不能再除 UnitSize。priced=false 表�
 
 - [`classify.go`](classify.go) 定义 `Route`/`AuthClass`，解析内嵌路由，分类 public/data-plane/LLM/mixed 路径，匹配路径模板并构造固定公共响应。
 - [`contribute.go`](contribute.go) 定义模型/供应商贡献结构、受锁保护的贡献与官方别名注册表、`Contribute`、`ContributeProvider`；私有辅助把贡献行和字段转换为目录 JSON。
-- [`cost.go`](cost.go) 提供仅 token 的兼容入口 `Cost` 和小数格式化 `Format`，二者使用当前目录 token 价格。
+- [`cost.go`](cost.go) 提供仅 token 的入口 `Cost` 和小数格式化 `Format`，二者使用当前目录 token 价格。
 - [`cost_at.go`](cost_at.go) 定义归一化 `Usage`、`Charge`、`AppliedRate`、`PriceSnapshot`，负责费率解码、平铺字段转换、供应商用量归一化、候选模型解析、variant/window 选择、费用计算与快照序列化。
 - [`credential_providers.go`](credential_providers.go) 解析 `provider_fields.json`，合并凭据与价格供应商元数据，深拷贝追加项，去重，补 API base/DeepSeek 默认值并返回排序后的 `CredentialProviders`。
 - [`embed.go`](embed.go) 内嵌 `routes.json`、自动路由预设、价格数据和凭据字段；`Embedded` 校验 JSON 并统一启动日志。

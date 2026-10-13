@@ -59,7 +59,7 @@ func main() {
 
 ## 内部核心实现
 
-凭据提取严格遵循优先级，首个非空且格式可接受的来源立即胜出，防止低优先级兼容头覆盖 LiteLLM 或 `Authorization` 凭据。Bearer 前缀不区分大小写，并清理两端空白。Basic 先清理整个头再截取内容，使用标准 base64 解码，并且只按第一个冒号拆分，因此密码本身可以包含冒号。Basic 解码失败不会直接报错，而是继续检查后续头。Google 查询参数受路径限制，其他接口不会从 URL 读取密钥。
+凭据提取严格遵循优先级，首个非空且格式可接受的来源立即胜出，防止低优先级凭据头覆盖 LiteLLM 或 `Authorization` 凭据。Bearer 前缀不区分大小写，并清理两端空白。Basic 先清理整个头再截取内容，使用标准 base64 解码，并且只按第一个冒号拆分，因此密码本身可以包含冒号。Basic 解码失败不会直接报错，而是继续检查后续头。Google 查询参数受路径限制，其他接口不会从 URL 读取密钥。
 
 `Resolve` 首先拒绝空提取结果，然后仅在配置主密钥非空时做精确匹配；命中后直接生成 `KindMaster`，不查询 IAM。普通密钥必须有存储实例，明文经 `iam.HashKey` 计算后按哈希查行，再判断生命周期。状态判断早于过期判断：同时“已吊销且过期”的密钥报告 `key_revoked`；其他非活动状态统一报告 `key_blocked`。过期边界采用“当前时间不再早于 `ExpiresAt`”即拒绝。成功转换时复制可空用户与项目 ID，并保留原密钥行和哈希，供后续预算、限流和记账使用。
 
@@ -71,6 +71,6 @@ func main() {
 
 ## 源码职责与入口
 
-- [auth.go](auth.go) 是唯一生产源码，定义稳定错误码与 `Error` 包装契约、`Principal` 及其授权视图、兼容凭据提取、主密钥与虚拟密钥解析、生命周期分类、密钥行转换和实时用户会话构造。理解线格式优先级从 `APIKeyFrom` 开始，理解密钥认证从 `Resolve` 开始，理解界面会话失效从 `SessionPrincipal` 开始。
+- [auth.go](auth.go) 是唯一生产源码，定义稳定错误码与 `Error` 包装契约、`Principal` 及其授权视图、凭据提取、主密钥与虚拟密钥解析、生命周期分类、密钥行转换和实时用户会话构造。理解线格式优先级从 `APIKeyFrom` 开始，理解密钥认证从 `Resolve` 开始，理解界面会话失效从 `SessionPrincipal` 开始。
 - [auth_test.go](auth_test.go) 验证 Basic 凭据空白处理。
 - [google_key_test.go](google_key_test.go) 验证仅限 Gemini/Vertex 路径的 Google 凭据形式。

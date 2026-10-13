@@ -158,15 +158,14 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 // 调用：dataplane/execution/serve.go、live/redis.go
 // 测试：authz_test.go、catalog_reads_test.go、chains_test.go
 func (s *Server) Run(addr string) error {
-	if s.Live != nil {
-		go s.flushLoop()
-	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+ // 监听成功后启动刷写；服务退出时取消，避免启动失败留下后台任务。
+ if s.Live != nil { go s.flushLoop(ctx) }
 	go s.archiveLoop(ctx)
 	return (&http.Server{Handler: s.Handler()}).Serve(ln)
 }

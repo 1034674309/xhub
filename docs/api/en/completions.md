@@ -27,7 +27,7 @@ curl "$XHUB_BASE_URL/v1/completions" \
 | Field | Type | Description |
 | --- | --- | --- |
 | model | string · required | Public model name; deployment must support this protocol. |
-| prompt | string or array · required | Legacy completion prompt. |
+| prompt | string or array · required | Text completion prompt. |
 | max_tokens / temperature / stream | integer / number / boolean | Output ceiling, sampling and SSE. |
 
 ## Success response

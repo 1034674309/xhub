@@ -41,8 +41,24 @@ try {
       await page.screenshot({ path: `${reportDirectory}/docs-navigation-${lang}.png` });
     }
   });
+  // 目的：修正文案必须在双语真实页面可见；前置当前构建和服务器，检查模型匿名参数、默认价格源与系统 CA，再刷新；只读，最终关闭浏览器。
+  await scenario("当前源码契约 → 双语模型参数、安装默认值与 CA", async () => {
+    for (const [locale, home, setup, ignored] of [["zh-CN", "", "getting-started.zh-CN", "匿名发现忽略此参数"], ["en", "en/", "getting-started", "Ignored for anonymous discovery"]]) {
+      await page.goto(base + home);
+      assert.match(await page.locator("body").innerText(), /XHUB_CA_CERT_FILE/);
+      await page.goto(base + "docs/" + setup + ".html");
+      assert.ok((await page.getByRole("article").innerText()).includes("https://api.modelink.ai/v1/market/models"));
+      assert.match(await page.getByRole("article").innerText(), /make e2e-offline/);
+      await page.goto(base + "docs/api/" + locale + "/models.html");
+      const text = await page.getByRole("article").innerText();
+      assert.ok(text.includes(ignored), "匿名请求参数边界必须可见");
+      assert.ok(text.includes("1677610602") && text.includes("openai"), "标准元信息必须与代码一致");
+      await page.reload();
+      assert.ok((await page.getByRole("article").innerText()).includes(ignored));
+    }
+  });
   // 前置为实际构建产物，验证旧地址、锚点、中英同主题切换与英文导航；只读网站，浏览器上下文最终清理。
-  await scenario("开发文档语言目录 → 旧地址兼容 → 同主题切换 → API", async () => {
+  await scenario("开发文档语言目录 → 地址重定向 → 同主题切换 → API", async () => {
     await page.goto(base + "docs/development/routing.html#main");
     await page.waitForURL("**/development/zh-CN/routing.html#main");
     await page.getByRole("link", { name: "Switch to English", exact: true }).click();

@@ -1,5 +1,6 @@
 """真实验收 routing 模块的单元测试；各用例独立管理夹具与清理。"""
 import tempfile
+import json
 import threading
 import unittest
 from unittest import mock
@@ -81,145 +82,103 @@ class AcceptanceTests(unittest.TestCase):
             fallback_acceptance_route("shared", "fault", ["healthy"], "shared", "backup", 300)
 
 
-    def test_fallback_policy_chain_uses_manifest_glm_and_cleans_up_on_failure(self):
-        """目的：验收入口不能重用两家共用的 chat_models，且异常必须清理临时数据；前置真实清单及两家同名基线，在模板失败与聊天失败处断言 GLM 目标、全部零权重与删除调用，临时目录自动清理。"""
-        for fail_at in ("template", "chat"):
-            with self.subTest(fail_at=fail_at), tempfile.TemporaryDirectory() as directory:
-                dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
-                dataset.state["chat_models"] = {"fennoai": "gpt-5.6-sol", "qiniu": "gpt-5.6-sol"}
-                dataset.state["selected"] = {"fennoai": {"provider": {"id": "fennoai"}}}
-                baseline = [
-                    {"id": "qiniu", "public_name": "gpt-5.6-sol", "provider": "qiniu"},
-                    {"id": "fenno", "public_name": "gpt-5.6-sol", "provider": "fennoai"},
-                    {"id": "glm", "public_name": "z-ai/glm-5", "provider": "qiniu"},
-                ]
-                dataset.state["deployments"] = baseline + [
-                    {"id": "fault", "public_name": "gpt-5.6-sol", "provider": "fennoai", "temporary": True}]
-                dataset.observer = mock.MagicMock(rows=[])
-
-                def api(route, body):
-                    """模拟管理接口并核对完整路由参数；参数为路径和正文，返回创建结果或抛故障，所有状态仅在当前临时实例内。"""
-                    if route == "/route_template/new":
-                        self.assertEqual(body["body"]["fallbacks"], [{"gpt-5.6-sol": ["z-ai/glm-5"]}, {"z-ai/glm-5": []}])
-                        self.assertEqual(body["body"]["model_routes"][0]["allocations"], [
-                            {"deployment_id": "fault", "weight": 100},
-                            {"deployment_id": "qiniu", "weight": 0},
-                            {"deployment_id": "fenno", "weight": 0}])
-                        if fail_at == "template":
-                            raise AssertionError("injected failure")
-                        return {"id": "route"}, {}
-                    return {"key": "temporary-" + body.get("key_alias", "")}, {}
-
-                with mock.patch.object(dataset, "deployment", return_value="fault"), \
-                     mock.patch.object(dataset, "api", side_effect=api) as requests, \
-                     mock.patch.object(dataset, "chat_request", side_effect=AssertionError("injected failure")):
-                    with self.assertRaisesRegex(AssertionError, "injected failure"):
-                        dataset.verify_fallback_policy_chain({"user_id": "user", "team_id": "team", "project_id": "project"})
-                self.assertEqual(dataset.state["deployments"], baseline)
-                requests.assert_any_call("/model/delete", {"id": "fault"})
-                if fail_at == "chat":
-                    requests.assert_any_call("/route_template/route/delete", {})
-                    self.assertEqual(sum(call.args[0] == "/key/delete" for call in requests.call_args_list), 2)
-
-
-    def test_fallback_chain_reuses_successful_target_and_rejects_wrong_bill_identity(self):
-        """目的：同会话同正文首次回退两跳、后续命中成功正文且账单保留请求身份；前置隔离观察器，覆盖正常及模型/会话/来源错误，验证禁回退仍使用原会话并清理所有临时资源。"""
-        for invalid_field in (None, "model", "session_id", "session_source"):
-            with self.subTest(invalid_field=invalid_field), tempfile.TemporaryDirectory() as directory:
-                dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
-                dataset.state["chat_models"] = {"fennoai": "gpt-5.6-sol"}
-                dataset.state["selected"] = {"fennoai": {"provider": {"id": "fennoai"}}}
-                baseline = [
-                    {"id": "healthy", "public_name": "gpt-5.6-sol", "provider": "fennoai"},
-                    {"id": "glm", "public_name": "z-ai/glm-5", "provider": "qiniu"},
-                ]
-                dataset.state["deployments"] = baseline + [{"id": "fault", "public_name": "gpt-5.6-sol", "provider": "fennoai", "temporary": True}]
-                dataset.observer = mock.MagicMock(rows=[], lock=threading.Lock())
-                successful_bodies = []
-                disabled_bodies = []
-
-                def api(route, body):
-                    """模拟管理边界；参数为路径和正文，返回临时模板或密钥，仅记录本例管理调用，结束由外层核对删除。"""
-                    if route == "/route_template/new":
-                        return {"id": "route"}, {}
-                    return {"key": "temporary-" + body.get("key_alias", "")}, {}
-
-                def chat(subject, body, expected=200):
-                    """模拟供应商边界；参数为密钥、请求和预期状态，返回响应与 call ID，首次记录主备两跳，后续不外发，禁止回退只记录主模型。"""
-                    if expected == 200:
-                        if not successful_bodies:
-                            dataset.observer.rows.append({"provider": "fennoai", "route_tag": "fault", "status": 429, "messages": body["messages"][0]["content"]})
-                        successful_bodies.append(dict(body))
-                        if len(successful_bodies) == 1:
-                            dataset.observer.rows.append({"provider": "qiniu", "route_tag": "default", "status": 200, "messages": body["messages"][0]["content"]})
-                        return {"usage": {"total_tokens": 3}}, {"cache_hit": str(len(successful_bodies) > 1).lower()}, 200, str(len(successful_bodies))
-                    if expected == 502:
-                        disabled_bodies.append(dict(body))
-                    dataset.observer.rows.append({"provider": "fennoai", "route_tag": "fault", "status": 429, "messages": body["messages"][0]["content"]})
-                    return {"error": "model not in allowed model list"}, {}, expected, "denied"
-
-                def bill(call_id):
-                    """模拟已落库账单；参数为独立调用 ID，返回请求身份；可注入单字段错误以证明错误归属不会被成功状态掩盖。"""
-                    row = {"model": "gpt-5.6-sol", "session_id": successful_bodies[-1]["session_id"], "session_source": "explicit"}
-                    if invalid_field:
-                        row[invalid_field] = "wrong"
-                    return row
-
-                with mock.patch.object(dataset, "deployment", return_value="fault"), \
-                     mock.patch.object(dataset, "api", side_effect=api) as requests, \
-                     mock.patch.object(dataset, "chat_request", side_effect=chat), \
-                     mock.patch.object(dataset, "wait_bill", side_effect=bill), \
-                     mock.patch("acceptance.routing.bill_check", return_value=0.001),                      mock.patch("acceptance.routing.cache_bill_check") as check_cache_bill:
-                    if invalid_field:
-                        with self.assertRaisesRegex(AssertionError, "账单未保留请求模型或明确会话"):
-                            dataset.verify_fallback_policy_chain({"user_id": "user", "team_id": "team", "project_id": "project"})
+    def test_route_evidence_rejects_missing_duplicate_or_wrong_facts(self):
+        """目的：路由证据不能沿用缺失或错误事实；前置内存数据库响应，覆盖正常、空、重复、串供应商、型号、缓存及外发路径错误；临时目录自动清理。"""
+        good = dict(request_id="call", supplier="qiniu", upstream_model="actual", cache_hit=False,
+                    outbound_endpoint="/v1/chat/completions", status="success", http_status=200)
+        cases = [[good], [], [good, good], [{**good, "supplier": "other"}],
+                 [{**good, "upstream_model": "wrong"}], [{**good, "cache_hit": True}],
+                 [{**good, "outbound_endpoint": ""}]]
+        for index, rows in enumerate(cases):
+            with self.subTest(index=index), tempfile.TemporaryDirectory() as directory:
+                dataset = Dataset("http://localhost:1", directory, load_manifest())
+                with mock.patch.object(dataset, "wait_log"), mock.patch("acceptance.routing.sql", return_value=json.dumps(rows)):
+                    if index == 0:
+                        self.assertEqual(dataset.route_evidence("call", "qiniu", "actual"), good)
                     else:
-                        dataset.verify_fallback_policy_chain({"user_id": "user", "team_id": "team", "project_id": "project"})
-                        repeat_count = dataset.data["logic_chains"]["fallback_cache"]["repeat_requests"]
-                        self.assertEqual(len(successful_bodies), repeat_count)
-                        self.assertEqual(len({row["session_id"] for row in successful_bodies}), 1, "各轮必须保持同一个明确会话")
-                        self.assertEqual(len({row["messages"][0]["content"] for row in successful_bodies}), 1, "重复相同正文验证回退成功响应缓存")
-                        self.assertEqual(check_cache_bill.call_count, repeat_count - 1)
-                        self.assertEqual(len(disabled_bodies), 1)
-                        self.assertEqual(disabled_bodies[0]["session_id"], successful_bodies[0]["session_id"])
-                        self.assertEqual(len(dataset.observer.rows), 4)
-                self.assertEqual(dataset.state["deployments"], baseline)
-                requests.assert_any_call("/model/delete", {"id": "fault"})
-                requests.assert_any_call("/route_template/route/delete", {})
-                self.assertEqual(sum(call.args[0] == "/key/delete" for call in requests.call_args_list), 2)
+                        with self.assertRaises(AssertionError):
+                            dataset.route_evidence("call", "qiniu", "actual")
+                with self.assertRaises(AssertionError):
+                    dataset.route_evidence(None, "qiniu")
 
-
-    def test_profile_route_isolation_calls_both_real_models_and_rejects_cross_provider(self):
-        """目的：真实模型 ID 分离后仍主动验证两种单供应商路由；前置两个配置密钥和模拟观察记录，验证两次真实调用目标及跨供应商记录会失败，临时目录自动清理。"""
+    def test_profile_route_isolation_uses_current_persisted_receipts(self):
+        """目的：两个供应商配置每轮主动调用并核对精确请求；前置两把密钥，验证调用型号、当前证据及串供应商失败；内存模拟，无外部数据，临时目录清理。"""
         with tempfile.TemporaryDirectory() as directory:
-            dataset = Dataset("http://127.0.0.1:1", directory, load_manifest())
-            dataset.state["keys"] = [
-                {"profile": "fenno-only", "call_model": "gpt-5.6-sol"},
-                {"profile": "qiniu-only", "call_model": "z-ai/glm-5"},
-            ]
-            dataset.observer = mock.MagicMock(rows=[])
-
-            def observed_call(key, marker, model=None):
-                """模拟当前调用进入与配置匹配的供应商；参数为密钥、标记和模型，无返回；仅写入内存观察记录。"""
-                provider = {"fenno-only": "fennoai", "qiniu-only": "qiniu"}[key["profile"]]
-                dataset.observer.rows.append({"provider": provider, "messages": marker, "status": 200})
-
-            with mock.patch.object(dataset, "call", side_effect=observed_call) as call:
+            dataset = Dataset("http://localhost:1", directory, load_manifest())
+            dataset.state["keys"] = [{"profile": "fenno-only", "call_model": "gpt"},
+                                     {"profile": "qiniu-only", "call_model": "gpt"}]
+            dataset.state["selected"] = {"fennoai": {"model": "gpt"}, "qiniu": {"model": "openai/gpt"}}
+            def called(key, marker, model=None):
+                """记录本轮独立调用回执；参数为密钥、标记及型号，无返回；只写内存报告供隔离断言读取。"""
+                dataset.report["calls"].append({"call_id": key["profile"], "marker": marker})
+            with mock.patch.object(dataset, "call", side_effect=called) as call, mock.patch.object(dataset, "route_evidence") as evidence:
                 dataset.verify_profile_route_isolation()
-            self.assertEqual([row.kwargs["model"] for row in call.call_args_list], ["gpt-5.6-sol", "z-ai/glm-5"])
-            self.assertTrue(dataset.checked("profile-routes-real-models-and-vendors"))
-
-            dataset.report["checks"] = []
-            dataset.observer.rows = []
-
-            def crossed_call(key, marker, model=None):
-                """模拟错误跨供应商转发；参数为密钥、标记和模型，无返回；用于证明隔离断言会拒绝错误路径。"""
-                dataset.observer.rows.append({"provider": "qiniu", "messages": marker, "status": 200})
-
-            with mock.patch.object(dataset, "call", side_effect=crossed_call):
-                with self.assertRaisesRegex(AssertionError, "fenno-only"):
+                dataset.verify_profile_route_isolation()
+                self.assertEqual(call.call_count, 4, "历史成功不能跳过当前供应商请求")
+                evidence.assert_any_call("fenno-only", "fennoai", "gpt")
+                evidence.assert_any_call("qiniu-only", "qiniu", "openai/gpt")
+            with mock.patch.object(dataset, "call", side_effect=called), mock.patch.object(dataset, "route_evidence", side_effect=AssertionError("串供应商")):
+                with self.assertRaisesRegex(AssertionError, "串供应商"):
                     dataset.verify_profile_route_isolation()
 
+    def test_real_cache_and_fallback_chains_clean_resources_on_success_and_failure(self):
+        """目的：真实路由链不依赖观察器且错误时清理资源；前置管理接口与真实响应契约夹具，覆盖缓存切换和回退成功、错误缓存、主模型无故障及真实 404 不满足回退条件；临时目录自动清理。"""
+        for chain in ("cache", "fallback"):
+            for invalid in ((False, True, "ineligible-404") if chain == "fallback" else (False, True)):
+                with self.subTest(chain=chain, invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                    dataset = Dataset("http://localhost:1", directory, load_manifest())
+                    dataset.logger = mock.Mock()
+                    dataset.state.update(chat_models={"fennoai": "gpt-5.6-sol"}, selected={
+                        "fennoai": {"provider": {"id": "fennoai"}}, "qiniu": {"provider": {"id": "qiniu"}}})
+                    target = next(r for r in dataset.data["models"] if r["id"] == "qiniu-glm")
+                    baseline = [{"id": "healthy", "public_name": "gpt-5.6-sol", "provider": "fennoai"},
+                                {"id": "fallback", "public_name": target["public_name"], "provider": "qiniu"}]
+                    dataset.state["deployments"] = list(baseline)
+                    created, requests = [], []
+                    def deployment(*args, **kwargs):
+                        """模拟注册本轮部署并保存状态；参数同生产接口，返回唯一 ID；仅修改内存以验证异常清理。"""
+                        ident = "temporary-" + str(len(created))
+                        created.append(ident)
+                        dataset.state["deployments"].append({"id": ident, "public_name": kwargs["public_name"]})
+                        return ident
+                    def api(route, body):
+                        """模拟管理资源创建和清理；参数为路径及正文，返回 ID 或密钥；不访问真实服务。"""
+                        requests.append((route, body))
+                        if route == "/key/generate":
+                            return {"key": str(len(requests))}, {}
+                        return {"id": "route"}, {}
+                    answer = {"choices": [{}], "usage": {"prompt_tokens": 2, "completion_tokens": 1}}
+                    hit = {"x-litellm-cache-hit": "true"}
+                    responses = [(answer, {}, 200, "first"), (answer, hit, 200, "second"),
+                                 (answer, {}, 200, "isolated"), ({}, {}, 401, "blocked"),
+                                 (answer, {}, 200, "switched"), (answer, hit, 200, "repeated")]
+                    if chain == "cache" and invalid:
+                        responses[1] = (answer, {}, 200, "second")
+                    if chain == "fallback":
+                        responses = [({"error": "upstream refused"}, {}, 502, "fault")]
+                        responses += [(answer, {}, 200, "turn-" + str(i)) for i in range(dataset.data["logic_chains"]["fallback_cache"]["repeat_requests"])]
+                        responses += [({"error": "model not in allowed model list"}, {}, 401, "denied")]
+                    def bill(call_id):
+                        """返回当前主模型及明确会话账单；参数为请求 ID，返回账单，避免历史身份替代当前请求。"""
+                        model = "gpt-5.6-sol"
+                        return {"model": model, "session_id": "real-fallback-" + dataset.run}
+                    with mock.patch.object(dataset, "deployment", side_effect=deployment), mock.patch.object(dataset, "api", side_effect=api), \
+                         mock.patch.object(dataset, "chat_request", side_effect=responses), mock.patch.object(dataset, "wait_bill", side_effect=bill), \
+                         mock.patch.object(dataset, "wait_log", return_value={"metadata": {"upstream_response": {"status_code": 404 if invalid == "ineligible-404" else 429}}}), \
+                         mock.patch.object(dataset, "route_evidence", return_value={"status": "success" if invalid is True else "error"}) as evidence, \
+                         mock.patch("acceptance.routing.bill_check", return_value=0.1), mock.patch("acceptance.routing.cache_bill_check"):
+                        callback = dataset.verify_cache_weight_chain if chain == "cache" else dataset.verify_fallback_policy_chain
+                        if invalid:
+                            with self.assertRaisesRegex(AssertionError, "前置条件未满足" if invalid == "ineligible-404" else "."):
+                                callback({"user_id": "u", "team_id": "t", "project_id": "p"})
+                        else:
+                            callback({"user_id": "u", "team_id": "t", "project_id": "p"})
+                            self.assertGreaterEqual(evidence.call_count, 3)
+                    self.assertEqual(dataset.state["deployments"], baseline)
+                    self.assertEqual(sum(route == "/key/delete" for route, _ in requests), 2)
+                    self.assertIn(("/route_template/route/delete", {}), requests)
+                    for ident in created:
+                        self.assertIn(("/model/delete", {"id": ident}), requests)
 
     def test_deployment_route_tag_builds_distinct_observer_address(self):
         """目的：同模型临时部署必须生成可观察的独立地址；前置模拟观察器和模型创建接口，验证 weight-b 写入 api_base、状态保存标签及临时资源标记，不创建真实部署。"""

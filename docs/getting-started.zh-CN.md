@@ -15,7 +15,7 @@ XHub 包含两个服务：Go API 网关默认监听 `4000`，Next.js 控制台�
 | Redis | 推荐 7 | 可选的共享运行状态 |
 | Docker Compose | Docker 部署时需要 | 运行本地服务栈 |
 
-使用**全新的 PostgreSQL 数据库**。当前身份结构不提供从早期结构迁移的路径。
+使用**全新的 PostgreSQL 数据库**。
 
 ## Docker Compose 部署
 
@@ -102,7 +102,7 @@ make ui
 
 1. 打开“模型与端点”，选择供应商类型并填写对应连接与认证字段。
 2. 手动或从供应商目录添加部署，设置公开模型名、上游模型及端点类型。
-3. 创建组织和团队，配置团队模型范围并添加成员。个人推理也需要团队成员关系；项目按需创建。
+3. 创建组织和团队，配置团队模型范围并添加成员。独立用户也可以使用个人密钥；个人额度留空时不设金额上限；项目按需创建。
 4. 创建个人或服务虚拟密钥，在 Playground 测试模型，再从应用调用。
 
 [![模型与端点控制台：供应商标签、添加模型按钮和部署列表](assets/console-deployments.png)](assets/console-deployments.png)
@@ -148,11 +148,11 @@ make regression
 
 数据库不可达时部分测试会跳过。启动本地 PostgreSQL 或设置 `XHUB_TEST_DATABASE_URL` 后检查测试输出；测试使用独立 schema。前端按受影响文件定向验证，避免无路径运行整个套件。
 
-浏览器测试需要先安装 Chromium（`cd frontend && npx playwright install chromium`），再从根目录运行 `make e2e`；端口与服务要求见测试指南。`make regression-live` 会调用真实供应商并产生费用，需要另行配置凭证并确认运行范围。
+浏览器测试需要先安装 Chromium（`cd frontend && npx playwright install chromium`），再从根目录运行 `make e2e-offline`，使用隔离数据和本地供应商夹具。make e2e 验证已准备的共享基线，并可能调用付费供应商；端口与服务要求见测试指南。`make regression-live` 会调用真实供应商并产生费用，需要另行配置凭证并确认运行范围。
 
 ## 文档与能力边界
 
 客户操作见[客户手册](user-guide.zh-CN.md)，实现规则见[开发参考](development/zh-CN/README.md)，模块内的 `readme.md` / `readme_cn.md` 提供双语代码说明。文档记录当前行为，临时方案与执行记录不作为使用承诺。
 
 
-供应商均由管理员显式创建：选择提供商后填写对应凭据字段。系统不会自动安装中转供应商。价格刷新需设置 XHUB_PRICE_FEED_URL，未配置时继续使用当前嵌入价格及人工覆盖。
+供应商均由管理员显式创建：选择提供商后填写对应凭据字段。手动价格刷新及已启用的定时刷新默认读取 https://api.modelink.ai/v1/market/models；XHUB_PRICE_FEED_URL 可指定其他源。刷新失败保留当前目录，人工覆盖独立管理。

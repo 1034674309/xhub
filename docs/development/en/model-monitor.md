@@ -1,0 +1,11 @@
+# Model monitoring
+
+Monitoring groups usage by provider connection and actual upstream model. Public aliases of the same upstream model on one connection are aggregated. Provider identity uses the credential connection name when available; inline addresses remove authentication and query parameters. Selectors combine authorized deployments and visible historical records.
+
+Billing and monitoring buckets commit in the same PostgreSQL transaction. Statistics change only after an idempotent billing insert succeeds. Task settlement subtracts the previous value and adds the settled value. Queued billing becomes visible after persistence.
+
+Fifteen-minute UTC buckets retain organization, team, project, user, key, billing ownership, provider and upstream-model dimensions. Batches merge matching buckets and apply UPSERTs in stable key order. Queries read aggregated buckets, with a window of 1–90 days and timezone offsets aligned to 15 minutes. High-cardinality dimensions increase storage and query cost; local tests are not a production load benchmark.
+
+Only successful uncached real text streams produce performance samples. TTFT measures the first SSE data segment, which can contain metadata. TPS is output tokens × 1000 / (total milliseconds − first-segment milliseconds); a zero interval produces no TPS sample. Cross-bucket averages are weighted by sample counts. Synchronous requests retain counts, tokens, cost and latency without a TTFT sample.
+
+The bilingual Recharts interface displays at most eight chart series while retaining all combinations in the detail table. Deploy matching console, gateway and database structures. Missing interface structures produce a retryable error.

@@ -1,8 +1,6 @@
-# 会话保持与供应商粘性设计
+# 会话保持与供应商粘性
 
-日期：2026-10-12。
-
-## 1. 设计目标
+## 1. 当前行为
 
 **动态会话偏好优先保持同一供应商和上游部署，提高上游 prompt 缓存命中机会；新会话按“模型默认配置 → 当前模板的模型规则与路由组”选路。调用记录按会话归组。**
 
@@ -116,7 +114,7 @@ Redis 异常时普通对话继续正常路由，可保留本机短期偏好，�
 
 已识别会话的调用日志按 `scope + session_id` 归组，供应商切换保持同组。日志模型保留客户端请求的模型/组别名，实际部署、供应商和上游型号单独记录；沿用现有端点、状态、用量和费用字段，在现有 `usage_events` 增加 `session_source` 保存识别来源。粘性缓存不建表。重试和费用记录保持现有调用/尝试粒度；提前拒绝不保证已建立会话记录，缓存异常通过调试日志记录降级原因。
 
-会话列表由后端按组分页，详情展示各轮实际目标和失败。费用沿用现有调用/尝试结算，聚合不重复计费。响应缓存命中标明未调用上游，不伪造执行目标或更新供应商成功偏好。旧日志不按相似 prompt 追溯合并。
+会话列表由后端按组分页，详情展示各轮实际目标和失败。费用沿用现有调用/尝试结算，聚合不重复计费。响应缓存命中标明未调用上游，不伪造执行目标或更新供应商成功偏好。没有会话标识的记录不按相似 prompt 推断归组。
 
 新增页面文案使用项目中英文 i18n，示例提示词用英文，用户输入保持原文。
 
@@ -139,10 +137,8 @@ Redis 异常时普通对话继续正常路由，可保留本机短期偏好，�
 
 自动化测试使用真实后台、隔离数据库/Redis 与本地受控上游，验证页面、接口、实际调用次数和数据；结束清理自建数据。供应商 prompt 缓存通过独立 live regression 测量，不能用网关响应缓存或耗时推断命中。
 
-2026-10-12 的[真实供应商缓存实测](../../testdata/supplier-cache/2026-10-12/report.md)通过真实网关调用 Fenno 与七牛的 GPT-5.5 对应接口，共 12 轮；9 轮明确返回 3,840 / 4,364 个输入缓存 token（88.0%），其余 3 轮未报告缓存数。双候选保持 Fenno、切回 Fenno 两阶段共 6 轮全部明确命中，原始用量与日志一致，且每轮都实际访问上游。该样本验证了动态偏好保留缓存复用机会，不能代表生产命中率或证明相对随机路由的提升幅度；供应商内部账号、节点与缓存有效期仍属于外部边界。
+真实供应商的 prompt 缓存命中与有效期属于外部服务边界，需使用独立 live regression 验证。
 
 ## 8. 参考
 
 - [现有路由模板](routing.md)、[路由组与回退](routing-groups.md)、[模型与端点](model-endpoints.md)。
-- Sub2API `a6f0a07bcdcfd62826ba481dc1ada45f5b77bcf8`：[会话信号优先级](../../../../sub2api/backend/internal/service/openai_gateway_scheduling.go)、[prompt 内容 seed](../../../../sub2api/backend/internal/service/openai_content_session_seed.go)。
-- LiteLLM `102619d47a78d80f0383c9e8f52446046f0ecc6b`：[部署粘性](https://github.com/BerriAI/litellm/blob/102619d47a78d80f0383c9e8f52446046f0ecc6b/litellm/router_utils/pre_call_checks/deployment_affinity_check.py)、[原子缓存申请](https://github.com/BerriAI/litellm/blob/102619d47a78d80f0383c9e8f52446046f0ecc6b/litellm/caching/affinity_cache.py)。LiteLLM 此粘性检查主要依赖父响应、明确 session 和调用方；prompt 内容兜底参考 Sub2API。

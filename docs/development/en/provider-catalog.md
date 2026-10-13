@@ -64,7 +64,7 @@ Fetching and importing a provider model list only adds model and price informati
 
 - Base `https://newapi.example.com/proxy/v1` plus the registered `bypass_openai_chat` action `/v1/chat/completions` becomes `/proxy/v1/chat/completions`: XHub avoids duplicating `/v1` and preserves `/proxy`. Clients use XHub's address. See `internal/provider/openai/native.go` and `internal/dataplane/transport/bypass_url.go`.
 - Compatible discovery merges the complete upstream list with local specialized models; it does not filter ordinary models through a local execution whitelist. Failures permit manual IDs. Discovery v1 fallback does not change inference addresses or protocols. See `internal/gateway/models`.
-- The normal UI flow resolves address and authentication from the referenced model provider. Legacy deployments with inline addresses can prevent a provider address change from taking effect: runtime resolution fills empty addresses rather than overriding existing ones. This is a legacy-data diagnostic boundary, not a new configuration workflow. See `internal/llm/credentials/credential.go`.
+- The normal UI flow resolves address and authentication from the referenced model provider. Deployment-level addresses take precedence; runtime provider resolution fills empty addresses. See `internal/llm/credentials/credential.go`.
 - An unregistered `catalog_id` may remain relay metadata but creates no executor. Registered specialized catalogs validate models and TransportIDs. The backend reads the trusted catalog from the saved connection, not a forged request value.
 
 ## 3. Suno: obtain the actual contract first
@@ -163,7 +163,7 @@ Create → read string task ID → pin identity and deployment → poll → extr
 ~~~bash
 go test ./internal/provider/... ./internal/llm/credentials ./internal/dataplane/transport
 bash scripts/regression.sh 'TestProvider(Transport|Forms)Contract'
-bash scripts/e2e.sh provider-forms.spec.ts docs-center.spec.ts
+bash scripts/e2e.sh scenarios/legacy/provider-forms scenarios/legacy/docs-center
 ~~~
 
 Use an isolated database and local upstream; see [testing](testing.md). Cover save/reload, invalid configuration, authentication, success/failure payloads and bilingual selection. Tasks additionally need pending states, multiple results, identity isolation and repeated-query settlement checks. Validate external suppliers separately.

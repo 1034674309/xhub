@@ -6,7 +6,7 @@ import (
 )
 
 // TestUserAccountEditing 验证真实用户更新接口和团队关系；前置隔离网关、管理员与两个成员，参数 t 为测试上下文，无返回值。
-// 覆盖更新契约、空名称/预算、非法字段回滚、普通成员越权、团队角色、移除后推理拒绝及删除；harness 清理私有 schema 和本地上游。
+// 覆盖更新契约、空名称/预算、非法字段回滚、普通成员越权、团队角色、移除后有效推理请求被拒绝且不调用上游及删除；harness 清理私有 schema 和本地上游。
 func TestUserAccountEditing(t *testing.T) {
 	h := newHarness(t, chatDeployment("edit-chat"))
 	admin := h.adminSession()
@@ -38,8 +38,13 @@ func TestUserAccountEditing(t *testing.T) {
 	h.ok(http.MethodPost, "/team/member_update", admin, map[string]any{"team_id": a.teamID, "user_id": a.userID, "role": "user"})
 	h.ok(http.MethodPost, "/v1/chat/completions", a.key, map[string]any{"model": "edit-chat", "messages": []any{map[string]any{"role": "user", "content": "before removal"}}})
 	h.ok(http.MethodPost, "/team/member_delete", admin, map[string]any{"team_id": a.teamID, "user_id": a.userID})
-	if r := h.do(http.MethodPost, "/v1/chat/completions", a.key, map[string]any{"model": "edit-chat", "messages": []any{}}); r.status != 401 && r.status != 403 {
+	// 使用有效对话到达权限校验，避免空消息的协议错误掩盖成员移除后的访问控制结果。
+	callsBefore := len(h.upstreamCalls())
+	if r := h.do(http.MethodPost, "/v1/chat/completions", a.key, map[string]any{"model": "edit-chat", "messages": []any{map[string]any{"role": "user", "content": "after removal"}}}); r.status != 401 && r.status != 403 {
 		t.Fatalf("移除团队后密钥仍可访问: %s", r.describe())
+	}
+	if got := len(h.upstreamCalls()); got != callsBefore {
+		t.Fatalf("移除团队后的拒绝请求不应调用上游：调用次数从 %d 变为 %d", callsBefore, got)
 	}
 	h.ok(http.MethodPost, "/user/delete", admin, map[string]any{"user_id": a.userID})
 	if r := h.do(http.MethodGet, "/user/info?user_id="+a.userID, admin, nil); r.status != 404 {

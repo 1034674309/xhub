@@ -14,10 +14,10 @@ GET /models 无需密钥，列出已启用公开模型名。显式提供密钥�
 
 ### 权限与失败
 
-失效密钥返回认证错误，越权返回权限错误或隐藏资源存在的响应。缺少模型时检查允许范围、启用状态和公开名称。
+失效密钥或无权使用推理入口的身份返回 401；没有模型授权时返回空列表。缺少模型时检查允许范围、启用状态和公开名称。
 
 ## 协议行为
-GET /models 可匿名发现已启用公开模型名。显式凭据按权限过滤，无效密钥返回 401；GET /v1/models 保留鉴权。id 是可调用名，created 是固定兼容时间戳，owned_by 是兼容标签而非真实供应商。空 data 可能表示没有授权模型。
+GET /models 可匿名发现已启用公开模型名。显式凭据按权限过滤，无效密钥返回 401；GET /v1/models 保留鉴权。id 是可调用名，created 固定为 1677610602，owned_by 固定为 openai，不代表实际供应商。空 data 可能表示没有授权模型。
 
 ## 接口与认证
 
@@ -25,7 +25,7 @@ GET /models 可匿名发现已启用公开模型名。显式凭据按权限过�
 GET /models
 ~~~
 
-GET /models 无凭据可公开查询已启用的模型名称。携带显式密钥时按权限过滤，错误密钥返回 401。GET /v1/models 保留鉴权兼容路径。
+GET /models 无凭据可公开查询已启用的模型名称。携带显式密钥时按权限过滤，错误密钥返回 401。GET /v1/models 要求鉴权。
 
 Base URL 使用调试台显示的网关根地址，不额外追加 /v1；实际请求使用上面的完整接口路径。
 
@@ -40,9 +40,9 @@ curl "$XHUB_BASE_URL/models"
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | scope | string | 空或 expand；其他值返回 400，expand 扩展管理员可见范围。 |
-| team_id | string | 会话团队筛选；密钥保持绑定范围。 |
-| return_wildcard_routes | boolean | 返回允许的通配名，默认 false。 |
-| only_model_access_groups | boolean | 旧参数，true 返回空列表。 |
+| team_id | string | 已鉴权会话的团队筛选；密钥保持绑定范围。匿名发现忽略此参数。 |
+| return_wildcard_routes | boolean | 保留已配置通配名并展开目录匹配；推理密钥也可包含匹配可见模型的授权通配名。默认 false，匿名发现忽略此参数。 |
+| only_model_access_groups | boolean | true 时返回空列表。 |
 
 ## 成功响应
 
@@ -73,7 +73,5 @@ curl "$XHUB_BASE_URL/models"
 
 | HTTP | 说明 |
 | --- | --- |
-| 400 | 请求无效，请检查 JSON、参数和查询。 |
+| 400 | scope 无效；仅接受空值或 expand。 |
 | 401 | XHub 凭据缺失或无效。 |
-| 403 | 权限拒绝，请检查模型范围或策略。 |
-| 429 | 超过限制，请检查响应详情与 Retry-After。 |

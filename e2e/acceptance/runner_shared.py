@@ -84,7 +84,7 @@ def verify_running_gateway(args, data):
     logger = RunLogger(directory / "e2e.log")
     gateway = os.environ.get("E2E_GATEWAY", "http://127.0.0.1:4000").rstrip("/")
     dataset = None
-    unsupported = {"profile-isolation", "cache-weight", "fallback", "business-browser", "regression"}
+    unsupported = {"business-browser", "regression"}
     try:
         status, _, _ = http(gateway, "/health/liveliness")
         if status != 200:
@@ -122,7 +122,7 @@ def verify_running_gateway(args, data):
         dataset.report["isolated_only_categories"] = sorted(unsupported)
         if requested:
             raise ValueError("真实网关模式不支持自启服务或故障注入分类: " + ", ".join(requested) +
-                             "；请显式选择真实业务分类，隔离测试使用 make e2e-offline 或 make regression")
+                             "；请显式选择真实业务分类，隔离测试使用 make regression")
         logger.log("连接已经运行的真实网关：" + gateway)
         dataset.verify()
         dataset.run_case("media-logs", dataset.verify_saved_media_logs)
@@ -159,37 +159,61 @@ def verify_running_gateway(args, data):
 
 
 def shared_main_environment(args, data):
-    """用途：通过已有真实网关构建基线；参数为 seed CLI 和清单，返回退出码，供 make testdata 调用。
+    """用途：清库并自启临时网关构建基线；参数为 seed CLI 和清单，返回退出码，供 make testdata 调用。
 
-    使用现有管理员密码，不启动进程、不生成配置、不直接清库；空租户检查由 seed 通过管理接口执行。
-    健康或凭据失败在修改基线文件前返回，业务失败保留本轮检查点以供排查。
+    使用本地配置管理员密码，清库后自启临时网关；结束关闭网关并保留数据。
+    凭据和编译失败不清库；启动或业务失败保留本轮检查点以供排查。
     """
     try:
         validate_providers(data)
     except ValueError as error:
         raise SystemExit(str(error))
-    gateway = os.environ.get("E2E_GATEWAY", "http://127.0.0.1:4000").rstrip("/")
-    auth = local_admin_credentials(gateway, ROOT)
+    auth = local_admin_credentials("http://127.0.0.1:4000", ROOT)
     if not auth.get("E2E_DATASET_PASSWORD"):
-        raise SystemExit("建数需要现有网关管理员密码，请设置 E2E_DATASET_PASSWORD；账号由 E2E_DATASET_ADMIN 指定，默认 admin@xhub.local")
+        raise SystemExit("建数需要管理员密码，请配置 configs/config.yaml 或 E2E_DATASET_PASSWORD；账号由 E2E_DATASET_ADMIN 指定")
     directory = Path(args.directory).resolve()
-    dataset = None
+    dataset, process, log = None, None, None
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chmod(directory, 0o700)
+    logger = RunLogger(directory / "testdata.log")
     try:
-        status, _, _ = http(gateway, "/health/liveliness")
-        if status != 200:
-            raise RuntimeError("真实网关健康检查失败")
-        logger = RunLogger(directory / "testdata.log")
+        gateway = "http://127.0.0.1:" + str(free_port())
+        command(["go", "build", "-o", str(directory / "xhub"), "./cmd/gateway"])
+        # 用户选择重建共享数据；reset_shared_target 使用 DROP DATABASE WITH (FORCE)
+        # 断开既有连接，不以空闲连接或数据库查看工具作为清库阻塞条件。
+        config = shared_config(auth["E2E_DATASET_PASSWORD"])
+        config["general_settings"].update(admin_email=auth["E2E_DATASET_ADMIN"], admin_name="Admin")
+        write_private(directory / "c.yaml", config)
+        reset_shared_target(logger=logger.log)
+        # 清库后旧检查点失效，避免后续验收复用旧实体 ID。
+        for name in ("access.json", "report.json"):
+            (directory / name).unlink(missing_ok=True)
+        log = open(directory / "gateway.log", "w")
+        process = subprocess.Popen([str(directory / "xhub"), "-config", str(directory / "c.yaml"), "-addr", gateway.removeprefix("http://")], cwd=ROOT,
+                                   env={**os.environ, "XHUB_PUBLIC_ORIGIN": gateway}, stdout=log, stderr=log)
+        ready(gateway + "/health/liveliness", process)
         dataset = module.Dataset(gateway, directory, data, logger=logger.log)
         dataset.login_credentials = auth
         dataset.seed()
         dataset.report["counts"] = {name: len(dataset.state[name]) for name in ("organizations", "teams", "users", "projects", "keys")}
-        dataset.report.update(status="seeded", gateway=gateway, gateway_mode="existing")
+        dataset.report.update(status="seeded", gateway=gateway, gateway_mode="temporary")
         dataset.save()
-        logger.log("构建完成，模型调用=0；make testdata 和 make e2e 均复用已经运行的真实网关")
+        logger.log("构建完成，模型调用=0；关闭临时网关并保留数据，随后使用 make run 启动正常网关")
         return 0
     except Exception as error:
         if dataset:
             dataset.report.update(status="failed", error=type(error).__name__ + ": " + str(error))
             dataset.save()
+        logger.log("建数失败：" + type(error).__name__ + ": " + str(error))
         print("建数失败：" + type(error).__name__ + ": " + str(error), file=sys.stderr)
         return 1
+    finally:
+        if process is not None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        if log is not None:
+            log.close()

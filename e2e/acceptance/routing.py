@@ -1,5 +1,9 @@
 """真实验收的 routing 模块；共享上下文由 Dataset 静态组合，资源与失败证据归本轮所有。"""
 import json
+import os
+import re
+
+from .runner_runtime import sql
 
 from .support import fallback_acceptance_deployments, fallback_acceptance_route, weighted_acceptance_route, response_cache_hit, cache_bill_check, bill_check
 
@@ -7,8 +11,38 @@ from .support import fallback_acceptance_deployments, fallback_acceptance_route,
 class RoutingCases:
     """用途：封装 routing 场景；通过 self 访问本轮状态、管理 API 和证据，供 Dataset 调用，不自行启动全套测试。"""
 
+    def route_evidence(self, call_id, supplier, upstream=None, cache_hit=False):
+        """用途：按请求 ID 核对持久化供应商、型号及缓存事实；参数为请求及预期路由，返回脱敏证据。
+
+        供真实路由验收调用；等待日志落库后只读当前基线 schema，缺失、重复或路由错误抛断言，不修改历史数据。
+        """
+        if not call_id:
+            raise AssertionError("路由验收缺少独立请求 ID")
+        self.wait_log(call_id)
+        schema_file = self.directory / "schema.txt"
+        schema = schema_file.read_text().strip() if schema_file.exists() else "public"
+        if not re.fullmatch(r"public|e2e_real_[a-f0-9]{12}", schema):
+            raise ValueError("路由证据 schema 非法")
+        ident = str(call_id).replace("'", "''")
+        rows = json.loads(sql(f"SELECT coalesce(json_agg(json_build_object('request_id',request_id,"
+            f"'supplier',supplier,'upstream_model',upstream_model,'cache_hit',cache_hit,"
+            f"'outbound_endpoint',outbound_endpoint,'status',status,'http_status',http_status)), '[]'::json) "
+            f"FROM {schema}.usage_events WHERE request_id='{ident}';").strip())
+        if len(rows) != 1:
+            raise AssertionError(f"请求 {call_id} 路由事实必须唯一，实际={len(rows)}")
+        row = rows[0]
+        if row["supplier"] != supplier or (upstream is not None and row["upstream_model"] != upstream) or row["cache_hit"] != cache_hit:
+            raise AssertionError("真实路由与预期不符: " + json.dumps(row, ensure_ascii=False))
+        if cache_hit and row["outbound_endpoint"]:
+            raise AssertionError("缓存命中不应记录真实外发路径: " + call_id)
+        if not cache_hit and not row["outbound_endpoint"]:
+            raise AssertionError("未命中缓存的请求缺少真实外发路径: " + call_id)
+        self.report.setdefault("route_evidence", []).append(row)
+        self.save()
+        return row
+
     def observed_since(self, start, marker):
-        """用途：读取某一步之后属于固定请求标记的观察记录；参数为起始下标和标记，返回匹配行副本；供断言缓存未外发、权重命中与回退顺序。"""
+        """用途：供其他观察器场景读取请求标记记录；参数为起始下标与标记，返回行副本；无观察器返回空列表，不修改资源。"""
         if not self.observer:
             return []
         with self.observer.lock:
@@ -24,9 +58,12 @@ class RoutingCases:
         timeout = self.data["routing"]["timeout_seconds"]
         deployment_ids, route_id, temporary_keys = [], None, []
         try:
-            first_id = self.deployment(definition, provider, model, temporary=True, route_tag="weight-a")
-            second_id = self.deployment(definition, provider, model, temporary=True, route_tag="weight-b")
-            deployment_ids.extend((first_id, second_id))
+            first_id = self.deployment(definition, provider, temporary=True, public_name=model)
+            deployment_ids.append(first_id)
+            second_definition = next(row for row in self.data["models"] if row["id"] == "qiniu-chat")
+            second_provider = self.state["selected"]["qiniu"]["provider"]
+            second_id = self.deployment(second_definition, second_provider, temporary=True, public_name=model)
+            deployment_ids.append(second_id)
             excluded_ids = [row["id"] for row in self.state["deployments"]
                             if row["public_name"] == model and row["id"] not in deployment_ids]
             initial = weighted_acceptance_route(model, first_id, second_id,
@@ -44,67 +81,62 @@ class RoutingCases:
             body = {"model": model, "session_id": marker, "messages": [{"role": "user",
                     "content": "Reply only OK. " + marker}], "max_tokens": 32}
 
-            before = len(self.observer.rows)
             self.action_start(model, protocol, "缓存首次未命中与权重 100:0",
-                              "固定正文首次请求，要求只调用 weight-a 的真实上游")
+                              "固定正文首次请求，要求只调用 Fenno 真实上游")
             first, first_headers, _, first_call = self.chat_request(primary, body)
-            rows = self.observed_since(before, marker)
-            if (response_cache_hit(first_headers) or len(rows) != 1
-                    or rows[0].get("route_tag") != "weight-a" or rows[0].get("status") != 200):
+            self.route_evidence(first_call, provider["id"], definition.get("stored_model", definition["upstream_model"]))
+            if response_cache_hit(first_headers):
                 raise AssertionError("首次请求没有按 100:0 只进入 weight-a 真实部署")
             first_bill = self.wait_bill(first_call)
             first_cost = bill_check(first_bill, primary, self.data["billing"])
             self.action_ok(model, protocol, "缓存首次未命中与权重 100:0",
-                           f"cache_hit=false，weight-a 上游=1，weight-b 上游=0，金额={first_cost:.9f}")
+                           f"cache_hit=false，实测供应商=fennoai，金额={first_cost:.9f}")
 
-            before = len(self.observer.rows)
             second, second_headers, _, second_call = self.chat_request(primary, body)
-            if not response_cache_hit(second_headers) or self.observed_since(before, marker):
+            if not response_cache_hit(second_headers):
                 raise AssertionError("相同请求没有由缓存回答或仍发生真实上游调用")
             if second != first or second_call == first_call:
                 raise AssertionError("缓存响应不一致或缓存请求没有独立 call ID")
+            self.route_evidence(second_call, "", "", cache_hit=True)
             second_bill = self.wait_bill(second_call)
             cache_bill_check(second_bill, primary, first["usage"])
             self.action_ok(model, protocol, "相同请求缓存命中与响应一致",
-                           "响应 JSON 与首次完全一致，上游增量=0，独立请求日志 cache_hit=true，spend=0，usage 一致")
+                           "响应 JSON 与首次完全一致，缓存日志已核对，独立请求日志 cache_hit=true，spend=0，usage 一致")
 
-            before = len(self.observer.rows)
             _, isolated_headers, _, isolated_call = self.chat_request(isolated, body)
-            rows = self.observed_since(before, marker)
-            if response_cache_hit(isolated_headers) or len(rows) != 1 or rows[0].get("route_tag") != "weight-a":
+            self.route_evidence(isolated_call, provider["id"])
+            if response_cache_hit(isolated_headers):
                 raise AssertionError("另一把密钥错误复用了第一把密钥的缓存")
             isolated_cost = bill_check(self.wait_bill(isolated_call), isolated, self.data["billing"])
             self.action_ok(model, protocol, "跨密钥缓存隔离",
-                           f"第二把密钥 cache_hit=false，weight-a 真实上游=1，独立计费={isolated_cost:.9f}")
+                           f"第二把密钥 cache_hit=false，实测供应商=fennoai，独立计费={isolated_cost:.9f}")
 
             self.api("/key/block", {"key": primary["key"]})
-            before = len(self.observer.rows)
             _, blocked_headers, blocked_status, _ = self.chat_request(primary, body, expected=401)
-            if response_cache_hit(blocked_headers) or self.observed_since(before, marker):
+            if response_cache_hit(blocked_headers):
                 raise AssertionError("封禁密钥读取了缓存或发生上游调用")
             self.action_ok(model, protocol, "封禁权限先于缓存读取",
-                           f"HTTP={blocked_status}，cache_hit=false，上游增量=0")
+                           f"HTTP={blocked_status}，cache_hit=false，封禁请求已被拒绝")
             self.api("/key/unblock", {"key": primary["key"]})
 
             updated = weighted_acceptance_route(model, first_id, second_id,
                                                 weights["updated_weights"], timeout, excluded_ids)
             self.api("/route_template/" + route_id + "/update", {"body": updated})
-            before = len(self.observer.rows)
             switched, switched_headers, _, switched_call = self.chat_request(primary, body)
-            rows = self.observed_since(before, marker)
-            if response_cache_hit(switched_headers) or len(rows) != 1 or rows[0].get("route_tag") != "weight-b":
+            self.route_evidence(switched_call, second_provider["id"], second_definition.get("stored_model", second_definition["upstream_model"]))
+            if response_cache_hit(switched_headers):
                 raise AssertionError("路由更新未使旧缓存失效并切换到 weight-b")
             switched_cost = bill_check(self.wait_bill(switched_call), primary, self.data["billing"])
             self.action_ok(model, protocol, "路由更新使缓存失效并切换权重 0:100",
-                           f"cache_hit=false，weight-a 上游=0，weight-b 上游=1，金额={switched_cost:.9f}")
+                           f"cache_hit=false，实测供应商=qiniu，金额={switched_cost:.9f}")
 
-            before = len(self.observer.rows)
             repeated, repeated_headers, _, repeated_call = self.chat_request(primary, body)
-            if repeated != switched or not response_cache_hit(repeated_headers) or self.observed_since(before, marker):
+            if repeated != switched or not response_cache_hit(repeated_headers) or repeated_call == switched_call:
                 raise AssertionError("切换后相同请求没有命中新路由缓存")
+            self.route_evidence(repeated_call, "", "", cache_hit=True)
             cache_bill_check(self.wait_bill(repeated_call), primary, switched["usage"])
             self.action_ok(model, protocol, "新权重缓存命中与零权重排除",
-                           "响应一致，weight-a 上游=0，weight-b 上游增量=0，cache_hit=true，spend=0")
+                           "响应与权重切换后的真实回答一致，cache_hit=true，无外发，spend=0")
         finally:
             for subject in temporary_keys:
                 self.api("/key/delete", {"keys": [subject["key"]]})
@@ -118,110 +150,93 @@ class RoutingCases:
                 self.save()
 
     def verify_fallback_policy_chain(self, key):
-        """用途：组合验证 429 跨真实模型回退、成功正文缓存及零费用、目标白名单复核和 disable_fallbacks；参数为基线密钥，返回无；临时故障部署、模板和密钥均 finally 删除。"""
+        """用途：真实供应商错误触发跨模型回退并验证逐轮调用、目标权限及禁用回退；参数为基线密钥，无返回。
+
+        默认不存在的临时上游型号产生真实拒绝，环境 E2E_FALLBACK_UPSTREAM_MODEL 可指定故障型号；
+        不模拟 429，记录实际错误码；若不是 429/5xx，明确失败而不声称验证回退。finally 清理临时资源。
+        """
         model = self.state["chat_models"]["fennoai"]
-        # chat_models 记录两家供应商共用的公开模型，不能作为跨模型回退目标；
-        # 使用清单中独立的七牛 GLM 模型，并把主模型两家的健康部署全部排除。
-        fallback_definition = next(row for row in self.data["models"] if row["id"] == "qiniu-glm")
-        fallback_model = fallback_definition["public_name"]
-        protocol = "bypass_openai_chat"
-        provider = self.state["selected"]["fennoai"]["provider"]
+        upstream = os.environ.get("E2E_FALLBACK_UPSTREAM_MODEL", "xhub-nonexistent-" + self.run)
         definition = next(row for row in self.data["models"] if row["id"] == "fenno-chat")
-        healthy_ids, fallback_id = fallback_acceptance_deployments(
-            self.state["deployments"], model, fallback_model, fallback_definition["provider"])
-        excluded_fallback_ids = [row["id"] for row in self.state["deployments"]
-                                 if row["public_name"] == fallback_model and row["id"] != fallback_id]
-        fault_id = self.deployment(definition, provider, model, fault=True, temporary=True)
-        route_id, temporary_keys = None, []
+        provider = self.state["selected"]["fennoai"]["provider"]
+        target = next(row for row in self.data["models"] if row["id"] == "qiniu-glm")
+        fallback_model = target["public_name"]
+        _, fallback_id = fallback_acceptance_deployments(self.state["deployments"],
+            self.state["chat_models"]["fennoai"], fallback_model, target["provider"])
+        excluded = [r["id"] for r in self.state["deployments"]
+                    if r["public_name"] == fallback_model and r["id"] != fallback_id]
+        deployment_id, route_id, subjects = None, None, []
         try:
-            route, _ = self.api("/route_template/new", {"name": "real-acceptance-fallback-" + self.run,
-                "body": fallback_acceptance_route(model, fault_id, healthy_ids, fallback_model, fallback_id,
-                                                    self.data["routing"]["timeout_seconds"], excluded_fallback_ids)})
+            deployment_id = self.deployment(definition, provider, upstream, public_name=model, temporary=True)
+            route, _ = self.api("/route_template/new", {"name": "real-fallback-" + self.run, "body": fallback_acceptance_route(
+                model, deployment_id, [r["id"] for r in self.state["deployments"] if r["public_name"] == model and r["id"] != deployment_id], fallback_model, fallback_id, self.data["routing"]["timeout_seconds"], excluded)})
             route_id = route["id"]
             for suffix, models in (("allowed", [model, fallback_model]), ("primary-only", [model])):
-                created, _ = self.api("/key/generate", {"key_alias": "real-fallback-" + suffix,
-                    "owner_type": "personal", "user_id": key["user_id"], "team_id": key["team_id"],
-                    "project_id": key["project_id"], "models": models, "route_template_id": route_id})
-                temporary_keys.append({**key, **created, "profile": "logic-chain", "call_model": model})
-            allowed, primary_only = temporary_keys
-            marker = "fallback-repeat-" + self.run
-            body = {"model": model, "session_id": marker, "messages": [{"role": "user",
-                    "content": "Reply only OK. " + marker}], "max_tokens": 32}
-            repeat_count = self.data["logic_chains"]["fallback_cache"]["repeat_requests"]
-            first_answer = None
-            for repeat in range(1, repeat_count + 1):
-                # 首次真实回退后重复同一正文；缓存命中必须无上游增量并独立记录零费用。
-                before = len(self.observer.rows)
-                answer, headers, _, call_id = self.chat_request(allowed, body)
-                rows = self.observed_since(before, marker)
-                route = [(row.get("provider"), row.get("route_tag"), row.get("status")) for row in rows]
-                expected_route = [("fennoai", "fault", 429), ("qiniu", "default", 200)] if repeat == 1 else []
-                if response_cache_hit(headers) != (repeat > 1) or route != expected_route:
-                    raise AssertionError(f"回退第 {repeat} 轮缓存或调用链错误：预期={expected_route}，实际={route}")
-                if repeat == 1:
-                    first_answer = answer
-                elif answer != first_answer:
-                    raise AssertionError("回退缓存正文与首次成功响应不一致")
+                created, _ = self.api("/key/generate", {"key_alias": model + suffix, "owner_type": "personal",
+                    "user_id": key["user_id"], "team_id": key["team_id"], "project_id": key["project_id"],
+                    "models": models, "route_template_id": route_id})
+                subjects.append({**key, **created, "profile": "fallback-real", "call_model": model})
+            allowed, restricted = subjects
+            body = {"model": model, "session_id": "real-fallback-" + self.run, "messages": [{"role": "user", "content": "Reply only OK. " + model}], "max_tokens": 32}
+            # 禁止回退的探测先证实真实外发错误，避免本地拒绝被误认为供应商故障。
+            error, headers, status, call_id = self.chat_request(allowed, {**body, "disable_fallbacks": True}, expected=(400, 401, 403, 404, 422, 429, 500, 502, 503, 504))
+            if response_cache_hit(headers):
+                raise AssertionError("禁用回退的失败请求错误命中缓存")
+            proof = self.route_evidence(call_id, provider["id"], upstream)
+            if proof["status"] == "success":
+                raise AssertionError("指定主模型没有产生真实供应商错误")
+            log = self.wait_log(call_id)
+            diagnostic = log.get("metadata", {}).get("upstream_response")
+            if not diagnostic:
+                raise AssertionError("真实故障缺少供应商响应诊断")
+            self.report.setdefault("fallback_failures", []).append({"call_id": call_id,
+                "gateway_status": status, "upstream_response": diagnostic, "requested_upstream": upstream})
+            self.save()
+            upstream_status = diagnostic.get("status_code")
+            if not isinstance(upstream_status, int) or not (upstream_status == 429 or upstream_status >= 500):
+                raise AssertionError(f"真实回退前置条件未满足：供应商 HTTP={upstream_status}，通用回退需要 429/5xx；请通过 E2E_FALLBACK_UPSTREAM_MODEL 指定真实故障型号，不能将当前错误记为回退通过")
+            self.action_ok(model, "bypass_openai_chat", "真实供应商错误与禁用回退", f"HTTP={status}，供应商={provider['id']}，已核对外发路径；实际错误已记录")
+            call_ids = set()
+            for index in range(self.data["logic_chains"]["fallback_cache"]["repeat_requests"]):
+                # 同会话不同正文，排除响应缓存掩盖后续轮次的真实调用。
+                request = {**body, "messages": [{"role": "user", "content": f"Reply only OK. {model} turn {index}"}]}
+                answer, headers, _, call_id = self.chat_request(allowed, request)
+                if response_cache_hit(headers) or call_id in call_ids:
+                    raise AssertionError("回退逐轮请求必须真实外发并有独立 ID")
+                call_ids.add(call_id)
                 bill = self.wait_bill(call_id)
-                if bill.get("model") != model or bill.get("session_id") != marker or bill.get("session_source") != "explicit":
-                    raise AssertionError(f"回退第 {repeat} 轮账单未保留请求模型或明确会话：model={bill.get('model')}，session_id={bill.get('session_id')}，session_source={bill.get('session_source')}")
-                if repeat == 1:
-                    cost = bill_check(bill, allowed, self.data["billing"])
-                else:
-                    cache_bill_check(bill, allowed, first_answer["usage"])
-                    cost = 0
-                self.action_ok(model + " → " + fallback_model, protocol,
-                               f"第 {repeat}/{repeat_count} 轮回退及成功正文复用",
-                               f"调用链={route}，健康零权重=0 次，cache_hit={repeat > 1}，金额={cost:.9f}，usage={answer['usage']}")
-            self.action_ok(model + " → " + fallback_model, protocol, "回退成功响应缓存",
-                           f"同会话同正文执行={repeat_count} 次，首次真实故障后回退，后续命中且独立记录零费用")
-
-            denied_marker = "fallback-denied-" + self.run
-            denied_body = {"model": model, "messages": [{"role": "user",
-                "content": "Reply only OK. " + denied_marker}], "max_tokens": 32}
-            before = len(self.observer.rows)
-            denied, denied_headers, denied_status, _ = self.chat_request(primary_only, denied_body, expected=401)
-            rows = self.observed_since(before, denied_marker)
-            if response_cache_hit(denied_headers) or [(r.get("provider"), r.get("route_tag"), r.get("status")) for r in rows] != [("fennoai", "fault", 429)]:
-                raise AssertionError("回退目标白名单拒绝前发生了备用模型外发")
-            if "model not in allowed model list" not in json.dumps(denied, ensure_ascii=False):
-                raise AssertionError("回退目标白名单拒绝没有返回明确原因")
-            self.action_ok(fallback_model, protocol, "回退目标重新执行模型白名单",
-                           f"主模型故障后 HTTP={denied_status}，Qiniu 上游增量=0，拒绝原因已核对")
-
-            disabled_marker = "fallback-disabled-" + self.run
-            disabled_body = {"model": model, "session_id": marker, "messages": [{"role": "user",
-                "content": "Reply only OK. " + disabled_marker}], "max_tokens": 32,
-                "disable_fallbacks": True}
-            before = len(self.observer.rows)
-            _, disabled_headers, disabled_status, _ = self.chat_request(allowed, disabled_body, expected=502)
-            rows = self.observed_since(before, disabled_marker)
-            if response_cache_hit(disabled_headers) or [(r.get("provider"), r.get("route_tag"), r.get("status")) for r in rows] != [("fennoai", "fault", 429)]:
-                raise AssertionError("disable_fallbacks=true 后仍执行了备用模型")
-            self.action_ok(model, protocol, "disable_fallbacks 停止回退链",
-                           f"HTTP={disabled_status}，仅 Fenno fault=429，Qiniu 上游增量=0，cache_hit=false")
+                bill_check(bill, allowed, self.data["billing"])
+                if bill.get("session_id") != body["session_id"] or bill.get("model") != model:
+                    raise AssertionError("回退请求丢失明确会话或请求模型")
+                self.route_evidence(call_id, target["provider"], target.get("stored_model", target["upstream_model"]))
+                self.action_ok(model, "bypass_openai_chat", f"真实回退第 {index + 1} 轮", f"备用供应商={target['provider']}，usage={answer['usage']}，cache_hit=false")
+            denied, headers, _, denied_id = self.chat_request(restricted, body, expected=401)
+            if response_cache_hit(headers) or "model not in allowed model list" not in json.dumps(denied):
+                raise AssertionError("回退目标白名单未返回明确拒绝")
+            self.action_ok(fallback_model, "bypass_openai_chat", "回退目标白名单拒绝", "HTTP=401，禁止目标调用")
         finally:
-            for subject in temporary_keys:
+            for subject in subjects:
                 self.api("/key/delete", {"keys": [subject["key"]]})
             if route_id:
                 self.api("/route_template/" + route_id + "/delete", {})
-            self.api("/model/delete", {"id": fault_id})
-            self.state["deployments"] = [row for row in self.state["deployments"] if row["id"] != fault_id]
-            self.save()
+            if deployment_id:
+                self.api("/model/delete", {"id": deployment_id})
+                self.state["deployments"] = [r for r in self.state["deployments"] if r["id"] != deployment_id]
+                self.save()
 
     def verify_profile_route_isolation(self):
-        """用途：用当前运行的新请求验收两个单供应商密钥配置；无参数/返回；分别调用真实英文模型 ID，并要求观察器中只有声明的供应商收到该标记，证明不同上游模型没有再被合并到业务别名。"""
-        if self.checked("profile-routes-real-models-and-vendors"):
-            return
+        """用途：主动调用两种单供应商密钥并核对精确持久化路由；无参数/返回，供真实验收调用。
+
+        每轮重新请求，历史检查点不替代当前证据；账单由 call 核对，路由缺失或不符抛断言，无临时资源。
+        """
         for profile, provider in (("fenno-only", "fennoai"), ("qiniu-only", "qiniu")):
             key = next(row for row in self.state["keys"] if row["profile"] == profile)
             marker = f"route-isolation-{profile}-{self.run}"
             self.call(key, marker, model=key["call_model"])
-            rows = [row for row in self.observer.rows if marker in row["messages"]]
-            successes = [row for row in rows if row["status"] == 200]
-            if not successes or any(row["provider"] != provider for row in rows):
-                raise AssertionError(f"{profile} 没有隔离到真实模型和供应商 {provider}")
+            receipt = next(row for row in self.report["calls"] if row["marker"] == marker)
+            self.route_evidence(receipt["call_id"], provider, self.state["selected"][provider]["model"])
             self.action_ok(key["call_model"], "bypass_openai_chat", "真实模型路由隔离",
-                           f"profile={profile}，仅供应商={provider} 收到请求，响应包含非零 usage")
+                           f"profile={profile}，持久化供应商={provider}，响应包含非零 usage")
+        self.report["checks"] = [r for r in self.report["checks"] if r.get("name") != "profile-routes-real-models-and-vendors"]
         self.report["checks"].append({"name": "profile-routes-real-models-and-vendors", "passed": True})
         self.save()

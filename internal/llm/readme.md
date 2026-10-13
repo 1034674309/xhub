@@ -2,7 +2,7 @@
 
 [简体中文](readme_cn.md)
 
-The root provides navigation. Import concrete subpackages directly; no compatibility aliases are retained.
+The root provides navigation. Import concrete subpackages directly.
 
 ## Integration from other modules
 

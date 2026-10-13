@@ -65,7 +65,7 @@ Provider discovery and catalogs help administrators configure models and let bus
 
 Organize resources into organizations, teams, and projects, with platform, organization, and team administrators alongside ordinary members. Platform teams set model and budget boundaries; organization and team administrators manage members and projects within their scope. Members get their own model catalog and call records.
 
-Give people personal keys and applications team or project service keys. Keys support model scopes, budgets, expiration, rotation, blocking, and deletion. Removing a member invalidates their personal keys for that team. Model permissions narrow through these scopes, with management and data access checked by the backend.
+Give people personal keys and applications team or project service keys. Keys support model scopes, budgets, expiration, rotation, blocking, and deletion. Removing a member preserves personal keys; subsequent requests must pass current membership, key scope, and billing authorization checks. Model permissions narrow through these scopes, with management and data access checked by the backend.
 
 ### Cost management: usage with traceable pricing
 
@@ -258,7 +258,7 @@ Installation and customer guides are available in English and Chinese. Central d
 
 ## Project status and deployment references
 
-XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Account login and scoped roles currently exclude SSO/SCIM; this repository does not promise commercial SLAs or compliance certifications.
+XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Enterprise identity supports independently managed OIDC Code + PKCE login and SCIM user/group provisioning; OIDC login requires an active provisioned identity. Real identity-provider tenants require separate validation; this repository does not promise commercial SLAs or compliance certifications.
 
 ## License
 

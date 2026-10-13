@@ -2,7 +2,7 @@
 
 ## 原厂协议与认证
 
-使用 XHub 公开模型名及虚拟密钥；部署必须启用对应 Bypass 协议。网关替换上游模型名并注入部署凭据，保留原厂扩展字段，同时执行权限、护栏和计费。客户端发送 Authorization: Bearer $XHUB_API_KEY。模型支持由部署决定，不表示所有原厂模型自动可用。
+使用 XHub 公开模型名及虚拟密钥；部署必须启用对应 Bypass 协议。网关替换上游模型名并注入部署凭据，保留原厂扩展字段，同时执行权限和计费；Bypass 不执行标准入口的调用前文本护栏链。客户端发送 Authorization: Bearer $XHUB_API_KEY。模型支持由部署决定，不表示所有原厂模型自动可用。
 
 ## 接口概述
 
@@ -11,7 +11,7 @@ Responses 响应
 ### Responses 响应
 
 ## 接口行为
-POST /responses 是别名。读取 output[].content，output_text 是 SDK 便利属性，不保证在原始 JSON 中。创建不意味着支持查询或取消路由。
+读取 output[].content，output_text 是 SDK 便利属性，不保证在原始 JSON 中。创建不意味着支持查询或取消路由。
 
 ## 接口与认证
 

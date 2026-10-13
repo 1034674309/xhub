@@ -2,7 +2,7 @@
 
 ## Native protocol and authentication
 
-Use an XHub public model name and virtual key with the matching Bypass deployment. XHub maps the model and injects deployment credentials, preserves native fields and enforces access, guardrails and billing. Send Authorization: Bearer $XHUB_API_KEY. Model availability depends on configured deployments.
+Use an XHub public model name and virtual key with the matching Bypass deployment. XHub maps the model and injects deployment credentials, preserves native fields and enforces access and billing. Bypass does not run the standard pre-call text guardrail chain. Send Authorization: Bearer $XHUB_API_KEY. Model availability depends on configured deployments.
 
 ## Protocol behavior
 Read choices[].message for normal responses and choices[].delta for streaming. Tool calls require application execution and subsequent result messages. SSE errors after headers cannot change HTTP status. POST /chat/completions is an alias.

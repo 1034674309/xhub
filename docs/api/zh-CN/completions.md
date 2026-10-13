@@ -27,7 +27,7 @@ curl "$XHUB_BASE_URL/v1/completions" \
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | model | string · required | 公开模型名，部署必须支持此协议。 |
-| prompt | string or array · required | 旧补全协议提示。 |
+| prompt | string or array · required | 文本补全提示词。 |
 | max_tokens / temperature / stream | integer / number / boolean | 输出上限、采样和 SSE。 |
 
 ## 成功响应

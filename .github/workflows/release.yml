@@ -1,0 +1,178 @@
+name: Docker and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 发布任务按 ref 排队，避免推送镜像后被取消而缺失 Release。
+concurrency:
+  group: docker-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: node --test scripts/test_release_workflow.cjs
+      - run: python3 -m unittest scripts.test_deploy_build -v
+      - run: go test ./internal/...
+      - run: docker compose up -d --wait postgres redis
+      - run: bash scripts/regression.sh -v
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      # 真实登录、密钥轮换和推理结果，无外部付费服务；运行器清理专属 schema。
+      - run: bash scripts/e2e.sh scenarios/legacy/login/sc-056.test.ts scenarios/keys/rotation-secret.test.ts
+        env:
+          E2E_RUN_DIR: ${{ github.workspace }}/.e2e/release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-test-results
+          path: |
+            .e2e/release/results.json
+            .e2e/release/junit.xml
+            .e2e/release/scenario-coverage.json
+            .e2e/release/html/
+            .e2e/release/test-results/
+          if-no-files-found: ignore
+      - run: docker compose down -v
+        if: always()
+
+  publish:
+    needs: verify
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # ref 通过环境传入，禁止将不可信标签直接插入 shell 代码。
+      - name: Validate version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" == tag ]]; then
+            if [[ ! "$REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$ ]]; then
+              echo 'Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N (also alpha/beta).' >&2
+              exit 1
+            fi
+          fi
+          repository=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          XHUB_GATEWAY_ORIGIN: http://gateway:4000
+      # tracingRoot 是仓库根目录，保留 standalone 的 frontend 子目录和 docs 资源。
+      - name: Prepare runtime artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p bin/console/frontend/.next
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o bin/xhub-linux-amd64 ./cmd/gateway
+          cp /etc/ssl/certs/ca-certificates.crt bin/ca-certificates.crt
+          test -f frontend/.next/standalone/frontend/server.js
+          cp -a frontend/.next/standalone/. bin/console/
+          cp -a frontend/.next/static bin/console/frontend/.next/static
+          cp -a frontend/public bin/console/frontend/public
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: gateway
+        with:
+          images: ghcr.io/${{ steps.version.outputs.repository }}-gateway
+          tags: |
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha
+            type=semver,pattern={{version}}
+          flavor: latest=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+      - uses: docker/metadata-action@v5
+        id: console
+        with:
+          images: ghcr.io/${{ steps.version.outputs.repository }}-console
+          tags: |
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha
+            type=semver,pattern={{version}}
+          flavor: latest=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+      - uses: docker/build-push-action@v6
+        id: gateway_image
+        with:
+          context: .
+          file: Dockerfile
+          target: gateway
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.gateway.outputs.tags }}
+          labels: ${{ steps.gateway.outputs.labels }}
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
+      - uses: docker/build-push-action@v6
+        id: console_image
+        with:
+          context: .
+          file: deploy/Dockerfile.release
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.console.outputs.tags }}
+          labels: ${{ steps.console.outputs.labels }}
+          cache-from: type=gha,scope=console
+          cache-to: type=gha,mode=max,scope=console
+      # 两个镜像发布成功才创建版本；重跑更新附件，不重复创建 Release。
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+          REPOSITORY: ${{ steps.version.outputs.repository }}
+          GATEWAY_DIGEST: ${{ steps.gateway_image.outputs.digest }}
+          CONSOLE_DIGEST: ${{ steps.console_image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          printf 'ghcr.io/%s-gateway@%s\nghcr.io/%s-console@%s\n' "$REPOSITORY" "$GATEWAY_DIGEST" "$REPOSITORY" "$CONSOLE_DIGEST" > docker-images.txt
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease --latest=false); fi
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes "${prerelease[@]}"
+          fi
+          gh release upload "$VERSION" docker-images.txt --clobber

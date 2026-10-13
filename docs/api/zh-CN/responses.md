@@ -32,7 +32,7 @@ curl "$XHUB_BASE_URL/v1/responses" \
 | max_output_tokens | integer | 输出上限。 |
 | stream | boolean | 支持时返回带类型 SSE。 |
 | tools / tool_choice | array / string or object | 仅上游支持的工具。 |
-| previous_response_id | string | 需要上游状态支持。 |
+| previous_response_id | string | 使用网关历史并固定原部署，按调用方、请求模型和端点隔离，保留一小时。上下文缺失或过期拒绝续接，instructions 不继承。 |
 
 ## 成功响应
 

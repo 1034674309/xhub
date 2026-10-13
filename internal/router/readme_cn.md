@@ -57,7 +57,7 @@ pin 不能绕过停用、冷却或零权重；组中的真实模型身份仍需�
 
 Compile(selected, store, models) 读取模型默认值与模板显式配置，校验引用，并通过 RouteSettings.Err 返回错误，不执行写入。iam.SelectRouteTemplate 按 key、team、organization 选择首个绑定；所选文档不存在时使用内置模板。内置设置为一次尝试、60 秒、阈值三、无冷却。
 
-解析/校验 API 覆盖 FallbackPolicy、Group、Policy、默认权重、模板、目录、策略和部署归属。RouteSettings.ForModel 按模型规则、组、旧模板默认、模型默认解析；Candidates 只展开显式组名；Schedule 应用权重和可选 pin。Retries、TimeoutSeconds、AllowedFails、CooldownSeconds 返回已校验值。All、Available、Order、Pick、DeploymentID、CooldownID 执行调度。CleanAllocations 与 CleanTemplateWeights 深度清理悬空引用。
+解析/校验 API 覆盖 FallbackPolicy、Group、Policy、默认权重、模板、目录、策略和部署归属。RouteSettings.ForModel 按精确模型规则、组、模型默认值的优先级解析；Candidates 只展开显式组名；Schedule 应用权重和可选 pin。Retries、TimeoutSeconds、AllowedFails、CooldownSeconds 返回已校验值。All、Available、Order、Pick、DeploymentID、CooldownID 执行调度。CleanAllocations 与 CleanTemplateWeights 深度清理悬空引用。
 
 ## 内部核心实现
 
@@ -74,7 +74,7 @@ traffic-split 按正的有限相对权重独立抽样；未列部署默认权重
 - [groups.go](groups.go)：Group/GroupArgs、名称/成员/权重校验和候选展开。
 - [policy.go](policy.go)：Allocation、Policy、DefaultWeights、严格解析、份额与部署归属。
 - [router.go](router.go)：State、精确/通配匹配、全部策略、加权抽样、运行身份、价格比较和策略校验。
-- [schedule.go](schedule.go)：健康/权重过滤和兼容粘性置顶。
+- [schedule.go](schedule.go)：健康/权重过滤和会话目标置顶。
 - [settings.go](settings.go)：RouteSettings、范围解析、builtin、模型优先级、重试值和模板字段校验。
 - [template.go](template.go)：组与三类回退提取及实时目录校验。
 - [weight_cleanup.go](weight_cleanup.go)：悬空分配清理和深拷贝模板修复。

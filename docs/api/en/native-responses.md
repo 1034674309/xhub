@@ -2,7 +2,7 @@
 
 ## Native protocol and authentication
 
-Use an XHub public model name and virtual key with the matching Bypass deployment. XHub maps the model and injects deployment credentials, preserves native fields and enforces access, guardrails and billing. Send Authorization: Bearer $XHUB_API_KEY. Model availability depends on configured deployments.
+Use an XHub public model name and virtual key with the matching Bypass deployment. XHub maps the model and injects deployment credentials, preserves native fields and enforces access and billing. Bypass does not run the standard pre-call text guardrail chain. Send Authorization: Bearer $XHUB_API_KEY. Model availability depends on configured deployments.
 
 ## Overview
 
@@ -11,7 +11,7 @@ Responses
 ### Responses
 
 ## Behavior
-POST /responses is an alias. Read output[].content. output_text is an SDK convenience, not a guaranteed raw field. Creation does not guarantee retrieval or cancellation routes.
+Read output[].content. output_text is an SDK convenience, not a guaranteed raw field. Creation does not guarantee retrieval or cancellation routes.
 
 ## Endpoint and authentication
 

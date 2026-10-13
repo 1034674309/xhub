@@ -419,6 +419,7 @@ describe("RequestLogsPanel", () => {
       });
     });
 
+    /** 目的：验证英文默认界面切换自定义时间会清除分页游标；前置两页日志夹具；结果为第一页请求，框架回收组件与查询缓存，无后台写入。 */
     it("drops the cursor and returns to the first page when Custom Range is toggled", async () => {
       const user = userEvent.setup();
       const firstPage = Array.from({ length: 50 }, (_, index) => logEntry({ request_id: `req-${index}` }));
@@ -437,7 +438,7 @@ describe("RequestLogsPanel", () => {
       fireEvent.click(screen.getByTestId("pagination-next"));
       await waitFor(() => expect(lastCall()?.page).toBe(2));
 
-      await user.click(screen.getByRole("button", { name: translate("zh-CN", "Last 24 Hours") }));
+      await user.click(screen.getByRole("button", { name: translate("en", "Last 24 Hours") }));
       await user.click(await screen.findByRole("button", { name: "Custom Range" }));
 
       await waitFor(() => {
@@ -522,13 +523,14 @@ describe("RequestLogsPanel", () => {
   });
 
   describe("time range", () => {
+    /** 目的：验证英文时间快捷项提交十五分钟查询窗口；前置默认日志面板；检查请求起止差值，框架清理组件与查询缓存，无后台写入。 */
     it("requests a ~15 minute window when Last 15 Minutes is picked", async () => {
       const user = userEvent.setup();
       renderPanel();
 
       await waitFor(() => expect(uiSpendLogsCall).toHaveBeenCalled());
-      await user.click(screen.getByRole("button", { name: translate("zh-CN", "Last 24 Hours") }));
-      await user.click(await screen.findByRole("button", { name: translate("zh-CN", "Last 15 Minutes") }));
+      await user.click(screen.getByRole("button", { name: translate("en", "Last 24 Hours") }));
+      await user.click(await screen.findByRole("button", { name: translate("en", "Last 15 Minutes") }));
 
       const windowSeconds = () => {
         const call = lastCall();
@@ -542,18 +544,19 @@ describe("RequestLogsPanel", () => {
       expect(windowSeconds()).toBeLessThanOrEqual(16 * 60);
     });
 
+    /** 目的：验证英文界面重置筛选恢复二十四小时窗口；前置选择十五分钟；检查按钮及刷新请求，框架清理组件和查询缓存，无后台写入。 */
     it("restores the default 24 hour window when filters are reset", async () => {
       const user = userEvent.setup();
       renderPanel();
 
       await waitFor(() => expect(uiSpendLogsCall).toHaveBeenCalled());
-      await user.click(screen.getByRole("button", { name: translate("zh-CN", "Last 24 Hours") }));
-      await user.click(await screen.findByRole("button", { name: translate("zh-CN", "Last 15 Minutes") }));
-      expect(await screen.findByRole("button", { name: translate("zh-CN", "Last 15 Minutes") })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: translate("en", "Last 24 Hours") }));
+      await user.click(await screen.findByRole("button", { name: translate("en", "Last 15 Minutes") }));
+      expect(await screen.findByRole("button", { name: translate("en", "Last 15 Minutes") })).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Reset Filters" }));
 
-      expect(await screen.findByRole("button", { name: translate("zh-CN", "Last 24 Hours") })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: translate("en", "Last 24 Hours") })).toBeInTheDocument();
 
       await user.click(screen.getByTestId("datatable-refresh"));
 
