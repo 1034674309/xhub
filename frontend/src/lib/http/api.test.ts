@@ -48,6 +48,18 @@ describe("typed api client middleware", () => {
     vi.unstubAllGlobals();
   });
 
+  /** 前置可移植镜像以 /gw 为基址、浏览器有公网源；验证原生 Request 可构造且保留认证头。
+   * 使用隔离 fetch 返回结果，不调用外部服务；afterEach 恢复全局对象。 */
+  it("supports same-origin gateway proxy in native Request", async () => {
+    registerBaseUrlGetter(() => "/gw");
+    vi.stubGlobal("location", { origin: "http://xhub-http.test:3000" });
+    registerAuthTokenGetter(() => "sk-session-test");
+    const { fetch, requests } = capturingFetch(jsonResponse(200, { data: [] }));
+    await fetchClient.GET("/model_group/info", { fetch });
+    expect(requests[0].url).toBe("http://xhub-http.test:3000/gw/model_group/info");
+    expect(requests[0].headers.get("Authorization")).toBe("Bearer sk-session-test");
+  });
+
   it("injects the bearer token under the registered auth header name", async () => {
     registerAuthTokenGetter(() => "sk-test");
     registerAuthHeaderNameGetter(() => "x-litellm-key");

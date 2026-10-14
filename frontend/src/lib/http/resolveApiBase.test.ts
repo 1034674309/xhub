@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clientSampleBaseUrl, resolveApiBase, resolveGatewayApiBase, resolveRequestUrl } from "./resolveApiBase";
+import {
+  clientSampleBaseUrl,
+  resolveConsoleApiBase,
+  resolveApiBase,
+  resolveGatewayApiBase,
+  resolveRequestUrl,
+} from "./resolveApiBase";
 
 describe("resolveRequestUrl", () => {
   it("targets the registered base when one is registered", () => {
@@ -175,8 +181,32 @@ describe("clientSampleBaseUrl", () => {
         "http://localhost:4000",
       ),
     ).toBe("https://docs.example.com");
-    expect(clientSampleBaseUrl({ PROXY_BASE_URL: "https://proxy.example.com/" }, "")).toBe(
-      "https://proxy.example.com",
-    );
+    expect(clientSampleBaseUrl({ PROXY_BASE_URL: "https://proxy.example.com/" }, "")).toBe("https://proxy.example.com");
   });
+});
+
+/** 验证控制台地址与示例地址分离；前置不同覆盖组合，断言代理回退和覆盖优先级；纯函数无清理。 */
+describe("resolveConsoleApiBase", () => {
+  /** 前置缺失、null、空白地址；公网 HTTP 与 HTTPS 均可使用相对代理，不产生 localhost 地址。 */
+  it.each([{}, { envBase: null, reportedBase: null }, { envBase: "  ", reportedBase: " " }])(
+    "defaults to /gw for absent overrides: %j",
+    (inputs) => {
+      expect(resolveConsoleApiBase(inputs)).toBe("/gw");
+    },
+  );
+  /** 前置独立部署或服务端覆盖；保留现有优先级并规范尾斜杠，纯函数无清理。 */
+  it("preserves explicit gateway overrides", () => {
+    expect(resolveConsoleApiBase({ envBase: " https://env.example.com/ " })).toBe("https://env.example.com");
+    expect(
+      resolveConsoleApiBase({ envBase: "https://env.example.com", reportedBase: "https://api.example.com/" }),
+    ).toBe("https://api.example.com");
+  });
+});
+
+/** 前置相对控制台代理；typed client 必须获得绝对 URL，缺少浏览器源时保留相对路径，纯函数无清理。 */
+it("resolves relative gateway proxies against the page origin", () => {
+  expect(
+    resolveRequestUrl("/model/list?all=true", { registeredBase: "/gw/", pageOrigin: "http://xhub-http.test:3000/" }),
+  ).toBe("http://xhub-http.test:3000/gw/model/list?all=true");
+  expect(resolveRequestUrl("/model/list", { registeredBase: "/gw" })).toBe("/gw/model/list");
 });

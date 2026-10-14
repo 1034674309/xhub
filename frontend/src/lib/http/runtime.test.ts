@@ -11,9 +11,10 @@ describe("runtime request config defaults", () => {
     expect(getRequestBaseUrl()).toBe("https://proxy.example.com");
   });
 
-  it("defaults the base URL to the local gateway when NEXT_PUBLIC_BASE_URL is unset", () => {
+  /** 前置未设置构建地址；验证 typed client 经同源代理，afterEach 恢复环境，无持久数据。 */
+  it("defaults to the same-origin gateway proxy when NEXT_PUBLIC_BASE_URL is unset", () => {
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "");
-    expect(getRequestBaseUrl()).toBe("http://localhost:4000");
+    expect(getRequestBaseUrl()).toBe("/gw");
   });
 
   it("defaults the auth header name to Authorization", () => {

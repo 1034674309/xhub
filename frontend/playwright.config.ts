@@ -3,6 +3,9 @@ import { defineConfig, devices } from "@playwright/test";
 const uiPort = process.env.E2E_UI_PORT || "3100";
 const gatewayPort = process.env.E2E_GW_PORT || "4100";
 const upstreamPort = process.env.E2E_UP_PORT || "4110";
+const portableConsole = process.env.E2E_PORTABLE_CONSOLE === "1";
+// 测试域名走普通 HTTP，使浏览器真实缺少 randomUUID；不修改系统 hosts 或浏览器安全策略。
+const browserHost = portableConsole ? "xhub-http.test" : "127.0.0.1";
 const gateway = "http://127.0.0.1:" + gatewayPort;
 // 调用方可为并发隔离运行指定专属目录，避免配置、schema 和报告相互覆盖。
 const runDir = process.env.E2E_RUN_DIR ? path.resolve(process.env.E2E_RUN_DIR) : path.resolve(__dirname, `../.e2e/run-${process.pid}-${Date.now()}`);
@@ -20,7 +23,8 @@ export default defineConfig({
   reporter: [["./e2e/checklist-reporter.cjs"], ["html", { open: "never", outputFolder: path.join(runDir, "html") }],
     ["json", { outputFile: path.join(runDir, "results.json") }],
     ["junit", { outputFile: path.join(runDir, "junit.xml") }]],
-  use: { baseURL: "http://127.0.0.1:" + uiPort, screenshot: "only-on-failure",
+  use: { baseURL: "http://" + browserHost + ":" + uiPort,
+    launchOptions: portableConsole ? { args: ["--host-resolver-rules=MAP xhub-http.test 127.0.0.1"] } : {}, screenshot: "only-on-failure",
     trace: "retain-on-failure", video: "off", ...devices["Desktop Chrome"] },
   webServer: [
     { command: "bash ../e2e/start-gateway.sh", url: gateway + "/health/liveliness",

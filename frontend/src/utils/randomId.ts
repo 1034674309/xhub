@@ -1,4 +1,5 @@
-/** UUID that still works on plain HTTP. crypto.randomUUID exists only in a secure context. */
+/** 生成客户端会话 UUID，无参数，返回 UUID v4 字符串；调试台等页面调用。
+ * HTTPS 优先使用原生生成器，普通 HTTP 使用 getRandomValues；旧环境无 crypto 时回退随机字节，无持久化副作用。 */
 export function randomId(): string {
   const cryptoObj = globalThis.crypto;
   if (cryptoObj && typeof cryptoObj.randomUUID === "function") {

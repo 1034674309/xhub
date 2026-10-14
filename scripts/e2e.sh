@@ -23,7 +23,12 @@ export E2E_RESPONSES_CONTINUATION=1
 # HTTPS 身份与官方 Kodo SDK 协议夹具仅编入测试程序。
 export E2E_ENTERPRISE_FIXTURE=1
 export XHUB_GATEWAY_ORIGIN="$E2E_GATEWAY"
-export NEXT_PUBLIC_BASE_URL="$E2E_GATEWAY"
+# 发布兼容模式与正式镜像一样不注入浏览器后台地址，实际验证 /gw 自举。
+if [[ "${E2E_PORTABLE_CONSOLE:-0}" == 1 ]]; then
+  unset NEXT_PUBLIC_BASE_URL
+else
+  export NEXT_PUBLIC_BASE_URL="$E2E_GATEWAY"
+fi
 LOCK="$ROOT/.e2e/browser.lock"
 mkdir -p "$ROOT/.e2e"
 source "$ROOT/scripts/browser-lock.sh"

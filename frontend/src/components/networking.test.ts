@@ -26,7 +26,7 @@ describe("密钥创建使用固定 JSON 字段契约", () => {
       expect(fetcher).toHaveBeenCalledOnce();
       const [url, init] = fetcher.mock.calls[0];
       expect(new URL(url, "http://test.local").pathname).toBe(
-        "/key/generate",
+        "/gw/key/generate",
       );
       expect(JSON.parse(init.body)).toMatchObject({
         metadata: { source: "test" },
@@ -188,7 +188,7 @@ describe("modelInfoCall", () => {
     );
 
     const parsed = new URL(mockFetch.mock.calls[0][0] as string, "http://example.com");
-    expect(parsed.pathname).toBe("/v2/model/info");
+    expect(parsed.pathname).toBe("/gw/v2/model/info");
     expect(parsed.searchParams.get("model")).toBe("gpt-4");
     expect(parsed.searchParams.has("search")).toBe(false);
     expect(parsed.searchParams.get("page")).toBe("2");
@@ -256,7 +256,7 @@ describe("daily activity helpers", () => {
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const parsed = new URL(calledUrl, "http://example.com");
 
-    expect(parsed.pathname).toBe("/tag/daily/activity");
+    expect(parsed.pathname).toBe("/gw/tag/daily/activity");
     expect(parsed.searchParams.get("tags")).toBe("alpha,beta");
   });
 
@@ -462,7 +462,8 @@ describe("UI config and public endpoints", () => {
     expect(configCall).toBeDefined();
   });
 
-  it("uses the local gateway origin when the server reports an empty proxy_base_url", async () => {
+  /** 前置空构建与报告地址；验证控制台使用 /gw，结束恢复环境与 fetch，无持久数据。 */
+  it("uses the same-origin proxy when the server reports an empty proxy_base_url", async () => {
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "");
     setupMockFetch([
       { url: "/litellm/.well-known/litellm-ui-config", data: { server_root_path: "/", proxy_base_url: "" } },
@@ -470,7 +471,7 @@ describe("UI config and public endpoints", () => {
 
     await Networking.getUiConfig();
 
-    expect(Networking.getProxyBaseUrl()).toBe("http://localhost:4000");
+    expect(Networking.getProxyBaseUrl()).toBe("/gw");
     expect(Networking.getProxyBaseUrl()).not.toContain("/ui");
     vi.unstubAllEnvs();
   });
@@ -927,5 +928,30 @@ describe("usage date contracts", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: { message: "usage unavailable" } }), text: async () => JSON.stringify({ error: { message: "usage unavailable" } }) });
     const from = new Date(2025, 2, 1);
     await expect(kind === "gateway" ? Networking.gatewayDailyActivityCall("token", from, from) : Networking.teamSpendByUserCall("token", from, from, [])).rejects.toThrow();
+  });
+});
+
+/** 前置未设置构建地址；验证获取配置从同源代理自举，网络失败原样返回，不切换到 localhost；afterEach 恢复 fetch。 */
+describe("portable console UI config bootstrap", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+
+  /** 前置网关返回合法配置；检查实际请求 URL，不创建数据库数据，afterEach 恢复 fetch。 */
+  it("loads initial UI configuration through /gw", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ json: async () => ({ server_root_path: "/", proxy_base_url: "" }) });
+    global.fetch = fetcher;
+    await Networking.getUiConfig();
+    expect(fetcher).toHaveBeenCalledWith("/gw/litellm/.well-known/litellm-ui-config");
+    expect(Networking.getProxyBaseUrl()).toBe("/gw");
+  });
+
+  /** 前置代理暂时无法连接；验证失败可见且不改写目标，afterEach 恢复 fetch，无持久数据。 */
+  it("propagates bootstrap failure without requesting localhost", async () => {
+    const failure = new TypeError("network unavailable");
+    const fetcher = vi.fn().mockRejectedValue(failure);
+    global.fetch = fetcher;
+    await expect(Networking.getUiConfig()).rejects.toBe(failure);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith("/gw/litellm/.well-known/litellm-ui-config");
   });
 });

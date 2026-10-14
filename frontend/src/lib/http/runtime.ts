@@ -1,4 +1,4 @@
-import { resolveApiBase, resolveGatewayApiBase } from "./resolveApiBase";
+import { resolveApiBase, resolveConsoleApiBase } from "./resolveApiBase";
 
 /**
  * Runtime request config the typed client reads on every call. The values are
@@ -10,8 +10,7 @@ import { resolveApiBase, resolveGatewayApiBase } from "./resolveApiBase";
  * enables a query cannot diverge. Keeping the seam here (not importing from the
  * component tree) lets api.ts stay in lib/http without a layering inversion.
  *
- * The base URL default is the gateway origin (NEXT_PUBLIC_BASE_URL when set).
- * It is not the page origin. networking.tsx replaces the getter with one that
+ * 控制台默认经同源 /gw 代理请求网关，NEXT_PUBLIC_BASE_URL 可显式覆盖。 networking.tsx replaces the getter with one that
  * also folds in the server root path from the live UI config. The auth header
  * name has no build-time source, so it defaults to "Authorization" until the
  * session's JWT supplies a custom one.
@@ -20,7 +19,7 @@ import { resolveApiBase, resolveGatewayApiBase } from "./resolveApiBase";
 type Getter<T> = () => T;
 
 let baseUrlGetter: Getter<string> = () =>
-  resolveApiBase({ explicitBase: resolveGatewayApiBase({ envBase: process.env.NEXT_PUBLIC_BASE_URL }) });
+  resolveApiBase({ explicitBase: resolveConsoleApiBase({ envBase: process.env.NEXT_PUBLIC_BASE_URL }) });
 let authHeaderNameGetter: Getter<string> = () => "Authorization";
 let authTokenGetter: Getter<string | null> = () => null;
 let errorHandler: (message: string) => void = () => {};
