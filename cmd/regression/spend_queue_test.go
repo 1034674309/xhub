@@ -148,3 +148,72 @@ func TestSpendQueueFailureRecovery(t *testing.T) {
 		})
 	}
 }
+
+// TestUsageSessionSourceUpgradeRecovery 复现旧库缺列导致真实 HTTP 调用已成功但账单事务失败的升级故障。
+// 前置私有 PostgreSQL schema、专用 Redis 和本地上游；验证失败响应、队列保留、迁移后日志/用量/监控恢复及五层费用仅结算一次。
+// 参数 t 管理资源生命周期；不访问真实供应商，所有故障和数据均由 harness 清理。
+func TestUsageSessionSourceUpgradeRecovery(t *testing.T) {
+	isolatedSpendRedis(t)
+	const model = "regression-usage-upgrade"
+	h := newHarness(t, chatDeployment(model))
+	admin := h.adminSession()
+	c := h.openScope(t, admin, "usage-upgrade")
+	before := h.moneyOf(t, c)
+	if _, err := h.db.Engine.Exec("ALTER TABLE usage_events DROP COLUMN session_source"); err != nil {
+		t.Fatal(err)
+	}
+	r := h.ok(http.MethodPost, "/v1/chat/completions", c.key, chatRequest(model, "Verify upgrade recovery"))
+	cost := parseFloatOrZero(r.header("x-litellm-response-cost"))
+	rows, raw := h.gw.Live.PeekLogs(10)
+	if cost <= 0 || len(rows) != 1 || len(raw) != 1 {
+		t.Fatalf("推理成功后未保留待结算账单: cost=%v rows=%+v", cost, rows)
+	}
+	row := rows[0]
+	h.flushSpend()
+	if pending, pendingRaw := h.gw.Live.PeekLogs(10); len(pending) != 1 || len(pendingRaw) != 1 || pendingRaw[0] != raw[0] {
+		t.Fatal("缺列写入失败丢失 Redis 待写记录")
+	}
+	if after := h.moneyOf(t, c); !after.grewBy(before, 0) {
+		t.Fatalf("事务失败仍修改五层费用: before=%+v after=%+v", before, after)
+	}
+	if failed := h.do(http.MethodGet, "/spend/logs/ui/"+row.RequestID, admin, nil); failed.status != http.StatusInternalServerError {
+		t.Fatalf("缺列时日志接口应明确报错: status=%d body=%s", failed.status, failed.body)
+	}
+	for range 2 {
+		if err := h.db.Migrate(t.Context()); err != nil {
+			t.Fatalf("旧库补列迁移失败: %v", err)
+		}
+		h.flushSpend()
+	}
+	if after := h.moneyOf(t, c); !after.grewBy(before, cost) {
+		t.Fatalf("恢复后五层费用应只增长一次: before=%+v after=%+v cost=%v", before, after, cost)
+	}
+	if logs := h.successRows(t, admin, model); len(logs) != 1 {
+		t.Fatalf("恢复后日志数量=%d，预期 1", len(logs))
+	}
+	h.ok(http.MethodGet, "/spend/logs/ui/"+row.RequestID, admin, nil)
+	usage := h.ok(http.MethodGet, "/user/daily/activity/aggregated?user_id="+c.userID, admin, nil).json()
+	if got := usage["metadata"].(map[string]any)["total_api_requests"]; got != float64(1) {
+		t.Fatalf("恢复后用量请求数不是 1: %+v", usage)
+	}
+	monitor := h.ok(http.MethodGet, "/models/monitor?model="+model, admin, nil).json()
+	if got := monitor["summary"].(map[string]any)["requests"]; got != float64(1) {
+		t.Fatalf("恢复后模型监控请求数不是 1: %+v", monitor)
+	}
+	h.ok(http.MethodGet, "/guardrails/usage/overview", admin, nil)
+	if err := h.gw.Live.EnqueueSpend(row); err != nil {
+		t.Fatal(err)
+	}
+	h.flushSpend()
+	if pending, _ := h.gw.Live.PeekLogs(10); len(pending) != 0 {
+		t.Fatal("迁移恢复后队列仍有记录或重放重新入队")
+	}
+	for _, ref := range []string{live.SpendRef("key", row.APIKey), live.SpendRef("user", c.userID), live.SpendRef("team", c.teamID), live.SpendRef("org", c.orgID), live.SpendRef("project", c.projectID)} {
+		if got := h.gw.Live.HotSpend(ref); !nearlyEqual(got, 0) {
+			t.Fatalf("恢复后 %s 待结算费用未释放: %v", ref, got)
+		}
+	}
+	if after := h.moneyOf(t, c); !after.grewBy(before, cost) {
+		t.Fatalf("重放导致重复计费: %+v", after)
+	}
+}

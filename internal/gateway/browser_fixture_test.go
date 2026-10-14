@@ -247,6 +247,24 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/usage/legacy", "/usage/migrate":
+			// 仅在已校验的 e2e_ 私有 schema 中复现旧表缺列；恢复必须走生产迁移入口。
+			// 控制端只编入测试程序，重复迁移不得重算历史费用；测试结束由运行器删库清理。
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var err error
+			if r.URL.Path == "/usage/legacy" {
+				_, err = db.Engine.Context(r.Context()).Exec("ALTER TABLE usage_events DROP COLUMN session_source")
+			} else {
+				err = db.Migrate(r.Context())
+			}
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		case "/session/ttl":
 			// 仅缩短当前测试会话的存储 TTL；不删除或撤销凭据，让真实鉴权链等待到期后拒绝。
 			var body struct {

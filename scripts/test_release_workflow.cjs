@@ -9,6 +9,18 @@ const yaml = require('../frontend/node_modules/js-yaml');
 const workflow = yaml.load(readFileSync(join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
 const publish = workflow.jobs.publish;
 
+/** 前置真实发布 YAML；验证升级双语闭环随发布运行且使用隔离 Redis，防止 CI 只验证新库；只读配置无需清理。 */
+test('verification runs both usage upgrade browser scenarios with isolated Redis', () => {
+  const browser = workflow.jobs.verify.steps.find(item => (item.run || '').startsWith('bash scripts/e2e.sh '));
+  assert.ok(browser, '发布必须运行真实浏览器场景');
+  for (const locale of ['en', 'zh-CN']) {
+    assert.ok(browser.run.split(/\s+/).includes(`scenarios/regression/usage-upgrade-${locale}.test.ts`),
+      `发布缺少 ${locale} 旧库升级闭环`);
+  }
+  assert.equal(browser.env.E2E_REDIS, '1', '升级验收必须使用专属 Redis 真实结算链');
+  assert.equal(browser.env.E2E_PORTABLE_CONSOLE, '1', '发布必须继续验证 HTTP 控制台代理');
+});
+
 /** 按名称返回发布步骤；参数为名称，缺失时抛出断言；供测试调用，无副作用。 */
 function step(name) {
   const result = publish.steps.find(item => item.name === name);

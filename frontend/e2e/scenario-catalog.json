@@ -2545,5 +2545,19 @@
     "kind": "implemented",
     "environment": "default offline",
     "subsystem": "iam"
+  },
+  {
+    "id": "REGRESSION-USAGE-UPGRADE-EN",
+    "file": "e2e/scenarios/regression/usage-upgrade-en.test.ts",
+    "title": "legacy usage upgrade restores observability en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "REGRESSION-USAGE-UPGRADE-ZH-CN",
+    "file": "e2e/scenarios/regression/usage-upgrade-zh-CN.test.ts",
+    "title": "legacy usage upgrade restores observability zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]
