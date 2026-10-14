@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS organizations (
     route_template_id TEXT REFERENCES route_templates (id) ON DELETE SET NULL
 );
 
+-- 仅补充当前组织表的新字段，不导入旧系统数据；空范围与空元数据使已有组织保持原行为。
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS models TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}';
+
 -- Deleting an organization that still has teams is refused (RESTRICT).
 --
 -- models is the team's model set and the ceiling for everything under it. An

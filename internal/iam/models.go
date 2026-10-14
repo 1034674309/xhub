@@ -76,15 +76,17 @@ func (u *User) Active() bool { return u != nil && u.Status == StatusActive }
 // 测试：无直接单测
 func (u *User) Admin() bool { return u.Active() && u.Role == RoleAdmin }
 
-// Organization groups teams. Only platform administrators manage it.
+// Organization 保存组织额度、模型授权上限及元数据；模型范围由平台管理员设置，空列表兼容已有组织的不限制行为。
 type Organization struct {
-	RPMLimit  *int     `xorm:"'rpm_limit'" json:"rpm_limit"`
-	TPMLimit  *int     `xorm:"'tpm_limit'" json:"tpm_limit"`
-	ID        string   `xorm:"pk 'id'" json:"id"`
-	Name      string   `xorm:"'name'" json:"name"`
-	Status    string   `xorm:"'status'" json:"status"`
-	MaxBudget *float64 `xorm:"'max_budget'" json:"max_budget"`
-	Spend     float64  `xorm:"'spend'" json:"spend"`
+	Models    []string       `xorm:"json 'models'" json:"models"`
+	Metadata  map[string]any `xorm:"json 'metadata'" json:"metadata"`
+	RPMLimit  *int           `xorm:"'rpm_limit'" json:"rpm_limit"`
+	TPMLimit  *int           `xorm:"'tpm_limit'" json:"tpm_limit"`
+	ID        string         `xorm:"pk 'id'" json:"id"`
+	Name      string         `xorm:"'name'" json:"name"`
+	Status    string         `xorm:"'status'" json:"status"`
+	MaxBudget *float64       `xorm:"'max_budget'" json:"max_budget"`
+	Spend     float64        `xorm:"'spend'" json:"spend"`
 	// RouteTemplateID is the named router settings this organization selects.
 	// Empty means it selects nothing and inherits from the platform default.
 	RouteTemplateID *string   `xorm:"'route_template_id'" json:"route_template_id,omitempty"`

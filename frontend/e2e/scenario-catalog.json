@@ -2529,5 +2529,21 @@
     "kind": "implemented",
     "environment": "default offline",
     "subsystem": "budget"
+  },
+  {
+    "id": "REGRESSION-ORGANIZATION-CONFIG-EN",
+    "file": "e2e/scenarios/regression/organization-config-en.test.ts",
+    "title": "organization config roundtrip and model ceiling en",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "iam"
+  },
+  {
+    "id": "REGRESSION-ORGANIZATION-CONFIG-ZH-CN",
+    "file": "e2e/scenarios/regression/organization-config-zh-CN.test.ts",
+    "title": "organization config roundtrip and model ceiling zh-CN",
+    "kind": "implemented",
+    "environment": "default offline",
+    "subsystem": "iam"
   }
 ]

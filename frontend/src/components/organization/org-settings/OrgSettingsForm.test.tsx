@@ -11,15 +11,15 @@ vi.mock("@/i18n", async (importOriginal) => {
 });
 
 vi.mock("@/components/ModelSelect/ModelSelect", () => ({
-  ModelSelect: ({ onChange }: { onChange: (values: string[]) => void }) => (
-    <button type="button" onClick={() => onChange([])}>
+  ModelSelect: ({ onChange, disabled }: { onChange: (values: string[]) => void; disabled?: boolean }) => (
+    <button type="button" disabled={disabled} onClick={() => onChange([])}>
       clear-models
     </button>
   ),
 }));
 vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
   __esModule: true,
-  default: ({ onChange }: { onChange: (values: string[]) => void }) => (
+  default: ({ onChange, disabled }: { onChange: (values: string[]) => void; disabled?: boolean }) => (
     <button type="button" onClick={() => onChange(["vs-2"])}>
       set-vector-stores
     </button>
@@ -73,13 +73,15 @@ const org: Organization = {
   },
 };
 
-const renderForm = (overrides?: { patchOrganization?: Mock; onSaved?: () => void; org?: Organization }) => {
+/** 为组织表单测试构建独立 QueryClient；参数可覆盖角色、数据和保存方法，返回监听函数；自动卸载，无数据库写入。 */
+const renderForm = (overrides?: { canEditModels?: boolean; patchOrganization?: Mock; onSaved?: () => void; org?: Organization }) => {
   const patchOrganization = overrides?.patchOrganization ?? vi.fn().mockResolvedValue({});
   const onSaved = overrides?.onSaved ?? vi.fn();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
       <OrgSettingsForm
+        canEditModels={overrides?.canEditModels}
         organizationId="org-1"
         org={overrides?.org ?? org}
         accessToken="token"
@@ -219,4 +221,15 @@ describe("OrgSettingsForm", () => {
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
   });
+});
+
+/** 目的：组织管理员只能读模型上限但能维护元数据；前置只读角色，验证禁用控件和 JSON 原文保存，组件自动卸载。 */
+it("keeps organization models read-only while allowing metadata edits", async () => {
+  const user = userEvent.setup();
+  const { patchOrganization } = renderForm({ canEditModels: false });
+  expect(screen.getByRole("button", {name: "clear-models"})).toBeDisabled();
+  expect(screen.getByText("Only platform administrators can change the organization model ceiling.")).toBeVisible();
+  fireEvent.change(screen.getByLabelText("Metadata"), {target: {value: '{"department":"研发试点","nested":{"limit":3}}'}});
+  await user.click(screen.getByRole("button", {name: "Save Changes"}));
+  await waitFor(() => expect(patchOrganization).toHaveBeenCalledWith("org-1", {metadata: {department: "研发试点", nested: {limit: 3}}}));
 });

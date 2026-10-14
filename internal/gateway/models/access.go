@@ -8,12 +8,8 @@ import (
 	"github.com/sunqirui1987/xhub/internal/util"
 )
 
-// AllowsModel is the model authorization decision shared by the model catalog and the inference path, so a listed model is always a usable model. The permitted set comes from iam alone, which resolves it down one chain: team = union of the team's active access groups project = team ∩ project narrowing (when the key names a project) key = (project or team) ∩ key narrowing (when the key narrows) teamI
-// D narrows a session that is browsing one team's catalog; a key ignores it and answers for the single team it is bound to, never merging capabilities across teams. A scope with no grants at all is unrestricted: nothing has been assigned yet, and an empty assignment is not a denial.
-// 参数 s（Host）：Allows模型使用的数据面宿主；ctx（context.Context）：上下文，取消时停止；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；teamID（string）：团队 id。空串表示没有指定团队；alias（string）：对外模型名。
-// 返回 bool（bool）：这个调用方被允许使用该模型时返回真。目录和推理走同一判断，列出的模型就是可用的模型。
-// 调用：gateway/limits.go、gateway/models/available.go、gateway/models/list.go
-// 测试：无直接单测
+// AllowsModel 为模型目录与推理返回统一授权判断；参数为宿主、上下文、主体、预览团队及公开模型名。
+// 主凭证始终允许，其他主体按组织、团队、项目和密钥交集判断；查询失败或空名称返回 false，无写入副作用。
 func AllowsModel(s Host, ctx context.Context, p *auth.Principal, teamID, alias string) bool {
 	util.Trace("evaluate model access")
 	alias = strings.TrimSpace(alias)
@@ -39,17 +35,18 @@ func AllowsModel(s Host, ctx context.Context, p *auth.Principal, teamID, alias s
 	return false
 }
 
-// effectiveModels is the caller's permitted model names. A nil slice means the caller is unrestricted; an error means the check could not be made and the caller must deny rather than fall open. Only a key carries a model binding. A session has none of its own, so it is narrowed only when it names a team, and otherwise sees every deployment.
-// 参数 s（Host）：effective模型使用的数据面宿主；ctx（context.Context）：上下文，取消时停止；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；teamID（string）：团队 id。空串表示没有指定团队。
-// 返回 []string（[]string）：effective模型。没有匹配时为 nil 或空切片，调用方按长度判断；error（error）：失败原因。nil 表示这一步成功。
-// 调用：仅在 access.go 内使用
-// 测试：无直接单测
+// effectiveModels 返回调用方模型交集，供目录和推理的统一权限判断调用。
+// 参数 s/ctx/p 为宿主、上下文及主体，teamID 仅供平台管理员预览指定团队；普通会话始终读取本人团队。
+// 返回 nil 表示未限制，非 nil 空列表表示无权限，错误必须拒绝；只读，避免通过省略或伪造 team_id 绕过组织上限。
 func effectiveModels(s Host, ctx context.Context, p *auth.Principal, teamID string) ([]string, error) {
 	if s == nil || s.Identity() == nil {
 		return nil, nil
 	}
 	if p.Key != nil {
 		return s.Identity().AllowedModelsForKey(ctx, p.Key)
+	}
+	if !p.PlatformAdmin() {
+		return s.Identity().AllowedModelsForUser(ctx, p.UserID)
 	}
 	if teamID != "" {
 		return s.Identity().AllowedModelsForTeam(ctx, teamID)

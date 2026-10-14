@@ -57,17 +57,19 @@ interface OrgSettingsFormProps {
   organizationId: string;
   org: Organization;
   accessToken: string;
+  canEditModels?: boolean;
   onCancel: () => void;
   onSaved: () => void;
   patchOrganization?: (organizationId: string, body: OrgPatchBody) => Promise<unknown>;
 }
 
 /** 组织设置表单：接收组织快照、身份及保存/取消回调，返回可编辑表单。
- * 管理员页面调用；仅提交实际修改字段，非法输入不提交，保存失败保留输入。 */
+ * canEditModels 由平台角色决定，组织管理员只读模型上限；仅提交实际修改字段，非法输入不提交，保存失败保留输入。 */
 export const OrgSettingsForm = ({
   organizationId,
   org,
   accessToken,
+  canEditModels = true,
   onCancel,
   onSaved,
   patchOrganization = defaultPatchOrganization,
@@ -104,6 +106,8 @@ export const OrgSettingsForm = ({
         <FormField control={form.control} name="models" label={t("Models")}>
           {(field) => (
             <ModelSelect
+              id={field.id}
+              disabled={!canEditModels}
               value={field.value}
               onChange={field.onChange}
               context="organization"
@@ -111,6 +115,8 @@ export const OrgSettingsForm = ({
             />
           )}
         </FormField>
+
+        <p className="text-sm text-muted-foreground">{t(canEditModels ? "organizationConfig.modelScopeHint" : "organizationConfig.modelScopeReadOnly")}</p>
 
         <FormField control={form.control} name="route_template_id" label={t("pages.routeTemplates.title")}>
           {({ value, onChange }) => (

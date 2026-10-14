@@ -34,6 +34,8 @@ interface OrgCreateDialogProps {
   createOrganization?: (body: OrgCreateBody) => Promise<unknown>;
 }
 
+/** 组织创建弹窗：接收打开状态、会话及可选创建接口，返回表单；校验后提交模型上限和元数据。
+ * 管理页面调用，成功清空并关闭，失败保留用户输入，取消不写数据。 */
 export const OrgCreateDialog = ({
   open,
   onOpenChange,
@@ -89,6 +91,7 @@ export const OrgCreateDialog = ({
             <FormField control={form.control} name="models" label={t("Models")}>
               {(field) => (
                 <ModelSelect
+                  id={field.id}
                   value={field.value}
                   onChange={field.onChange}
                   context="organization"
@@ -96,6 +99,8 @@ export const OrgCreateDialog = ({
                 />
               )}
             </FormField>
+
+            <p className="text-sm text-muted-foreground">{t("organizationConfig.modelScopeHint")}</p>
 
             <FormField control={form.control} name="route_template_id" label={t("pages.routeTemplates.title")}>
               {({ value, onChange }) => (

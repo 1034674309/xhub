@@ -66,9 +66,9 @@ func ReadDemoUser(ctx context.Context, dsn, userID string) (*iam.User, error) {
 
 `Bootstrap`、`EnsureAdmin`、`Login`、`CreateUser`、`GetUser`、`UserByEmail`、`UpdateProfile`、`SetPassword`、`AdminUpdateUser`、`DeleteUser` 实现账号生命周期。输入会被规范化和校验，密码只保存哈希，删除或降级最后一个平台管理员会被拒绝。`ListUsersPage(UserListQuery)` 把搜索、状态、角色、团队、组织筛选与调用方提供的授权范围取交集，仅允许白名单排序字段，默认页大小 100、上限 500，返回 `(rows, total, error)`。用户列表的 SSOID 条件没有对应用户查询字段，指定时返回空结果；企业 OIDC 绑定另存于 enterprise_login_identities，该列表条件不会查询这些绑定。
 
-组织和团队入口包括 `CreateOrg(..., rates ...RateLimits)`、`UpdateOrg`、`CreateTeam`、`UpdateTeamProfile`、`AdminUpdateTeam(..., rates ...RatePatch)`、`MoveTeam` 及相应查询、列表和删除方法。成员方法负责组织管理员和团队成员的增删改，保留至少一个团队管理员，并拒绝同一用户进入第二个团队。项目方法保证项目模型和预算不超出所属团队。变更在事务内写审计；外键、配额或速率分配失败会回滚整个变更。
+组织和团队入口包括 `CreateOrg(..., rates ...RateLimits)`、`CreateOrgWithConfig(..., OrgConfig, rates ...RateLimits)`、`UpdateOrg`、`CreateTeam`、`UpdateTeamProfile`、`AdminUpdateTeam(..., rates ...RatePatch)`、`MoveTeam` 及相应查询、列表和删除方法。成员方法负责组织管理员和团队成员的增删改，保留至少一个团队管理员，并拒绝同一用户进入第二个团队。项目方法保证项目模型和预算不超出所属团队。变更在事务内写审计；外键、配额或速率分配失败会回滚整个变更。
 
-`CreateKey` 和 `RotateKey` 返回 `(key, plaintext, error)`，明文只暴露一次。`KeyByHash` 是认证查询入口；`ActiveKey`、`OwnedBy`、`TouchKey`、状态/删除/重置方法和筛选列表支撑网关策略。`AllowedModelsForTeam` 与 `AllowedModelsForKey` 对团队、项目、密钥模型集合取交集；某层为 nil 表示该层不限制。`ParseExpiry` 只接受支持的相对时长格式，错误格式直接失败。`ResetKeySpend` 修改当前计数，但不删除历史事件。
+`CreateKey` 和 `RotateKey` 返回 `(key, plaintext, error)`，明文只暴露一次。`KeyByHash` 是认证查询入口；`ActiveKey`、`OwnedBy`、`TouchKey`、状态/删除/重置方法和筛选列表支撑网关策略。`AllowedModelsForUser`、`AllowedModelsForTeam` 与 `AllowedModelsForKey` 对组织、团队、项目、密钥模型集合逐层取交集；某层为空表示继承，最终 nil 表示整条链未限制，非 nil 空结果表示无可用模型。组织模型为平台设置的授权上限，修改后立即影响已有会话和密钥；团队创建、修改或转移不得突破目标组织范围。组织 `models` 与 JSON 对象 `metadata` 在创建、详情、列表和部分更新中往返；省略字段保留原值，null 或空集合显式清空。启动迁移为现有组织添加两个默认空字段，不导入旧系统数据。`ParseExpiry` 只接受支持的相对时长格式，错误格式直接失败。`ResetKeySpend` 修改当前计数，但不删除历史事件。
 
 ### 配额、速率、模板与用量 API
 
@@ -100,7 +100,7 @@ RPM 和 TPM 复用相同拓扑。`rateAllocated` 累加固定子节点，并让�
 
 ### 身份不变量与审计快照
 
-邮箱按不区分大小写方式规范化，密码使用 bcrypt，存储角色和控制台角色分别转换。成员变更要求活跃用户，禁止多个团队归属路径，并保留最后一个团队/平台管理员。退出团队保留个人密钥，新调用按当前归属和计费授权检查，历史事件保持原归属；用户删除或目录停用时可以撤销凭证。模型和预算范围按团队、项目、密钥逐层求交集或上限。审计写入尽量捕获 actor/object 名称；读取时不会为补全名称扩大授权，因此已删除资源可能保持无名。
+邮箱按不区分大小写方式规范化，密码使用 bcrypt，存储角色和控制台角色分别转换。成员变更要求活跃用户，禁止多个团队归属路径，并保留最后一个团队/平台管理员。退出团队保留个人密钥，新调用按当前归属和计费授权检查，历史事件保持原归属；用户删除或目录停用时可以撤销凭证。模型范围按组织、团队、项目、密钥逐层求交集，预算按归属链求上限。审计写入尽量捕获 actor/object 名称；读取时不会为补全名称扩大授权，因此已删除资源可能保持无名。
 
 ### 用量账务与失败边界
 

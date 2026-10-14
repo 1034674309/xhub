@@ -37,6 +37,8 @@ interface OrganizationInfoProps {
   editOrg: boolean;
 }
 
+/** 组织详情视图：接收组织 ID、身份权限与关闭回调，返回团队、管理员和设置页。
+ * 模型上限仅平台管理员可编辑，其余已授权组织字段按表单增量保存；加载失败保留页面错误，无自动写入。 */
 const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
   organizationId,
   onClose,
@@ -300,6 +302,7 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
 
               {isEditing ? (
                 <OrgSettingsForm
+                  canEditModels={is_proxy_admin}
                   organizationId={organizationId}
                   org={orgData}
                   accessToken={accessToken || ""}
@@ -324,7 +327,7 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
                     <p className="font-medium text-foreground">{t("Models")}</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {models.length === 0 ? (
-                        <span className="text-muted-foreground">{t("Models are set on each team.")}</span>
+                        <span className="text-muted-foreground">{t("organizationConfig.modelScopeInherited")}</span>
                       ) : (
                         models.map((model, index) => <BadgeLink key={index}>{model}</BadgeLink>)
                       )}
