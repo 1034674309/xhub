@@ -16,6 +16,39 @@ function step(name) {
   return result;
 }
 
+/** 前置干净 runner；验证本机 Redis 在 Go 与后台回归前安装且可执行，覆盖安装和二进制失败，finally 清理命令夹具。 */
+test('verification installs isolated Redis before Go and backend regression tests and propagates failures', () => {
+  const steps = workflow.jobs.verify.steps;
+  const installIndex = steps.findIndex(item => item.name === 'Install regression Redis');
+  const goIndex = steps.findIndex(item => /go test/.test(item.run || ''));
+  const regressionIndex = steps.findIndex(item => item.name === 'Backend regression');
+  assert.ok(installIndex >= 0 && installIndex < goIndex && installIndex < regressionIndex,
+    '本机 redis-server 必须在依赖它的测试之前安装');
+  const install = steps[installIndex];
+  assert.equal(install.shell, 'bash');
+  const directory = mkdtempSync(join(tmpdir(), 'xhub-release-redis-'));
+  try {
+    writeFileSync(join(directory, 'sudo'), '#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\ncase "$*" in\n  "apt-get update") exit "$UPDATE_STATUS" ;;\n  "apt-get install -y --no-install-recommends redis-server") exit "$INSTALL_STATUS" ;;\n  *) exit 99 ;;\nesac\n', { mode: 0o755 });
+    writeFileSync(join(directory, 'redis-server'), '#!/bin/bash\nprintf "redis-server %s\\n" "$*" >> "$CALLS"\n[[ "$*" == --version ]] || exit 99\nexit "$REDIS_STATUS"\n', { mode: 0o755 });
+    for (const [updateStatus, installStatus, redisStatus, expectedCalls] of [
+      [0, 0, 0, 3], [7, 0, 0, 1], [0, 8, 0, 2], [0, 0, 127, 3],
+    ]) {
+      const calls = join(directory, 'calls');
+      writeFileSync(calls, '');
+      const result = spawnSync('bash', ['-c', install.run], {
+        cwd: directory, encoding: 'utf8',
+        env: { ...process.env, PATH: directory + ':' + process.env.PATH, CALLS: calls,
+          UPDATE_STATUS: String(updateStatus), INSTALL_STATUS: String(installStatus), REDIS_STATUS: String(redisStatus) },
+      });
+      assert.equal(result.status, updateStatus || installStatus || redisStatus,
+        'Redis 准备失败必须中止 CI: ' + result.stderr);
+      assert.deepEqual(readFileSync(calls, 'utf8').trim().split('\n'), [
+        'apt-get update', 'apt-get install -y --no-install-recommends redis-server', 'redis-server --version',
+      ].slice(0, expectedCalls), '准备步骤必须安装本机程序并验证可执行性，失败后不得继续');
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 /** 配置准备覆盖干净检出、已有配置和缺失示例；执行真实工作流 shell，验证生成内容、保留原配置及失败退出，finally 删除临时目录。 */
 test('verification prepares configs/config.yaml before Go tests without overwriting existing configuration', () => {
   const steps = workflow.jobs.verify.steps;
