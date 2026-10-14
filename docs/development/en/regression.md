@@ -4,6 +4,11 @@
 
 Use the real gateway, isolated PostgreSQL schemas and a local protocol upstream. Never use production records as fixtures.
 
+The complete deterministic suite also requires `redis-server` on the test host's `PATH` (install the `redis-server` package on Ubuntu/Debian).
+Spend-queue recovery, concurrent session affinity and agent conversation cases start their own Redis processes on random ports and stop them during cleanup.
+They do not use or flush an existing Redis instance. Starting the Compose Redis service alone does not provide the required host binary;
+CI explicitly installs it and checks its version before testing.
+
 ~~~bash
 make regression
 bash scripts/regression.sh -v Pricing

@@ -34,6 +34,14 @@ jobs:
       - run: node --test scripts/test_release_workflow.cjs
       - run: python3 -m unittest scripts.test_deploy_build -v
       - run: python3 -m unittest scripts.test_regression_output -v
+      # 隔离回归夹具在随机端口启动本机 Redis，Compose 服务不能替代 redis-server 二进制。
+      - name: Install regression Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends redis-server
+          redis-server --version
       # 本地配置不入库；干净 checkout 从已跟踪的示例生成测试所需配置。
       - name: Prepare test configuration
         shell: bash
