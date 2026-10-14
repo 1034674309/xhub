@@ -4,6 +4,10 @@
 
 使用真实网关、独立 PostgreSQL schema 和本地协议上游，不使用生产数据。
 
+完整确定性套件还要求 `redis-server` 在运行测试的主机 `PATH` 中可用（Ubuntu/Debian 可安装 `redis-server` 包）。
+计费队列故障恢复、并发会话粘性和代理对话用例会自行启动随机端口的专属 Redis，结束时终止进程，
+不使用或清空已有 Redis。仅启动 Compose 的 Redis 容器不能满足本机二进制依赖；CI 会在测试前显式安装并检查版本。
+
 ~~~bash
 make regression
 bash scripts/regression.sh -v Pricing
