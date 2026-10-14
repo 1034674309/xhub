@@ -510,7 +510,7 @@ func UserDelete(g Gate, w http.ResponseWriter, r *http.Request) {
 
 // ---------- organizations ----------
 
-// OrgNew creates an organization. Only a platform administrator may: an organization is a grouping of teams, not something a tenant owns.
+// OrgNew 为平台管理员创建组织，同时校验并保存模型上限和 JSON 元数据；非法配置不产生组织。
 // 参数 g（Gate）：带当前操作者的鉴权守卫。允许时返回 nil，拒绝时返回禁止或未找到；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/identity/mount.go
@@ -522,6 +522,18 @@ func OrgNew(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := readMap(r)
+	models, metadata, err := organizationConfigFields(body)
+	if err != nil {
+		g.WriteIAMError(w, r, err)
+		return
+	}
+	config := iam.OrgConfig{}
+	if models != nil {
+		config.Models = *models
+	}
+	if metadata != nil {
+		config.Metadata = *metadata
+	}
 	// 在可选额度解析前拒绝非法值，避免错误输入清空原额度。
 	if err := util.ValidateRateFields(body); err != nil {
 		util.WriteError(w, 400, "invalid_request", err.Error())
@@ -539,7 +551,7 @@ func OrgNew(g Gate, w http.ResponseWriter, r *http.Request) {
 		g.WriteAuthz(w, r, err)
 		return
 	}
-	o, err := g.Identity().CreateOrg(r.Context(), actorOf(p), str(body["organization_alias"]), floatPtr(body["max_budget"]), iam.RateLimits{RPMLimit: util.Rate(body, "rpm_limit"), TPMLimit: util.Rate(body, "tpm_limit")})
+	o, err := g.Identity().CreateOrgWithConfig(r.Context(), actorOf(p), str(body["organization_alias"]), floatPtr(body["max_budget"]), config, iam.RateLimits{RPMLimit: util.Rate(body, "rpm_limit"), TPMLimit: util.Rate(body, "tpm_limit")})
 	if err != nil {
 		g.WriteIAMError(w, r, err)
 		return
@@ -645,7 +657,7 @@ func orgIDFrom(_ Gate, r *http.Request, _ *auth.Principal) string {
 	return ""
 }
 
-// OrgUpdate changes an organization's name, status or budget.
+// OrgUpdate 保存组织部分更新；名称和元数据由组织管理员维护，额度、状态与模型上限需要平台授权。
 // 参数 g（Gate）：带当前操作者的鉴权守卫。允许时返回 nil，拒绝时返回禁止或未找到；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/identity/mount.go
@@ -657,6 +669,11 @@ func OrgUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := readMap(r)
+	models, metadata, err := organizationConfigFields(body)
+	if err != nil {
+		g.WriteIAMError(w, r, err)
+		return
+	}
 	// 在可选额度解析前拒绝非法值，避免错误输入清空原额度。
 	if err := util.ValidateRateFields(body); err != nil {
 		util.WriteError(w, 400, "invalid_request", err.Error())
@@ -671,10 +688,10 @@ func OrgUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 		util.WriteError(w, 400, "invalid_request", "organization_id required")
 		return
 	}
-	// A budget or a status change is the platform administrator's. An
-	// organization administrator may rename the organization only.
+	// 预算、限流、状态和模型上限由平台管理员维护，组织管理员可修改名称与元数据。
 	action := authz.ActionOrgAdmin
-	if _, budget := body["max_budget"]; budget || util.OptionalRate(body, "rpm_limit") != nil || util.OptionalRate(body, "tpm_limit") != nil || stringPtr(body, "status") != nil {
+	// 组织模型范围是平台设定的授权上限，组织管理员不能通过改白名单扩权；元数据与名称仍允许组织管理员维护。
+	if _, budget := body["max_budget"]; budget || models != nil || util.OptionalRate(body, "rpm_limit") != nil || util.OptionalRate(body, "tpm_limit") != nil || stringPtr(body, "status") != nil {
 		action = authz.ActionOrgWrite
 	}
 	if err := g.Authorize(r, p, action, authz.Object{Type: authz.ObjectOrg, ID: id}); err != nil {
@@ -686,6 +703,7 @@ func OrgUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := iam.OrgUpdate{
+		Models: models, Metadata: metadata,
 		Name:      orgNamePtr(body),
 		Status:    stringPtr(body, "status"),
 		MaxBudget: optionalFloat(body, "max_budget"),
@@ -994,6 +1012,13 @@ func TeamInfo(g Gate, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info := teamPublic(t, myTeamRole(g, r, p, id))
+	// 团队管理员无权读取组织详情；仅随已授权的团队详情返回模型上限，供团队和密钥选择器收窄选项。
+	org, err := g.Identity().GetOrg(r.Context(), t.OrganizationID)
+	if err != nil {
+		g.WriteIAMError(w, r, err)
+		return
+	}
+	info["organization_models"] = nonNilStrings(org.Models)
 	attachRoster(g, r, p, info)
 	util.WriteJSON(w, 200, map[string]any{
 		"team_id":          id,
@@ -1686,7 +1711,7 @@ func teamPublic(t *iam.Team, role string) map[string]any {
 	}
 }
 
-// orgPublic is the public JSON for an organization.
+// orgPublic 为组织创建、详情及列表构建兼容 JSON，返回已持久化模型范围和元数据，不修改组织。
 // 参数 o（*iam.Organization）：组织行。
 // 返回 map[string]any（map[string]any）：组织公开的字段表。缺键表示上游或库里没有这个字段。
 // 调用：仅在 handlers.go 内使用
@@ -1705,7 +1730,7 @@ func orgPublic(o *iam.Organization) map[string]any {
 		"rpm_limit": o.RPMLimit, "tpm_limit": o.TPMLimit,
 		"litellm_budget_table": map[string]any{"max_budget": budget, "rpm_limit": o.RPMLimit, "tpm_limit": o.TPMLimit},
 		"spend":                o.Spend,
-		"models":               []string{},
+		"models":               nonNilStrings(o.Models),
 		"members":              []any{},
 		"teams":                []any{},
 		// The router template this organization selects. Absent means it selects
@@ -1714,7 +1739,7 @@ func orgPublic(o *iam.Organization) map[string]any {
 		"route_template_id": deref(o.RouteTemplateID),
 		"created_at":        o.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":        o.UpdatedAt.UTC().Format(time.RFC3339),
-		"metadata":          map[string]any{},
+		"metadata":          o.Metadata,
 	}
 }
 

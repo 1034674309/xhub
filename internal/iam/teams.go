@@ -32,9 +32,24 @@ type teamRow struct {
 // 调用：gateway/identity/handlers.go
 // 测试：activity_http_test.go、authz_test.go、permission_test.go
 func (db *DB) CreateOrg(ctx context.Context, by Actor, name string, maxBudget *float64, rates ...RateLimits) (*Organization, error) {
+	return db.CreateOrgWithConfig(ctx, by, name, maxBudget, OrgConfig{}, rates...)
+}
+
+// CreateOrgWithConfig 在同一事务创建组织、模型上限、元数据及审计，供组织管理接口与兼容入口调用。
+// 参数 ctx/by 为上下文及操作者，name/maxBudget 为名称及额度，config 为组织设置，rates 为可选限流。
+// 返回持久化组织或字段/数据库错误；非法配置不产生组织和审计，空配置保持已有创建接口行为。
+func (db *DB) CreateOrgWithConfig(ctx context.Context, by Actor, name string, maxBudget *float64, config OrgConfig, rates ...RateLimits) (*Organization, error) {
+	models, err := NormalizeOrganizationModels(config.Models)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := normalizeOrganizationMetadata(config.Metadata)
+	if err != nil {
+		return nil, err
+	}
 	var out *Organization
-	err := db.tx(ctx, func(s *xorm.Session) error {
-		o := Organization{ID: newID(), Name: name, Status: StatusActive, MaxBudget: maxBudget}
+	err = db.tx(ctx, func(s *xorm.Session) error {
+		o := Organization{ID: newID(), Name: name, Status: StatusActive, MaxBudget: maxBudget, Models: models, Metadata: metadata}
 		if len(rates) > 0 {
 			o.RPMLimit, o.TPMLimit = rates[0].RPMLimit, rates[0].TPMLimit
 		}
@@ -120,8 +135,10 @@ func (db *DB) ListOrgs(ctx context.Context, userID string) ([]Organization, erro
 	return out, err
 }
 
-// OrgUpdate changes an organization; nil fields keep their value.
+// OrgUpdate 表示组织部分更新；nil 字段保持原值，非 nil 空模型或元数据对象明确清空。
 type OrgUpdate struct {
+	Models    *[]string
+	Metadata  *map[string]any
 	RPMLimit  **int
 	TPMLimit  **int
 	Name      *string
@@ -133,7 +150,7 @@ type OrgUpdate struct {
 	RouteTemplateID **string
 }
 
-// UpdateOrg applies an OrgUpdate.
+// UpdateOrg 在事务内保存组织部分更新并写审计；模型和元数据校验失败回滚全部字段。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：组织 id。空串表示没有指定组织；in（OrgUpdate）：调用方提交的OrgUpdate。字段为空表示这项不改。
 // 返回 *Organization（*Organization）：交给调用方的组织行；error（error）：失败原因。nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go
@@ -154,6 +171,18 @@ func (db *DB) UpdateOrg(ctx context.Context, by Actor, id string, in OrgUpdate) 
 		if in.MaxBudget != nil {
 			cur.MaxBudget = *in.MaxBudget
 		}
+		if in.Models != nil {
+			cur.Models, err = NormalizeOrganizationModels(*in.Models)
+			if err != nil {
+				return err
+			}
+		}
+		if in.Metadata != nil {
+			cur.Metadata, err = normalizeOrganizationMetadata(*in.Metadata)
+			if err != nil {
+				return err
+			}
+		}
 		if in.RPMLimit != nil {
 			cur.RPMLimit = *in.RPMLimit
 		}
@@ -166,7 +195,7 @@ func (db *DB) UpdateOrg(ctx context.Context, by Actor, id string, in OrgUpdate) 
 		if in.RouteTemplateID != nil {
 			cur.RouteTemplateID = *in.RouteTemplateID
 		}
-		if _, err := s.ID(id).Cols("name", "status", "max_budget", "route_template_id", "rpm_limit", "tpm_limit").Update(cur); err != nil {
+		if _, err := s.ID(id).Cols("name", "status", "max_budget", "route_template_id", "rpm_limit", "tpm_limit", "models", "metadata").Update(cur); err != nil {
 			return err
 		}
 		if out, err = getOrg(ctx, s, id); err != nil {
@@ -200,9 +229,7 @@ func (db *DB) DeleteOrg(ctx context.Context, by Actor, id string) error {
 
 // TeamInput creates a team together with its first team administrator.
 //
-// Models is the team's model set. An empty list means no restriction rather
-// than no models, so a team created without a choice reaches what the
-// deployment offers; narrowing it later is what limits it.
+// Models 为团队模型列表；空列表继承组织上限，显式名称必须在组织授权范围内。
 type TeamInput struct {
 	RPMLimit       *int
 	TPMLimit       *int
@@ -223,6 +250,9 @@ func (db *DB) CreateTeam(ctx context.Context, by Actor, in TeamInput) (*Team, er
 
 	var out *Team
 	err := db.tx(ctx, func(s *xorm.Session) error {
+		if err := checkOrganizationModels(s, in.OrganizationID, in.Models); err != nil {
+			return err
+		}
 		if in.AdminUserID != "" {
 			if err := requireActiveUser(s, in.AdminUserID); err != nil {
 				return err
@@ -384,7 +414,7 @@ func (db *DB) UpdateTeamProfile(ctx context.Context, by Actor, id string, name, 
 	return out, err
 }
 
-// AdminUpdateTeam changes status, budget and model set; platform administrators only. The model list sits at this level rather than at the team administrator's because it is the team's ceiling: a team administrator who could widen it would be granting their own team reach the platform did not give them.
+// AdminUpdateTeam 在平台授权后修改团队状态、预算、模型与可选限流，显式模型必须受组织上限约束。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：团队 id。空串表示没有指定团队；status（*string）：HTTP 状态码；maxBudget（**float64）：管理员Update团队使用的*float64；models（*[]string）：管理员Update团队使用的string。
 // 返回 *Team（*Team）：交给调用方的团队行；error（error）：失败原因。nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go
@@ -418,6 +448,13 @@ func (db *DB) AdminUpdateTeam(ctx context.Context, by Actor, id string, status *
 			patch.MaxBudget, cols = *maxBudget, append(cols, "max_budget")
 		}
 		if models != nil {
+			current, err := getTeam(ctx, s, id)
+			if err != nil {
+				return err
+			}
+			if err := checkOrganizationModels(s, current.OrganizationID, *models); err != nil {
+				return err
+			}
 			// The names are stored as given. This package has no view of which
 			// deployments exist — that is the gateway's model table — so it
 			// cannot tell a typo from a model added a moment later, and a name
@@ -442,7 +479,7 @@ func (db *DB) AdminUpdateTeam(ctx context.Context, by Actor, id string, status *
 	return out, err
 }
 
-// MoveTeam re-parents a team. Access-group assignments from the previous organization are removed first, which cascades to project and key narrowing; a failure leaves everything untouched.
+// MoveTeam 在事务内转移团队并检查目标组织的额度、限流与模型上限；不兼容的显式模型返回 ErrInvalid，失败保留原归属。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：团队 id。空串表示没有指定团队；organizationID（string）：组织 id。空串表示不按组织过滤。
 // 返回 *Team（*Team）：交给调用方的团队行；error（error）：失败原因。nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go
@@ -453,10 +490,16 @@ func (db *DB) MoveTeam(ctx context.Context, by Actor, id, organizationID string)
 		if err := lockTeam(ctx, s, id); err != nil {
 			return err
 		}
+		current, err := getTeam(ctx, s, id)
+		if err != nil {
+			return err
+		}
+		if err := checkOrganizationModels(s, organizationID, current.Models); err != nil {
+			return err
+		}
 		if _, err := s.ID(id).Cols("organization_id").Update(&Team{OrganizationID: organizationID}); err != nil {
 			return err
 		}
-		var err error
 		if out, err = getTeam(ctx, s, id); err != nil {
 			return err
 		}

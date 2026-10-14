@@ -483,19 +483,24 @@ func resolveKeyTeam(s *xorm.Session, k *Key) error {
 
 // ---------- model resolution ----------
 
-// allowedModels computes the permitted model set for a scope: team = the team's own model list project = team ∩ project list (when projectID is set) key = (project or team) ∩ key list (when keyID is set
-// ) A nil result means the scope is unrestricted. An empty, non-nil result means it is restricted to nothing. Those are different answers and every caller treats them differently, so the distinction iscarried out of this function rather than flattened into an empty slice. Each level's list narrows the one above it, and an empty list at a level means "inherit", not "deny": a team created a moment ago has been assigned nothing yet, and reading that as a denial would leave it unable to reach any model at all. A scope that must reach nothing is blocked instead. Every scope resolves to a single team
-// ; capabilities are never merged across teams. This is the only function the catalog and the inference path use.
-// 参数 s（*xorm.Session）：当前事务里的数据库会话。调用方负责提交，这里不关闭它；teamID（string）：团队 id。空串表示没有指定团队；projectID（string）：项目 id。空串表示不按项目过滤；keyID（string）：密钥 id。空串表示没有指定密钥。
-// 返回 map[string]值（map[string]值）：allowed模型的字段表。缺键表示上游或库里没有这个字段；error（error）：失败原因。nil 表示这一步成功。
-// 调用：iam/teams.go
-// 测试：无直接单测
+// allowedModels 按组织、团队、项目、密钥逐层取模型交集，供模型发现与推理共用，组织收窄后已有凭证立即受限。
+// 参数 s 为当前会话，teamID/projectID/keyID 为单一归属链；返回授权集合或查询错误，无写入副作用。
+// nil 表示全链未限制，非 nil 空集合表示交集无可用模型；不得将两者混同，否则会把拒绝错误转换为放行。
 func allowedModels(s *xorm.Session, teamID, projectID, keyID string) (map[string]struct{}, error) {
-	set, err := scopeModels(s, "teams", teamID)
+	orgID := ""
+	if teamID != "" {
+		var team Team
+		if err := get(s.Where("id = ?", teamID), &team); err != nil {
+			return nil, err
+		}
+		orgID = team.OrganizationID
+	}
+	set, err := scopeModels(s, "organizations", orgID)
 	if err != nil {
 		return nil, err
 	}
 	for _, scope := range []struct{ table, id string }{
+		{"teams", teamID},
 		{"projects", projectID},
 		{"api_keys", keyID},
 	} {
@@ -571,9 +576,9 @@ type modelsRow struct {
 	Models []string `xorm:"json 'models'"`
 }
 
-// AllowedModelsForTeam is the team's model set, used before a key exists. A nil result means the team has no restriction of its own.
+// AllowedModelsForTeam 为密钥创建前的团队目录返回组织与团队模型交集；只读，nil 表示整条归属链未限制。
 // 参数 ctx（context.Context）：上下文，取消或超时时停止后续工作；teamID（string）：团队 id。空串表示没有指定团队。
-// 返回 []string（[]string）：Allowed模型为团队。没有匹配时为 nil 或空切片，调用方按长度判断；error（error）：失败原因。nil 表示这一步成功。
+// 返回 []string（[]string）：nil 表示不限制，空非 nil 表示没有可用模型；error（error）：失败原因。nil 表示这一步成功。
 // 调用：gateway/identity/handlers.go、gateway/models/access.go
 // 测试：无直接单测
 func (db *DB) AllowedModelsForTeam(ctx context.Context, teamID string) ([]string, error) {

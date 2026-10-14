@@ -4,6 +4,7 @@ import { pageDescriptionsEn } from "./pageDescriptions.en";
 import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
+ organizationConfig: {"modelScopeHint": "Models set the organization ceiling. Teams, projects and keys can only inherit or narrow it. Leave empty to allow all proxy models.", "modelScopeReadOnly": "Only platform administrators can change the organization model ceiling.", "modelScopeInherited": "All proxy models; teams, projects and keys may narrow this range."},
  session: { inferred: "Inferred session", logoutFailed: "Unable to sign out. Please try again." },
  requestMetrics: {endpoints: "Endpoints", inbound: "Inbound", outbound: "Outbound", duration: "Total time (s)", ttft: "TTFT (s)", tps: "TPS (tokens/s)", definition: "TTFT measures the first upstream response byte. TPS = total tokens / (total time − TTFT), for streaming and synchronous requests."},
  monitor: {
