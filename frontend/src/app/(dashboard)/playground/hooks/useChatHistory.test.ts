@@ -33,6 +33,25 @@ describe("useChatHistory", () => {
     sessionStorage.clear();
   });
 
+  /** 前置公网 HTTP 缺少 randomUUID，覆盖正常/简化调试；验证创建、清空均生成有效 ID。
+   * 不修改已有聊天内容；结束卸载 hook、恢复 crypto 并清除私有会话数据。 */
+  it.each([false, true])("普通 HTTP 可以创建和清空会话 simplified=%s", (simplified) => {
+    const original = globalThis.crypto;
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: { getRandomValues: original.getRandomValues.bind(original) } });
+    const hook = renderHook(() => useChatHistory({ simplified }));
+    try {
+      const first = hook.result.current.sessionId;
+      expect(first).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+      act(() => hook.result.current.clearChatHistory());
+      expect(hook.result.current.sessionId).not.toBe(first);
+      expect(sessionStorage.getItem("playgroundSessionId")).toBe(simplified ? null : hook.result.current.sessionId);
+    } finally {
+      hook.unmount();
+      Object.defineProperty(globalThis, "crypto", { configurable: true, value: original });
+      sessionStorage.clear();
+    }
+  });
+
   describe("updateTextUI", () => {
     it("should create a new assistant message when chat is empty", () => {
       const { result } = renderHook(() => useChatHistory({ simplified: false }));

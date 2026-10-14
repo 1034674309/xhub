@@ -66,12 +66,18 @@ jobs:
             tail -c 16384 .e2e/release/regression.log
             exit "$status"
           fi
+      - name: Console HTTP compatibility unit tests
+        working-directory: frontend
+        run: |
+          npx vitest run --project unit src/lib/http/resolveApiBase.test.ts src/lib/http/runtime.test.ts src/lib/http/api.test.ts src/utils/randomId.test.ts src/components/networking.test.ts
+          npx vitest run --project component 'src/app/(dashboard)/playground/hooks/useChatHistory.test.ts'
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       # 真实登录、密钥轮换和推理结果，无外部付费服务；运行器清理专属 schema。
-      - run: bash scripts/e2e.sh scenarios/legacy/login/sc-056.test.ts scenarios/keys/rotation-secret.test.ts
+      - run: bash scripts/e2e.sh scenarios/legacy/login/sc-056.test.ts scenarios/keys/rotation-secret.test.ts scenarios/legacy/playground-workspace/sc-109.test.ts
         env:
           E2E_RUN_DIR: ${{ github.workspace }}/.e2e/release
+          E2E_PORTABLE_CONSOLE: '1'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

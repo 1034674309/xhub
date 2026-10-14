@@ -55,6 +55,17 @@ export const resolveGatewayApiBase = ({ envBase, reportedBase }: GatewayApiBaseI
   return LOCAL_GATEWAY_ORIGIN;
 };
 
+/** 解析控制台请求地址；参数为构建覆盖地址与服务端报告地址，返回外部地址或同源 /gw。
+ * 网络层和 typed client 初始化调用；保留显式覆盖优先级，未配置时通过 Next 代理，避免发布镜像绑定访问者的 localhost。
+ * 不用于生成客户端示例；示例继续使用对外网关地址，无状态副作用。
+ */
+export const resolveConsoleApiBase = ({ envBase, reportedBase }: GatewayApiBaseInputs): string => {
+  if ((reportedBase ?? "").trim() || (envBase ?? "").trim()) {
+    return resolveGatewayApiBase({ envBase, reportedBase });
+  }
+  return "/gw";
+};
+
 export interface ClientSampleSettings {
   PROXY_BASE_URL?: string | null;
   LITELLM_UI_API_DOC_BASE_URL?: string | null;
@@ -62,12 +73,9 @@ export interface ClientSampleSettings {
 
 /**
  * Base URL copied into OpenAI and curl samples. A doc base wins, then an
- * explicit proxy base, then the same gateway choice the dashboard uses.
+ * explicit proxy base, then the public gateway default (never the console /gw proxy).
  */
-export const clientSampleBaseUrl = (
-  settings?: ClientSampleSettings | null,
-  envBase?: string | null,
-): string => {
+export const clientSampleBaseUrl = (settings?: ClientSampleSettings | null, envBase?: string | null): string => {
   const doc = (settings?.LITELLM_UI_API_DOC_BASE_URL ?? "").trim();
   if (doc) return doc.replace(/\/+$/, "");
   const proxy = (settings?.PROXY_BASE_URL ?? "").trim();
@@ -89,7 +97,11 @@ export interface RequestUrlInputs {
   pageOrigin?: string | null;
 }
 
+/** 组合请求路径与运行时地址，供 typed client 创建 Request；参数为路径、注册地址和页面源。
+ * 返回可用 URL；/gw 等相对代理需要页面源补全，避免原生 Request 拒绝相对 URL，无网络或存储副作用。
+ */
 export const resolveRequestUrl = (path: string, { registeredBase, pageOrigin }: RequestUrlInputs): string => {
   const base = (registeredBase || pageOrigin || "").replace(/\/+$/, "");
-  return `${base}${path}`;
+  const target = `${base}${path}`;
+  return registeredBase?.startsWith("/") && pageOrigin ? `${pageOrigin.replace(/\/+$/, "")}${target}` : target;
 };

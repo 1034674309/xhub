@@ -30,7 +30,7 @@ echo "[build] console"
     npm ci
   fi
   NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-http://localhost:4000}" \
+    NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-}" \
     npm run build
 )
 

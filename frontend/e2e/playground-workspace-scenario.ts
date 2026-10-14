@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto, t } from "./helpers";
+import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto, t, watchGateway } from "./helpers";
 
 
 /** 选择公开模型及客户聊天端点；参数 page/name 为页面和别名，返回完成 Promise；只操作隔离测试页面。 */
@@ -118,8 +118,19 @@ test("chat explains missing credentials and unavailable deployment, then recover
 export function registerSC109() {
 
 
+/** 前置真实网关、私有 schema 与本地上游；兼容模式使用非安全 HTTP 域名和未注入地址的生产构建。
+ * 验证登录、双语聊天、会话恢复/清空、真实推理与日志；finally 删除模型，runner 回收 schema。 */
 test("single workspace has no comparison controls and preserves bilingual chat", async ({ page }) => {
+  const guard = watchGateway(page);
+  const localFailures: string[] = [];
+  page.on("requestfailed", request => {
+    if (request.url().startsWith("http://localhost:4000")) localFailures.push(request.url());
+  });
   await loginAdmin(page);
+  if (process.env.E2E_PORTABLE_CONSOLE === "1") {
+    expect(await page.evaluate(() => window.isSecureContext), "必须在普通 HTTP 上验证，不能被 localhost 安全上下文掩盖").toBe(false);
+    expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe("undefined");
+  }
   const name = "e2e-single-workspace";
   const id = await deployment(page, name);
   const switchedName = name + "-switched";
@@ -227,6 +238,8 @@ test("single workspace has no comparison controls and preserves bilingual chat",
     expect(nextResponse.status()).toBe(200);
     expect(nextResponse.request().headers()["x-session-id"]).toBe(nextSessionId);
     expect(nextResponse.headers()["x-session-id"]).toBe(nextSessionId);
+    guard.assertOk();
+    expect(localFailures, "发布镜像不能请求访问者自己的 localhost 网关").toEqual([]);
     await expect.poll(async () => {
       const log = await page.request.get(GATEWAY + "/spend/logs/ui/" + nextResponse.headers()["x-litellm-call-id"], { headers });
       return log.ok() ? (await log.json()).session_id : "";

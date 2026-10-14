@@ -4,6 +4,7 @@ import { MessageType, A2ATaskMetadata } from "@/components/chat_ui/types";
 import { TokenUsage } from "@/components/chat_ui/ResponseMetrics";
 import { MCPEvent } from "@/components/mcp_tools/types";
 import { truncateString } from "@/utils/textUtils";
+import { randomId } from "@/utils/randomId";
 
 const CHAT_HISTORY_PERSIST_WAIT_MS = 500;
 
@@ -69,9 +70,9 @@ export interface UseChatHistoryReturn {
 /** 管理调试对话与响应 ID；参数 simplified 禁用持久化，返回历史和更新动作；页面及密钥调试调用。
  * 恢复缓存时检查数据形状，损坏历史或模式回退默认值，避免旧缓存导致页面崩溃。 */
 export function useChatHistory({ simplified }: { simplified: boolean }): UseChatHistoryReturn {
-  // 首次渲染即创建并保存明确 ID；刷新复用，密钥调试保持独立且不持久化。
+  // 公网 HTTP 不提供原生 UUID；统一使用兼容生成器，刷新复用，密钥调试保持独立。
   const [sessionId, setSessionId] = useState(() => {
-    const id = (!simplified && sessionStorage.getItem("playgroundSessionId")) || crypto.randomUUID();
+    const id = (!simplified && sessionStorage.getItem("playgroundSessionId")) || randomId();
     if (!simplified) sessionStorage.setItem("playgroundSessionId", id);
     return id;
   });
@@ -391,7 +392,7 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
    * 先取消待写历史，立即持久化新 ID，释放音频资源，避免清空后刷新恢复旧会话。 */
   const clearChatHistory = () => {
     persistDebouncer.cancel();
-    const id = crypto.randomUUID();
+    const id = randomId();
     setSessionId(id);
     if (!simplified) sessionStorage.setItem("playgroundSessionId", id);
     // Use functional updater to get the latest snapshot — avoids stale-closure

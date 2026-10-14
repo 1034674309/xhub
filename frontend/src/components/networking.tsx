@@ -45,7 +45,7 @@ import {
   isQuietAccessDenial,
   unwrapProxyErrorMessage,
 } from "@/lib/http/client";
-import { resolveApiBase, resolveGatewayApiBase } from "@/lib/http/resolveApiBase";
+import { resolveApiBase, resolveConsoleApiBase } from "@/lib/http/resolveApiBase";
 import {
   registerAuthHeaderNameGetter,
   registerAuthTokenGetter,
@@ -64,7 +64,7 @@ export { deriveErrorMessage };
 export { ApiError } from "@/lib/http/client";
 
 const isLocal = process.env.NODE_ENV === "development";
-const defaultProxyBaseUrl = resolveGatewayApiBase({ envBase: process.env.NEXT_PUBLIC_BASE_URL });
+const defaultProxyBaseUrl = resolveConsoleApiBase({ envBase: process.env.NEXT_PUBLIC_BASE_URL });
 const WORKER_URL_KEY = "litellm_worker_url";
 // If a worker URL is in localStorage, use it as the initial proxyBaseUrl.
 // This survives page navigation.
@@ -94,16 +94,16 @@ const getWindowLocation = () => {
   return window.location;
 };
 
+/** 更新控制台请求地址；参数为网关根路径与报告地址，无返回值，getUiConfig 成功后调用。
+ * 保留显式 worker 切换；缺少覆盖地址时经同源 /gw 代理，副作用为更新模块中的运行时基址。
+ */
 const updateProxyBaseUrl = (serverRootPath: string, receivedProxyBaseUrl: string | null = null) => {
-  /**
-   * Special function for updating the proxy base url. Should only be called by getUiConfig.
-   */
   // If a worker URL is in localStorage, don't let getUiConfig overwrite it
   if (typeof window !== "undefined" && window.localStorage.getItem(WORKER_URL_KEY)) {
     return;
   }
   proxyBaseUrl = resolveApiBase({
-    explicitBase: resolveGatewayApiBase({
+    explicitBase: resolveConsoleApiBase({
       envBase: process.env.NEXT_PUBLIC_BASE_URL,
       reportedBase: receivedProxyBaseUrl,
       pageOrigin: getWindowLocation()?.origin ?? null,
@@ -116,11 +116,12 @@ const updateServerRootPath = (receivedServerRootPath: string) => {
   setServerRootPath(receivedServerRootPath);
 };
 
+/** 返回控制台当前后台地址，无参数；页面与请求客户端调用。缺省使用同源 /gw，无状态副作用。 */
 export const getProxyBaseUrl = (): string => {
   if (proxyBaseUrl) {
     return proxyBaseUrl;
   }
-  return resolveGatewayApiBase({
+  return resolveConsoleApiBase({
     envBase: process.env.NEXT_PUBLIC_BASE_URL,
     pageOrigin: getWindowLocation()?.origin ?? null,
   });

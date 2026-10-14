@@ -1,5 +1,6 @@
 """部署构建辅助函数测试；仅使用临时文件，不编译镜像或访问网络。"""
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -162,3 +163,24 @@ class CertificateDiscoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConsoleBuildAddressTests(unittest.TestCase):
+    """验证真实构建环境赋值：默认可移植，显式覆盖保留，构建失败不被吞掉；无持久数据。"""
+
+    def test_browser_gateway_address_default_override_and_failure(self):
+        """前置真实 build.sh 中的 npm 构建语句；执行空/显式地址及失败路径，临时命令夹具自动清理。"""
+        script = (LIBRARY.parent / "build.sh").read_text()
+        command = re.search(r"  NEXT_TELEMETRY_DISABLED=1 .*?npm run build", script, re.S).group(0)
+        with tempfile.TemporaryDirectory() as directory:
+            npm = Path(directory) / "npm"
+            npm.write_text('#!/bin/sh\nprintf "%s" "$NEXT_PUBLIC_BASE_URL"\nexit "$BUILD_STATUS"\n')
+            npm.chmod(0o755)
+            for value, status in [(None, 0), ("https://api.example.com", 0), (None, 7)]:
+                environment = dict(os.environ, PATH=directory + ":" + os.environ["PATH"], BUILD_STATUS=str(status))
+                environment.pop("NEXT_PUBLIC_BASE_URL", None)
+                if value is not None:
+                    environment["NEXT_PUBLIC_BASE_URL"] = value
+                result = subprocess.run(["bash", "-e", "-c", command], env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.stdout, value or "", "默认镜像不能固化访问者的 localhost")

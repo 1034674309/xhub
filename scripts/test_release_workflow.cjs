@@ -204,3 +204,15 @@ test('release reruns are repeatable and upload failures propagate', () => {
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+/** 前置发布工作流；验证 CI 使用无构建地址的普通 HTTP 调试流程并运行对应单元测试；只读无需清理。 */
+test('portable HTTP compatibility is required before publishing', () => {
+  const steps = workflow.jobs.verify.steps;
+  const browser = steps.find(item => /bash scripts\/e2e.sh/.test(item.run || ''));
+  assert.equal(browser.env.E2E_PORTABLE_CONSOLE, '1');
+  assert.match(browser.run, /scenarios\/legacy\/playground-workspace\/sc-109.test.ts/);
+  const unit = steps.find(item => item.name === 'Console HTTP compatibility unit tests');
+  assert.ok(unit);
+  assert.match(unit.run, /resolveApiBase.test.ts/);
+  assert.match(unit.run, /useChatHistory.test.ts/);
+});
