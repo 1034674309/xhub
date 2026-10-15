@@ -228,3 +228,24 @@ test('portable HTTP compatibility is required before publishing', () => {
   assert.match(unit.run, /resolveApiBase.test.ts/);
   assert.match(unit.run, /useChatHistory.test.ts/);
 });
+
+/** 前置真实发布工作流；验证固定版本的实际 CLI 进入后台回归、新浏览器协议闭环进入发布门槛且证据 always 上传。只读配置，无外部依赖或清理。 */
+test('agent compatibility uses pinned real clients and a governed browser flow', () => {
+  const verify = workflow.jobs.verify.steps;
+  const install = verify.findIndex(item => item.name === 'Install agent compatibility clients');
+  const backend = verify.findIndex(item => item.name === 'Backend regression');
+  assert.ok(install >= 0 && install < backend, '实际 CLI 必须在后台回归之前准备');
+  assert.match(verify[install].run, /@openai\/codex@0\.162\.1/);
+  assert.match(verify[install].run, /@anthropic-ai\/claude-code@2\.1\.300/);
+  for (const [key, name] of [['XHUB_TEST_CODEX_BIN', 'codex'], ['XHUB_TEST_CLAUDE_BIN', 'claude']]) {
+    assert.ok(verify[backend].env[key].endsWith('/node_modules/.bin/' + name), 'CI 不得因未配置二进制跳过实际 ' + name);
+  }
+  const browser = verify.find(item => (item.run || '').startsWith('bash scripts/e2e.sh '));
+  assert.ok(browser.run.split(/\s+/).includes('agent-native-protocol.test.ts'), '发布缺少原生 Agent/工具续轮/计费浏览器闭环');
+  assert.ok(browser.run.split(/\s+/).includes('messages-reasoning.test.ts'), '发布缺少 Messages 公开推理和工具续轮浏览器闭环');
+  assert.ok(browser.run.split(/\s+/).includes('agent-chat-bridge.test.ts'), '发布缺少 Codex namespace/custom Chat 桥接闭环');
+  assert.ok(browser.run.split(/\s+/).includes('agent-proxy-timeout.test.ts'), '发布缺少超过30秒的非流式推理代理闭环');
+  const artifact = verify.find(item => item.uses === 'actions/upload-artifact@v4');
+  assert.equal(artifact.if, 'always()');
+  assert.ok(artifact.with.path.includes('.e2e/release/agent-clients/'), '必须保留实际 CLI 证据');
+});

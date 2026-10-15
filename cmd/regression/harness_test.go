@@ -765,7 +765,9 @@ func (h *harness) do(method, path, token string, body any) reply {
 	return h.doHeaders(method, path, token, body, nil)
 }
 
-// doHeaders 和 do 一样，额外带上调用方要钉住的头，例如会话粘滞用的 X-Session-Id。
+// doHeaders 发送真实 HTTP 请求并附加会话等测试头；参数 method/path 为方法与路径，token 为一次性密钥，body 为 JSON 正文，headers 为附加头。
+// 所有后台回归调用，返回状态/正文/头；live 模式只在没有任何输出上限时注入协议对应的默认上限，不覆盖调用方参数。
+// 失败终止测试，响应正文必关闭；不写业务数据，数据清理由各例 harness 负责。
 func (h *harness) doHeaders(method, path, token string, body any, headers map[string]string) reply {
 	h.t.Helper()
 	var reader io.Reader
@@ -779,8 +781,13 @@ func (h *harness) doHeaders(method, path, token string, body any, headers map[st
 				for k, v := range object {
 					copyBody[k] = v
 				}
-				if _, exists := copyBody["max_tokens"]; !exists {
-					copyBody["max_tokens"] = 16
+				// Responses/新 Chat 已有自己的输出上限，不能再注入 max_tokens 造成互斥字段错误。
+				if copyBody["max_tokens"] == nil && copyBody["max_completion_tokens"] == nil && copyBody["max_output_tokens"] == nil {
+					key := "max_tokens"
+					if strings.HasSuffix(path, "/responses") {
+						key = "max_output_tokens"
+					}
+					copyBody[key] = 16
 				}
 				body = copyBody
 			}

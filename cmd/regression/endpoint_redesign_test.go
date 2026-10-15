@@ -262,14 +262,21 @@ func TestEndpointDialogueMatrix(t *testing.T) {
 			}
 			beforeCalls := calls.Load()
 			denied := h.do("POST", "/v1/chat/completions", owner.key, map[string]any{"model": "matrix", "messages": []any{map[string]any{"role": "user", "content": "hello"}}, "unsupported": true})
-			if denied.status != 400 || calls.Load() != beforeCalls {
+			if source != "openai-chat" && (denied.status != 400 || calls.Load() != beforeCalls) {
 				t.Fatalf("未知能力必须调用上游前失败：%s calls=%d", denied.describe(), calls.Load())
 			}
 			if denied := h.do("POST", "/bypass/openai/v1/chat/completions", owner.key, map[string]any{"model": "matrix", "messages": []any{map[string]any{"role": "user", "content": "hello"}}}); denied.status == 200 {
 				t.Fatal("Bypass 未显式启用仍被调用")
 			}
-			if calls.Load() != 10 {
-				t.Fatal(fmt.Sprintf("上游调用数=%d，应为10", calls.Load()))
+			wantCalls := int32(10)
+			if source == "openai-chat" {
+				wantCalls = 11
+				if denied.status != 200 {
+					t.Fatal("同协议扩展字段应交由上游验证")
+				}
+			}
+			if calls.Load() != wantCalls {
+				t.Fatal(fmt.Sprintf("上游调用数=%d，应为%d", calls.Load(), wantCalls))
 			}
 		})
 	}
@@ -336,7 +343,7 @@ func endpointStreamFrames(source string) []string {
 	case "openai-chat":
 		return []string{`{"choices":[{"index":0,"delta":{"content":"matrix-ok"}}]}`, `{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":8,"completion_tokens":2}}`, "[DONE]"}
 	case "openai-responses":
-		return []string{`{"type":"response.output_text.delta","delta":"matrix-ok"}`, `{"type":"response.completed","response":{"id":"matrix","status":"completed","usage":{"input_tokens":8,"output_tokens":2}}}`}
+		return []string{`{"type":"response.output_text.delta","delta":"matrix-ok"}`, `{"type":"response.completed","response":{"id":"matrix","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"matrix-ok"}]}],"usage":{"input_tokens":8,"output_tokens":2}}}`}
 	case "anthropic-messages":
 		return []string{`{"type":"message_start","message":{"id":"matrix","usage":{"input_tokens":8}}}`, `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"matrix-ok"}}`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`, `{"type":"message_stop"}`}
 	case "gemini", "vertex":

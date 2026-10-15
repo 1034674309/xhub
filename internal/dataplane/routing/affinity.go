@@ -3,10 +3,41 @@
 package routing
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+
 	"github.com/sunqirui1987/xhub/internal/config"
 	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
+	providerdeployment "github.com/sunqirui1987/xhub/internal/provider/deployment"
 	"github.com/sunqirui1987/xhub/internal/router"
 )
+
+// BindConnection 在凭据补齐后校验并记录实际连接，防止同一部署 ID 更新配置后重放旧历史。
+// 参数 plan 为请求私有计划，dep 为已解析凭据的候选；返回能否继续，失败不修改计划。
+// 两类创建执行器在外发前调用；固定续接要求已有且相同的指纹，普通请求记录新指纹。
+// 指纹覆盖地址、账户凭据、上游型号和传输，仅在内存编码后保存 SHA256；不记录密钥明文。
+// 定价、权重与请求超时不影响连接身份；旧缓存缺少指纹时失败关闭，调用方需开启新会话。
+func BindConnection(plan *dpcontract.RoutePlan, dep config.ModelEntry) bool {
+	if plan == nil {
+		return false
+	}
+	identity := map[string]any{"version": 1, "transport": providerdeployment.SelectedTransport(dep), "model": dep.ParamString("model", dep.ModelName)}
+	for _, key := range []string{"api_base", "api_key", "custom_llm_provider", "litellm_credential_name", "organization", "project", "headers", "extra_headers", "api_version"} {
+		identity[key] = dep.LiteLLMParams[key]
+	}
+	raw, err := json.Marshal(identity)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(raw)
+	id := hex.EncodeToString(digest[:])
+	if plan.Required && (plan.Target.ConnectionID == "" || plan.Target.ConnectionID != id) {
+		return false
+	}
+	plan.Target.ConnectionID = id
+	return true
+}
 
 // RuntimePin 把会话保存的稳定 deployment_id 转换为当前部署的运行身份。
 // 参数 models 为本轮兼容候选，id 为稳定部署 ID；返回当前 CooldownID，空 ID、删除或不兼容时返回空串。

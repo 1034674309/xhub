@@ -51,9 +51,9 @@ func NormalizeDialogueUsage(u map[string]any) map[string]any {
 	return out
 }
 
-// dialogueOutputUsage 将共享实测事实映射到用户用量协议；参数为事实与协议，返回新对象。
+// DialogueOutputUsage 将共享实测事实映射到用户用量协议；参数为事实与协议，返回新对象。
 // 调用：同步输出；未知用量通过 pricing_blocked 明示，不生成估算数值。
-func dialogueOutputUsage(u map[string]any, protocol string) map[string]any {
+func DialogueOutputUsage(u map[string]any, protocol string) map[string]any {
 	out := map[string]any{}
 	for key, value := range u {
 		out[key] = value
@@ -64,8 +64,21 @@ func dialogueOutputUsage(u map[string]any, protocol string) map[string]any {
 		}
 		delete(out, source)
 	}
+	if protocol == "openai-responses" {
+		// LiteLLM 的 Responses usage 转换同样补齐 SDK 必需明细；这是格式默认值，不改变已报告的输入/输出总量或计费。
+		for detail, field := range map[string]string{"input_tokens_details": "cached_tokens", "output_tokens_details": "reasoning_tokens"} {
+			fields := map[string]any{}
+			for key, value := range dialogueMap(out[detail]) {
+				fields[key] = value
+			}
+			if fields[field] == nil {
+				fields[field] = 0
+			}
+			out[detail] = fields
+		}
+	}
 	if protocol == "anthropic-messages" {
-		if details := dialogueMap(u["prompt_tokens_details"]); details != nil {
+		if details := dialogueMap(u["prompt_tokens_details"]); details["cached_tokens"] != nil {
 			out["cache_read_input_tokens"] = details["cached_tokens"]
 		}
 		delete(out, "input_tokens_details")

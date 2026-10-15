@@ -203,6 +203,20 @@ func (s *Server) AnnotateCall(callID string, note dpcontract.CallNote) {
 	s.callNotes[callID] = note
 }
 
+// ReleaseCall 清理请求结束后剩余的临时附注、正文和护栏信息，供两类执行器的 defer 调用。
+// 参数 callID 为请求 ID，无返回；空 ID、nil 宿主及已记账条目均可重复清理。
+// 只删除本次请求的内存数据，不写账单，不影响其他请求、任务上下文或已经排队的日志副本。
+func (s *Server) ReleaseCall(callID string) {
+	if s == nil || callID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.callNotes, callID)
+	delete(s.exchanges, callID)
+	delete(s.guardrailNotes, callID)
+}
+
 // 取出并删除这次调用的附注。
 // 参数 callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行。
 // 返回 CallNote（dataplane.CallNote）：取出并删除这次调用的附注。

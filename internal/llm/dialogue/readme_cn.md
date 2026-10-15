@@ -2,7 +2,9 @@
 
 [English](readme.md)
 
-统一对话编解码与严格校验.
+同协议原生字段保留、跨协议对话编解码与严格能力校验。
+
+OpenAI 同协议使用 `Dialogue.Native` / `DialogueResult.Native` 保留 Agent 字段与原生输出，跨协议只使用已验证投影；不能等价表达的推理密文、工具或扩展明确拒绝。完整范围、LiteLLM 来源及供应商实测见[兼容对照](../../../docs/development/zh-CN/agent-protocol-compatibility.md)。
 
 ## 如何由其他模块接入
 
@@ -12,7 +14,7 @@
 
 | 入口或资源 | 调用方式与返回结果 |
 | --- | --- |
-| ParseDialogue(protocol, body) | 严格解码为统一 Dialogue |
+| ParseDialogue(protocol, body) | 保存原协议及已验证共享投影 |
 | EncodeDialogue(dialogue, protocol, model) | 编码为目标协议请求映射 |
 | ParseDialogueResult / EncodeDialogueResult | 响应事实编解码 |
 

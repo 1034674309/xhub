@@ -10,9 +10,9 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-// ParseDialogueResult 提取上游文本、工具调用、结束原因和用量事实。参数为协议与响应；返回结果或格式错误。
-// 调用：统一同步响应和流终态；不参与价格计算，不推断供应商。
-func ParseDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
+// parseUnifiedDialogueResult 提取已投影上游文本、工具调用、结束原因和用量事实。参数为协议与响应；返回结果或格式错误。
+// 调用：ParseDialogueResult 的共享解析分支；不参与价格计算，不推断供应商，无外部副作用。
+func parseUnifiedDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
 	if protocol == "gemini" || protocol == "vertex" {
 		return parseGoogleDialogueResult(raw)
 	}
@@ -153,7 +153,19 @@ func dialogueFieldShape(raw string, shape byte, nullable bool) bool {
 
 // EncodeDialogueResult 将共享回复输出到用户协议；参数为结果、入口协议及公开型号，返回 JSON。
 // 调用：统一同步入口及 SSE 终态；Responses 上游 store=false，网关通过临时上下文支持 previous_response_id。
+// Messages 把公开推理放入独立 thinking 块，签名为空；不能把推理混入正文或伪造厂商签名，密文仍由 BridgeError 拒绝。
 func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, error) {
+	if r.Source == protocol && r.Native != nil {
+		out, err := cloneObject(r.Native)
+		if err != nil {
+			return nil, err
+		}
+		out["model"] = model
+		return json.Marshal(out)
+	}
+	if r.BridgeError != "" {
+		return nil, fmt.Errorf("unsupported response bridge: %s", r.BridgeError)
+	}
 	if protocol == "gemini" || protocol == "vertex" {
 		return encodeGoogleDialogueResult(r)
 	}
@@ -165,6 +177,9 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	switch protocol {
 	case "openai-chat":
 		msg := map[string]any{"role": "assistant", "content": r.Text}
+		if r.Reasoning != "" {
+			msg["reasoning_content"] = r.Reasoning
+		}
 		if len(r.Calls) > 0 {
 			var calls []any
 			for _, c := range r.Calls {
@@ -175,22 +190,32 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 		out = map[string]any{"id": r.ID, "object": "chat.completion", "model": model, "choices": []any{map[string]any{"index": 0, "message": msg, "finish_reason": r.Stop}}, "usage": u}
 	case "openai-responses":
 		items := []any{}
+		if r.Reasoning != "" {
+			items = append(items, map[string]any{"id": r.ID + "_reasoning", "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": r.Reasoning}}})
+		}
 		if r.Text != "" {
 			items = append(items, map[string]any{"id": r.ID + "_message", "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
 		}
 		for _, c := range r.Calls {
-			items = append(items, map[string]any{"id": c.ID, "type": "function_call", "call_id": c.ID, "name": c.Name, "arguments": c.Arguments, "status": "completed"})
+			item, err := ResponseToolItem(c, r.ToolBindings, "completed")
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 		}
 		status := "completed"
 		if r.Stop == "length" {
 			status = "incomplete"
 		}
-		out = map[string]any{"id": r.ID, "object": "response", "model": model, "status": status, "store": false, "output": items, "usage": dialogueOutputUsage(u, protocol)}
+		out = map[string]any{"id": r.ID, "object": "response", "model": model, "status": status, "store": false, "output": items, "usage": DialogueOutputUsage(u, protocol)}
 		if status == "incomplete" {
 			out["incomplete_details"] = map[string]any{"reason": "max_output_tokens"}
 		}
 	case "anthropic-messages":
 		content := []any{}
+		if r.Reasoning != "" {
+			content = append(content, map[string]any{"type": "thinking", "thinking": r.Reasoning, "signature": ""})
+		}
 		if r.Text != "" {
 			content = append(content, map[string]any{"type": "text", "text": r.Text})
 		}
@@ -208,7 +233,7 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 		if len(r.Calls) > 0 {
 			stop = "tool_use"
 		}
-		out = map[string]any{"id": r.ID, "type": "message", "role": "assistant", "model": model, "content": content, "stop_reason": stop, "usage": dialogueOutputUsage(u, protocol)}
+		out = map[string]any{"id": r.ID, "type": "message", "role": "assistant", "model": model, "content": content, "stop_reason": stop, "usage": DialogueOutputUsage(u, protocol)}
 	default:
 		return nil, fmt.Errorf("unregistered dialogue protocol %s", protocol)
 	}

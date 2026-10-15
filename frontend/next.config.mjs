@@ -13,6 +13,8 @@ const nextConfig = {
   typescript: { tsconfigPath: process.env.E2E_BUILD_DIR ? "tsconfig.e2e.json" : "tsconfig.json" },
   experimental: {
     useTypeScriptCli: false,
+    // 推理请求可能长时间没有首字节；覆盖框架默认的 30 秒代理超时，网关和调用方仍各自执行自己的截止时间。
+    proxyTimeout: 600_000,
   },
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,

@@ -16,6 +16,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	"github.com/sunqirui1987/xhub/internal/config"
 	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
+	dprouting "github.com/sunqirui1987/xhub/internal/dataplane/routing"
 	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/router"
 )
@@ -133,7 +134,10 @@ func (h *fallbackServeHost) EnforceIdentityLimits(w http.ResponseWriter, _ strin
 // 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
 func (h *fallbackServeHost) PlanRoute(*http.Request, string, map[string]any, *auth.Principal) dpcontract.RoutePlan {
 	if h.required {
-		return dpcontract.RoutePlan{Required: true, Pinned: router.DeploymentID(h.cfg.ModelList[0]), Target: dpcontract.RouteTarget{DeploymentID: router.DeploymentID(h.cfg.ModelList[0]), Model: "a", Pool: "a"}}
+		plan := dpcontract.RoutePlan{Pinned: router.DeploymentID(h.cfg.ModelList[0]), Target: dpcontract.RouteTarget{DeploymentID: router.DeploymentID(h.cfg.ModelList[0]), Model: "a", Pool: "a"}}
+		dprouting.BindConnection(&plan, h.cfg.ModelList[0])
+		plan.Required = true
+		return plan
 	}
 	return dpcontract.RoutePlan{}
 }

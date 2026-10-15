@@ -179,6 +179,10 @@ func (h *logHost) AnnotateCall(id string, note dpcontract.CallNote) {
 	}
 }
 
+// ReleaseCall 满足日志捕获宿主的请求清理契约；参数为本次 ID，无返回。
+// 本夹具保存的是事后断言副本，不模拟生产暂存，因此不删除捕获数据，也不连接外部存储。
+func (h *logHost) ReleaseCall(string) {}
+
 // FindDeployment 是 logHost 的测试接口实现。
 // 忽略部署 ID，恒返回零部署与 false；测试不恢复原生任务归属。
 // 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。

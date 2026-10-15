@@ -18,7 +18,7 @@ import (
 func TestDialogueStreamMatrix(t *testing.T) {
 	streams := map[string][]string{
 		"openai-chat":        {`{"id":"r","choices":[{"index":0,"delta":{"content":"hello"}}]}`, `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":3,"id":"call_x","type":"function","function":{"name":"weather","arguments":"{"}}]}}]}`, `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":3,"function":{"arguments":"\"city\":\"上海\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":3}}`, "[DONE]"},
-		"openai-responses":   {`{"type":"response.created","response":{"id":"r"}}`, `{"type":"response.output_text.delta","delta":"hello"}`, `{"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","call_id":"call_x","name":"weather","arguments":""}}`, `{"type":"response.function_call_arguments.delta","output_index":3,"delta":"{\"city\":\"上海\"}"}`, `{"type":"response.completed","response":{"id":"r","usage":{"input_tokens":10,"output_tokens":3}}}`},
+		"openai-responses":   {`{"type":"response.created","response":{"id":"r"}}`, `{"type":"response.output_text.delta","delta":"hello"}`, `{"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","call_id":"call_x","name":"weather","arguments":""}}`, `{"type":"response.function_call_arguments.delta","output_index":3,"delta":"{\"city\":\"上海\"}"}`, `{"type":"response.completed","response":{"id":"r","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]},{"type":"function_call","call_id":"call_x","name":"weather","arguments":"{\"city\":\"上海\"}"}],"usage":{"input_tokens":10,"output_tokens":3}}}`},
 		"anthropic-messages": {`{"type":"message_start","message":{"id":"r","usage":{"input_tokens":10}}}`, `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"hello"}}`, `{"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"call_x","name":"weather","input":{}}}`, `{"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"上海\"}"}}`, `{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}`, `{"type":"message_stop"}`},
 	}
 	google := []string{`{"responseId":"r","candidates":[{"content":{"parts":[{"text":"hello"}]}}]}`, `{"candidates":[{"content":{"parts":[{"functionCall":{"id":"call_x","name":"weather","args":{"city":"上海"}}}]},"finishReason":"STOP"}]}`, `{"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"thoughtsTokenCount":1}}`}
@@ -45,10 +45,10 @@ func TestDialogueStreamMatrix(t *testing.T) {
 				if !strings.Contains(output, terminal) {
 					t.Fatal("缺少用户协议终态")
 				}
-				if target == "openai-responses" && !strings.Contains(output, "response.function_call_arguments.done") {
+				if target != source && target == "openai-responses" && !strings.Contains(output, "response.function_call_arguments.done") {
 					t.Fatal("缺少工具完成生命周期")
 				}
-				if target == "openai-chat" && strings.Contains(output, `"index":3`) {
+				if target != source && target == "openai-chat" && strings.Contains(output, `"index":3`) {
 					t.Fatal("稀疏上游工具索引未映射")
 				}
 			})

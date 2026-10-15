@@ -2,6 +2,7 @@
 import json
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import HTTPServer
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -9,6 +10,60 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_slow_agent_proxy_fixture(self):
+        """目的：仅专属模型触发超时边界等待并返回正常用量；前置本地服务，单元层替换等待避免耗时，浏览器层实际等待31秒，tearDown关闭服务。"""
+        with patch("e2e.fake_upstream.time.sleep") as wait:
+            result = self.request("/v1/chat/completions", {"model": "e2e-agent-proxy-slow", "messages": [{"role": "user", "content": "Reply OK."}]})
+            wait.assert_called_once_with(31)
+            self.assertEqual(result["choices"][0]["message"]["content"], "e2e-ok")
+        with patch("e2e.fake_upstream.time.sleep") as wait:
+            self.request("/v1/chat/completions", {"model": "normal-model"})
+            wait.assert_not_called()
+
+    def test_agent_chat_tool_fixture(self):
+        """目的：Chat 专属夹具校验 namespace、推理和 custom 包装，并拒绝原生字段；前置随机端口本地服务，tearDown 关闭线程，不访问供应商。"""
+        for custom in (False, True):
+            parameters = {"type": "object", "properties": {"content": {"type": "string"}} if custom else {}}
+            body = {"model": "e2e-agent-chat-tools", "messages": [{"role": "user", "content": "Read the file."}], "reasoning_effort": "medium", "tools": [{"type": "function", "function": {"name": "fs__read", "parameters": parameters}}]}
+            first = self.request("/v1/chat/completions", body)
+            call = first["choices"][0]["message"]["tool_calls"][0]
+            self.assertEqual(call["function"]["name"], "fs__read")
+            self.assertEqual(json.loads(call["function"]["arguments"]), {"content": "Read the file."} if custom else {})
+            with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+                raw = response.read().decode()
+                self.assertIn('"choices": []', raw)
+                self.assertTrue(raw.endswith("data: [DONE]\n\n"))
+            for invalid in ({"include": ["reasoning.encrypted_content"]}, {"reasoning_effort": "lost"}):
+                with self.assertRaises(HTTPError) as error:
+                    self.request("/v1/chat/completions", {**body, **invalid})
+                self.assertEqual(error.exception.code, 400)
+                error.exception.close()
+
+    def test_messages_public_reasoning_fixture(self):
+        """目的：公开推理夹具返回独立推理、函数调用和正确 SSE 终态，坏续轮400；前置本地随机端口服务，tearDown 回收服务和状态，不依赖外部供应商。"""
+        for protocol in ("responses", "chat/completions"):
+            is_responses = protocol == "responses"
+            key = "input" if is_responses else "messages"
+            body = {"model": "e2e-agent-messages", key: [{"role": "user", "content": "Read the file."}], "tools": [{"name": "read"}]}
+            first = self.request("/v1/" + protocol, body)
+            if is_responses:
+                self.assertEqual(first["output"][0]["summary"][0]["text"], "Plan")
+                self.assertEqual(first["output"][1]["call_id"], "call_1")
+            else:
+                self.assertEqual(first["choices"][0]["message"]["reasoning_content"], "Plan")
+                self.assertEqual(first["choices"][0]["message"]["tool_calls"][0]["id"], "call_1")
+            data = json.dumps({**body, "stream": True}).encode()
+            with urlopen(Request(self.base + "/v1/" + protocol, data=data), timeout=2) as response:
+                raw = response.read().decode()
+                self.assertIn("Plan", raw)
+                self.assertIn("response.completed" if is_responses else "data: [DONE]\n\n", raw)
+                self.assertNotIn('data: "[DONE]"', raw)
+            bad_history = {"type": "function_call_output", "call_id": "call_1", "output": "file-value"} if is_responses else {"role": "tool", "tool_call_id": "call_1", "content": "file-value"}
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/" + protocol, {**body, key: [bad_history]})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+
     def test_permission_probe_counts_success_and_failure(self):
         """目的：权限探针读操作不增加计数，成功和失败推理均增加；前置本地服务，tearDown 回收线程及状态。"""
         before = self.request("/e2e/request-count")["requests"]

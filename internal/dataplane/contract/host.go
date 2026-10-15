@@ -36,6 +36,11 @@ type SpendLog interface {
 	// 测试：bypass_logic_test.go 断言创建笔记里有供应商、TTFT 和部署 id。
 	AnnotateCall(callID string, note CallNote)
 
+	// ReleaseCall 释放本次 HTTP 调用未被记账消费的临时备注、交互和护栏事实。
+	// 参数 callID 为本次调用 ID；无返回，不创建账单或删除已持久化日志。
+	// 两类执行器在请求结束时调用；空 ID、不存在或已经消费的条目应安全忽略。
+	ReleaseCall(callID string)
+
 	// RecordSpend 写一条用量。它读取并清掉 callID 上的暂存，计算费用，更新响应头里的 cost。
 	// 缓存命中或状态码大于等于 400 时，token 仍保留，扣费金额强制为 0。
 	//
@@ -265,11 +270,14 @@ type RouteStep struct {
 }
 
 // RouteTarget 描述可被会话偏好保存的部署、实际公开模型池及回退路径。
-// 稳定 DeploymentID 用于重新定位当前配置，运行时冷却身份由执行器重新计算；Revision 用于比较更新防止迟到覆盖。
-// Path 需由生产方复制，不应在不同请求间共享可变切片；目标记录本身不是持久化强绑定。
+// 普通偏好按稳定 DeploymentID 重新定位，固定续接另校验 ConnectionID；Revision 用于比较更新防止迟到覆盖。
+// Path 需由生产方复制，不应在不同请求间共享可变切片；归属是临时缓存快照，不是长期数据库记录。
 type RouteTarget struct {
 	// 部署目录的稳定 ID，地址或定价变化不改变它；每轮从当前目录恢复执行配置，删除后失效。
 	DeploymentID string `json:"deployment_id"`
+	// 创建响应时已补齐凭据的连接指纹；固定续接必须匹配，缺失时拒绝并要求新会话。
+	// 仅保存哈希，不包含地址或密钥明文；普通偏好仍按稳定部署 ID 重新选路。
+	ConnectionID string `json:"connection_id,omitempty"`
 	// 实际部署所属公开模型；组调用和回退时可以不同于客户端请求别名，上游型号另行保存。
 	Model string `json:"model"`
 	// 实际选中部署的公开模型池或显式组，决定当前策略、权重及回退源。

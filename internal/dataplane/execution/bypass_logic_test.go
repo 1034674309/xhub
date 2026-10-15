@@ -373,6 +373,10 @@ func (h *logicHost) CommitRoute(dpcontract.RoutePlan, string, string) {}
 // 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。
 func (h *logicHost) AnnotateCall(_ string, note dpcontract.CallNote) { h.notes = append(h.notes, note) }
 
+// ReleaseCall 满足原生捕获宿主的清理契约；参数为本次 ID，无返回。
+// notes 是断言用历史副本而非生产暂存，不在请求退出时删除；夹具由测试回收。
+func (h *logicHost) ReleaseCall(string) {}
+
 // FindDeployment 是 logicHost 的测试接口实现。
 // 按参数运行部署 ID 查找测试目录，返回部署及 ok；不存在时返回零部署和 false，不访问外部目录。
 // 调用方为本文件或同包的执行测试；仅模拟所述边界，不能据此推断生产宿主的行为。

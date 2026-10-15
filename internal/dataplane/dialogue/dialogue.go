@@ -172,12 +172,29 @@ func ResponsesRequestBody(body map[string]any, history []llmdialogue.Turn) (map[
 // Serve 成功分支及 Responses 流完成前回调使用；移除 instructions 派生的首条临时指令，保留输入中的显式系统消息。
 // 复制切片并追加回复，保持工具 ID 关联；嵌套字段可能共享引用，本函数本身不写会话缓存或数据库。
 func ResponseHistory(d llmdialogue.Dialogue, body map[string]any, result llmdialogue.DialogueResult) []llmdialogue.Turn {
+	if d.Source == "openai-responses" && result.Source == "openai-responses" {
+		var history []llmdialogue.Turn
+		input := d.Native["input"]
+		if text, ok := input.(string); ok {
+			input = []any{map[string]any{"role": "user", "content": text}}
+		}
+		for _, group := range []any{input, result.Native["output"]} {
+			if items, ok := group.([]any); ok {
+				for _, value := range items {
+					if item, ok := value.(map[string]any); ok {
+						history = append(history, llmdialogue.Turn{NativeProtocol: "openai-responses", Native: item})
+					}
+				}
+			}
+		}
+		return history
+	}
 	turns := d.Turns
 	if instructions, _ := body["instructions"].(string); instructions != "" && len(turns) > 0 {
 		turns = turns[1:]
 	}
 	history := append([]llmdialogue.Turn(nil), turns...)
-	return append(history, llmdialogue.Turn{Role: "assistant", Text: result.Text, Calls: result.Calls})
+	return append(history, llmdialogue.Turn{Role: "assistant", Text: result.Text, Calls: result.Calls, Reasoning: result.Reasoning})
 }
 
 // CallerProtocol 将统一入口操作名映射为显式调用方协议 ID。
@@ -203,7 +220,7 @@ func DialogueRequestBody(body map[string]any) map[string]any {
 	delete(out, "disable_fallbacks")
 	// 会话身份已由 PlanRoute 读取；统一对话没有原厂缓存键的跨协议表示。
 	delete(out, "session_id")
-	delete(out, "prompt_cache_key")
+	// prompt_cache_key 是 OpenAI 原生缓存参数，同协议必须保留。
 	return out
 }
 

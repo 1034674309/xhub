@@ -1,4 +1,4 @@
-.PHONY: test run ui tidy testdata e2e e2e-list e2e-all e2e-model-endpoints regression regression-live
+.PHONY: test run ui tidy testdata e2e e2e-list e2e-offline e2e-all e2e-model-endpoints regression regression-live
 
 # make 的第二个词本来是另一个目标；仅在 e2e 后把白名单内的词解释为分类。
 E2E_CATEGORIES := entities gpt-1 gpt-2 gpt-3 gpt-4 glm image ark-video fal-video kling-video inheritance chat-bills permissions xgo limits model-lifecycle guard-lifecycle global-guards profile-isolation cache-weight Affinity fallback media-logs database browser business-browser regression
@@ -49,6 +49,11 @@ e2e:
 # 显示每类验收目的、使用示例、共享基线前提、费用边界与报告位置；只显示帮助，无服务或数据副作用。
 e2e-list:
 	@python3 scripts/e2e.py --list-categories
+
+# 离线浏览器入口使用独立 schema、本地协议夹具和自动清理，不复用共享验收数据或调用付费模型。
+# E2E_TESTS 可选指定 Playwright 用例路径；为空时执行完整离线套件。
+e2e-offline:
+	bash scripts/e2e.sh $(E2E_TESTS)
 
 # 原有全套隔离验收保留为显式入口。
 e2e-all:

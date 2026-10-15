@@ -2,6 +2,8 @@
 
 [中文](readme_cn.md) · [Parent architecture](../readme.md)
 
+`PipeDialogue` preserves and validates native SSE for matching OpenAI protocols; other combinations reuse the shared stream state machine. `ResponseHistory` preserves native reasoning/tool items. Standard endpoints still enforce authorization, budgets and guardrails rather than invoking bypass execution. See the [compatibility matrix](../../../docs/development/en/agent-protocol-compatibility.md).
+
 ## Integration from other modules
 
 Integration here means other Go packages in this repository. Go internal import rules restrict imports from outside the repository; HTTP clients use mounted gateway endpoints.

@@ -135,11 +135,17 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 		return plan
 	}
 	key := sessionPinKey(alias, plan.Caller, plan.SessionID, endpoint)
+	// 加密推理依赖生成它的供应商连接，不能按普通会话偏好切换账户或降级读本机缓存。
+	opaque := requiresNativeOwnership(body)
 	// expected 是本轮读取的完整序列化值（含 Revision），而非仅部署 ID；
 	// local 指定本轮后续比较写入使用本机还是共享存储。普通偏好允许降级，
 	// 所以读取错误只记录日志，不设置 plan.Err，也不影响已恢复的父响应归属。
-	expected, local, err := s.cacheRead(key, true)
+	expected, local, err := s.cacheRead(key, !opaque)
 	if err != nil {
+		if opaque {
+			plan.Err = fmt.Errorf("encrypted history ownership is unavailable; start a new conversation")
+			return plan
+		}
 		util.Debug("session affinity cache degraded: %v", err)
 	}
 	if !plan.Required {
@@ -151,6 +157,17 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 		// Pinned 保存稳定部署 ID，执行器再映射到当前目录中的运行配置。
 		// Required 计划跳过这两步，确保动态偏好不能覆盖父响应的 Target/Pinned。
 		plan.Pinned = plan.Target.DeploymentID
+	}
+	if opaque && !plan.Required {
+		// 完整密文的证明必须来自首次成功响应，而非可以被普通请求改写的动态路由偏好。
+		// 否则连接更新后发一次普通请求，就可能把旧密文错误地绑定到新账户。
+		ownerRaw, _, ownerErr := s.cacheRead(sessionOwnerKey(alias, plan.Caller, plan.SessionID, endpoint), false)
+		var owner dpcontract.RouteTarget
+		if ownerErr != nil || json.Unmarshal([]byte(ownerRaw), &owner) != nil || owner.DeploymentID == "" {
+			plan.Err = fmt.Errorf("encrypted history requires an owned session or previous_response_id")
+			return plan
+		}
+		plan.Target, plan.Pinned, plan.Required = owner, owner.DeploymentID, true
 	}
 	// 6. 安装请求级回调：expected/local 被闭包捕获，Claim 更新它们后 Save
 	// 使用同一份基准。后续新请求会重新读取存储，Redis 恢复后以共享值为准，
@@ -213,7 +230,8 @@ type responseOwner struct {
 // responses 执行器还须将本轮输入和成功输出合并进 plan.History；本方法不构造历史。
 // 无返回值；空 deploymentID 或 Caller 直接返回，不写偏好、历史或归属。
 // 先复制 Target、填成功部署，缺失 Pool/Model 用原 alias 补足，再通过 Save 比较更新偏好。
-// 偏好比较失败不撤销成功结果，响应归属仍记录实际目标，与动态偏好是否更新成功独立。
+// 偏好比较失败不撤销成功结果，响应归属仍记录实际连接指纹，与动态偏好是否更新成功独立。
+// Responses 首次成功目标另存为固定会话归属，后续普通选路只更新偏好，不能替旧密文更换账户。
 // 有 responseID 和 SessionID 时发布归属；responses 且 History 非空时先编码并写历史，
 // 历史失败即停止，避免发布已知缺少上下文的归属；History 为空时仍发布归属，但续接会因缺历史拒绝。
 // 历史和归属是非事务的一小时记录，不是原厂长期 store；归属写入错误在此被忽略。
@@ -236,6 +254,25 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 		plan.Save(target)
 	}
 	if responseID != "" && plan.SessionID != "" {
+		// 统一及原生 Responses 的入口 ID 不同；固定归属与父响应一样按实际入口隔离发布。
+		// 首次成功目标只允许相同连接续期，不能由后续普通选路覆盖。
+		key := sessionOwnerKey(plan.Alias, plan.Caller, plan.SessionID, plan.Endpoint)
+		targetRaw, _ := json.Marshal(target)
+		current, err := s.cacheCompare(key, "", string(targetRaw), false)
+		if err == nil && current != string(targetRaw) {
+			var owner dpcontract.RouteTarget
+			if json.Unmarshal([]byte(current), &owner) == nil {
+				if owner.DeploymentID == target.DeploymentID && owner.ConnectionID == target.ConnectionID {
+					_, _ = s.cacheCompare(key, current, current, false)
+				} else {
+					// 同一会话曾在不同连接成功，完整历史无法再仅凭会话 ID 确认出处。
+					// 保留不可用归属，禁止后续普通请求或迟到成功重新绑定；明确父响应仍有独立快照。
+					owner.ConnectionID = ""
+					invalid, _ := json.Marshal(owner)
+					_, _ = s.cacheCompare(key, current, string(invalid), false)
+				}
+			}
+		}
 		// 先发布历史，再发布可被后续请求引用的归属；不是跨键事务，但不能反过来。
 		if plan.Endpoint == "responses" && len(plan.History) > 0 {
 			raw, err := json.Marshal(plan.History)
@@ -249,4 +286,18 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 		raw, _ := json.Marshal(responseOwner{Target: target, Session: plan.SessionID})
 		_ = s.cacheWrite(responsePinKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw))
 	}
+}
+
+// requiresNativeOwnership 判断 Responses 输入是否含供应商绑定的不透明历史。
+// 参数 body 为未改写的用户正文，返回是否必须固定原部署；PlanRoute 调用，不解密、不写缓存。
+// 普通推理摘要和 DeepSeek 公开 reasoning_content 不触发固定；加密项即使格式错误也不能触发跨账户重试。
+func requiresNativeOwnership(body map[string]any) bool {
+	items, _ := body["input"].([]any)
+	for _, value := range items {
+		item, _ := value.(map[string]any)
+		if item["encrypted_content"] != nil {
+			return true
+		}
+	}
+	return false
 }

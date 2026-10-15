@@ -78,7 +78,7 @@ func TestResponsesNativeToolContinuation(t *testing.T) {
 				t.Fatalf("原厂 store/续接字段错误: %v", calls)
 			}
 			input := calls[1]["input"].([]any)
-			if len(input) != 4 || input[0].(map[string]any)["content"] != "new instructions" || input[1].(map[string]any)["content"] != "lookup" || input[2].(map[string]any)["call_id"] != "call_lookup" || input[3].(map[string]any)["output"] != "result" {
+			if len(input) != 3 || calls[1]["instructions"] != "new instructions" || input[0].(map[string]any)["content"] != "lookup" || input[1].(map[string]any)["call_id"] != "call_lookup" || input[2].(map[string]any)["output"] != "result" {
 				t.Fatalf("工具关联或请求指令错误: %v", input)
 			}
 			h.ok("PATCH", "/model/"+deploymentID+"/update", admin, map[string]any{"model_info": map[string]any{"disabled": true}})

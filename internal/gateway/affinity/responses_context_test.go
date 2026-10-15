@@ -42,3 +42,66 @@ func TestResponsesContextIsolationAndExpiry(t *testing.T) {
 		t.Fatal("过期历史被接受或未清理")
 	}
 }
+
+// TestEncryptedHistoryRequiresOwnedDeployment 验证完整加密历史必须复用本身份已知部署，不能跨用户/别名/会话重选。
+// 参数 t 为上下文；前置独立内存状态，正常文本可自由选路，密文首次/错误身份拒绝；内存数据随测试回收。
+func TestEncryptedHistoryRequiresOwnedDeployment(t *testing.T) {
+	state := &State{}
+	principal := &auth.Principal{UserID: "alice"}
+	request := httptest.NewRequest("POST", "/v1/responses", nil)
+	request.Header.Set("X-Session-Id", "native-session")
+	first := state.PlanRoute(request, "a", map[string]any{"input": "Hello"}, principal)
+	if first.Err != nil || first.Required {
+		t.Fatalf("普通首轮错误: %+v", first)
+	}
+	first.Target.DeploymentID = "native-deployment"
+	state.CommitRoute(first, "native-deployment", "resp-1")
+	body := map[string]any{"input": []any{map[string]any{"type": "reasoning", "encrypted_content": "cipher"}, map[string]any{"role": "user", "content": "Next"}}}
+	next := state.PlanRoute(request, "a", body, principal)
+	if next.Err != nil || !next.Required || next.Pinned != "native-deployment" {
+		t.Fatalf("密文未固定原部署: %+v", next)
+	}
+	for _, tc := range []struct{ alias, user, session string }{{"b", "alice", "native-session"}, {"a", "bob", "native-session"}, {"a", "alice", "new-session"}} {
+		req := httptest.NewRequest("POST", "/v1/responses", nil)
+		req.Header.Set("X-Session-Id", tc.session)
+		if got := state.PlanRoute(req, tc.alias, body, &auth.Principal{UserID: tc.user}); got.Err == nil {
+			t.Fatalf("非归属密文被放行: %+v", tc)
+		}
+	}
+	if requiresNativeOwnership(nil) || requiresNativeOwnership(map[string]any{"input": "Hello"}) {
+		t.Fatal("纯文本误判为密文")
+	}
+}
+
+// TestOpaqueSessionOwnershipSurvivesPreferenceUpdates 验证普通选路更新不能替旧密文重新绑定账户。
+// 参数 t 为上下文；前置同一身份/模型/会话在 A 成功后又在 B 完成普通请求，完整密文归属失效而非绑定 B。
+// 同时检查 B 的明确父响应可恢复自己的归属、键与其他会话/入口隔离；内存夹具随测试回收。
+func TestOpaqueSessionOwnershipSurvivesPreferenceUpdates(t *testing.T) {
+	state := &State{}
+	principal := &auth.Principal{UserID: "alice"}
+	req := httptest.NewRequest("POST", "/v1/responses", nil)
+	req.Header.Set("X-Session-Id", "fixed-session")
+	first := state.PlanRoute(req, "model", map[string]any{"input": "Hello"}, principal)
+	first.Target = dpcontract.RouteTarget{DeploymentID: "stable", ConnectionID: "account-a", Model: "model", Pool: "model"}
+	first.History = []llmdialogue.Turn{{Role: "user", Text: "Hello"}}
+	state.CommitRoute(first, "stable", "response-a")
+	next := state.PlanRoute(req, "model", map[string]any{"input": "Fresh plain request"}, principal)
+	next.Target.ConnectionID, next.History = "account-b", first.History
+	state.CommitRoute(next, "stable", "response-b")
+	body := map[string]any{"input": []any{map[string]any{"type": "reasoning", "encrypted_content": "opaque-a"}}}
+	owned := state.PlanRoute(req, "model", body, principal)
+	if owned.Err != nil || !owned.Required || owned.Target.ConnectionID != "" {
+		t.Fatalf("动态偏好覆盖了固定密文归属: %+v", owned)
+	}
+	state.CommitRoute(first, "stable", "late-response-a")
+	if late := state.PlanRoute(req, "model", body, principal); late.Err != nil || late.Target.ConnectionID != "" {
+		t.Fatalf("迟到成功重新绑定了混合连接的会话: %+v", late)
+	}
+	parent := state.PlanRoute(req, "model", map[string]any{"previous_response_id": "response-b"}, principal)
+	if parent.Err != nil || parent.Target.ConnectionID != "account-b" {
+		t.Fatalf("明确父响应归属丢失: %+v", parent)
+	}
+	if sessionOwnerKey("model", "user:alice", "fixed-session", "responses") == sessionPinKey("model", "user:alice", "fixed-session", "responses") || sessionOwnerKey("model", "user:alice", "other-session", "responses") == sessionOwnerKey("model", "user:alice", "fixed-session", "responses") {
+		t.Fatal("固定归属键未隔离命名空间或会话")
+	}
+}
