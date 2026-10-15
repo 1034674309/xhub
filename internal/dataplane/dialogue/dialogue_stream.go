@@ -585,7 +585,8 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 			}
 		case "response.function_call_arguments.delta":
 			return s.toolDelta(streamIndex(m["output_index"]), "", "", streamString(m["delta"]))
-		case "response.completed":
+		case "response.completed", "response.incomplete":
+			// 达到输出上限仍是可观察终态，必须与 completed 使用相同的密文/拒绝校验，不能静默降级为普通推理。
 			if response := streamMap(m["response"]); response != nil && response["output"] != nil && !s.observeOnly {
 				raw, _ := json.Marshal(response)
 				result, err := llmdialogue.ParseDialogueResult(protocol, raw)
@@ -602,9 +603,9 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				}
 			}
 			s.completed = true
-		case "response.incomplete":
-			s.completed = true
-			s.stop = "length"
+			if typ == "response.incomplete" {
+				s.stop = "length"
+			}
 		case "response.failed", "error":
 			return fmt.Errorf("upstream response failed")
 		}

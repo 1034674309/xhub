@@ -10,6 +10,36 @@ import (
 	"testing"
 )
 
+// TestMessagesEncryptedIncompleteFailure 验证真实后台对带密文 incomplete 流输出错误并记失败日志。
+// 参数 t 为上下文；前置本地 SSE/隔离数据库/用户 Key，不能出现成功终态或成功账单；harness 清理服务、身份和日志。
+func TestMessagesEncryptedIncompleteFailure(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Plan\"}\n\n")
+		response := nativeAgentResponse("r_incomplete", "", true, nil)
+		response["status"] = "incomplete"
+		raw, _ := json.Marshal(map[string]any{"type": "response.incomplete", "response": response})
+		fmt.Fprintf(w, "data: %s\n\n", raw)
+	}))
+	t.Cleanup(up.Close)
+	dep := chatDeployment("encrypted-incomplete")
+	dep.LiteLLMParams["api_base"] = up.URL + "/v1"
+	dep.ModelInfo["transport"] = "bypass_openai_responses"
+	dep.ModelInfo["endpoint_types"] = []string{"messages"}
+	h := newHarness(t, dep)
+	admin := h.adminSession()
+	owner := h.openScope(t, admin, "incomplete-owner")
+	reply := h.do("POST", "/v1/messages", owner.key, map[string]any{"model": dep.ModelName, "stream": true, "messages": []any{map[string]any{"role": "user", "content": "Hello"}}})
+	if strings.Contains(reply.text(), "message_stop") || !strings.Contains(reply.text(), `"type":"error"`) {
+		t.Fatalf("密文 incomplete 流被当成成功: %s", reply.describe())
+	}
+	h.flushSpend()
+	bill := h.ok("GET", "/spend/logs/ui/"+reply.header("x-litellm-call-id"), admin, nil).json()
+	if bill["status"] == "success" || bill["api_key"] != owner.keyID {
+		t.Fatalf("密文失败日志状态或归属错误: %v", bill)
+	}
+}
+
 // publicAgentResponse 构造公开推理和工具/正文组成的 Responses 回复；参数为 ID、正文和可空工具调用。
 // Messages 回归和真实 CLI 夹具调用，返回固定用量对象；没有密文或厂商签名，不修改调用方对象或持久化数据。
 func publicAgentResponse(id, text string, call map[string]any) map[string]any {

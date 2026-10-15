@@ -81,3 +81,25 @@ func TestMessagesReasoningStreamBlocks(t *testing.T) {
 		}
 	}
 }
+
+// TestMessagesReasoningTerminalBoundaries 验证 completed/incomplete 都执行密文检查，公开推理达到输出上限仍正常保留 max_tokens。
+// 参数 t 为上下文；本地 SSE 覆盖公开/密文两类终态；密文必须发错误且没有 message_stop，公开推理正常完成；纯内存无需清理。
+func TestMessagesReasoningTerminalBoundaries(t *testing.T) {
+	for _, status := range []string{"completed", "incomplete"} {
+		for _, encrypted := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/encrypted=%v", status, encrypted), func(t *testing.T) {
+				raw := "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Plan\"}\n\n" + fmt.Sprintf("data: {\"type\":\"response.%s\",\"response\":{\"id\":\"r\",\"status\":\"%s\",\"output\":[{\"id\":\"rs\",\"type\":\"reasoning\",\"encrypted_content\":\"cipher\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"Plan\"}]}]}}\n\n", status, status)
+				if !encrypted {
+					raw = strings.ReplaceAll(raw, `"encrypted_content":"cipher",`, "")
+				}
+				_, _, _, out, err := PipeDialogue(httptest.NewRecorder(), &http.Response{Body: io.NopCloser(strings.NewReader(raw))}, time.Now(), "public", "openai-responses", "anthropic-messages")
+				if encrypted && (err == nil || strings.Contains(string(out), "message_stop") || !strings.Contains(string(out), `"type":"error"`)) {
+					t.Fatalf("密文终态 %s 被伪装为正常 Messages: %v %s", status, err, out)
+				}
+				if !encrypted && (err != nil || !strings.Contains(string(out), "message_stop") || (status == "incomplete" && !strings.Contains(string(out), `"stop_reason":"max_tokens"`))) {
+					t.Fatalf("公开推理终态失败: %v %s", err, out)
+				}
+			})
+		}
+	}
+}
