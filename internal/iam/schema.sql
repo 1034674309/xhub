@@ -312,3 +312,7 @@ ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS label TEXT NOT NULL DEFAULT ''
 
 -- 上游基础地址随调用快照保存；旧日志保持空值，不以当前配置推断历史。
 ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS api_base TEXT NOT NULL DEFAULT '';
+
+-- CREATE TABLE 不会更新旧表；启动时幂等补齐会话来源，避免日志与账单事务整体失败。
+-- 历史来源未知时保持空值，不根据当前路由推断，也不改写已有来源或重新结算账单。
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS session_source TEXT NOT NULL DEFAULT '';
