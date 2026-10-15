@@ -62,6 +62,8 @@ Authorized Fenno credentials were used against a local new gateway/private Postg
 
 Actual Codex `0.162.0-alpha.17.2` and Claude Code `2.1.300` each read a temporary file via a real tool, sent the result through the new gateway to `gpt-5.6-sol`, returned its contents and produced successful billing rows. Pinned release clients Codex `0.162.1` and Claude Code `2.1.300` were separately executed against local protocol fixtures. They are actual binaries, not the existing simulator; simulator coverage remains too.
 
+The fixed offline fixture only issues a test-file read command; protocol acceptance does not depend on the host read-only sandbox implementation. Live supplier tests retain the read-only sandbox. Retries are bounded and timeout cleanup terminates the complete process group, including npm launcher descendants. Windows CLI process-group acceptance is not covered here.
+
 ## Regression and reproduction
 
 - Unit: parameter mappings, invalid shapes, public/encrypted reasoning, native/refusal/failed stream results, history and ownership.

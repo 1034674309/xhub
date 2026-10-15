@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -21,8 +22,11 @@ import (
 // 参数 t 为回归上下文；显式 XHUB_TEST_CODEX_BIN/XHUB_TEST_CLAUDE_BIN 才运行，未安装时明确跳过。
 // 私有数据库和本地协议夹具隔离供应商波动；验证真实 CLI 请求/工具结果、日志及费用，不代表真实模型质量或上游兼容认证。
 // XHUB_AGENT_LIVE=1 并提供 LIVE_KEY/BASE 时显式改用真实上游，会产生费用；默认不访问外部服务。
-// CLI 禁用用户配置/外部 MCP/持久会话；仅授权读取测试目录，二进制由调用方提供，目录/schema/密钥由测试清理。
+// CLI 禁用用户配置/外部 MCP/持久会话；仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理。
 func TestRealAgentClients(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("real CLI fixture process-group cleanup is validated on POSIX only")
+	}
 	for _, client := range []string{"codex", "claude"} {
 		t.Run(client, func(t *testing.T) {
 			variable := "XHUB_TEST_CODEX_BIN"
@@ -56,6 +60,16 @@ func TestRealAgentClients(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				requests++
+				limit := 3
+				if live {
+					limit = 8
+				}
+				if requests > limit {
+					t.Errorf("%s 未在 %d 次请求内完成文件工具往返", client, limit)
+					w.WriteHeader(400)
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "agent fixture tool round trip exceeded limit"}})
+					return
+				}
 				raw, _ := json.Marshal(body["input"])
 				done := (strings.Contains(string(raw), "function_call_output") || strings.Contains(string(raw), "custom_tool_call_output")) && strings.Contains(string(raw), sentinel)
 				if done {
@@ -200,7 +214,12 @@ func TestRealAgentClients(t *testing.T) {
 			prompt := "Read " + file + " using your file or shell tool, then reply with AGENT_OK and its contents. Do not modify any files."
 			var args, env []string
 			if client == "codex" {
-				args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "-C", directory, "-s", "read-only", "--json", "-m", dep.ModelName, "-c", `model_provider="xhub"`, "-c", fmt.Sprintf(`model_providers.xhub={name="XHub",base_url="%s/v1",env_key="XHUB_AGENT_TEST_KEY",wire_api="responses",requires_openai_auth=false,supports_websockets=false}`, h.server.URL), "-c", `model_reasoning_effort="medium"`, prompt}
+				// 离线夹具只下发固定 cat 命令，协议验收不能依赖 CI 宿主用户命名空间；真实供应商仍使用只读沙箱。
+				sandbox := "danger-full-access"
+				if live {
+					sandbox = "read-only"
+				}
+				args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "-C", directory, "-s", sandbox, "--json", "-m", dep.ModelName, "-c", `model_provider="xhub"`, "-c", fmt.Sprintf(`model_providers.xhub={name="XHub",base_url="%s/v1",env_key="XHUB_AGENT_TEST_KEY",wire_api="responses",requires_openai_auth=false,supports_websockets=false}`, h.server.URL), "-c", `model_reasoning_effort="medium"`, prompt}
 				env = []string{"XHUB_AGENT_TEST_KEY=" + owner.key}
 			} else {
 				args = []string{"--bare", "--print", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--tools", "Read", "--allowedTools", "Read", "--max-turns", "3", "--output-format", "json", "--model", dep.ModelName, "--effort", "low", prompt}
@@ -208,6 +227,7 @@ func TestRealAgentClients(t *testing.T) {
 			}
 			command := exec.CommandContext(ctx, binary, args...)
 			command.Dir = directory
+			isolateAgentCommand(command)
 			// 子进程只拿一次性网关密钥，真实上游凭据仅留在测试转发器内存，不能暴露给 Agent 工具环境。
 			for _, entry := range os.Environ() {
 				name, _, _ := strings.Cut(entry, "=")
