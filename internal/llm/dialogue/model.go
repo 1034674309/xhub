@@ -5,6 +5,11 @@ package dialogue
 type Turn struct {
 	Role, Text, ID, Name, Arguments string
 	Calls                           []Turn
+	// Reasoning 是可公开推理文本；加密项仅通过 Native 在同协议重放。
+	Reasoning string
+	// Native 保存受身份绑定的原协议历史项；跨协议不能直接重放不透明推理内容。
+	Native         map[string]any `json:",omitempty"`
+	NativeProtocol string         `json:",omitempty"`
 }
 
 // Dialogue 保存统一对话请求；Options 只保存已实现协议可表达的已验证参数。
@@ -13,6 +18,11 @@ type Dialogue struct {
 	Tools   []map[string]any
 	Options map[string]any
 	Stream  bool
+	// Source/Native 是护栏处理后的原协议正文；只在同协议编码时使用。
+	Source string
+	Native map[string]any
+	// BridgeError 只阻止无法无损表示的跨协议候选，不阻止兼容的原协议候选。
+	BridgeError string
 }
 
 // DialogueResult 保存实测回复与用量；ID 来源上游，由网关按该 ID 保存临时续接上下文。
@@ -20,4 +30,10 @@ type DialogueResult struct {
 	ID, Text, Stop string
 	Calls          []Turn
 	Usage          map[string]any
+	// Reasoning 保存公开推理文本，用于 Chat/Responses 桥接，不承载密文。
+	Reasoning string
+	// 原始回复用于同协议输出，防止推理项、扩展用量和供应商字段被重新编码丢失。
+	Source      string
+	Native      map[string]any
+	BridgeError string
 }

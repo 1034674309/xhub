@@ -2,7 +2,9 @@
 
 [简体中文](readme_cn.md)
 
-Unified dialogue codecs and strict validation.
+Native field preservation for matching protocols; dialogue codecs and strict capability validation for bridges.
+
+Matching OpenAI protocols retain Agent fields/results in `Dialogue.Native` / `DialogueResult.Native`. Bridges use validated projections and reject non-equivalent encrypted reasoning, tools or extensions. See the [compatibility matrix](../../../docs/development/en/agent-protocol-compatibility.md) for boundaries, LiteLLM sources and live supplier results.
 
 ## Integration from other modules
 
@@ -12,7 +14,7 @@ Select an explicit source protocol, parse and check errors, then encode for the 
 
 | Entry point or resource | Usage and result |
 | --- | --- |
-| ParseDialogue(protocol, body) | Strictly decode into Dialogue |
+| ParseDialogue(protocol, body) | Retain source protocol plus a validated shared projection |
 | EncodeDialogue(dialogue, protocol, model) | Encode a request map for the target protocol |
 | ParseDialogueResult / EncodeDialogueResult | Decode and encode response facts |
 

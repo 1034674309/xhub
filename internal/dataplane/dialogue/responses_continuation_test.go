@@ -30,7 +30,7 @@ func TestResponsesRequestRestoresToolsAndValidates(t *testing.T) {
 	if len(next) != 4 || next[0].Text != "first" || len(history) != 2 || out["guardrails"] == nil || body["previous_response_id"] != "resp-a" {
 		t.Fatalf("指令隔离或原始数据修改: %+v", next)
 	}
-	for _, invalid := range []map[string]any{{"input": "x", "store": "false"}, {"input": "x", "previous_response_id": 12}, {"input": "x", "previous_response_id": ""}, {"input": []any{}}, {"input": "x", "unknown": true}} {
+	for _, invalid := range []map[string]any{{"input": "x", "store": "false"}, {"input": "x", "previous_response_id": 12}, {"input": "x", "previous_response_id": ""}, {"input": []any{}}} {
 		if _, err := ResponsesRequestBody(invalid, history); err == nil {
 			t.Fatalf("无效增量输入被接受: %v", invalid)
 		}

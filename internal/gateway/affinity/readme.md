@@ -17,6 +17,8 @@ The public API is for other Go packages within this repository. Go's internal im
 
 Affinity does not authenticate callers, schedule candidates, validate deployment eligibility, or calculate charges. A cached target never grants permission.
 
+Full encrypted Responses history also requires caller-scoped session deployment ownership and a required target. Shared-cache failures, disabled origins or changed weights must not move encrypted history to another account. Unknown ownership requires a new conversation.
+
 ## Exported API
 
 | API | When to call | Inputs | Result and boundary |

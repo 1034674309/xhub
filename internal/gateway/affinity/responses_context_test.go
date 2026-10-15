@@ -42,3 +42,33 @@ func TestResponsesContextIsolationAndExpiry(t *testing.T) {
 		t.Fatal("过期历史被接受或未清理")
 	}
 }
+
+// TestEncryptedHistoryRequiresOwnedDeployment 验证完整加密历史必须复用本身份已知部署，不能跨用户/别名/会话重选。
+// 参数 t 为上下文；前置独立内存状态，正常文本可自由选路，密文首次/错误身份拒绝；内存数据随测试回收。
+func TestEncryptedHistoryRequiresOwnedDeployment(t *testing.T) {
+	state := &State{}
+	principal := &auth.Principal{UserID: "alice"}
+	request := httptest.NewRequest("POST", "/v1/responses", nil)
+	request.Header.Set("X-Session-Id", "native-session")
+	first := state.PlanRoute(request, "a", map[string]any{"input": "Hello"}, principal)
+	if first.Err != nil || first.Required {
+		t.Fatalf("普通首轮错误: %+v", first)
+	}
+	first.Target.DeploymentID = "native-deployment"
+	state.CommitRoute(first, "native-deployment", "resp-1")
+	body := map[string]any{"input": []any{map[string]any{"type": "reasoning", "encrypted_content": "cipher"}, map[string]any{"role": "user", "content": "Next"}}}
+	next := state.PlanRoute(request, "a", body, principal)
+	if next.Err != nil || !next.Required || next.Pinned != "native-deployment" {
+		t.Fatalf("密文未固定原部署: %+v", next)
+	}
+	for _, tc := range []struct{ alias, user, session string }{{"b", "alice", "native-session"}, {"a", "bob", "native-session"}, {"a", "alice", "new-session"}} {
+		req := httptest.NewRequest("POST", "/v1/responses", nil)
+		req.Header.Set("X-Session-Id", tc.session)
+		if got := state.PlanRoute(req, tc.alias, body, &auth.Principal{UserID: tc.user}); got.Err == nil {
+			t.Fatalf("非归属密文被放行: %+v", tc)
+		}
+	}
+	if requiresNativeOwnership(nil) || requiresNativeOwnership(map[string]any{"input": "Hello"}) {
+		t.Fatal("纯文本误判为密文")
+	}
+}

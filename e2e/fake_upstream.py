@@ -292,6 +292,33 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
+        if "responses" in path and model == "e2e-agent-native":
+            # 专属 Agent 夹具检查字段和完整历史，网关仍是真实实现；不连接任何外部服务。
+            advanced = "reasoning" in req or "include" in req
+            if advanced and req.get("include") and (req.get("reasoning", {}).get("effort") != "medium" or not req.get("text")):
+                self.send_error(400, "agent options lost")
+                return
+            items = req.get("input", [])
+            second = isinstance(items, list) and any(i.get("type") == "function_call_output" for i in items)
+            if second and not any(i.get("encrypted_content") == "fixture-cipher" for i in items):
+                self.send_error(400, "reasoning history lost")
+                return
+            output = []
+            if req.get("include"):
+                output.append({"id": "rs_" + uuid.uuid4().hex, "type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan"}], "encrypted_content": "fixture-cipher"})
+            if req.get("tools") and not second:
+                output.append({"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "read", "arguments": "{}", "status": "completed"})
+            else:
+                output.append({"id": "msg_" + uuid.uuid4().hex, "type": "message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "e2e-ok", "annotations": []}]})
+            payload = {"id": "resp_" + uuid.uuid4().hex, "object": "response", "status": "completed", "model": model, "output": output,
+                       "usage": {"input_tokens": 8, "output_tokens": 2, "output_tokens_details": {"reasoning_tokens": 1}, "vendor_counter": 42}}
+            if req.get("stream"):
+                events = [{"type": "response.reasoning_summary_text.delta", "sequence_number": 7, "output_index": 0, "delta": "Plan"},
+                          {"type": "response.completed", "sequence_number": 8, "response": payload}]
+                self._sse(events)
+            else:
+                self._json(payload)
+            return
         if "responses" in path:
             payload = {
                 "id": "resp_e2e",

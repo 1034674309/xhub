@@ -2559,5 +2559,12 @@
     "title": "legacy usage upgrade restores observability zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-356",
+    "file": "e2e/agent-native-protocol.test.ts",
+    "title": "native agent protocols preserve reasoning and tool continuation through the console",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]

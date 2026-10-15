@@ -1,0 +1,133 @@
+package dialogue
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/openai/openai-go/v3/packages/ssestream"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+)
+
+// PipeNativeDialogue 在同协议时保留完整 SSE 数据，参数与 PipeDialogue 相同；返回写出、用量、首帧耗时、日志捕获及错误。
+// 标准入口仍先经过鉴权、额度和护栏；本函数仅处理传输，复用共享增量校验，不转入 bypass 链。
+// Responses 校验完成对象并在终态可见前提交历史；Chat 必须同时看到 finish_reason 与 DONE。
+// 截断、供应商失败、写入错误均返回失败，已写出时不能重试；关闭上游正文，捕获最多 2 MiB，不修改不透明推理项。
+func PipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	state := dialogueStream{observeOnly: true, protocol: protocol, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}}
+	var capture bytes.Buffer
+	var wrote, completed bool
+	var ttft time.Duration
+	// write 把已校验事件写到客户端并检查短写；捕获是诊断用途，不能等同客户端接收确认。
+	write := func(event string, data []byte) error {
+		var b bytes.Buffer
+		if event != "" {
+			fmt.Fprintf(&b, "event: %s\n", event)
+		}
+		fmt.Fprintf(&b, "data: %s\n\n", data)
+		raw := b.Bytes()
+		if capture.Len() < 2<<20 {
+			n := min(len(raw), (2<<20)-capture.Len())
+			capture.Write(raw[:n])
+		}
+		n, err := w.Write(raw)
+		if n > 0 {
+			wrote = true
+			if ttft == 0 {
+				ttft = time.Since(start)
+			}
+		}
+		if err == nil && n != len(raw) {
+			err = io.ErrShortWrite
+		}
+		if f, ok := w.(http.Flusher); ok && err == nil {
+			f.Flush()
+		}
+		return err
+	}
+	decoder := ssestream.NewDecoder(resp)
+	var err error
+	for decoder.Next() {
+		event := decoder.Event()
+		data := strings.TrimSpace(string(event.Data))
+		if data == "[DONE]" {
+			if protocol != "openai-chat" {
+				continue
+			}
+			if state.stop == "" {
+				err = fmt.Errorf("upstream stream ended without finish_reason")
+				break
+			}
+			for _, call := range state.calls {
+				if call.ID == "" || call.Name == "" || !json.Valid([]byte(call.Arguments)) {
+					err = fmt.Errorf("incomplete upstream tool call")
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+			err = write(event.Type, []byte(data))
+			completed = err == nil
+			break
+		}
+		var payload map[string]any
+		if err = json.Unmarshal([]byte(data), &payload); err != nil {
+			break
+		}
+		if err = state.consume(protocol, data); err != nil {
+			break
+		}
+		if protocol == "openai-responses" && (payload["type"] == "response.completed" || payload["type"] == "response.incomplete") {
+			raw, _ := json.Marshal(payload["response"])
+			var result llmdialogue.DialogueResult
+			result, err = llmdialogue.ParseDialogueResult(protocol, raw)
+			if err != nil {
+				break
+			}
+			state.usage = result.Usage
+			if len(beforeComplete) > 0 && beforeComplete[0] != nil {
+				beforeComplete[0](result)
+			}
+			completed = true
+		}
+		// 仅改响应顶层公开模型；密文、工具 ID、序号及其他供应商字段完整保留。
+		if _, ok := payload["model"]; ok {
+			payload["model"] = alias
+		}
+		if response := streamMap(payload["response"]); response != nil {
+			response["model"] = alias
+		}
+		raw, _ := json.Marshal(payload)
+		if err = write(event.Type, raw); err != nil {
+			break
+		}
+		if completed {
+			break
+		}
+	}
+	if err == nil {
+		err = decoder.Err()
+	}
+	if err == nil && !completed {
+		err = fmt.Errorf("upstream stream ended without completion")
+	}
+	if err != nil && wrote {
+		payload := map[string]any{"type": "error", "error": map[string]any{"type": "upstream_error", "message": "upstream stream failed"}}
+		event := "error"
+		if protocol == "openai-responses" {
+			event = "response.failed"
+			payload = map[string]any{"type": event, "response": map[string]any{"id": state.id, "status": "failed", "error": map[string]any{"code": "upstream_error", "message": "upstream stream failed"}}}
+		}
+		raw, _ := json.Marshal(payload)
+		_ = write(event, raw)
+	}
+	return wrote, llmdialogue.NormalizeDialogueUsage(state.usage), ttft, capture.Bytes(), err
+}

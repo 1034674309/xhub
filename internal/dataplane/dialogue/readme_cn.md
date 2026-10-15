@@ -2,6 +2,8 @@
 
 [English](readme.md) · [上层架构](../readme_cn.md)
 
+`PipeDialogue` 对同协议 OpenAI 调用保留原生 SSE 并校验终态，其他组合复用统一流状态机；`ResponseHistory` 保留原生推理/工具项。标准入口仍经过鉴权、预算和护栏；不改用 bypass 执行链。完整边界见[兼容对照](../../../docs/development/zh-CN/agent-protocol-compatibility.md)。
+
 ## 如何由其他模块接入
 
 这里的“对外”指仓库内其他 Go 包。Go 的 `internal` 规则限制了仓库外的直接导入；HTTP 客户端使用已挂载的网关接口。

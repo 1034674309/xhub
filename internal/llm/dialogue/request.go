@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// ParseDialogue 将用户 OpenAI、Anthropic、Gemini/Vertex 对话解码成共享表示。参数为协议及正文；返回对话或字段错误。
-// 调用：统一入口在发起上游前；不支持的能力明确拒绝，Bypass 入口不调用此函数。
-func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
+// parseUnifiedDialogue 将已投影的用户 OpenAI、Anthropic、Gemini/Vertex 对话解码成共享表示。参数为协议及正文；返回对话或字段错误。
+// 调用：ParseDialogue 的共享投影或 Google 解析分支；不支持的能力明确拒绝，无外部副作用。
+func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	if protocol == "gemini" || protocol == "vertex" {
 		return parseGoogleDialogue(body)
 	}
@@ -105,18 +105,41 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		}
 		fields := []string{"role", "content"}
 		if protocol == "openai-chat" {
-			fields = append(fields, "tool_call_id", "tool_calls")
+			fields = append(fields, "tool_call_id", "tool_calls", "reasoning_content")
 		}
 		if protocol == "openai-responses" {
-			fields = append(fields, "type", "call_id", "name", "arguments", "output", "id", "status")
+			fields = append(fields, "type", "call_id", "name", "arguments", "output", "id", "status", "summary")
 		}
 		if err := dialogueFields(m, fields...); err != nil {
 			return d, err
 		}
 		role := dialogueString(m["role"])
 		kind := dialogueString(m["type"])
-		if protocol == "openai-responses" && kind != "" && kind != "message" && kind != "function_call" && kind != "function_call_output" {
+		if protocol == "openai-responses" && kind != "" && kind != "message" && kind != "function_call" && kind != "function_call_output" && kind != "reasoning" {
 			return d, fmt.Errorf("unsupported input item %s", kind)
+		}
+		if protocol == "openai-responses" && kind == "reasoning" {
+			var text string
+			if value, exists := m["summary"]; exists {
+				if _, ok := value.([]any); !ok {
+					return d, fmt.Errorf("reasoning summary must be an array")
+				}
+			}
+			for _, part := range dialogueList(m["summary"]) {
+				block := dialogueMap(part)
+				if block["type"] != "summary_text" {
+					return d, fmt.Errorf("unsupported reasoning summary")
+				}
+				value, ok := block["text"].(string)
+				if !ok {
+					return d, fmt.Errorf("reasoning summary text must be a string")
+				}
+				text += value
+			}
+			if text != "" {
+				d.Turns = append(d.Turns, Turn{Role: "reasoning", Reasoning: text})
+			}
+			continue
 		}
 		if protocol == "openai-responses" && kind == "function_call" {
 			d.Turns = append(d.Turns, Turn{Role: "assistant", Calls: []Turn{{ID: dialogueString(m["call_id"]), Name: dialogueString(m["name"]), Arguments: dialogueString(m["arguments"])}}})
@@ -133,7 +156,12 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		if !strings.Contains("|system|developer|user|assistant|tool|", "|"+role+"|") {
 			return d, fmt.Errorf("unsupported message role %s", role)
 		}
-		turn := Turn{Role: role, ID: dialogueString(m["tool_call_id"])}
+		if value := m["reasoning_content"]; value != nil {
+			if _, ok := value.(string); !ok {
+				return d, fmt.Errorf("reasoning_content must be a string")
+			}
+		}
+		turn := Turn{Role: role, ID: dialogueString(m["tool_call_id"]), Reasoning: dialogueString(m["reasoning_content"])}
 		if protocol == "anthropic-messages" {
 			if parts, ok := m["content"].([]any); ok {
 				for _, p := range parts {
@@ -196,7 +224,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 				turn.Calls = append(turn.Calls, Turn{ID: dialogueString(c["id"]), Name: dialogueString(f["name"]), Arguments: dialogueString(f["arguments"])})
 			}
 		}
-		if turn.Text != "" || len(turn.Calls) > 0 || role == "tool" {
+		if turn.Text != "" || turn.Reasoning != "" || len(turn.Calls) > 0 || role == "tool" {
 			d.Turns = append(d.Turns, turn)
 		}
 	}
@@ -266,6 +294,37 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 // EncodeDialogue 按显式上游协议编码对话，型号原样传递。参数为内部表示、协议、真实型号；返回正文或能力错误。
 // 调用：统一执行器；工具 ID 和参数不重新生成，Messages 工具结果按相邻角色合并。
 func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) {
+	if d.Source != "" {
+		if d.Source == protocol {
+			out, err := cloneObject(d.Native)
+			if err != nil {
+				return nil, err
+			}
+			out["model"] = model
+			if protocol == "openai-responses" {
+				out["store"] = false
+			}
+			if protocol == "openai-chat" && d.Stream {
+				opts := dialogueMap(out["stream_options"])
+				if opts == nil {
+					opts = map[string]any{}
+				}
+				opts["include_usage"] = true
+				out["stream_options"] = opts
+			}
+			return out, nil
+		}
+		if d.BridgeError != "" {
+			return nil, fmt.Errorf("unsupported protocol bridge: %s", d.BridgeError)
+		}
+		base := d
+		base.Source, base.Native = "", nil
+		out, err := EncodeDialogue(base, protocol, model)
+		if err != nil {
+			return nil, err
+		}
+		return bridgeOptions(d, protocol, out)
+	}
 	if protocol == "gemini" || protocol == "vertex" {
 		return encodeGoogleDialogue(d)
 	}
@@ -289,10 +348,26 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 	}
 	var messages []any
 	var system []string
+	var pendingReasoning string
 	for _, t := range d.Turns {
+		if t.Native != nil {
+			if t.NativeProtocol != protocol {
+				return nil, fmt.Errorf("opaque history requires %s", t.NativeProtocol)
+			}
+			messages = append(messages, t.Native)
+			continue
+		}
+		if t.Role == "reasoning" && protocol == "openai-chat" {
+			pendingReasoning += t.Reasoning
+			continue
+		}
 		switch protocol {
 		case "openai-chat":
 			m := map[string]any{"role": t.Role, "content": t.Text}
+			if t.Role == "assistant" && (pendingReasoning != "" || t.Reasoning != "") {
+				m["reasoning_content"] = pendingReasoning + t.Reasoning
+				pendingReasoning = ""
+			}
 			if t.Role == "tool" {
 				m["tool_call_id"] = t.ID
 			}
@@ -305,6 +380,12 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 			}
 			messages = append(messages, m)
 		case "openai-responses":
+			if t.Reasoning != "" {
+				messages = append(messages, map[string]any{"type": "reasoning", "id": fmt.Sprintf("rs_bridge_%d", len(messages)), "summary": []any{map[string]any{"type": "summary_text", "text": t.Reasoning}}})
+			}
+			if t.Role == "reasoning" {
+				continue
+			}
 			if t.Role == "tool" {
 				messages = append(messages, map[string]any{"type": "function_call_output", "call_id": t.ID, "output": t.Text})
 				continue
@@ -316,6 +397,9 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 				messages = append(messages, map[string]any{"type": "function_call", "call_id": c.ID, "name": c.Name, "arguments": c.Arguments})
 			}
 		case "anthropic-messages":
+			if t.Reasoning != "" {
+				return nil, fmt.Errorf("reasoning history requires OpenAI protocol")
+			}
 			if t.Role == "system" || t.Role == "developer" {
 				system = append(system, t.Text)
 				continue
@@ -419,6 +503,9 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 		} else {
 			return nil, fmt.Errorf("unsupported tool_choice")
 		}
+	}
+	if pendingReasoning != "" {
+		return nil, fmt.Errorf("reasoning history requires following assistant message")
 	}
 	return out, nil
 }

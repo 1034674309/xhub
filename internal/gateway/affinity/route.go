@@ -135,11 +135,17 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 		return plan
 	}
 	key := sessionPinKey(alias, plan.Caller, plan.SessionID, endpoint)
+	// 加密推理依赖生成它的供应商连接，不能按普通会话偏好切换账户或降级读本机缓存。
+	opaque := requiresNativeOwnership(body)
 	// expected 是本轮读取的完整序列化值（含 Revision），而非仅部署 ID；
 	// local 指定本轮后续比较写入使用本机还是共享存储。普通偏好允许降级，
 	// 所以读取错误只记录日志，不设置 plan.Err，也不影响已恢复的父响应归属。
-	expected, local, err := s.cacheRead(key, true)
+	expected, local, err := s.cacheRead(key, !opaque)
 	if err != nil {
+		if opaque {
+			plan.Err = fmt.Errorf("encrypted history ownership is unavailable; start a new conversation")
+			return plan
+		}
 		util.Debug("session affinity cache degraded: %v", err)
 	}
 	if !plan.Required {
@@ -151,6 +157,13 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 		// Pinned 保存稳定部署 ID，执行器再映射到当前目录中的运行配置。
 		// Required 计划跳过这两步，确保动态偏好不能覆盖父响应的 Target/Pinned。
 		plan.Pinned = plan.Target.DeploymentID
+	}
+	if opaque && !plan.Required {
+		if plan.Pinned == "" {
+			plan.Err = fmt.Errorf("encrypted history requires an owned session or previous_response_id")
+			return plan
+		}
+		plan.Required = true
 	}
 	// 6. 安装请求级回调：expected/local 被闭包捕获，Claim 更新它们后 Save
 	// 使用同一份基准。后续新请求会重新读取存储，Redis 恢复后以共享值为准，
@@ -249,4 +262,18 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 		raw, _ := json.Marshal(responseOwner{Target: target, Session: plan.SessionID})
 		_ = s.cacheWrite(responsePinKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw))
 	}
+}
+
+// requiresNativeOwnership 判断 Responses 输入是否含供应商绑定的不透明历史。
+// 参数 body 为未改写的用户正文，返回是否必须固定原部署；PlanRoute 调用，不解密、不写缓存。
+// 普通推理摘要和 DeepSeek 公开 reasoning_content 不触发固定；加密项即使格式错误也不能触发跨账户重试。
+func requiresNativeOwnership(body map[string]any) bool {
+	items, _ := body["input"].([]any)
+	for _, value := range items {
+		item, _ := value.(map[string]any)
+		if item["encrypted_content"] != nil {
+			return true
+		}
+	}
+	return false
 }

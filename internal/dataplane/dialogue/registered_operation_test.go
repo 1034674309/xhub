@@ -22,7 +22,7 @@ func TestDialogueRequestBodyRemovesConsumedProxyFields(t *testing.T) {
 		"session_id": "conversation", "prompt_cache_key": "native-cache", "guardrails": []any{"redact"}, "litellm_trace_id": "trace-1", "unknown_capability": true,
 	}
 	clean := DialogueRequestBody(body)
-	for _, key := range []string{"session_id", "prompt_cache_key"} {
+	for _, key := range []string{"session_id"} {
 		if clean[key] != nil || body[key] == nil {
 			t.Fatalf("会话字段未剥离或原正文被修改: %s", key)
 		}
@@ -42,8 +42,18 @@ func TestDialogueRequestBodyRemovesConsumedProxyFields(t *testing.T) {
 	if _, ok := body["guardrails"]; !ok {
 		t.Fatal("整理统一正文修改了原始请求")
 	}
-	if _, err := llmdialogue.ParseDialogue("openai-chat", clean); err == nil {
-		t.Fatal("真正未知的能力应继续被明确拒绝")
+	if clean["prompt_cache_key"] != "native-cache" {
+		t.Fatal("原生缓存参数被删除")
+	}
+	d, err := llmdialogue.ParseDialogue("openai-chat", clean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = llmdialogue.EncodeDialogue(d, "openai-responses", "model"); err == nil {
+		t.Fatal("未知能力跨协议必须拒绝")
+	}
+	if out, err := llmdialogue.EncodeDialogue(d, "openai-chat", "model"); err != nil || out["unknown_capability"] != true {
+		t.Fatal("同协议扩展能力必须保留")
 	}
 }
 

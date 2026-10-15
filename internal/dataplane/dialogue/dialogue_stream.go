@@ -23,6 +23,12 @@ import (
 // Responses 的 incomplete 也可结束，但会保留 length 原因，不伪装成完整生成。
 // 只在当前请求内串行使用；完成前验证工具参数，Responses 终态前提交已验证的续接历史。
 type dialogueStream struct {
+	// observeOnly 只复用增量校验和用量累计，原生输出由 PipeNativeDialogue 保留完整事件。
+	observeOnly bool
+	// reasoning 保存公开推理文本；索引用于 Responses 的推理输出生命周期。
+	reasoning        string
+	reasoningStarted bool
+	reasoningBlock   int
 	// 客户端 HTTP 写入器，写错误沿转换链返回。
 	writer http.ResponseWriter
 	// 转换后 SSE 的日志捕获缓冲，写客户端前记录，因此可能包含未实际送达的尾片段。
@@ -71,6 +77,9 @@ func streamIndex(v any) int { n, _ := v.(float64); return int(n) }
 // capture 可能包含未完全写成功的帧，因此不能作为客户端完整接收的证明；写出后执行器必须禁止换部署。
 // 副作用为状态序号、捕获缓冲和 HTTP 输出；刷新只在 writer 支持 http.Flusher 时执行。
 func (s *dialogueStream) emit(event string, data any) error {
+	if s.observeOnly {
+		return nil
+	}
 	if s.protocol == "openai-responses" {
 		if m, ok := data.(map[string]any); ok {
 			m["sequence_number"] = s.sequence
@@ -126,6 +135,41 @@ func (s *dialogueStream) start() error {
 // 只负责封装，不累计 token 或校验终态；通过 emit 改变捕获与写出状态。
 func (s *dialogueStream) chat(delta map[string]any, finish any) error {
 	return s.emit("", map[string]any{"id": s.id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": s.model, "choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}})
+}
+
+// reasoningDelta 累积公开推理文本并按 OpenAI 目标协议输出，参数为增量字符串，返回协议或写入错误。
+// consume 调用；同协议观察模式只累计，Responses 输出独立 reasoning 项；Messages 无等价签名能力时拒绝。
+// 无外部调用，会修改流状态和写出字节；不得把密文传入本方法。
+func (s *dialogueStream) reasoningDelta(text string) error {
+	if text == "" {
+		return nil
+	}
+	s.reasoning += text
+	if s.observeOnly {
+		return nil
+	}
+	if s.protocol != "openai-chat" && s.protocol != "openai-responses" {
+		return fmt.Errorf("reasoning stream requires OpenAI protocol")
+	}
+	if err := s.start(); err != nil {
+		return err
+	}
+	if s.protocol == "openai-chat" {
+		return s.chat(map[string]any{"reasoning_content": text}, nil)
+	}
+	if !s.reasoningStarted {
+		s.reasoningStarted = true
+		s.reasoningBlock = s.nextBlock
+		s.nextBlock++
+		item := map[string]any{"id": s.id + "_reasoning", "type": "reasoning", "summary": []any{}}
+		if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.reasoningBlock, "item": item}); err != nil {
+			return err
+		}
+		if err := s.emit("response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}}); err != nil {
+			return err
+		}
+	}
+	return s.emit("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "delta": text})
 }
 
 // textDelta 累积并按调用方协议输出一段文本增量。
@@ -261,7 +305,7 @@ func (s *dialogueStream) finish() error {
 		return err
 	}
 	s.usage = llmdialogue.NormalizeDialogueUsage(s.usage)
-	r := llmdialogue.DialogueResult{ID: s.id, Text: s.text, Stop: s.stop, Usage: s.usage}
+	r := llmdialogue.DialogueResult{ID: s.id, Text: s.text, Stop: s.stop, Usage: s.usage, Reasoning: s.reasoning}
 	if r.Stop == "" {
 		r.Stop = "stop"
 	}
@@ -320,6 +364,20 @@ func (s *dialogueStream) finish() error {
 		_ = json.Unmarshal(raw, &response)
 		// 完成事件按已发送的输出索引重排，保留工具和文本块的生命周期及稳定 ID。
 		items := make([]any, s.nextBlock)
+		if s.reasoningStarted {
+			part := map[string]any{"type": "summary_text", "text": s.reasoning}
+			item := map[string]any{"id": s.id + "_reasoning", "type": "reasoning", "summary": []any{part}}
+			items[s.reasoningBlock] = item
+			for _, event := range []map[string]any{
+				{"type": "response.reasoning_summary_text.done", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "text": s.reasoning},
+				{"type": "response.reasoning_summary_part.done", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "part": part},
+				{"type": "response.output_item.done", "output_index": s.reasoningBlock, "item": item},
+			} {
+				if err := s.emit(streamString(event["type"]), event); err != nil {
+					return err
+				}
+			}
+		}
 		if s.textBlock >= 0 {
 			part := map[string]any{"type": "output_text", "text": s.text, "annotations": []any{}}
 			item := map[string]any{"id": s.id + "_message", "type": "message", "role": "assistant", "status": "completed", "content": []any{part}}
@@ -454,6 +512,12 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				return fmt.Errorf("multiple stream choices unsupported")
 			}
 			delta := streamMap(choice["delta"])
+			if delta["refusal"] != nil && !s.observeOnly {
+				return fmt.Errorf("refusal stream requires native protocol")
+			}
+			if err := s.reasoningDelta(streamString(delta["reasoning_content"])); err != nil {
+				return err
+			}
 			if err := s.textDelta(streamString(delta["content"])); err != nil {
 				return err
 			}
@@ -475,6 +539,12 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 			s.observeUsage(streamMap(response["usage"]))
 		}
 		switch typ {
+		case "response.refusal.delta":
+			if !s.observeOnly {
+				return fmt.Errorf("refusal stream requires native protocol")
+			}
+		case "response.reasoning_summary_text.delta":
+			return s.reasoningDelta(streamString(m["delta"]))
 		case "response.output_text.delta":
 			return s.textDelta(streamString(m["delta"]))
 		case "response.output_item.added":
@@ -485,6 +555,21 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 		case "response.function_call_arguments.delta":
 			return s.toolDelta(streamIndex(m["output_index"]), "", "", streamString(m["delta"]))
 		case "response.completed":
+			if response := streamMap(m["response"]); response != nil && response["output"] != nil && !s.observeOnly {
+				raw, _ := json.Marshal(response)
+				result, err := llmdialogue.ParseDialogueResult(protocol, raw)
+				if err != nil {
+					return err
+				}
+				if _, err = llmdialogue.EncodeDialogueResult(result, s.protocol, s.model); err != nil {
+					return err
+				}
+				if s.reasoning == "" {
+					if err = s.reasoningDelta(result.Reasoning); err != nil {
+						return err
+					}
+				}
+			}
 			s.completed = true
 		case "response.incomplete":
 			s.completed = true
@@ -564,6 +649,9 @@ func (s *dialogueStream) googleCall(c llmdialogue.Turn) error {
 // 解码或验证失败不调用完成回调；若失败发生在回调后的终态写出，已保存的续接事实不会自动回滚。
 // capture 不是客户端接收确认；状态和回调仅限单请求，不跨请求共享。
 func PipeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	if upstream == caller && (caller == "openai-chat" || caller == "openai-responses") {
+		return PipeNativeDialogue(w, resp, start, alias, caller, beforeComplete...)
+	}
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
