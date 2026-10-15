@@ -16,6 +16,8 @@ References: official LiteLLM `e889d9d6533ac30e776aa3b3780f99fa73e07460` and the 
 
 Current DeepSeek documentation already describes native Responses and additional effort controls. The referenced legacy adapter still reduces effort to thinking on/off. XHub preserves native values rather than copying that outdated restriction.
 
+The follow-up references official `35970c3eacb9f4f8746af215586f23f3a2a17941`: namespace/custom round trips, optional reasoning hints, required Responses usage details, and late Messages input-token reporting. XHub also projects inline `additional_tools` and public reasoning context: `current_turn` keeps public reasoning after the final user message, while `auto/all_turns` keep available history. It neither decrypts nor fabricates vendor ciphertext. Client trace metadata never replaces gateway identity.
+
 ## Capability boundaries
 
 | Feature | Native Responses | Native Chat | Responses ↔ Chat |
@@ -23,9 +25,9 @@ Current DeepSeek documentation already describes native Responses and additional
 | Text, function tools/results | Supported | Supported | Supported |
 | JSON/SSE and observed usage | Preserve native events | Preserve native events and `reasoning_content` deltas | Convert supported text/tool/public reasoning events |
 | Reasoning effort | Preserve, model validates values | Preserve, model validates values | Map field names; upstream still validates capability |
-| Summaries/encrypted reasoning | Preserve native items | Preserve public reasoning | Public text can be mapped; reject encrypted history and other non-equivalent controls |
+| Summaries/encrypted reasoning | Preserve native items | Preserve public reasoning | Public text maps; summary detail and the encrypted-content include are optional return hints; opaque history still fails |
 | JSON Schema | Preserve | Preserve | Map flattened/nested structures |
-| Codex custom/namespace tools and `additional_tools` | Preserve | Not certified here | Reject unsupported items/tools |
+| Codex custom/namespace tools and `additional_tools` | Preserve | Function representation | Flatten/restore single-level namespaces; wrap custom strings as function JSON; project inline declarations; grammar becomes a model hint |
 | Refusal | Preserve, including native continuation | Preserve | Reject unimplemented conversion explicitly |
 | `n > 1`, `background: true` | Reject before dispatch | Reject multiple completions | Unsupported |
 | Images/audio/video/other native services | Not certified here | Not certified here | Not certified here |
@@ -42,33 +44,38 @@ Claude Code uses `/v1/messages`, not Responses. Existing bridging is additionall
 
 ## Live supplier acceptance — 2026-10-15
 
-Authorized Fenno credentials were used against a local new gateway/private PostgreSQL schema. No production containers, models, organization settings or balances were changed. Each model has four checks: Responses JSON/SSE and Chat JSON/SSE, bounded output, successful billing ownership. Passing is a dated observation for that key/request, not certification of all parameters or future versions.
+Authorized Fenno (GPT/Grok) and Qiniu (DeepSeek) connections were tested against an independent local gateway/database. Production containers, models, organizations and balances were not changed. Each model has four checks: Responses JSON/SSE and Chat JSON/SSE. Passing is a dated observation for that key/request, not certification of every parameter or future version.
 
-| Company model ID | Passed checks | Observation |
+| Supplier | Upstream model ID | Four checks |
 | --- | --- | --- |
-| `gpt-5.5` | 0/4 | Upstream 503; direct requests also 503 |
-| `gpt-5.6-terra` | 4/4 | Passed |
-| `gpt-5.6-sol` | 4/4 | Passed; actual Codex and Claude Code file-tool round trips also passed |
-| `codex-auto-review` | 4/4 | Passed; supplier ID, not certification of a separate official model |
-| `gpt-6-astra` | 4/4 | Passed |
-| `gpt-6-sol` | 4/4 | Passed |
-| `gpt-6.1-sol` | 4/4 | Passed |
-| `grok-4.5` | 4/4 | Passed |
-| `grok-4.6` | 4/4 | Passed |
-| `deepseek-v4-flash` | 0/4 | Upstream 503, also fails directly; live acceptance pending |
-| `deepseek-v4-pro` | 0/4 | Same |
-| `deepseek-v4-1-flash` | 0/4 | Same; preserve supplier spelling rather than guessing an official alias |
-| `gpt-image-2` | Not run | Deferred image scope |
+| Fenno | `gpt-5.5` | 0/4; upstream 503, also 503 directly on both endpoints |
+| Fenno | `gpt-5.6-terra`, `gpt-5.6-sol`, `codex-auto-review`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol` | 4/4 each |
+| Fenno | `grok-4.5`, `grok-4.6` | 4/4 each |
+| Qiniu | `deepseek/deepseek-v4.1-flash` | 4/4 |
+| Qiniu | `deepseek/deepseek-v4-pro-0813` | 4/4 |
+| Qiniu | `deepseek/deepseek-v4-flash-20260731` | 4/4 |
 
-32/48 passed; 16 received upstream 503 (existing gateway error contract returns 502). All eight direct controls also returned 503. DeepSeek request/reasoning/stream/tool contracts are covered offline, but cannot be marked live-verified.
+The API matrix passed **44/48; four GPT-5.5 availability checks failed**. The existing gateway error contract maps upstream 503 to 502. Raw responses are retained, and the probe treats normal `error: null` as no error. Supplier IDs do not certify separate official models. Qiniu returned 404 on native `/responses`, so DeepSeek uses Chat upstream with XHub Responses/Messages bridging. Earlier Fenno DeepSeek 503 results are not attributed to Qiniu.
 
-Actual Codex `0.162.0-alpha.17.2` and Claude Code `2.1.300` each read a temporary file via a real tool, sent the result through the new gateway to `gpt-5.6-sol`, returned its contents and produced successful billing rows. Pinned release clients Codex `0.162.1` and Claude Code `2.1.300` were separately executed against local protocol fixtures. They are actual binaries, not the existing simulator; simulator coverage remains too.
+Pinned Codex **0.162.1** and Claude Code **2.1.300** actually read a temporary file, returned its tool result, and answered with a marker from that file. The marker was absent from the prompt.
 
-Additional Messages acceptance: the persistent local instance used the same Fenno connection. Both `gpt-5.6-sol` and `grok-4.6` passed Responses/Chat/Messages JSON and SSE through native Responses and native Chat deployments, 24/24 total. Pinned Codex 0.162.1 and Claude Code 2.1.300 each completed a real file-tool round trip with both models, 4/4 total. The previously reproduced Grok → Messages public-reasoning failure is fixed. This does not certify every Grok model or parameter.
+| Local deployment | Codex | Claude Code |
+| --- | --- | --- |
+| `gpt-5.6-sol` (native Responses) | Passed | Passed |
+| `gpt-5.6-sol-chat` (Chat bridge) | Passed after cooldown | Passed |
+| `grok-4.6` (native Responses) | Passed | Passed |
+| `grok-4.6-chat` (Chat bridge) | Passed | Passed |
+| `qiniu-deepseek-v4.1-flash` (Chat bridge) | Passed | Passed |
+| `qiniu-deepseek-v4-pro-0813` (Chat bridge) | Passed | Passed |
+| `qiniu-deepseek-v4-flash-20260731` (Chat bridge) | Passed | Passed |
 
-The corrected DeepSeek IDs `deepseek/deepseek-v4.1-flash`, `deepseek/deepseek-v4-pro-0813` and `deepseek/deepseek-v4-flash-20260731` still returned upstream 503 in all 12 probes and all six direct controls. Their live supplier acceptance is deferred.
+The initial client matrix passed 13/14. A preceding upstream stream error put the GPT Chat deployment in cooldown; an unchanged retry after cooldown passed, completing 14/14 tool round trips. The first failure is retained, and retry success is not an availability guarantee. Earlier GPT/Grok Responses/Chat/Messages JSON/SSE checks passed 24/24; the three Qiniu models passed 18/18 across those endpoints (including serial retries after rate limiting). Manual test rates validate accounting only; they are not supplier prices.
 
-The fixed offline fixture only issues a test-file read command; protocol acceptance does not depend on the host read-only sandbox implementation. Live supplier tests retain the read-only sandbox. Retries are bounded and timeout cleanup terminates the complete process group, including npm launcher descendants. Windows CLI process-group acceptance is not covered here.
+File-tool acceptance disables hosted web search and external connectors. The generic Chat bridge does not silently discard these tools; reasoning effort, summary and include requests remain enabled. Hosted search, images, signed/encrypted cross-provider replay and long-session compaction are not certified. The console `/gw` proxy timeout is ten minutes, with independent gateway/client deadlines; a real 31-second non-streaming browser regression covers the previous disconnect.
+
+Offline fixtures only issue test-file reads; protocol acceptance does not depend on host read-only sandbox support. Live tests retain the read-only sandbox. Retries are bounded, and timeout cleanup terminates the complete process group. Windows process-group acceptance is not covered.
+
+Executed checks: internal unit tests 687 passed/4 skipped; backend regression 225 passed/12 skipped (including four offline tool round trips with two actual clients and two upstream protocols); browser E2E 4/4; upstream fixture unit tests 14/14; Linux release-workflow tests 11/11. After the alias-collision fix, focused unit tests passed 50/50 and the backend bridge regression passed again. macOS Bash 3.2 exposes one existing empty-array release-script failure; the Linux/CI Bash environment passes all checks.
 
 ## Regression and reproduction
 
@@ -83,7 +90,7 @@ XHUB_TEST_CODEX_BIN=/absolute/path/to/codex \
 XHUB_TEST_CLAUDE_BIN=/absolute/path/to/claude \
 XHUB_AGENT_REPORT_DIR=/absolute/path/to/reports bash scripts/regression.sh -v
 E2E_REDIS=1 E2E_PORTABLE_CONSOLE=1 bash scripts/e2e.sh \
-  agent-native-protocol.test.ts messages-reasoning.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
+  agent-native-protocol.test.ts messages-reasoning.test.ts agent-chat-bridge.test.ts agent-proxy-timeout.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
 node --test scripts/test_release_workflow.cjs
 ```
 

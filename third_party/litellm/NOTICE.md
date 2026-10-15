@@ -35,3 +35,20 @@ The Go Messages bridge adapts public reasoning ↔ unsigned thinking and ordered
 content blocks. It does not implement that snapshot's encrypted-reasoning envelope
 or claim to manufacture Anthropic signatures. Parallel tool fragments are buffered
 until JSON validation and emitted serially using XHub's existing stream state.
+
+Additional Codex bridge and usage reference (MIT): official LiteLLM
+`35970c3eacb9f4f8746af215586f23f3a2a17941` (local upstream reference updated
+2026-10-15; company branch `xhub-qiniu` remains at `f09e043`). Relevant files:
+`responses/litellm_completion_transformation/{transformation,custom_tools}.py`
+and `llms/anthropic/pass_through/adapters/{transformation,streaming_iterator}.py`.
+The Go adaptation flattens/restores namespace functions, wraps/unwraps custom
+string inputs, separates optional Responses reasoning hints, fills required
+Responses usage detail fields and returns late Chat usage in Messages events.
+XHub additionally projects Codex inline `additional_tools` declarations and
+scopes public reasoning for `current_turn`; it does not claim these extensions
+are direct copies of LiteLLM. Long tool names use a stable bounded alias and
+tool-name collisions fail explicitly. Custom grammar is a best-effort model
+description on Chat, not a native grammar guarantee. Hosted web search remains
+unsupported on the generic Chat bridge and is disabled in file-tool acceptance.
+No OpenAI ciphertext is decrypted or fabricated and no signed-thinking envelope
+is implemented. Core governance and existing retry rules stay in XHub.

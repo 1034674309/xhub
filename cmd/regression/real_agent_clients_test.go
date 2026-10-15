@@ -22,13 +22,15 @@ import (
 // 参数 t 为回归上下文；显式 XHUB_TEST_CODEX_BIN/XHUB_TEST_CLAUDE_BIN 才运行，未安装时明确跳过。
 // 私有数据库和本地协议夹具隔离供应商波动；验证真实 CLI 请求/工具结果、日志及费用，不代表真实模型质量或上游兼容认证。
 // XHUB_AGENT_LIVE=1 并提供 LIVE_KEY/BASE 时显式改用真实上游，会产生费用；默认不访问外部服务。
-// CLI 禁用用户配置/外部 MCP/持久会话；仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理。
+// CLI 禁用用户配置/外部 MCP/网页搜索/持久会话，隔离桌面工具环境；两种 OpenAI 上游均需跑通文件读取。
+// 仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理；不认证服务端检索工具。
 func TestRealAgentClients(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("real CLI fixture process-group cleanup is validated on POSIX only")
 	}
-	for _, client := range []string{"codex", "claude"} {
-		t.Run(client, func(t *testing.T) {
+	for _, variant := range []struct{ client, transport string }{{"codex", "responses"}, {"codex", "chat"}, {"claude", "responses"}, {"claude", "chat"}} {
+		client, transport := variant.client, variant.transport
+		t.Run(client+"/"+transport, func(t *testing.T) {
 			variable := "XHUB_TEST_CODEX_BIN"
 			if client == "claude" {
 				variable = "XHUB_TEST_CLAUDE_BIN"
@@ -70,14 +72,18 @@ func TestRealAgentClients(t *testing.T) {
 					writeJSON(w, map[string]any{"error": map[string]any{"message": "agent fixture tool round trip exceeded limit"}})
 					return
 				}
-				raw, _ := json.Marshal(body["input"])
-				done := (strings.Contains(string(raw), "function_call_output") || strings.Contains(string(raw), "custom_tool_call_output")) && strings.Contains(string(raw), sentinel)
+				historyField := "input"
+				if transport == "chat" {
+					historyField = "messages"
+				}
+				raw, _ := json.Marshal(body[historyField])
+				done := (strings.Contains(string(raw), "function_call_output") || strings.Contains(string(raw), "custom_tool_call_output") || strings.Contains(string(raw), `"role":"tool"`)) && strings.Contains(string(raw), sentinel)
 				if done {
 					toolReturned = true
 				}
 				if live {
 					encoded, _ := json.Marshal(body)
-					req, err := http.NewRequestWithContext(r.Context(), "POST", liveBase+"/responses", bytes.NewReader(encoded))
+					req, err := http.NewRequestWithContext(r.Context(), "POST", liveBase+map[string]string{"responses": "/responses", "chat": "/chat/completions"}[transport], bytes.NewReader(encoded))
 					if err != nil {
 						t.Error("live request construction failed")
 						w.WriteHeader(502)
@@ -117,10 +123,14 @@ func TestRealAgentClients(t *testing.T) {
 				}
 				if done {
 					toolReturned = true
-					if client == "claude" && (!strings.Contains(string(raw), "Inspect the file before answering.") || !strings.Contains(string(raw), `"type":"reasoning"`)) {
+					if client == "claude" && (!strings.Contains(string(raw), "Inspect the file before answering.") || !strings.Contains(string(raw), map[string]string{"responses": `"type":"reasoning"`, "chat": `"reasoning_content"`}[transport])) {
 						t.Error("实际 Claude Code 续轮未还原 thinking 推理项")
 					}
-					writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "AGENT_OK "+sentinel, nil), body["stream"] == true)
+					if transport == "chat" {
+						writeChatAgentResponse(w, fmt.Sprintf("chat_cli_%d", requests), "AGENT_OK "+sentinel, "", "", body["stream"] == true)
+					} else {
+						writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "AGENT_OK "+sentinel, nil), body["stream"] == true)
+					}
 					return
 				}
 				toolName := ""
@@ -128,7 +138,17 @@ func TestRealAgentClients(t *testing.T) {
 				tools, _ := body["tools"].([]any)
 				for _, value := range tools {
 					tool, _ := value.(map[string]any)
+					if transport == "chat" {
+						tool, _ = tool["function"].(map[string]any)
+					}
 					name, _ := tool["name"].(string)
+					if client == "codex" && transport == "chat" && name == "functions__exec" {
+						toolName = name
+						args, _ := json.Marshal(map[string]any{"cmd": "cat " + file, "workdir": directory, "max_output_tokens": 1000})
+						wrapped, _ := json.Marshal(map[string]any{"content": "text(await tools.exec_command(" + string(args) + "));"})
+						argument = string(wrapped)
+						break
+					}
 					if client == "codex" && (name == "exec_command" || name == "shell_command" || name == "shell") {
 						toolName = name
 						args := map[string]any{"cmd": "cat " + file, "workdir": directory, "max_output_tokens": 1000}
@@ -191,12 +211,16 @@ func TestRealAgentClients(t *testing.T) {
 				if custom {
 					call = map[string]any{"id": "ctc_cli", "type": "custom_tool_call", "status": "completed", "call_id": "call_cli", "name": "exec", "namespace": "functions", "input": argument}
 				}
-				writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", call), body["stream"] == true)
+				if transport == "chat" {
+					writeChatAgentResponse(w, fmt.Sprintf("chat_cli_%d", requests), "", toolName, argument, body["stream"] == true)
+				} else {
+					writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", call), body["stream"] == true)
+				}
 			}))
 			t.Cleanup(upstream.Close)
 			dep := chatDeployment("gpt-5.6-sol")
 			dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
-			dep.ModelInfo["transport"] = "bypass_openai_responses"
+			dep.ModelInfo["transport"] = "bypass_openai_" + transport
 			dep.ModelInfo["endpoint_types"] = []string{"chat", "responses", "messages"}
 			h := newHarness(t, dep)
 			baseHandler := h.server.Config.Handler
@@ -222,7 +246,7 @@ func TestRealAgentClients(t *testing.T) {
 				if live {
 					sandbox = "read-only"
 				}
-				args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "-C", directory, "-s", sandbox, "--json", "-m", dep.ModelName, "-c", `model_provider="xhub"`, "-c", fmt.Sprintf(`model_providers.xhub={name="XHub",base_url="%s/v1",env_key="XHUB_AGENT_TEST_KEY",wire_api="responses",requires_openai_auth=false,supports_websockets=false}`, h.server.URL), "-c", `model_reasoning_effort="medium"`, prompt}
+				args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "-C", directory, "-s", sandbox, "--json", "-m", dep.ModelName, "-c", `model_provider="xhub"`, "-c", fmt.Sprintf(`model_providers.xhub={name="XHub",base_url="%s/v1",env_key="XHUB_AGENT_TEST_KEY",wire_api="responses",requires_openai_auth=false,supports_websockets=false}`, h.server.URL), "-c", `model_reasoning_effort="medium"`, "-c", `web_search="disabled"`, "-c", `apps._default.enabled=false`, "-c", `features.plugins=false`, "-c", `features.remote_plugin=false`, "-c", `analytics.enabled=false`, prompt}
 				env = []string{"XHUB_AGENT_TEST_KEY=" + owner.key}
 			} else {
 				args = []string{"--bare", "--print", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--tools", "Read", "--allowedTools", "Read", "--max-turns", "3", "--output-format", "json", "--model", dep.ModelName, "--effort", "low", prompt}
@@ -234,7 +258,7 @@ func TestRealAgentClients(t *testing.T) {
 			// 子进程只拿一次性网关密钥，真实上游凭据仅留在测试转发器内存，不能暴露给 Agent 工具环境。
 			for _, entry := range os.Environ() {
 				name, _, _ := strings.Cut(entry, "=")
-				if strings.Contains(name, "API_KEY") || strings.HasPrefix(name, "XHUB_AGENT_LIVE") || name == "ANTHROPIC_AUTH_TOKEN" {
+				if strings.Contains(name, "API_KEY") || strings.HasPrefix(name, "XHUB_AGENT_LIVE") || strings.HasPrefix(name, "CODEX_") || name == "ANTHROPIC_AUTH_TOKEN" {
 					continue
 				}
 				command.Env = append(command.Env, entry)
@@ -247,7 +271,7 @@ func TestRealAgentClients(t *testing.T) {
 				if err := os.MkdirAll(report, 0700); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(report, client+".jsonl"), []byte(safe), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(report, client+"-"+transport+".jsonl"), []byte(safe), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}

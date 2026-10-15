@@ -418,7 +418,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 								h.CommitRoute(plan, router.DeploymentID(rawDep), result.ID)
 							}
 						}
-						wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogue(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), commit)
+						wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogueWithTools(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), dialogue.ToolBindings, commit)
 					} else {
 						wrote, usage, ttft, streamed, streamErr = dpstream.PipeStream(w, resp, start)
 					}
@@ -480,6 +480,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						h.NoteFailure(did, routeCfg)
 						continue
 					}
+					result.ToolBindings = dialogue.ToolBindings
 					respBody, conversionErr = llmdialogue.EncodeDialogueResult(result, dpdialogue.CallerProtocol(op), alias)
 					if conversionErr != nil {
 						lastErr = conversionErr

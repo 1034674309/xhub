@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import socket
+import time
 import uuid
 from email.parser import BytesParser
 from email.policy import default
@@ -208,6 +209,9 @@ class Handler(BaseHTTPRequestHandler):
         if self._ark(req) or self._fal(req):
             return
         model = req.get("model") or "gpt-4o-mini"
+        if model == "e2e-agent-proxy-slow":
+            # 真实等待超过 Next.js 默认 30 秒，验证浏览器到网关的代理不会提前断开；仅此隔离夹具触发。
+            time.sleep(31)
         if self._error_log_response(str(model)):
             return
         # 兼容层允许保留 openai/ 前缀；只对这两个专属夹具规范化，避免影响其他模型行为。
@@ -292,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
-        if model == "e2e-agent-messages" and ("responses" in path or "chat/completions" in path):
+        if model in ("e2e-agent-messages", "e2e-agent-chat-tools") and ("responses" in path or "chat/completions" in path):
             # Messages 推理桥接夹具：校验工具续轮还原独立推理及调用 ID，而不是把推理当普通答案。
             is_responses = "responses" in path
             items = req.get("input" if is_responses else "messages", [])
@@ -301,6 +305,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(400, "public reasoning or tool identity lost")
                 return
             tool = bool(req.get("tools")) and not second
+            tool_name, tool_arguments = "read", "{}"
+            if model == "e2e-agent-chat-tools":
+                # 夹具只暴露 Chat；浏览器的 namespace/custom 必须由真实网关映射，不能把 Responses 原文直接转发过来。
+                if is_responses or req.get("include") or req.get("client_metadata"):
+                    self.send_error(400, "Chat-only agent fixture received native Responses fields")
+                    return
+                if tool:
+                    function = req["tools"][0].get("function", {})
+                    tool_name = function.get("name")
+                    if tool_name != "fs__read" or req.get("reasoning_effort") != "medium":
+                        self.send_error(400, "namespace or reasoning effort lost")
+                        return
+                    if "content" in function.get("parameters", {}).get("properties", {}):
+                        tool_arguments = json.dumps({"content": "Read the file."})
             if is_responses:
                 output = [{"id": "rs_public", "type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan"}]}]
                 output.append({"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "read", "arguments": "{}"} if tool else {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "e2e-ok"}]})
@@ -314,11 +332,12 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 message = {"role": "assistant", "content": None if tool else "e2e-ok", "reasoning_content": "Plan"}
                 if tool:
-                    message["tool_calls"] = [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}]
+                    message["tool_calls"] = [{"index": 0, "id": "call_1", "type": "function", "function": {"name": tool_name, "arguments": tool_arguments}}]
                 usage = {"prompt_tokens": 8, "completion_tokens": 2}
                 stop = "tool_calls" if tool else "stop"
                 payload = {"id": "chat_public", "choices": [{"message": message, "finish_reason": stop}], "usage": usage}
-                events = [{"id": "chat_public", "choices": [{"index": 0, "delta": message, "finish_reason": stop}], "usage": usage}]
+                # usage 单独出现在工具/正文结束之后，检验 Messages 桥接能把晚到的输入 Token 回填给客户端。
+                events = [{"id": "chat_public", "choices": [{"index": 0, "delta": message, "finish_reason": stop}]}, {"id": "chat_public", "choices": [], "usage": usage}]
             if req.get("stream"):
                 # Chat 的 DONE 是裸标记而非 JSON 字符串；不得用 _sse 把它转义为带引号的值。
                 body = "".join("data: " + json.dumps(event) + "\n\n" for event in events)

@@ -23,6 +23,8 @@ type Dialogue struct {
 	Native map[string]any
 	// BridgeError 只阻止无法无损表示的跨协议候选，不阻止兼容的原协议候选。
 	BridgeError string
+	// ToolBindings 保存本轮 namespace/custom 到 Chat 函数名的映射，回复时恢复客户端工具身份。
+	ToolBindings map[string]ToolBinding
 }
 
 // DialogueResult 保存实测回复与用量；ID 来源上游，由网关按该 ID 保存临时续接上下文。
@@ -36,4 +38,6 @@ type DialogueResult struct {
 	Source      string
 	Native      map[string]any
 	BridgeError string
+	// ToolBindings 由请求执行链附加；只有跨协议 Responses 输出使用，原生结果保持原样。
+	ToolBindings map[string]ToolBinding
 }

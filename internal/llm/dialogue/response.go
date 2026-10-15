@@ -197,13 +197,17 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 			items = append(items, map[string]any{"id": r.ID + "_message", "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
 		}
 		for _, c := range r.Calls {
-			items = append(items, map[string]any{"id": c.ID, "type": "function_call", "call_id": c.ID, "name": c.Name, "arguments": c.Arguments, "status": "completed"})
+			item, err := ResponseToolItem(c, r.ToolBindings, "completed")
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 		}
 		status := "completed"
 		if r.Stop == "length" {
 			status = "incomplete"
 		}
-		out = map[string]any{"id": r.ID, "object": "response", "model": model, "status": status, "store": false, "output": items, "usage": dialogueOutputUsage(u, protocol)}
+		out = map[string]any{"id": r.ID, "object": "response", "model": model, "status": status, "store": false, "output": items, "usage": DialogueOutputUsage(u, protocol)}
 		if status == "incomplete" {
 			out["incomplete_details"] = map[string]any{"reason": "max_output_tokens"}
 		}
@@ -229,7 +233,7 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 		if len(r.Calls) > 0 {
 			stop = "tool_use"
 		}
-		out = map[string]any{"id": r.ID, "type": "message", "role": "assistant", "model": model, "content": content, "stop_reason": stop, "usage": dialogueOutputUsage(u, protocol)}
+		out = map[string]any{"id": r.ID, "type": "message", "role": "assistant", "model": model, "content": content, "stop_reason": stop, "usage": DialogueOutputUsage(u, protocol)}
 	default:
 		return nil, fmt.Errorf("unregistered dialogue protocol %s", protocol)
 	}

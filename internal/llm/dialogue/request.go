@@ -335,6 +335,13 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 		}
 		base := d
 		base.Source, base.Native = "", nil
+		if d.Source == "openai-responses" && protocol == "openai-chat" {
+			var err error
+			base.Turns, err = projectReasoningContext(d.Turns, dialogueMap(d.Native["reasoning"])["context"])
+			if err != nil {
+				return nil, err
+			}
+		}
 		out, err := EncodeDialogue(base, protocol, model)
 		if err != nil {
 			return nil, err

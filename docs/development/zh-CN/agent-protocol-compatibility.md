@@ -17,6 +17,8 @@
 
 当前 DeepSeek 官方协议已比所参考的旧适配器丰富。例如新版文档提供原生 Responses 和 `low/high/max` effort 映射；旧 LiteLLM DeepSeek 代码仍有将 effort 归为 thinking 开/关的逻辑。本轮保留原生值，由已配置供应商验证，不能为了“照搬成熟代码”抹掉新协议能力。
 
+本轮进一步对照官方 `35970c3eacb9f4f8746af215586f23f3a2a17941`，移植 namespace/custom 工具双向映射、可选推理提示和 usage 必需明细补齐，并修复 Messages 流式末帧遗漏输入 Token。Codex 的 `additional_tools` 内联声明、公开推理 `context` 范围投影是 XHub 的补充实现。`current_turn` 保留最后一条用户消息后的公开推理，`auto/all_turns` 保留可用完整历史；不解密或制造原厂密文。客户端跟踪元数据只作格式校验，不替代鉴权身份。
+
 ## 已实现的边界
 
 | 能力 | Responses → 原生 Responses | Chat → 原生 Chat | Responses ↔ Chat |
@@ -24,9 +26,9 @@
 | 文本、函数工具、工具结果 | 支持 | 支持 | 支持 |
 | JSON / SSE 与实测 usage | 支持，保留原生事件 | 支持，保留 `reasoning_content` 增量 | 转换共享文本/工具/公开推理事件 |
 | 推理 effort | 原样保留，合法值由模型决定 | 原样保留 | 映射字段；不会替模型接受不支持的值 |
-| 推理摘要 / 加密项 | 原生保留 | 公开推理保留 | 公开文本可转换；加密历史及 `include` 等不能等价表达时拒绝 |
+| 推理摘要 / 加密项 | 原生保留 | 公开推理保留 | 公开文本可转换；摘要粒度和 `include: reasoning.encrypted_content` 为可选返回提示，不阻断 Chat；真正密文历史仍拒绝 |
 | JSON Schema | 原生保留 | 原生保留 | 转换格式结构；最终能力仍由上游决定 |
-| Codex custom / namespace 工具、`additional_tools` | 原生保留 | 本轮不认证 | 拒绝不能表达的工具 / 输入项 |
+| Codex custom / namespace 工具、`additional_tools` | 原生保留 | 函数表达 | 单层 namespace 名称双向映射，custom 字符串通过函数 JSON 包装，内联声明投影为工具；grammar 仅为提示约束 |
 | 拒绝响应（refusal） | 原生保留，允许原生续轮 | 原生保留 | 明确拒绝未实现的转换，不能生成空白成功 |
 | 多候选 `n > 1` / `background: true` | 外发前拒绝 | 多候选外发前拒绝 | 不支持 |
 | 图片、音视频、其他原生工具服务 | 本轮不认证 | 本轮不认证 | 本轮不认证 |
@@ -41,33 +43,38 @@ Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现
 
 ## 真实供应商验收：2026-10-15
 
-使用已授权的 Fenno 连接，在**本地隔离的新网关与临时数据库**执行，没有改生产模型、组织、余额或容器。四项指 Responses JSON / SSE、Chat JSON / SSE；每次限制输出并验证成功日志归属。通过只证明该时点该 Key 的这些请求，不代表所有参数或未来版本均兼容。
+使用已授权的 Fenno（GPT/Grok）与七牛（DeepSeek）连接，在本机独立网关与数据库执行；生产容器、模型、组织和余额没有改动。四项指 Responses JSON/SSE、Chat JSON/SSE。通过只证明该时点该 Key 的这些请求，不代表全部参数或未来版本均兼容。
 
-| 公司当前模型 ID | 四项结果 | 结论 |
+| 供应商 | 上游模型 ID | 四项结果 |
 | --- | --- | --- |
-| `gpt-5.5` | 0 / 4 | 上游 503；直连 Responses / Chat 同样 503 |
-| `gpt-5.6-terra` | 4 / 4 | 通过 |
-| `gpt-5.6-sol` | 4 / 4 | 通过；另完成真实 Codex / Claude Code 文件工具往返 |
-| `codex-auto-review` | 4 / 4 | 通过；这是供应商提供的 ID，不能视为官方独立型号认证 |
-| `gpt-6-astra` | 4 / 4 | 通过 |
-| `gpt-6-sol` | 4 / 4 | 通过 |
-| `gpt-6.1-sol` | 4 / 4 | 通过 |
-| `grok-4.5` | 4 / 4 | 通过 |
-| `grok-4.6` | 4 / 4 | 通过 |
-| `deepseek-v4-flash` | 0 / 4 | 上游 503；两个直连接口同样失败，尚未完成真实模型验收 |
-| `deepseek-v4-pro` | 0 / 4 | 同上 |
-| `deepseek-v4-1-flash` | 0 / 4 | 同上；保留供应商原始拼写，不自行改为官方别名 |
-| `gpt-image-2` | 未执行 | 图像留到下一轮 |
+| Fenno | `gpt-5.5` | 0/4；上游 503，直连两个端点同样 503 |
+| Fenno | `gpt-5.6-terra`、`gpt-5.6-sol`、`codex-auto-review`、`gpt-6-astra`、`gpt-6-sol`、`gpt-6.1-sol` | 每个 4/4 |
+| Fenno | `grok-4.5`、`grok-4.6` | 每个 4/4 |
+| 七牛 | `deepseek/deepseek-v4.1-flash` | 4/4 |
+| 七牛 | `deepseek/deepseek-v4-pro-0813` | 4/4 |
+| 七牛 | `deepseek/deepseek-v4-flash-20260731` | 4/4 |
 
-共 32 / 48 通过，16 项收到上游 503（网关按现有错误契约返回 502）；8 次直连对照同样 503。DeepSeek 的请求、公开推理、流和工具续轮已有离线契约覆盖，但不能标为真实供应商验收通过。
+接口矩阵共 **44/48 通过，4 项 GPT-5.5 可用性失败**；网关按现有错误契约将上游 503 返回为 502。原始响应保留，探针将正常 `error: null` 识别为无错误。供应商提供的名称不代表独立官方型号认证。七牛该地址的 `/responses` 实测 404，因此 DeepSeek 部署选用 Chat，由 XHub 桥接 Responses/Messages；此前 Fenno 的 DeepSeek 503 不再当作七牛结果。
 
-实际 CLI：Codex `0.162.0-alpha.17.2` 与 Claude Code `2.1.300` 均通过新网关调用真实 `gpt-5.6-sol`，各完成读取临时文件 → 传回工具结果 → 最终回答的完整往返，并核对成功账单。发布用固定版本 Codex `0.162.1` / Claude Code `2.1.300` 另在本地协议夹具上实际运行通过，不是模拟 CLI；既有 simulator 测试继续保留。
+固定版本 Codex **0.162.1** 与 Claude Code **2.1.300** 均实际执行读取临时文件 → 工具结果回传 → 回答文件内独立标记；标记未出现在提示词中。
 
-追加 Messages 修复验收：本机持久测试实例使用同一 Fenno 连接，`gpt-5.6-sol` / `grok-4.6` 各通过原生 Responses 和原生 Chat 两种部署，分别测试 Responses、Chat、Messages 的 JSON/SSE，共 24/24 通过。固定版本 Codex 0.162.1 / Claude Code 2.1.300 分别调用这两个真实模型完成文件工具往返，共 4/4 通过；此前 Grok → Messages 的公开推理错误已复现并修复。以上不包含所有 Grok 型号或参数的认证。
+| 本机部署 | Codex | Claude Code |
+| --- | --- | --- |
+| `gpt-5.6-sol`（原生 Responses） | 通过 | 通过 |
+| `gpt-5.6-sol-chat`（Chat 桥接） | 冷却结束后重测通过 | 通过 |
+| `grok-4.6`（原生 Responses） | 通过 | 通过 |
+| `grok-4.6-chat`（Chat 桥接） | 通过 | 通过 |
+| `qiniu-deepseek-v4.1-flash`（Chat 桥接） | 通过 | 通过 |
+| `qiniu-deepseek-v4-pro-0813`（Chat 桥接） | 通过 | 通过 |
+| `qiniu-deepseek-v4-flash-20260731`（Chat 桥接） | 通过 | 通过 |
 
-补充完整 DeepSeek ID `deepseek/deepseek-v4.1-flash`、`deepseek/deepseek-v4-pro-0813`、`deepseek/deepseek-v4-flash-20260731` 的 12 项探测仍全部收到上游 503，6 次直连同样失败；本轮暂缓其真实供应商验收。
+客户端组合首轮 13/14 通过；GPT Chat 部署因此前上游流错误进入冷却，结束后同配置重测成功，最终 14/14 完成工具闭环。保留首轮失败证据，不把重试成功当作供应商永不失败的保证。此前 GPT/Grok 两种部署的 Responses/Chat/Messages JSON/SSE 验收为 24/24，七牛三个模型三种端点 JSON/SSE 验收为 18/18（包含限流后的串行重测）。测试费率仅用于观察记账，不代表供应商实际价格。
 
-固定离线夹具只下发读取测试文件的命令，协议验收不依赖宿主只读沙箱实现；真实供应商测试仍使用只读沙箱。CLI 重试有上限，超时清理整个进程组，避免 npm 启动器留下 Rust / 工具宿主子进程。Windows CLI 进程组验收本轮未覆盖。
+本次文件工具验收关闭服务端网页搜索和外部连接器；泛用 Chat 桥接不会悄悄丢弃这些工具来伪造完整兼容。客户端继续保留推理强度、摘要和 include 请求。原生网页搜索、图片、签名/密文跨厂商重放、长会话压缩不在认证范围。Next 控制台 `/gw` 代理超时改为 10 分钟，网关与客户端原有截止时间仍各自生效；新增真实等待 31 秒的非流式浏览器回归。
+
+固定离线夹具只下发读取测试文件的命令，协议验收不依赖宿主只读沙箱实现；真实供应商测试仍使用只读沙箱。CLI 重试有上限，超时清理整个进程组。Windows CLI 进程组验收本轮未覆盖。
+
+本轮实际验证：internal 单元 687 通过、4 跳过；后台 regression 225 通过、12 跳过（含两个真实 CLI × 两种上游的 4 组离线工具闭环）；浏览器 E2E 4/4；上游夹具单元 14/14；Linux 发布工作流测试 11/11。额外别名冲突修复后，相关单元 50/50 与后台工具桥接回归再次通过。macOS 自带 Bash 3.2 的发布脚本测试有一个既有空数组兼容失败，Linux/CI Bash 环境全部通过。
 
 ## 回归与复现
 
@@ -83,7 +90,7 @@ XHUB_TEST_CODEX_BIN=/absolute/path/to/codex \
 XHUB_TEST_CLAUDE_BIN=/absolute/path/to/claude \
 XHUB_AGENT_REPORT_DIR=/absolute/path/to/reports bash scripts/regression.sh -v
 E2E_REDIS=1 E2E_PORTABLE_CONSOLE=1 bash scripts/e2e.sh \
-  agent-native-protocol.test.ts messages-reasoning.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
+  agent-native-protocol.test.ts messages-reasoning.test.ts agent-chat-bridge.test.ts agent-proxy-timeout.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
 node --test scripts/test_release_workflow.cjs
 ```
 

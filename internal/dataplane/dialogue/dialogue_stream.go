@@ -57,6 +57,8 @@ type dialogueStream struct {
 	// 可选完成回调，参数为已验证 DialogueResult，无返回；Responses 终态发出前提交历史。
 	// 终态校验前失败不调用；回调之后若客户端写入失败，已提交历史不回滚。
 	beforeComplete func(llmdialogue.DialogueResult)
+	// namespace/custom 工具必须在参数完整时还原，避免把半截 JSON 包装泄露为 custom 输入。
+	toolBindings map[string]llmdialogue.ToolBinding
 }
 
 // streamMap 读取流事件中的动态对象字段。
@@ -127,7 +129,7 @@ func (s *dialogueStream) start() error {
 	case "openai-responses":
 		return s.emit("response.created", map[string]any{"type": "response.created", "response": map[string]any{"id": s.id, "object": "response", "model": s.model, "status": "in_progress", "store": false, "output": []any{}}})
 	case "anthropic-messages":
-		return s.emit("message_start", map[string]any{"type": "message_start", "message": map[string]any{"id": s.id, "type": "message", "role": "assistant", "model": s.model, "content": []any{}, "stop_reason": nil, "usage": map[string]any{"input_tokens": s.usage["prompt_tokens"], "output_tokens": 0}}})
+		return s.emit("message_start", map[string]any{"type": "message_start", "message": map[string]any{"id": s.id, "type": "message", "role": "assistant", "model": s.model, "content": []any{}, "stop_reason": nil, "usage": map[string]any{"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}})
 	}
 	return fmt.Errorf("unsupported stream protocol")
 }
@@ -287,6 +289,10 @@ func (s *dialogueStream) toolDelta(index int, id, name, args string) error {
 		}
 		return s.chat(map[string]any{"tool_calls": []any{c}}, nil)
 	case "openai-responses":
+		if len(s.toolBindings) > 0 {
+			// LiteLLM 同样需要双向恢复 custom 输入；缓冲到完整参数后再生成对应生命周期事件。
+			return nil
+		}
 		if fresh {
 			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": block, "item": map[string]any{"id": call.ID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": "", "status": "in_progress"}}); err != nil {
 				return err
@@ -330,7 +336,7 @@ func (s *dialogueStream) finish() error {
 		return err
 	}
 	s.usage = llmdialogue.NormalizeDialogueUsage(s.usage)
-	r := llmdialogue.DialogueResult{ID: s.id, Text: s.text, Stop: s.stop, Usage: s.usage, Reasoning: s.reasoning}
+	r := llmdialogue.DialogueResult{ID: s.id, Text: s.text, Stop: s.stop, Usage: s.usage, Reasoning: s.reasoning, ToolBindings: s.toolBindings}
 	if r.Stop == "" {
 		r.Stop = "stop"
 	}
@@ -420,9 +426,29 @@ func (s *dialogueStream) finish() error {
 		for _, index := range indices {
 			c := s.calls[index]
 			block := s.blocks[index]
-			item := map[string]any{"id": c.ID, "type": "function_call", "call_id": c.ID, "name": c.Name, "arguments": c.Arguments, "status": "completed"}
+			item, err := llmdialogue.ResponseToolItem(*c, s.toolBindings, "completed")
+			if err != nil {
+				return err
+			}
 			items[block] = item
-			if err := s.emit("response.function_call_arguments.done", map[string]any{"type": "response.function_call_arguments.done", "item_id": c.ID, "output_index": block, "arguments": c.Arguments}); err != nil {
+			field, prefix := "arguments", "response.function_call_arguments"
+			if item["type"] == "custom_tool_call" {
+				field, prefix = "input", "response.custom_tool_call_input"
+			}
+			if len(s.toolBindings) > 0 {
+				started := map[string]any{}
+				for key, value := range item {
+					started[key] = value
+				}
+				started[field], started["status"] = "", "in_progress"
+				if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": block, "item": started}); err != nil {
+					return err
+				}
+				if err := s.emit(prefix+".delta", map[string]any{"type": prefix + ".delta", "item_id": c.ID, "output_index": block, "delta": item[field]}); err != nil {
+					return err
+				}
+			}
+			if err := s.emit(prefix+".done", map[string]any{"type": prefix + ".done", "item_id": c.ID, "output_index": block, field: item[field]}); err != nil {
 				return err
 			}
 			if err := s.emit("response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": block, "item": item}); err != nil {
@@ -458,7 +484,7 @@ func (s *dialogueStream) finish() error {
 		if len(r.Calls) > 0 {
 			stop = "tool_use"
 		}
-		if err := s.emit("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": map[string]any{"output_tokens": s.usage["completion_tokens"]}}); err != nil {
+		if err := s.emit("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": llmdialogue.DialogueOutputUsage(s.usage, "anthropic-messages")}); err != nil {
 			return err
 		}
 		return s.emit("message_stop", map[string]any{"type": "message_stop"})
@@ -681,13 +707,19 @@ func (s *dialogueStream) googleCall(c llmdialogue.Turn) error {
 // 解码或验证失败不调用完成回调；若失败发生在回调后的终态写出，已保存的续接事实不会自动回滚。
 // capture 不是客户端接收确认；状态和回调仅限单请求，不跨请求共享。
 func PipeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	return PipeDialogueWithTools(w, resp, start, alias, upstream, caller, nil, beforeComplete...)
+}
+
+// PipeDialogueWithTools 为真实请求附加 namespace/custom 工具还原表，其他参数、返回值及资源清理与 PipeDialogue 一致。
+// Serve 调用；映射只作用于跨协议 Responses 工具事件，原生 SSE 不改；参数完整后发布工具输入，不执行工具或改变鉴权。
+func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, bindings map[string]llmdialogue.ToolBinding, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	if upstream == caller && (caller == "openai-chat" || caller == "openai-responses") {
 		return PipeNativeDialogue(w, resp, start, alias, caller, beforeComplete...)
 	}
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
-	s := dialogueStream{writer: w, protocol: caller, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}}
+	s := dialogueStream{writer: w, protocol: caller, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}, toolBindings: bindings}
 	if len(beforeComplete) > 0 {
 		s.beforeComplete = beforeComplete[0]
 	}

@@ -79,6 +79,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	}
 	var bridgeError string
 	var turns []any
+	responseTools := append([]any(nil), dialogueList(native["tools"])...)
 	for _, item := range items {
 		m := dialogueMap(item)
 		if m == nil {
@@ -87,7 +88,18 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		cp, _ := cloneObject(m)
 		if protocol == "openai-responses" {
 			switch dialogueString(cp["type"]) {
-			case "", "message", "function_call", "function_call_output":
+			case "additional_tools":
+				// Codex 会把延迟工具声明放在输入项里；它们是工具定义，不是用户消息，必须与顶层工具一同双向映射。
+				definitions, ok := cp["tools"].([]any)
+				if !ok {
+					return Dialogue{}, fmt.Errorf("additional_tools requires tools array")
+				}
+				responseTools = append(responseTools, definitions...)
+				continue
+			case "", "message", "function_call", "function_call_output", "custom_tool_call", "custom_tool_call_output":
+				if err := projectAgentCall(cp); err != nil {
+					return Dialogue{}, err
+				}
 			case "reasoning":
 				if cp["encrypted_content"] != nil {
 					bridgeError = "encrypted reasoning history"
@@ -95,7 +107,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 				}
 				// 官方客户端会为公开推理补 encrypted_content:null；共享投影移除空占位，原生正文仍保留原值。
 				delete(cp, "encrypted_content")
-			case "item_reference", "custom_tool_call", "custom_tool_call_output", "compaction", "additional_tools":
+			case "item_reference", "compaction":
 				bridgeError = "input item " + dialogueString(cp["type"])
 				continue
 			default:
@@ -143,26 +155,39 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	}
 	projected[key] = turns
 	var tools []any
+	var bindings map[string]ToolBinding
+	if protocol == "openai-responses" {
+		var unsupported string
+		tools, bindings, unsupported, err = projectAgentTools(responseTools)
+		if err != nil {
+			return Dialogue{}, err
+		}
+		if unsupported != "" {
+			bridgeError = unsupported
+		}
+		// 指定的 namespace/custom 工具选择也必须使用相同的 Chat 函数名，避免选择一个未注册名称。
+		if choice := dialogueMap(native["tool_choice"]); choice != nil && (choice["type"] == "function" || choice["type"] == "custom") {
+			projected["tool_choice"] = map[string]any{"type": "function", "name": qualifiedToolName(dialogueString(choice["namespace"]), dialogueString(choice["name"]))}
+		}
+	}
 	for _, value := range dialogueList(native["tools"]) {
+		if protocol == "openai-responses" {
+			break
+		}
 		tool := dialogueMap(value)
 		if tool == nil {
 			return Dialogue{}, fmt.Errorf("tool must be an object")
 		}
 		cp, _ := cloneObject(tool)
 		delete(cp, "cache_control")
-		if protocol == "openai-responses" && cp["type"] != "function" {
-			if cp["type"] == "custom" && dialogueString(cp["name"]) == "" {
-				return Dialogue{}, fmt.Errorf("custom function tool name is required")
-			}
-			bridgeError = "tool type " + dialogueString(cp["type"])
-			continue
-		}
 		tools = append(tools, cp)
 	}
 	if _, exists := native["tools"]; exists {
 		if _, ok := native["tools"].([]any); !ok {
 			return Dialogue{}, fmt.Errorf("tools must be an array")
 		}
+		projected["tools"] = tools
+	} else if len(tools) > 0 {
 		projected["tools"] = tools
 	}
 	// 这里只校验共享结构。无法投影的不透明项仍保留在原正文，不能伪造为用户文本。
@@ -193,7 +218,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 			}
 		}
 	}
-	d.Source, d.Native, d.BridgeError = protocol, native, bridgeError
+	d.Source, d.Native, d.BridgeError, d.ToolBindings = protocol, native, bridgeError, bindings
 	return d, nil
 }
 
@@ -240,6 +265,17 @@ func bridgeOptions(d Dialogue, target string, out map[string]any) (map[string]an
 		case "reasoning":
 			r := dialogueMap(value)
 			for k, v := range r {
+				if k == "context" {
+					// Chat 的公开推理已在 EncodeDialogue 按 active/all turns 范围投影，不能将该 Responses 字段直接发给上游。
+					continue
+				}
+				if k == "summary" && v != nil {
+					if !validReasoningSummary(v) {
+						return nil, fmt.Errorf("invalid reasoning summary")
+					}
+					// LiteLLM 同样拆分 effort 与摘要提示；Chat 保留公开推理，但没有原生摘要粒度参数。
+					continue
+				}
 				if k != "effort" && v != nil {
 					return nil, fmt.Errorf("reasoning.%s requires native Responses", k)
 				}
@@ -299,8 +335,15 @@ func bridgeOptions(d Dialogue, target string, out map[string]any) (map[string]an
 				out["text"] = map[string]any{"format": f}
 			}
 		case "include":
-			if len(dialogueList(value)) != 0 {
-				return nil, fmt.Errorf("include requires native Responses")
+			for _, item := range dialogueList(value) {
+				if item != "reasoning.encrypted_content" {
+					return nil, fmt.Errorf("include requires native Responses")
+				}
+			}
+			// include 是可选返回字段请求，不是已提交的密文；不伪造密文，真正的密文历史仍由 ParseDialogue 拒绝。
+		case "client_metadata":
+			if err := agentClientMetadata(value); err != nil {
+				return nil, err
 			}
 		case "metadata":
 			if target != "openai-chat" && target != "openai-responses" {
