@@ -37,7 +37,7 @@
 
 提交完整加密历史时，也必须具有本身份已知的会话部署归属；不能因权重、冷却、目标禁用或共享缓存故障切换供应商连接。无法确认归属时应发起新会话。
 
-Claude Code 使用 `/v1/messages`，并非 Responses 客户端。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
+Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影；非空密文、真实厂商签名和 redacted thinking 仍不能跨此 Messages 桥接。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
 
 ## 真实供应商验收：2026-10-15
 
@@ -63,13 +63,17 @@ Claude Code 使用 `/v1/messages`，并非 Responses 客户端。本轮额外验
 
 实际 CLI：Codex `0.162.0-alpha.17.2` 与 Claude Code `2.1.300` 均通过新网关调用真实 `gpt-5.6-sol`，各完成读取临时文件 → 传回工具结果 → 最终回答的完整往返，并核对成功账单。发布用固定版本 Codex `0.162.1` / Claude Code `2.1.300` 另在本地协议夹具上实际运行通过，不是模拟 CLI；既有 simulator 测试继续保留。
 
+追加 Messages 修复验收：本机持久测试实例使用同一 Fenno 连接，`gpt-5.6-sol` / `grok-4.6` 各通过原生 Responses 和原生 Chat 两种部署，分别测试 Responses、Chat、Messages 的 JSON/SSE，共 24/24 通过。固定版本 Codex 0.162.1 / Claude Code 2.1.300 分别调用这两个真实模型完成文件工具往返，共 4/4 通过；此前 Grok → Messages 的公开推理错误已复现并修复。以上不包含所有 Grok 型号或参数的认证。
+
+补充完整 DeepSeek ID `deepseek/deepseek-v4.1-flash`、`deepseek/deepseek-v4-pro-0813`、`deepseek/deepseek-v4-flash-20260731` 的 12 项探测仍全部收到上游 503，6 次直连同样失败；本轮暂缓其真实供应商验收。
+
 固定离线夹具只下发读取测试文件的命令，协议验收不依赖宿主只读沙箱实现；真实供应商测试仍使用只读沙箱。CLI 重试有上限，超时清理整个进程组，避免 npm 启动器留下 Rust / 工具宿主子进程。Windows CLI 进程组验收本轮未覆盖。
 
 ## 回归与复现
 
 - 单元：参数映射、非法类型、加密/公开推理、原生响应、拒绝/截断流、历史与归属隔离。
 - 后台：真实 HTTP / PostgreSQL 覆盖标准端点、护栏脱敏、未授权、预算、JSON/SSE、工具续轮、跨身份密文拒绝、原部署禁用后不得回退、取消、账单和清理。
-- 浏览器：管理面保存模型 → 调试台实际调用 → 浏览器原生参数 / 流 / 工具续轮 → Chat 桥接 → 日志与计费 → 删除测试部署和凭据；并回归原有 SSE / JSON 三轮续接及 Codex simulator 日志闭环。
+- 浏览器：另有 Messages 专属用例覆盖两种 OpenAI 上游的公开推理、JSON/SSE 工具续轮和日志计费；管理面保存模型 → 调试台实际调用 → 浏览器原生参数 / 流 / 工具续轮 → Chat 桥接 → 日志与计费 → 删除测试部署和凭据；并回归原有 SSE / JSON 三轮续接及 Codex simulator 日志闭环。
 - CI：固定 CLI 版本进入 backend regression；新增浏览器场景进入发布校验，失败也上传 CLI 输出和测试报告。
 
 ```bash
@@ -79,7 +83,7 @@ XHUB_TEST_CODEX_BIN=/absolute/path/to/codex \
 XHUB_TEST_CLAUDE_BIN=/absolute/path/to/claude \
 XHUB_AGENT_REPORT_DIR=/absolute/path/to/reports bash scripts/regression.sh -v
 E2E_REDIS=1 E2E_PORTABLE_CONSOLE=1 bash scripts/e2e.sh \
-  agent-native-protocol.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
+  agent-native-protocol.test.ts messages-reasoning.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
 node --test scripts/test_release_workflow.cjs
 ```
 

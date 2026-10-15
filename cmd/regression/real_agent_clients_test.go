@@ -117,7 +117,10 @@ func TestRealAgentClients(t *testing.T) {
 				}
 				if done {
 					toolReturned = true
-					writeAgentResponse(w, nativeAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "AGENT_OK "+sentinel, false, nil), body["stream"] == true)
+					if client == "claude" && (!strings.Contains(string(raw), "Inspect the file before answering.") || !strings.Contains(string(raw), `"type":"reasoning"`)) {
+						t.Error("实际 Claude Code 续轮未还原 thinking 推理项")
+					}
+					writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "AGENT_OK "+sentinel, nil), body["stream"] == true)
 					return
 				}
 				toolName := ""
@@ -188,7 +191,7 @@ func TestRealAgentClients(t *testing.T) {
 				if custom {
 					call = map[string]any{"id": "ctc_cli", "type": "custom_tool_call", "status": "completed", "call_id": "call_cli", "name": "exec", "namespace": "functions", "input": argument}
 				}
-				writeAgentResponse(w, nativeAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", false, call), body["stream"] == true)
+				writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", call), body["stream"] == true)
 			}))
 			t.Cleanup(upstream.Close)
 			dep := chatDeployment("gpt-5.6-sol")

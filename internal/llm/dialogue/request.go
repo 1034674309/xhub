@@ -166,10 +166,26 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 			if parts, ok := m["content"].([]any); ok {
 				for _, p := range parts {
 					b := dialogueMap(p)
-					if err := dialogueFields(b, "type", "text", "id", "name", "input", "tool_use_id", "content", "is_error"); err != nil {
+					fields := []string{"type", "text", "id", "name", "input", "tool_use_id", "content", "is_error"}
+					if b["type"] == "thinking" {
+						fields = []string{"type", "thinking", "signature"}
+					}
+					if err := dialogueFields(b, fields...); err != nil {
 						return d, err
 					}
 					switch dialogueString(b["type"]) {
+					case "thinking":
+						// LiteLLM 同样把公开 thinking 保留为独立推理；空签名不代表 Anthropic 签名，不能接受任意厂商签名并跨协议重放。
+						text, ok := b["thinking"].(string)
+						if !ok || role != "assistant" {
+							return d, fmt.Errorf("thinking requires assistant text")
+						}
+						if value := b["signature"]; value != nil {
+							if signature, ok := value.(string); !ok || signature != "" {
+								return d, fmt.Errorf("signed thinking requires native Messages")
+							}
+						}
+						turn.Reasoning += text
 					case "text":
 						turn.Text += dialogueString(b["text"])
 					case "tool_use":
@@ -357,7 +373,7 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 			messages = append(messages, t.Native)
 			continue
 		}
-		if t.Role == "reasoning" && protocol == "openai-chat" {
+		if t.Role == "reasoning" && (protocol == "openai-chat" || protocol == "anthropic-messages") {
 			pendingReasoning += t.Reasoning
 			continue
 		}
@@ -397,9 +413,6 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 				messages = append(messages, map[string]any{"type": "function_call", "call_id": c.ID, "name": c.Name, "arguments": c.Arguments})
 			}
 		case "anthropic-messages":
-			if t.Reasoning != "" {
-				return nil, fmt.Errorf("reasoning history requires OpenAI protocol")
-			}
 			if t.Role == "system" || t.Role == "developer" {
 				system = append(system, t.Text)
 				continue
@@ -410,6 +423,10 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 				role = "user"
 				parts = append(parts, map[string]any{"type": "tool_result", "tool_use_id": t.ID, "content": t.Text})
 			} else {
+				if role == "assistant" && (pendingReasoning != "" || t.Reasoning != "") {
+					parts = append(parts, map[string]any{"type": "thinking", "thinking": pendingReasoning + t.Reasoning, "signature": ""})
+					pendingReasoning = ""
+				}
 				if t.Text != "" {
 					parts = append(parts, map[string]any{"type": "text", "text": t.Text})
 				}

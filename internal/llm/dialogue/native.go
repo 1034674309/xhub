@@ -93,6 +93,8 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 					bridgeError = "encrypted reasoning history"
 					continue
 				}
+				// 官方客户端会为公开推理补 encrypted_content:null；共享投影移除空占位，原生正文仍保留原值。
+				delete(cp, "encrypted_content")
 			case "item_reference", "custom_tool_call", "custom_tool_call_output", "compaction", "additional_tools":
 				bridgeError = "input item " + dialogueString(cp["type"])
 				continue

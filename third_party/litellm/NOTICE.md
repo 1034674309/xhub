@@ -26,3 +26,12 @@ silently dropping parameters, no fabricated blank DeepSeek reasoning, and requir
 known deployment ownership before replaying encrypted history. The current DeepSeek
 API supports more effort controls and native endpoints than the cited legacy adapter;
 XHub preserves provider-supported native values instead of forcing its older on/off mapping.
+
+Additional public-thinking mapping reference (MIT): official LiteLLM
+`f08840579ebc072b642573e72f5a11020a3c1bbf`,
+`litellm/llms/anthropic/pass_through/adapters/transformation.py` and
+`responses_adapters/{transformation,streaming_iterator}.py`.
+The Go Messages bridge adapts public reasoning ↔ unsigned thinking and ordered
+content blocks. It does not implement that snapshot's encrypted-reasoning envelope
+or claim to manufacture Anthropic signatures. Parallel tool fragments are buffered
+until JSON validation and emitted serially using XHub's existing stream state.

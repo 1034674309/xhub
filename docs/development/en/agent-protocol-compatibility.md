@@ -36,6 +36,8 @@ The existing managed `store`/`previous_response_id` behavior remains: upstream `
 
 Full encrypted history requires known session deployment ownership too. It must not switch provider accounts on cooldown, disabled deployment, weight changes or shared-cache failure. Start a new conversation when ownership cannot be established.
 
+Public reasoning now maps to unsigned Messages `thinking` blocks following LiteLLM. Tool turns restore Chat `reasoning_content` or separate Responses reasoning-summary items. Streaming thinking/text blocks close in order; interleaved tool arguments are emitted serially only after completion validation. Codex history with `encrypted_content: null` is a nullable placeholder; nonempty ciphertext, vendor signatures and redacted thinking remain unsupported across this Messages bridge.
+
 Claude Code uses `/v1/messages`, not Responses. Existing bridging is additionally exercised for text/function tools, cache hints, caller metadata, adaptive effort and `clear_thinking_20251015 + keep=all` (no trimming). Cache hints do not guarantee cross-provider cache hits; `metadata.user_id` never replaces gateway identity. Manual thinking budgets, other trimming rules, unknown safeguards/output settings and signed reasoning are outside this bridge and receive explicit errors. Actual Claude Code 2.1.300 retries without unsupported safeguards.
 
 ## Live supplier acceptance — 2026-10-15
@@ -62,13 +64,17 @@ Authorized Fenno credentials were used against a local new gateway/private Postg
 
 Actual Codex `0.162.0-alpha.17.2` and Claude Code `2.1.300` each read a temporary file via a real tool, sent the result through the new gateway to `gpt-5.6-sol`, returned its contents and produced successful billing rows. Pinned release clients Codex `0.162.1` and Claude Code `2.1.300` were separately executed against local protocol fixtures. They are actual binaries, not the existing simulator; simulator coverage remains too.
 
+Additional Messages acceptance: the persistent local instance used the same Fenno connection. Both `gpt-5.6-sol` and `grok-4.6` passed Responses/Chat/Messages JSON and SSE through native Responses and native Chat deployments, 24/24 total. Pinned Codex 0.162.1 and Claude Code 2.1.300 each completed a real file-tool round trip with both models, 4/4 total. The previously reproduced Grok → Messages public-reasoning failure is fixed. This does not certify every Grok model or parameter.
+
+The corrected DeepSeek IDs `deepseek/deepseek-v4.1-flash`, `deepseek/deepseek-v4-pro-0813` and `deepseek/deepseek-v4-flash-20260731` still returned upstream 503 in all 12 probes and all six direct controls. Their live supplier acceptance is deferred.
+
 The fixed offline fixture only issues a test-file read command; protocol acceptance does not depend on the host read-only sandbox implementation. Live supplier tests retain the read-only sandbox. Retries are bounded and timeout cleanup terminates the complete process group, including npm launcher descendants. Windows CLI process-group acceptance is not covered here.
 
 ## Regression and reproduction
 
 - Unit: parameter mappings, invalid shapes, public/encrypted reasoning, native/refusal/failed stream results, history and ownership.
 - Backend: real HTTP/PostgreSQL, redaction guardrails, authorization/quota, native JSON/SSE, tool continuation, encrypted caller isolation, disabled origin with no failover, cancellation, billing and cleanup.
-- Browser: save a deployment, call it in Playground, browser fetch with Agent fields/stream/tool continuation, Chat bridge, verify logs/billing, delete deployment/credentials. Existing JSON/SSE three-turn continuation and Codex simulator log scenarios are also rerun.
+- Browser: a dedicated Messages case covers both OpenAI upstreams, public thinking, JSON/SSE tool continuation and billing logs; save a deployment, call it in Playground, browser fetch with Agent fields/stream/tool continuation, Chat bridge, verify logs/billing, delete deployment/credentials. Existing JSON/SSE three-turn continuation and Codex simulator log scenarios are also rerun.
 - CI: pinned real clients in backend regression; the new browser scenario is a release gate. Client outputs and reports are uploaded on failure too.
 
 ```bash
@@ -77,7 +83,7 @@ XHUB_TEST_CODEX_BIN=/absolute/path/to/codex \
 XHUB_TEST_CLAUDE_BIN=/absolute/path/to/claude \
 XHUB_AGENT_REPORT_DIR=/absolute/path/to/reports bash scripts/regression.sh -v
 E2E_REDIS=1 E2E_PORTABLE_CONSOLE=1 bash scripts/e2e.sh \
-  agent-native-protocol.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
+  agent-native-protocol.test.ts messages-reasoning.test.ts scenarios/legacy/responses-continuation scenarios/legacy/codex-agent
 node --test scripts/test_release_workflow.cjs
 ```
 

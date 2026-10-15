@@ -2566,5 +2566,12 @@
     "title": "native agent protocols preserve reasoning and tool continuation through the console",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-357",
+    "file": "e2e/messages-reasoning.test.ts",
+    "title": "messages bridge preserves public thinking and file tool continuation",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]

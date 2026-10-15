@@ -29,6 +29,9 @@ type dialogueStream struct {
 	reasoning        string
 	reasoningStarted bool
 	reasoningBlock   int
+	// Messages 同时只开放一个内容块；工具参数完成校验后串行发送，避免并行片段写入已关闭块。
+	messageBlockKind  string
+	messageBlockIndex int
 	// 客户端 HTTP 写入器，写错误沿转换链返回。
 	writer http.ResponseWriter
 	// 转换后 SSE 的日志捕获缓冲，写客户端前记录，因此可能包含未实际送达的尾片段。
@@ -137,8 +140,8 @@ func (s *dialogueStream) chat(delta map[string]any, finish any) error {
 	return s.emit("", map[string]any{"id": s.id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": s.model, "choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}})
 }
 
-// reasoningDelta 累积公开推理文本并按 OpenAI 目标协议输出，参数为增量字符串，返回协议或写入错误。
-// consume 调用；同协议观察模式只累计，Responses 输出独立 reasoning 项；Messages 无等价签名能力时拒绝。
+// reasoningDelta 累积公开推理文本并按目标协议输出，参数为增量字符串，返回协议或写入错误。
+// consume 调用；同协议观察模式只累计，Responses 输出独立 reasoning 项，Messages 输出无签名 thinking 内容块。
 // 无外部调用，会修改流状态和写出字节；不得把密文传入本方法。
 func (s *dialogueStream) reasoningDelta(text string) error {
 	if text == "" {
@@ -148,7 +151,7 @@ func (s *dialogueStream) reasoningDelta(text string) error {
 	if s.observeOnly {
 		return nil
 	}
-	if s.protocol != "openai-chat" && s.protocol != "openai-responses" {
+	if s.protocol != "openai-chat" && s.protocol != "openai-responses" && s.protocol != "anthropic-messages" {
 		return fmt.Errorf("reasoning stream requires OpenAI protocol")
 	}
 	if err := s.start(); err != nil {
@@ -156,6 +159,9 @@ func (s *dialogueStream) reasoningDelta(text string) error {
 	}
 	if s.protocol == "openai-chat" {
 		return s.chat(map[string]any{"reasoning_content": text}, nil)
+	}
+	if s.protocol == "anthropic-messages" {
+		return s.messageDelta(map[string]any{"type": "thinking", "thinking": "", "signature": ""}, map[string]any{"type": "thinking_delta", "thinking": text})
 	}
 	if !s.reasoningStarted {
 		s.reasoningStarted = true
@@ -203,16 +209,40 @@ func (s *dialogueStream) textDelta(text string) error {
 		}
 		return s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": s.id + "_message", "output_index": s.textBlock, "content_index": 0, "delta": text})
 	case "anthropic-messages":
-		if s.textBlock < 0 {
-			s.textBlock = s.nextBlock
-			s.nextBlock++
-			if err := s.emit("content_block_start", map[string]any{"type": "content_block_start", "index": s.textBlock, "content_block": map[string]any{"type": "text", "text": ""}}); err != nil {
-				return err
-			}
-		}
-		return s.emit("content_block_delta", map[string]any{"type": "content_block_delta", "index": s.textBlock, "delta": map[string]any{"type": "text_delta", "text": text}})
+		return s.messageDelta(map[string]any{"type": "text", "text": ""}, map[string]any{"type": "text_delta", "text": text})
 	}
 	return nil
+}
+
+// closeMessageBlock 关闭当前 Messages 内容块；无参数，返回 HTTP 写入错误；阶段切换与 finish 调用。
+// 仅在成功输出 stop 后清空活动状态，不重复关闭，也不生成 message_stop；不完整上游流不会调用正常完成链。
+func (s *dialogueStream) closeMessageBlock() error {
+	if s.messageBlockKind == "" {
+		return nil
+	}
+	if err := s.emit("content_block_stop", map[string]any{"type": "content_block_stop", "index": s.messageBlockIndex}); err != nil {
+		return err
+	}
+	s.messageBlockKind = ""
+	return nil
+}
+
+// messageDelta 将一个公开内容增量编码为顺序 Messages 块；参数为起始块和增量对象，返回写入错误。
+// 推理、正文及完成后的工具调用使用；类型切换先关闭旧块，再分配递增索引，避免 Claude Code 收到重叠或错类型增量。
+// 只影响本请求 SSE，不生成签名、不修改输入对象；工具调用方在不同工具之间显式关闭块。
+func (s *dialogueStream) messageDelta(block, delta map[string]any) error {
+	kind := streamString(block["type"])
+	if s.messageBlockKind != kind {
+		if err := s.closeMessageBlock(); err != nil {
+			return err
+		}
+		s.messageBlockKind, s.messageBlockIndex = kind, s.nextBlock
+		s.nextBlock++
+		if err := s.emit("content_block_start", map[string]any{"type": "content_block_start", "index": s.messageBlockIndex, "content_block": block}); err != nil {
+			return err
+		}
+	}
+	return s.emit("content_block_delta", map[string]any{"type": "content_block_delta", "index": s.messageBlockIndex, "delta": delta})
 }
 
 // toolDelta 将分散的工具 ID、函数名和 JSON 参数片段归并到同一工具调用。
@@ -230,8 +260,10 @@ func (s *dialogueStream) toolDelta(index int, id, name, args string) error {
 		call = &llmdialogue.Turn{}
 		s.calls[index] = call
 		s.toolIndices[index] = len(s.toolIndices)
-		s.blocks[index] = s.nextBlock
-		s.nextBlock++
+		if s.protocol != "anthropic-messages" {
+			s.blocks[index] = s.nextBlock
+			s.nextBlock++
+		}
 	}
 	if id != "" {
 		call.ID = id
@@ -264,14 +296,7 @@ func (s *dialogueStream) toolDelta(index int, id, name, args string) error {
 			return s.emit("response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "output_index": block, "item_id": call.ID, "delta": args})
 		}
 	case "anthropic-messages":
-		if fresh {
-			if err := s.emit("content_block_start", map[string]any{"type": "content_block_start", "index": block, "content_block": map[string]any{"type": "tool_use", "id": call.ID, "name": call.Name, "input": map[string]any{}}}); err != nil {
-				return err
-			}
-		}
-		if args != "" {
-			return s.emit("content_block_delta", map[string]any{"type": "content_block_delta", "index": block, "delta": map[string]any{"type": "input_json_delta", "partial_json": args}})
-		}
+		// Chat 可以交错多个工具片段，Messages 要求内容块有序；finish 校验完整 JSON 后逐个发送，保留各工具身份。
 	}
 	return nil
 }
@@ -415,10 +440,16 @@ func (s *dialogueStream) finish() error {
 		}
 		return s.emit(event, map[string]any{"type": event, "response": response})
 	case "anthropic-messages":
-		for i := 0; i < s.nextBlock; i++ {
-			if err := s.emit("content_block_stop", map[string]any{"type": "content_block_stop", "index": i}); err != nil {
+		for _, call := range r.Calls {
+			if err := s.closeMessageBlock(); err != nil {
 				return err
 			}
+			if err := s.messageDelta(map[string]any{"type": "tool_use", "id": call.ID, "name": call.Name, "input": map[string]any{}}, map[string]any{"type": "input_json_delta", "partial_json": call.Arguments}); err != nil {
+				return err
+			}
+		}
+		if err := s.closeMessageBlock(); err != nil {
+			return err
 		}
 		stop := "end_turn"
 		if r.Stop == "length" {

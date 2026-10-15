@@ -60,7 +60,13 @@ func writeAgentResponse(w http.ResponseWriter, response map[string]any, stream b
 			added["input"] = ""
 		}
 		emit("response.output_item.added", map[string]any{"output_index": index, "item": added})
-		if item["type"] == "function_call" {
+		if item["type"] == "reasoning" {
+			// 真实供应商先发推理摘要增量再发正文；CLI 必须在正文之前收到 thinking 块，不能只在终态补发。
+			for _, value := range item["summary"].([]any) {
+				part := value.(map[string]any)
+				emit("response.reasoning_summary_text.delta", map[string]any{"output_index": index, "item_id": item["id"], "summary_index": 0, "delta": part["text"]})
+			}
+		} else if item["type"] == "function_call" {
 			emit("response.function_call_arguments.delta", map[string]any{"output_index": index, "item_id": item["id"], "delta": item["arguments"]})
 			emit("response.function_call_arguments.done", map[string]any{"output_index": index, "item_id": item["id"], "arguments": item["arguments"]})
 		} else if item["type"] == "custom_tool_call" {

@@ -153,6 +153,7 @@ func dialogueFieldShape(raw string, shape byte, nullable bool) bool {
 
 // EncodeDialogueResult 将共享回复输出到用户协议；参数为结果、入口协议及公开型号，返回 JSON。
 // 调用：统一同步入口及 SSE 终态；Responses 上游 store=false，网关通过临时上下文支持 previous_response_id。
+// Messages 把公开推理放入独立 thinking 块，签名为空；不能把推理混入正文或伪造厂商签名，密文仍由 BridgeError 拒绝。
 func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, error) {
 	if r.Source == protocol && r.Native != nil {
 		out, err := cloneObject(r.Native)
@@ -207,10 +208,10 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 			out["incomplete_details"] = map[string]any{"reason": "max_output_tokens"}
 		}
 	case "anthropic-messages":
-		if r.Reasoning != "" {
-			return nil, fmt.Errorf("reasoning output requires OpenAI protocol")
-		}
 		content := []any{}
+		if r.Reasoning != "" {
+			content = append(content, map[string]any{"type": "thinking", "thinking": r.Reasoning, "signature": ""})
+		}
 		if r.Text != "" {
 			content = append(content, map[string]any{"type": "text", "text": r.Text})
 		}

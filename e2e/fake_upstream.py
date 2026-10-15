@@ -292,6 +292,42 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
+        if model == "e2e-agent-messages" and ("responses" in path or "chat/completions" in path):
+            # Messages 推理桥接夹具：校验工具续轮还原独立推理及调用 ID，而不是把推理当普通答案。
+            is_responses = "responses" in path
+            items = req.get("input" if is_responses else "messages", [])
+            second = isinstance(items, list) and any(i.get("type") == "function_call_output" or i.get("role") == "tool" for i in items)
+            if second and ("Plan" not in json.dumps(items) or "call_1" not in json.dumps(items)):
+                self.send_error(400, "public reasoning or tool identity lost")
+                return
+            tool = bool(req.get("tools")) and not second
+            if is_responses:
+                output = [{"id": "rs_public", "type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan"}]}]
+                output.append({"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "read", "arguments": "{}"} if tool else {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "e2e-ok"}]})
+                payload = {"id": "resp_public", "status": "completed", "output": output, "usage": {"input_tokens": 8, "output_tokens": 2}}
+                events = [{"type": "response.reasoning_summary_text.delta", "delta": "Plan"}]
+                if tool:
+                    events.extend([{"type": "response.output_item.added", "output_index": 1, "item": {"type": "function_call", "call_id": "call_1", "name": "read", "arguments": ""}}, {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": "{}"}])
+                else:
+                    events.append({"type": "response.output_text.delta", "delta": "e2e-ok"})
+                events.append({"type": "response.completed", "response": payload})
+            else:
+                message = {"role": "assistant", "content": None if tool else "e2e-ok", "reasoning_content": "Plan"}
+                if tool:
+                    message["tool_calls"] = [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}]
+                usage = {"prompt_tokens": 8, "completion_tokens": 2}
+                stop = "tool_calls" if tool else "stop"
+                payload = {"id": "chat_public", "choices": [{"message": message, "finish_reason": stop}], "usage": usage}
+                events = [{"id": "chat_public", "choices": [{"index": 0, "delta": message, "finish_reason": stop}], "usage": usage}]
+            if req.get("stream"):
+                # Chat 的 DONE 是裸标记而非 JSON 字符串；不得用 _sse 把它转义为带引号的值。
+                body = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+                if not is_responses:
+                    body += "data: [DONE]\n\n"
+                self._response(200, body.encode(), "text/event-stream")
+            else:
+                self._json(payload)
+            return
         if "responses" in path and model == "e2e-agent-native":
             # 专属 Agent 夹具检查字段和完整历史，网关仍是真实实现；不连接任何外部服务。
             advanced = "reasoning" in req or "include" in req
