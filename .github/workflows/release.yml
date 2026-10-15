@@ -33,7 +33,7 @@ jobs:
         working-directory: frontend
       - run: node --test scripts/test_release_workflow.cjs
       - run: python3 -m unittest scripts.test_deploy_build -v
-      - run: python3 -m unittest scripts.test_regression_output -v
+      - run: python3 -m unittest scripts.test_regression_output scripts.test_makefile -v
       # 隔离回归夹具在随机端口启动本机 Redis，Compose 服务不能替代 redis-server 二进制。
       - name: Install regression Redis
         shell: bash

@@ -16,6 +16,8 @@ make e2e-offline
 bash scripts/e2e.sh scenarios/pages/docs.test.ts scenarios/docs
 ```
 
+等价的 Make 入口为 `make e2e-offline E2E_TESTS="scenarios/pages/docs.test.ts scenarios/docs"`，会把用例路径传给隔离脚本，并保留失败退出状态。
+
 scripts/e2e.sh 构建服务，检查端口，创建本轮独立 schema，执行 Playwright，最后清理本轮数据。默认端口为控制台 3100、网关 4100、上游 4110，可通过 E2E_UI_PORT、E2E_GW_PORT、E2E_UP_PORT 修改。无路径参数时启用全量覆盖检查。
 
 make testdata 清空配置目标的共享 xhub 数据与 Redis DB 1，启动临时网关建数，结束后关闭临时网关并保留基线。仅用于专用测试环境。make e2e 复用已运行服务验证共享基线，模型场景可能产生费用。make e2e-list 显示分类、前提与费用边界。

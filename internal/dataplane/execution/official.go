@@ -37,6 +37,7 @@ import (
 func ServeBypass(h dpcontract.Bypass, w http.ResponseWriter, r *http.Request, hit providercontract.Hit) {
 	start := time.Now()
 	callID := util.CallID()
+	defer h.ReleaseCall(callID)
 	util.SetCallID(w, callID)
 	p := h.RequireLLMPrincipal(w, r)
 	if p == nil {
@@ -179,7 +180,9 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 		for _, rawDep := range pool {
 			// 组内尝试仍保留成员身份，错误分类及后续回退使用最后尝试成员。
 			fallbacks.UseDeployment(rawDep.ModelName)
-			plan.Target = fallbacks.Target(rawDep)
+			if !plan.Required {
+				plan.Target = fallbacks.Target(rawDep)
+			}
 			// 回退目标可能是另一个组；组别名与真实成员都必须通过权限和预算检查。
 			if fallbacks.PoolAlias != alias && fallbacks.PoolAlias != rawDep.ModelName && !h.EnforceIdentityLimits(w, r.URL.Path, principal, fallbacks.PoolAlias, dpusage.EstimateTokens(body)) {
 				return
@@ -193,6 +196,11 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 			candidate, err := h.AttachCredential(rawDep)
 			if err != nil {
 				continue
+			}
+			// 原生入口与统一入口使用相同的连接归属检查，连接更新不能继承旧密文或游标。
+			if !dprouting.BindConnection(&plan, candidate) {
+				util.WriteTypedError(w, r.URL.Path, 409, "unavailable", "response deployment unavailable")
+				return
 			}
 			candidateHit, err := providerdeployment.ResolveHit(originalHit, candidate)
 			if err != nil {

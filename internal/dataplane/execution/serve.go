@@ -52,6 +52,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	util.Trace("process path=%s step=start op=%s", r.URL.Path, op)
 	start := time.Now()
 	callID := util.CallID()
+	defer h.ReleaseCall(callID)
 	util.SetCallID(w, callID)
 	// 第一阶段：先取得可信身份，再读取客户端模型和会话信号；这些信号不能自行授予权限。
 	p := h.RequireLLMPrincipal(w, r)
@@ -256,7 +257,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		for _, rawDep := range pool {
 			// 组耗尽后采用最后尝试成员的回退链，保留原组名的初始权限检查。
 			fallbacks.UseDeployment(rawDep.ModelName)
-			plan.Target = fallbacks.Target(rawDep)
+			if !plan.Required {
+				plan.Target = fallbacks.Target(rawDep)
+			}
 			// 回退目标可能是另一个组；组别名与真实成员都必须通过权限和预算检查。
 			if fallbacks.PoolAlias != alias && fallbacks.PoolAlias != rawDep.ModelName && !h.EnforceIdentityLimits(w, r.URL.Path, p, fallbacks.PoolAlias, est) {
 				return
@@ -282,6 +285,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				missingCredential = true
 				util.Debug("skip deployment path=%s model=%s reason=credential_unavailable", r.URL.Path, alias)
 				continue
+			}
+			// 固定历史必须比对首次外发时的实际连接，不能只靠可编辑的稳定部署 ID。
+			if !dprouting.BindConnection(&plan, dep) {
+				util.WriteTypedError(w, r.URL.Path, 409, "unavailable", "response deployment unavailable")
+				return
 			}
 			upstreamModel := dep.ParamString("model", alias)
 			supplier := dep.ParamString("custom_llm_provider", "")

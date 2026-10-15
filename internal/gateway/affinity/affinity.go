@@ -51,6 +51,13 @@ func sessionPinKey(alias, caller, sessionID string, endpoint ...string) string {
 	return "session_route:v1:preference:" + hex.EncodeToString(sum[:])
 }
 
+// sessionOwnerKey 为完整不透明历史构造独立于动态偏好的固定会话归属键。
+// 参数为公开别名、鉴权范围、会话及入口；返回独立命名空间的哈希键，无缓存副作用。
+// PlanRoute/CommitRoute 共用；普通请求更新偏好不能替旧密文重新签发连接归属。
+func sessionOwnerKey(alias, caller, sessionID, endpoint string) string {
+	return strings.Replace(sessionPinKey(alias, caller, sessionID, endpoint), "session_route:v1:preference:", "session_route:v1:owner:", 1)
+}
+
 // callerScope 从鉴权结果提取缓存范围，供 PlanRoute 构建 Caller。
 // 参数 p 可为 nil；返回 key:<hash>（密钥优先）、user:<id>（无密钥时）或空字符串（无身份）。
 // 密钥优先让同一用户的不同密钥拥有独立状态，前缀区分密钥和用户两类标识。

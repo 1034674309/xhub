@@ -72,3 +72,36 @@ func TestEncryptedHistoryRequiresOwnedDeployment(t *testing.T) {
 		t.Fatal("纯文本误判为密文")
 	}
 }
+
+// TestOpaqueSessionOwnershipSurvivesPreferenceUpdates 验证普通选路更新不能替旧密文重新绑定账户。
+// 参数 t 为上下文；前置同一身份/模型/会话在 A 成功后又在 B 完成普通请求，完整密文归属失效而非绑定 B。
+// 同时检查 B 的明确父响应可恢复自己的归属、键与其他会话/入口隔离；内存夹具随测试回收。
+func TestOpaqueSessionOwnershipSurvivesPreferenceUpdates(t *testing.T) {
+	state := &State{}
+	principal := &auth.Principal{UserID: "alice"}
+	req := httptest.NewRequest("POST", "/v1/responses", nil)
+	req.Header.Set("X-Session-Id", "fixed-session")
+	first := state.PlanRoute(req, "model", map[string]any{"input": "Hello"}, principal)
+	first.Target = dpcontract.RouteTarget{DeploymentID: "stable", ConnectionID: "account-a", Model: "model", Pool: "model"}
+	first.History = []llmdialogue.Turn{{Role: "user", Text: "Hello"}}
+	state.CommitRoute(first, "stable", "response-a")
+	next := state.PlanRoute(req, "model", map[string]any{"input": "Fresh plain request"}, principal)
+	next.Target.ConnectionID, next.History = "account-b", first.History
+	state.CommitRoute(next, "stable", "response-b")
+	body := map[string]any{"input": []any{map[string]any{"type": "reasoning", "encrypted_content": "opaque-a"}}}
+	owned := state.PlanRoute(req, "model", body, principal)
+	if owned.Err != nil || !owned.Required || owned.Target.ConnectionID != "" {
+		t.Fatalf("动态偏好覆盖了固定密文归属: %+v", owned)
+	}
+	state.CommitRoute(first, "stable", "late-response-a")
+	if late := state.PlanRoute(req, "model", body, principal); late.Err != nil || late.Target.ConnectionID != "" {
+		t.Fatalf("迟到成功重新绑定了混合连接的会话: %+v", late)
+	}
+	parent := state.PlanRoute(req, "model", map[string]any{"previous_response_id": "response-b"}, principal)
+	if parent.Err != nil || parent.Target.ConnectionID != "account-b" {
+		t.Fatalf("明确父响应归属丢失: %+v", parent)
+	}
+	if sessionOwnerKey("model", "user:alice", "fixed-session", "responses") == sessionPinKey("model", "user:alice", "fixed-session", "responses") || sessionOwnerKey("model", "user:alice", "other-session", "responses") == sessionOwnerKey("model", "user:alice", "fixed-session", "responses") {
+		t.Fatal("固定归属键未隔离命名空间或会话")
+	}
+}

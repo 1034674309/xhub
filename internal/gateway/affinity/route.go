@@ -159,11 +159,15 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 		plan.Pinned = plan.Target.DeploymentID
 	}
 	if opaque && !plan.Required {
-		if plan.Pinned == "" {
+		// 完整密文的证明必须来自首次成功响应，而非可以被普通请求改写的动态路由偏好。
+		// 否则连接更新后发一次普通请求，就可能把旧密文错误地绑定到新账户。
+		ownerRaw, _, ownerErr := s.cacheRead(sessionOwnerKey(alias, plan.Caller, plan.SessionID, endpoint), false)
+		var owner dpcontract.RouteTarget
+		if ownerErr != nil || json.Unmarshal([]byte(ownerRaw), &owner) != nil || owner.DeploymentID == "" {
 			plan.Err = fmt.Errorf("encrypted history requires an owned session or previous_response_id")
 			return plan
 		}
-		plan.Required = true
+		plan.Target, plan.Pinned, plan.Required = owner, owner.DeploymentID, true
 	}
 	// 6. 安装请求级回调：expected/local 被闭包捕获，Claim 更新它们后 Save
 	// 使用同一份基准。后续新请求会重新读取存储，Redis 恢复后以共享值为准，
@@ -226,7 +230,8 @@ type responseOwner struct {
 // responses 执行器还须将本轮输入和成功输出合并进 plan.History；本方法不构造历史。
 // 无返回值；空 deploymentID 或 Caller 直接返回，不写偏好、历史或归属。
 // 先复制 Target、填成功部署，缺失 Pool/Model 用原 alias 补足，再通过 Save 比较更新偏好。
-// 偏好比较失败不撤销成功结果，响应归属仍记录实际目标，与动态偏好是否更新成功独立。
+// 偏好比较失败不撤销成功结果，响应归属仍记录实际连接指纹，与动态偏好是否更新成功独立。
+// Responses 首次成功目标另存为固定会话归属，后续普通选路只更新偏好，不能替旧密文更换账户。
 // 有 responseID 和 SessionID 时发布归属；responses 且 History 非空时先编码并写历史，
 // 历史失败即停止，避免发布已知缺少上下文的归属；History 为空时仍发布归属，但续接会因缺历史拒绝。
 // 历史和归属是非事务的一小时记录，不是原厂长期 store；归属写入错误在此被忽略。
@@ -249,6 +254,25 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 		plan.Save(target)
 	}
 	if responseID != "" && plan.SessionID != "" {
+		// 统一及原生 Responses 的入口 ID 不同；固定归属与父响应一样按实际入口隔离发布。
+		// 首次成功目标只允许相同连接续期，不能由后续普通选路覆盖。
+		key := sessionOwnerKey(plan.Alias, plan.Caller, plan.SessionID, plan.Endpoint)
+		targetRaw, _ := json.Marshal(target)
+		current, err := s.cacheCompare(key, "", string(targetRaw), false)
+		if err == nil && current != string(targetRaw) {
+			var owner dpcontract.RouteTarget
+			if json.Unmarshal([]byte(current), &owner) == nil {
+				if owner.DeploymentID == target.DeploymentID && owner.ConnectionID == target.ConnectionID {
+					_, _ = s.cacheCompare(key, current, current, false)
+				} else {
+					// 同一会话曾在不同连接成功，完整历史无法再仅凭会话 ID 确认出处。
+					// 保留不可用归属，禁止后续普通请求或迟到成功重新绑定；明确父响应仍有独立快照。
+					owner.ConnectionID = ""
+					invalid, _ := json.Marshal(owner)
+					_, _ = s.cacheCompare(key, current, string(invalid), false)
+				}
+			}
+		}
 		// 先发布历史，再发布可被后续请求引用的归属；不是跨键事务，但不能反过来。
 		if plan.Endpoint == "responses" && len(plan.History) > 0 {
 			raw, err := json.Marshal(plan.History)

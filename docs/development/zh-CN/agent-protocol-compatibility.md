@@ -39,6 +39,8 @@
 
 提交完整加密历史时，也必须具有本身份已知的会话部署归属；不能因权重、冷却、目标禁用或共享缓存故障切换供应商连接。无法确认归属时应发起新会话。
 
+固定续接还会核对首次外发时已解析凭据的连接指纹。保留部署 ID 修改地址、上游型号、传输、凭据名或同名凭据中的密钥后，旧续接返回 409；普通请求更新路由偏好也不会重新绑定旧密文。新版本部署前缓存的归属若没有连接指纹，需要开启新会话；缓存只保存哈希，不保存密钥明文。
+
 Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影；非空密文、真实厂商签名和 redacted thinking 仍不能跨此 Messages 桥接。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
 
 ## 真实供应商验收：2026-10-15

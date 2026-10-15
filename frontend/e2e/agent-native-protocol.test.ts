@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto, t } from "./helpers";
 
-/** 验证标准 Responses 的浏览器调用、原生 Agent 参数/流/工具续轮、Chat 桥接和账单。前置真实浏览器、Go 后台、隔离数据库、本地协议夹具；参数来自 Playwright fixture，无返回值。finally 删除模型和凭据，运行器回收 schema；不使用外部密钥或修改现有数据。 */
+/** 验证标准 Responses 的浏览器调用、原生参数/流/工具续轮、连接修改后的历史拒绝、非法请求恢复和账单。前置真实浏览器、Go 后台、隔离数据库及本地协议夹具；参数来自 Playwright fixture，无返回值。finally 删除模型和凭据，运行器回收 schema；不使用外部密钥或修改现有数据。 */
 test("native agent protocols preserve reasoning and tool continuation through the console", async ({ page }) => {
   test.setTimeout(120000);
   await loginAdmin(page);
@@ -71,6 +71,30 @@ test("native agent protocols preserve reasoning and tool continuation through th
     expect(chat.status(), await chat.text()).toBe(200);
     expect((await chat.json()).choices[0].message.content).toBe("e2e-ok");
     callIDs.push(chat.headers()["x-litellm-call-id"]);
+
+    // 使用真实管理接口更新同名凭据；稳定部署 ID 不变，但旧游标和密文必须在外发前拒绝。
+    const ownedHeaders = { ...headers, "X-Session-Id": "e2e-connection-snapshot" };
+    const snapshot = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: { ...options, input: "Start an owned conversation." } });
+    expect(snapshot.status(), await snapshot.text()).toBe(200);
+    const saved = await snapshot.json();
+    expect(saved.output).toEqual(expect.arrayContaining([expect.objectContaining({ encrypted_content: "fixture-cipher" })]));
+    callIDs.push(snapshot.headers()["x-litellm-call-id"]);
+    expect((await page.request.patch(GATEWAY + "/credentials/" + credential, { headers, data: { credential_values: { api_base: UPSTREAM + "/v1", api_key: "sk-fake-updated" } } })).status()).toBe(200);
+    const history = [{ role: "user", content: "Start an owned conversation." }, ...saved.output, { role: "user", content: "Continue." }];
+    for (const body of [{ ...options, previous_response_id: saved.id, input: "Continue." }, { ...options, input: history }]) {
+      const blocked = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: body });
+      expect(blocked.status(), await blocked.text()).toBe(409);
+    }
+    for (let index = 0; index < 3; index++) {
+      const invalid = await page.request.post(GATEWAY + "/v1/responses", { headers, data: { model: name, input: "Hello", session_id: " " } });
+      expect(invalid.status()).toBe(400);
+    }
+    const fresh = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: { model: name, input: "A fresh plain request." } });
+    expect(fresh.status(), await fresh.text()).toBe(200);
+    callIDs.push(fresh.headers()["x-litellm-call-id"]);
+    const stillBlocked = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: { ...options, input: history } });
+    expect(stillBlocked.status(), await stillBlocked.text()).toBe(409);
+
     for (const callID of callIDs) {
       expect(callID).toBeTruthy();
       await expect.poll(async () => {
