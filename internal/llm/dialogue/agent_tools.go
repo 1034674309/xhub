@@ -12,6 +12,8 @@ import (
 type ToolBinding struct {
 	Name, Namespace string
 	Custom          bool
+	// ClientSearch 表示由客户端执行的工具发现；只还原调用身份，网关不搜索或执行工具。
+	ClientSearch bool
 }
 
 // qualifiedToolName 为 namespace 函数构造稳定的 Chat 名称；参数为原命名空间和函数名，命名空间别名最长 64 字节，顶层名保持原值。
@@ -27,18 +29,29 @@ func qualifiedToolName(namespace, name string) string {
 	return fmt.Sprintf("%s_%x", joined[:39], sha256.Sum256([]byte(joined)))[:64]
 }
 
-// projectAgentTools 将 Responses 函数、单层 namespace 和 custom 工具投影为共享函数，返回工具、还原表、不可桥接原因及输入错误。
+// projectAgentTools 将 Responses 函数、单层 namespace、custom 及客户端 tool_search 投影为共享函数，返回工具、还原表、不可桥接原因及输入错误。
 // ParseDialogue 调用；未知原生工具保留在 Native，阻止桥接但允许原生路径；重复/碰撞名称明确拒绝，不静默覆盖工具身份。
 // custom 的语法定义仅作为模型提示，不能等价提供原厂 grammar 强约束；本方法不执行工具或修改输入。
 func projectAgentTools(values []any) ([]any, map[string]ToolBinding, string, error) {
 	var projected []any
 	bindings := map[string]ToolBinding{}
-	seen := map[string]bool{}
+	seen := map[string]string{}
 	bridgeError := ""
 	for _, value := range values {
 		tool := dialogueMap(value)
 		if tool == nil {
 			return nil, nil, "", fmt.Errorf("tool must be an object")
+		}
+		if tool["type"] == "tool_search" && tool["execution"] != nil && tool["execution"] != "client" && tool["execution"] != "server" {
+			return nil, nil, "", fmt.Errorf("tool_search execution must be server or client")
+		}
+		clientSearch := tool["type"] == "tool_search" && tool["execution"] == "client"
+		if clientSearch {
+			// LiteLLM 区分客户端与托管搜索；这里将客户端搜索保留为普通函数，而非丢掉工具发现能力。
+			if err := dialogueFields(tool, "type", "execution", "description", "parameters"); err != nil {
+				bridgeError = "client tool_search " + err.Error()
+			}
+			tool = map[string]any{"type": "function", "name": "tool_search", "description": tool["description"], "parameters": tool["parameters"]}
 		}
 		namespace := ""
 		members := []any{tool}
@@ -68,17 +81,19 @@ func projectAgentTools(values []any) ([]any, map[string]ToolBinding, string, err
 				return nil, nil, "", fmt.Errorf("tool name is required")
 			}
 			alias := qualifiedToolName(namespace, name)
-			if seen[alias] {
-				// 原生 namespace 与顶层名称可以合法共存；只拒绝有歧义的 Chat 候选，不能破坏原生部署。
-				bridgeError = "conflicting tool name " + alias
-			}
-			seen[alias] = true
 			cp, _ := cloneObject(member)
 			delete(cp, "cache_control")
+			// defer_loading 是发现性能提示；Chat 使用客户端已提供的定义，原生请求仍保留原标记。
+			if flag, exists := cp["defer_loading"]; exists {
+				if _, ok := flag.(bool); !ok {
+					return nil, nil, "", fmt.Errorf("defer_loading must be boolean")
+				}
+				delete(cp, "defer_loading")
+			}
 			cp["name"] = alias
 			if kind == "custom" {
 				// custom 会被重建成函数，必须先检查能力边界，避免未知格式或扩展在重建时静默消失；原生正文不受影响。
-				if err := dialogueFields(member, "type", "name", "description", "format", "cache_control"); err != nil {
+				if err := dialogueFields(member, "type", "name", "description", "format", "cache_control", "defer_loading"); err != nil {
 					bridgeError = "custom " + err.Error()
 				}
 				description := dialogueString(member["description"])
@@ -98,10 +113,20 @@ func projectAgentTools(values []any) ([]any, map[string]ToolBinding, string, err
 						bridgeError = "unsupported custom format"
 					}
 				}
-				cp = map[string]any{"type": "function", "name": alias, "description": description, "parameters": map[string]any{"type": "object", "properties": map[string]any{"content": map[string]any{"type": "string"}}, "required": []any{"content"}, "additionalProperties": false}}
+				// 与 LiteLLM 一样在 schema 中明确原文包装字段，避免模型将代码二次转义或误用 Responses 的 input 字段。
+				cp = map[string]any{"type": "function", "name": alias, "description": description, "parameters": map[string]any{"type": "object", "properties": map[string]any{"content": map[string]any{"type": "string", "description": "The raw " + name + " input following the specified format, without an extra JSON string wrapper."}}, "required": []any{"content"}, "additionalProperties": false}}
 			}
-			if namespace != "" || kind == "custom" {
-				bindings[alias] = ToolBinding{Name: name, Namespace: namespace, Custom: kind == "custom"}
+			fingerprint, _ := json.Marshal([]any{namespace, cp, clientSearch})
+			if previous, exists := seen[alias]; exists {
+				// 工具发现续轮可能重复已经加载的定义；完全相同的身份可合并，不同身份或 schema 仍拒绝桥接。
+				if previous == string(fingerprint) {
+					continue
+				}
+				bridgeError = "conflicting tool name " + alias
+			}
+			seen[alias] = string(fingerprint)
+			if namespace != "" || kind == "custom" || clientSearch {
+				bindings[alias] = ToolBinding{Name: name, Namespace: namespace, Custom: kind == "custom", ClientSearch: clientSearch}
 			}
 			projected = append(projected, cp)
 		}
@@ -138,8 +163,8 @@ func projectAgentCall(item map[string]any) error {
 	return nil
 }
 
-// ResponseToolItem 根据本请求的映射还原 Responses 工具项；参数为完整函数调用、映射和生命周期状态，返回项或非法 custom 参数错误。
-// JSON 及 SSE 编码器共用；custom 参数必须有字符串 content，不把错误 JSON 当成可执行输入；函数无外部副作用。
+// ResponseToolItem 根据本请求的映射还原 Responses 工具项；参数为完整函数调用、映射和生命周期状态，返回项或 custom/搜索参数错误。
+// JSON 及 SSE 编码器共用；custom 兼容 content/input 单字符串包装，不修补代码；客户端负责执行和语法校验。
 func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string) (map[string]any, error) {
 	item := map[string]any{"id": call.ID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": call.Arguments, "status": status}
 	binding, ok := bindings[call.Name]
@@ -150,12 +175,23 @@ func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string)
 	if binding.Namespace != "" {
 		item["namespace"] = binding.Namespace
 	}
-	if binding.Custom {
+	if binding.ClientSearch {
+		var args map[string]any
+		if json.Unmarshal([]byte(call.Arguments), &args) != nil || args == nil {
+			return nil, fmt.Errorf("client tool_search arguments must be an object")
+		}
+		item["type"], item["execution"], item["arguments"] = "tool_search_call", "client", args
+		delete(item, "name")
+	} else if binding.Custom {
 		var args map[string]any
 		if json.Unmarshal([]byte(call.Arguments), &args) != nil {
 			return nil, fmt.Errorf("invalid custom tool arguments")
 		}
 		content, valid := args["content"].(string)
+		if !valid {
+			// 七牛 DeepSeek 实测会用 Responses 的 input 单字段包装；只接受明确字符串别名，不猜测其他字段或改写代码。
+			content, valid = args["input"].(string)
+		}
 		if !valid || len(args) != 1 {
 			return nil, fmt.Errorf("custom tool requires a content string")
 		}
@@ -163,6 +199,39 @@ func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string)
 		delete(item, "arguments")
 	}
 	return item, nil
+}
+
+// projectClientSearchHistory 将客户端工具发现记录投影为 Chat 函数历史，返回加载的工具定义或输入错误。
+// 参数 item 是 ParseDialogue 创建的副本；只接受 client 执行及对象参数，保留 call_id 和结果原文，原生历史不变。
+// 调用方将返回定义加入当前工具目录，网关自身不会搜索、执行工具或改变用户权限。
+func projectClientSearchHistory(item map[string]any) ([]any, error) {
+	if item["execution"] != "client" || dialogueString(item["call_id"]) == "" {
+		return nil, fmt.Errorf("tool search history requires client execution and call_id")
+	}
+	delete(item, "execution")
+	if item["type"] == "tool_search_call" {
+		if err := dialogueFields(item, "type", "id", "call_id", "status", "arguments"); err != nil {
+			return nil, err
+		}
+		args := dialogueMap(item["arguments"])
+		if args == nil {
+			return nil, fmt.Errorf("client tool_search arguments must be an object")
+		}
+		raw, _ := json.Marshal(args)
+		item["type"], item["name"], item["arguments"] = "function_call", "tool_search", string(raw)
+		return nil, nil
+	}
+	if err := dialogueFields(item, "type", "id", "call_id", "status", "tools"); err != nil {
+		return nil, err
+	}
+	tools, ok := item["tools"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("client tool_search output requires tools array")
+	}
+	raw, _ := json.Marshal(map[string]any{"tools": tools})
+	item["type"], item["output"] = "function_call_output", string(raw)
+	delete(item, "tools")
+	return tools, nil
 }
 
 // agentClientMetadata 验证 Codex 的客户端跟踪元数据；参数为任意字段，返回类型/大小错误。

@@ -93,3 +93,28 @@ Messages field validation, native Turn encoding and caller/model/endpoint/sessio
 connection ownership. It neither decrypts ciphertext nor forwards this extension
 to unrelated native Chat/Anthropic deployments. Clients dropping the extension
 retain ordinary Chat behavior without a persisted-reasoning guarantee.
+
+Optional web search downgrade reference (MIT): LiteLLM `35970c3`,
+`responses/litellm_completion_transformation/transformation.py`,
+`_responses_tool_to_chat_form` and `_should_drop_derived_web_search_options`.
+XHub reuses the provider-capability decision pattern, not the Python runtime.
+Unlike the reference's implicit drop, XHub defaults to rejection, requires an explicit
+per-deployment `drop_optional` policy, rejects required search and exposes the downgrade
+in response headers and persisted diagnostics. Native Responses search remains unchanged
+unless the deployment explicitly declares it unsupported. External search execution is
+not implemented by this change.
+
+Custom-input and client-tool-discovery follow-up references (MIT): the same
+`35970c3` snapshot's `custom_tools.py` (`convert_custom_tool_to_function_tool`,
+`unwrap_custom_tool_arguments`), `transformation.py` (`_responses_tool_to_chat_form`),
+and `streaming_iterator.py` (tool-search item lifecycle). XHub keeps the reference's
+`content` string schema and adds a bounded `input` string alias observed from Qiniu
+DeepSeek; unlike LiteLLM's raw-string fallback it still rejects malformed JSON,
+non-string wrappers and ambiguous extra fields, without repairing executable text.
+LiteLLM drops client-executed tool search on its generic Chat bridge. XHub instead
+implements an explicit client-only function projection, object-valued search calls,
+search-result history and client-provided tool definitions according to the
+[OpenAI client tool-search contract](https://developers.openai.com/api/docs/guides/tools-tool-search).
+It does not execute search in the gateway or pretend server-executed search is supported.
+Identical loaded declarations deduplicate; conflicting aliases remain errors. Native
+requests preserve their tool definitions and discovery history unchanged.

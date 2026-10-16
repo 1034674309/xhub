@@ -448,6 +448,24 @@ func (s *dialogueStream) finish() error {
 				return err
 			}
 			items[block] = item
+			if item["type"] == "tool_search_call" {
+				// 客户端搜索参数是完整 JSON 对象，不能冒充 function_call_arguments 的字符串 delta。
+				// 和 LiteLLM 的专用搜索生命周期一样，仅发布 added/done 项，再由客户端执行并续轮。
+				started := map[string]any{}
+				for key, value := range item {
+					started[key] = value
+				}
+				started["arguments"], started["status"] = map[string]any{}, "in_progress"
+				for _, event := range []map[string]any{
+					{"type": "response.output_item.added", "output_index": block, "item": started},
+					{"type": "response.output_item.done", "output_index": block, "item": item},
+				} {
+					if err := s.emit(streamString(event["type"]), event); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			field, prefix := "arguments", "response.function_call_arguments"
 			if item["type"] == "custom_tool_call" {
 				field, prefix = "input", "response.custom_tool_call_input"

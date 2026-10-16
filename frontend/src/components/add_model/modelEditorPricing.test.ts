@@ -150,3 +150,16 @@ describe("modelEditorPricing", () => {
 
 /** 前置中文校验语境；只重置翻译状态，不访问外部资源。 */
 beforeEach(() => setActiveLocale("zh-CN"));
+
+/** 前置纯配置，不依赖 React 或后台；验证默认兼容、已有策略回显、保存和非法策略双语错误；无外部副作用。 */
+it.each(["zh-CN","en"] as const)("%s validates web search metadata", (locale) => {
+  setActiveLocale(locale);
+  expect(editorDefaults()).toMatchObject({web_search_support:"inherit",web_search_fallback:"reject"});
+  const original:EditorModel={model_name:"original",litellm_params:{},model_info:{web_search_support:"unsupported",web_search_fallback:"drop_optional"}};
+  expect(editorDefaults(original)).toMatchObject(original.model_info);
+  const values={...baseValues,input_cost_per_token:"1",web_search_support:"unsupported",web_search_fallback:"drop_optional"};
+  expect(buildEditorModel(values).model_info).toMatchObject(original.model_info);
+  for(const invalid of [{web_search_support:"guess"},{web_search_fallback:true}]) expect(()=>buildEditorModel({...values,...invalid})).toThrow(locale==="en"?"Select a valid web search":"请选择有效的联网搜索");
+  expect(()=>buildEditorModel({...values,web_search_support:"supported"})).toThrow(locale==="en"?"Native web search requires":"原生联网搜索需要");
+  setActiveLocale("zh-CN");
+});

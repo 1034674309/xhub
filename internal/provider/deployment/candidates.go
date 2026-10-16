@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"errors"
+
 	"github.com/sunqirui1987/xhub/internal/config"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
@@ -9,6 +11,8 @@ import (
 type CandidateDecision struct {
 	Deployment config.ModelEntry
 	Reason     string
+	// 搜索能力失败标记只供错误映射使用，不把连接配置输出给客户端。
+	SearchUnsupported bool
 }
 
 // Candidates 对已匹配公开模型的部署执行目录、声明和请求能力筛选。
@@ -20,12 +24,12 @@ func Candidates(list []config.ModelEntry, endpoint string, dialogue *llmdialogue
 	for _, dep := range list {
 		err := AllowsEndpoint(dep, endpoint)
 		if err == nil && dialogue != nil {
-			execution, _ := Execution(dep)
-			_, err = llmdialogue.EncodeDialogue(*dialogue, execution.Protocol, dep.ParamString("model", ""))
+			_, _, err = EncodeDialogue(dep, *dialogue)
 		}
 		decision := CandidateDecision{Deployment: dep}
 		if err != nil {
 			decision.Reason = err.Error()
+			decision.SearchUnsupported = errors.Is(err, llmdialogue.ErrWebSearchUnsupported)
 		} else {
 			pool = append(pool, dep)
 		}

@@ -1,4 +1,4 @@
-import { setActiveLocale } from "@/i18n";
+import { t, setActiveLocale } from "@/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -307,4 +307,21 @@ it("does not inherit a model directory when its current connection is unscoped",
  expect(screen.getByLabelText("供应商能力目录")).toHaveTextContent(/^$/);
  await userEvent.selectOptions(screen.getByLabelText("模型提供商 *"),"relay-b");
  expect(screen.getByLabelText("供应商能力目录")).toHaveTextContent(/^$/);
+});
+
+/** 前置中英文真实编辑器与可保存部署；验证搜索策略保存、帮助文案和原始上游值；自动卸载，不写真实后台。 */
+it.each(["zh-CN", "en"] as const)("%s saves explicit web search capability and fallback", async (locale) => {
+  setActiveLocale(locale);
+  mocks.catalog = catalog;
+  mocks.apiPost.mockResolvedValue({ models: [] });
+  mocks.patch.mockImplementation(async (_token, payload) => payload);
+  const user = userEvent.setup();
+  renderEditor({model:{model_name:"my-original-model",litellm_params:{model:"upstream-original",custom_llm_provider:"openai",litellm_credential_name:"relay-a",input_cost_per_token:0.000001},model_info:{id:"search-test",transport:"bypass_openai_chat",endpoint_types:["responses"],pricing_source:"manual"}}});
+  await user.selectOptions(screen.getByLabelText(t("providerGuideUI.searchSupport")), "unsupported");
+  await user.selectOptions(screen.getByLabelText(t("providerGuideUI.searchFallback")), "drop_optional");
+  expect(screen.getByText(t("providerGuideUI.searchDropHelp"))).toBeVisible();
+  expect(screen.getByLabelText(t("providerGuideUI.publicName"))).toHaveValue("my-original-model");
+  await user.click(screen.getByRole("button",{name:t("providerGuideUI.saveChanges"),exact:true}));
+  await waitFor(()=>expect(mocks.patch).toHaveBeenCalledWith("token",expect.objectContaining({model_info:expect.objectContaining({web_search_support:"unsupported",web_search_fallback:"drop_optional"})}),"search-test"));
+  setActiveLocale("zh-CN");
 });

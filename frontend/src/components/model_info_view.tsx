@@ -166,7 +166,7 @@ export default function ModelInfoView({
     <div className="space-y-6">
       <Button variant="ghost" size="sm" onClick={onClose}>
         <ArrowLeft className="size-4" />
-        返回模型列表
+        {t("providerGuideUI.backModels")}
       </Button>
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-card p-6">
         <div className="min-w-0 space-y-3">
@@ -177,7 +177,7 @@ export default function ModelInfoView({
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="break-all font-mono">{modelId}</span>
-            <button type="button" aria-label="复制模型 ID" onClick={copy} className="rounded p-1 hover:bg-muted">
+            <button type="button" aria-label={t("providerGuideUI.copyModelId")} onClick={copy} className="rounded p-1 hover:bg-muted">
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </button>
           </div>
@@ -192,13 +192,13 @@ export default function ModelInfoView({
           {canEdit && !editing && (
             <Button onClick={() => setEditing(true)}>
               <Pencil className="size-4" />
-              编辑模型
+              {t("providerGuideUI.editModel")}
             </Button>
           )}
           {canEdit && !editing && (
             <Button variant="ghost" className="text-destructive" onClick={() => setDeleting(true)}>
               <Trash2 className="size-4" />
-              删除
+              {t("Delete")}
             </Button>
           )}
         </div>

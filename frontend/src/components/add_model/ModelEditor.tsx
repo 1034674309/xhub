@@ -120,7 +120,7 @@ export default function ModelEditor({
     if (name === values.supplier) return;
     if (name === "__existing__") {
       const existing = editorDefaults(model);
-      for (const key of ["supplier", "custom_llm_provider", "model", "model_name", "transport", "endpoint_types"])
+      for (const key of ["supplier", "custom_llm_provider", "model", "model_name", "transport", "endpoint_types", "web_search_support", "web_search_fallback"])
         set(key, existing[key]);
       return;
     }
@@ -134,6 +134,8 @@ export default function ModelEditor({
     set("catalog_model", "");
     set("transport", "");
     set("endpoint_types", []);
+    set("web_search_support", "inherit");
+    set("web_search_fallback", "reject");
     if (values.model_name === suggestedModelName(String(values.model ?? ""), provider)) set("model_name", "");
   };
 
@@ -383,6 +385,22 @@ export default function ModelEditor({
                   }
                   modelCostMap={rows}
                 />
+                <section aria-label={t("providerGuideUI.searchTitle")} className="space-y-3 rounded-lg border p-4">
+                  <h4 className="font-medium">{t("providerGuideUI.searchTitle")}</h4>
+                  <p className="text-xs text-muted-foreground">{t("providerGuideUI.searchHelp")}</p>
+                  <Label htmlFor="editor-search-support">{t("providerGuideUI.searchSupport")}</Label>
+                  <select id="editor-search-support" className={selectClass} value={String(values.web_search_support ?? "inherit")} onChange={event => set("web_search_support", event.target.value)}>
+                    <option value="inherit">{t("providerGuideUI.searchInherit")}</option>
+                    <option value="supported">{t("providerGuideUI.searchSupported")}</option>
+                    <option value="unsupported">{t("providerGuideUI.searchUnsupported")}</option>
+                  </select>
+                  <Label htmlFor="editor-search-fallback">{t("providerGuideUI.searchFallback")}</Label>
+                  <select id="editor-search-fallback" className={selectClass} value={String(values.web_search_fallback ?? "reject")} onChange={event => set("web_search_fallback", event.target.value)}>
+                    <option value="reject">{t("providerGuideUI.searchReject")}</option>
+                    <option value="drop_optional">{t("providerGuideUI.searchDrop")}</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t("providerGuideUI.searchDropHelp")}</p>
+                </section>
                 <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
                   <div>
                     <Label htmlFor="editor-enabled">{t("providerGuideUI.enable")}</Label>

@@ -16,6 +16,9 @@ import (
 // 返回 error：缺少传输、端点、供应商不匹配或固定模型不在白名单时返回错误；合法时为 nil。
 // 调用：模型写入校验、DeploymentEndpoints。测试：validate_test.go。
 func ValidateDeployment(m config.ModelEntry) error {
+	if err := ValidateWebSearch(m); err != nil {
+		return err
+	}
 	if err := ValidateCatalogBinding(str(m.ModelInfo["catalog_id"]), m); err != nil {
 		return err
 	}

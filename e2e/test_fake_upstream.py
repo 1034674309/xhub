@@ -10,6 +10,26 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_client_search_fixture(self):
+        """目的：验证发现→加载→执行结果三轮及错误路径；前置本机夹具，断言真实 JSON/SSE 返回，tearDown 关闭服务，无供应商调用。"""
+        search = {"type": "function", "function": {"name": "tool_search", "parameters": {"type": "object"}}}
+        read = {"type": "function", "function": {"name": "fs__read", "parameters": {"type": "object"}}}
+        body = {"model": "e2e-client-tool-search", "messages": [{"role": "user", "content": "Discover the file tool."}], "tools": [search]}
+        first = self.request("/v1/chat/completions", body)
+        self.assertEqual(first["choices"][0]["message"]["tool_calls"][0]["function"]["name"], "tool_search")
+        body["messages"].append({"role": "tool", "tool_call_id": "search_1", "content": "Loaded read"})
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/chat/completions", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        body["tools"].append(read)
+        second = self.request("/v1/chat/completions", body)
+        self.assertEqual(json.loads(second["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]), {"input": "Read the file."})
+        body["messages"].append({"role": "tool", "tool_call_id": "read_1", "content": "file-value"})
+        self.assertEqual(self.request("/v1/chat/completions", body)["choices"][0]["message"]["content"], "e2e-ok")
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            self.assertTrue(response.read().decode().endswith("data: [DONE]\n\n"))
+
     def test_chat_reasoning_fixture(self):
         """目的：Chat 专属密文夹具保留原厂 ID 和终态密文，支持普通历史并拒绝错误身份；前置本地服务，tearDown 清理线程，不访问供应商。"""
         body = {"model": "e2e-agent-chat-reasoning", "input": [{"role": "user", "content": "Read the file."}], "tools": [{"name": "read"}]}

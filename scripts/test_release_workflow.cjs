@@ -223,6 +223,7 @@ test('portable HTTP compatibility is required before publishing', () => {
   const browser = steps.find(item => /bash scripts\/e2e.sh/.test(item.run || ''));
   assert.equal(browser.env.E2E_PORTABLE_CONSOLE, '1');
   assert.match(browser.run, /scenarios\/legacy\/playground-workspace\/sc-109.test.ts/);
+  assert.match(browser.run, /web-search-policy\.test\.ts/);
   const unit = steps.find(item => item.name === 'Console HTTP compatibility unit tests');
   assert.ok(unit);
   assert.match(unit.run, /resolveApiBase.test.ts/);
@@ -235,7 +236,7 @@ test('agent compatibility uses pinned real clients and a governed browser flow',
   const install = verify.findIndex(item => item.name === 'Install agent compatibility clients');
   const backend = verify.findIndex(item => item.name === 'Backend regression');
   assert.ok(install >= 0 && install < backend, '实际 CLI 必须在后台回归之前准备');
-  assert.match(verify[install].run, /@openai\/codex@0\.162\.1/);
+  assert.match(verify[install].run, /@openai\/codex@0\.163\.0/);
   assert.match(verify[install].run, /@anthropic-ai\/claude-code@2\.1\.300/);
   for (const [key, name] of [['XHUB_TEST_CODEX_BIN', 'codex'], ['XHUB_TEST_CLAUDE_BIN', 'claude']]) {
     assert.ok(verify[backend].env[key].endsWith('/node_modules/.bin/' + name), 'CI 不得因未配置二进制跳过实际 ' + name);
