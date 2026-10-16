@@ -93,3 +93,12 @@ describe("上游响应折叠", () => {
     expect(screen.getByRole("button", { name: "Upstream Response", exact: true })).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+/** 前置带降级诊断的日志组件；验证中英文提示和能力插值在折叠时也可见，旧日志无提示；自动卸载，无持久副作用。 */
+it.each(["zh-CN","en"] as const)("%s displays the web search downgrade reason", (locale) => {
+  const {rerender}=render(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry({metadata:{upstream_response:{status_code:200,headers:{},usage_reported:true,dropped_capabilities:["web_search"]}}})} /></I18nProvider>);
+  expect(screen.getByRole("status")).toHaveTextContent("web_search");
+  expect(screen.getByRole("status")).toHaveTextContent(locale==="en"?"This request did not use web search":"本次请求未使用联网搜索");
+  rerender(<I18nProvider initialLocale={locale}><LogDetailContent logEntry={logEntry()} /></I18nProvider>);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});

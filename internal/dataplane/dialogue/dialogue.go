@@ -234,7 +234,7 @@ func BuildDialogue(dep config.ModelEntry, d llmdialogue.Dialogue) (dptransport.U
 	if !ok {
 		return dptransport.Upstream{}, fmt.Errorf("explicit upstream execution profile required")
 	}
-	payload, err := llmdialogue.EncodeDialogue(d, t.Protocol, dep.ParamString("model", ""))
+	payload, dropped, err := providerdeployment.EncodeDialogue(dep, d)
 	if err != nil {
 		return dptransport.Upstream{}, err
 	}
@@ -284,7 +284,7 @@ func BuildDialogue(dep config.ModelEntry, d llmdialogue.Dialogue) (dptransport.U
 			parsed.RawQuery = query.Encode()
 			target = parsed.String()
 		}
-		return dptransport.Upstream{URL: target, Header: header, Body: raw}, nil
+		return dptransport.Upstream{URL: target, Header: header, Body: raw, DroppedCapabilities: dropped}, nil
 	}
 	return dptransport.Upstream{}, fmt.Errorf("create operation is not registered")
 }

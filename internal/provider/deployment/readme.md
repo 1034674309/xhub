@@ -56,3 +56,15 @@ Unit tests live beside source: [bindings_test.go](bindings_test.go), [candidates
 go test ./internal/provider/deployment/...
 
 Backend regressions live in cmd/regression; browser flows in frontend/e2e. Offline tests use local HTTP upstreams and do not establish production credential or vendor availability.
+
+### Optional Responses web search
+
+Deployment metadata `web_search_support` accepts `inherit` (default; preserve native
+Responses behavior), `supported` (requires native Responses transport), or `unsupported`.
+`web_search_fallback` accepts `reject` (default) or explicit `drop_optional`.
+`EncodeDialogue` applies the same policy for candidate selection, preview and execution.
+Only optional Responses `web_search`/`web_search_preview` declarations are removed,
+including Codex `additional_tools`. Required/tool-selected search and other unsupported
+capabilities remain rejected. This does not execute searches or infer support from model names.
+Responses expose `X-XHub-Dropped-Capabilities: web_search`; request diagnostics persist
+`dropped_capabilities`, and the log drawer displays a localized downgrade notice.

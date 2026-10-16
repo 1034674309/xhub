@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ModelInfoView from "./model_info_view";
 import { testConnectionRequest } from "./networking";
-import { setActiveLocale } from "@/i18n";
+import { t, setActiveLocale } from "@/i18n";
 
 const useModelsInfo = vi.fn();
 const modelEditor = vi.fn();
@@ -155,4 +155,16 @@ describe("ModelInfoView reconstructed behavior", () => {
     await user.click(screen.getByRole("button", { name: "Test Connection" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Connection test failed");
   });
+});
+
+/** 前置真实详情工具栏和中英文环境；验证编辑、返回、复制和删除动作均本地化；自动卸载，无后台写入。 */
+it.each(["zh-CN","en"] as const)("%s localizes the model settings entry actions", (locale) => {
+  setActiveLocale(locale);
+  useModelsInfo.mockReturnValue({data:{data:[requested]},refetch:vi.fn()});
+  render(<ModelInfoView {...props} />, {wrapper});
+  expect(screen.getByRole("button",{name:t("providerGuideUI.editModel"),exact:true})).toBeVisible();
+  expect(screen.getByRole("button",{name:t("providerGuideUI.backModels"),exact:true})).toBeVisible();
+  expect(screen.getByRole("button",{name:t("providerGuideUI.copyModelId"),exact:true})).toBeVisible();
+  expect(screen.getByRole("button",{name:t("Delete"),exact:true})).toBeVisible();
+  setActiveLocale("zh-CN");
 });

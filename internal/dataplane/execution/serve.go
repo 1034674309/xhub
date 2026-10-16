@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
@@ -340,6 +341,12 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						return
 					}
 				}
+				// 每次尝试重新设置，回退到原生搜索部署时不能遗留旧降级提示。
+				w.Header().Del("X-XHub-Dropped-Capabilities")
+				if len(built.DroppedCapabilities) > 0 {
+					w.Header().Set("X-XHub-Dropped-Capabilities", strings.Join(built.DroppedCapabilities, ","))
+					util.Info("process step=capability_dropped call_id=%q deployment_id=%q capability=web_search reason=deployment_unsupported", callID, router.DeploymentID(rawDep))
+				}
 				triedHTTP = true
 				util.Trace("process path=%s step=attempt n=%d provider=%s model=%s base_host=%s", r.URL.Path, try+1, supplier, realModel, dpdiagnostics.BaseHost(apiBase))
 				h.IncBusy(did)
@@ -365,7 +372,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				resp, err := client.Do(req)
 				if err != nil {
 					// 即使未收到响应，也保存本次尝试的实际出站路径，便于失败日志定位。
-					h.AnnotateCall(callID, dpcontract.CallNote{Upstream: &dpdiagnostics.UpstreamDiagnostics{Endpoint: req.URL.EscapedPath()}})
+					h.AnnotateCall(callID, dpcontract.CallNote{Upstream: &dpdiagnostics.UpstreamDiagnostics{Endpoint: req.URL.EscapedPath(), DroppedCapabilities: built.DroppedCapabilities}})
 					cancelAttempt()
 					h.DecBusy(did)
 					lastErr = err
@@ -376,6 +383,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				// 先观察原始响应，再执行错误重试和协议转换。
 				resp.Request = req
 				diagnostic := dpdiagnostics.ObserveUpstream(resp)
+				diagnostic.DroppedCapabilities = built.DroppedCapabilities
 				if !firstByte.IsZero() {
 					diagnostic.FirstByteAt = *firstByte
 				}

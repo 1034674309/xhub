@@ -18,6 +18,8 @@ import (
 type UpstreamDiagnostics struct {
 	// 实际出站路径，不含用户信息和查询参数，用于安全关联部署端点。
 	Endpoint string `json:"endpoint"`
+	// 当前出站尝试根据部署策略移除的能力；持久化原因固定为部署不支持该能力。
+	DroppedCapabilities []string `json:"dropped_capabilities,omitempty"`
 	// 首次 HTTP 响应字节的时刻；零值表示未测得，与首 SSE data 的时间不同。
 	FirstByteAt time.Time `json:"-"`
 	// 上游原始 HTTP 状态，协议转换或网关错误映射前保留。

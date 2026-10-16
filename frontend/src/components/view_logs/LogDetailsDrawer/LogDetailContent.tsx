@@ -128,6 +128,9 @@ export function LogDetailContent({ logEntry, isLoadingDetails = false, accessTok
               </CollapsibleTrigger>
               <CopyButton getText={() => JSON.stringify(metadata.upstream_response, null, 2)} label={t("Copy upstream response")} />
             </div>
+            {Array.isArray(metadata.upstream_response.dropped_capabilities) && metadata.upstream_response.dropped_capabilities.length > 0 && (
+              <p role="status" className="mt-2 text-sm text-muted-foreground">{t("providerGuideUI.searchDropped", { capabilities: metadata.upstream_response.dropped_capabilities.join(", ") })}</p>
+            )}
             <CollapsibleContent className="pt-3">
               <p>{t("HTTP Status")}: {metadata.upstream_response.status_code}</p>
               {metadata.upstream_response.usage_parse_error && <p role="alert">{metadata.upstream_response.usage_parse_error}</p>}

@@ -56,3 +56,13 @@ func main() {
 go test ./internal/provider/deployment/...
 
 真实后台回归在 cmd/regression，浏览器流程在 frontend/e2e。离线测试使用本地 HTTP 上游，不证明生产凭据或外部厂商服务可用性。
+
+### Responses 可选联网搜索
+
+部署元数据 `web_search_support` 支持 `inherit`（默认，保留原生 Responses 行为）、
+`supported`（仅原生 Responses 上游）和 `unsupported`；`web_search_fallback` 支持
+`reject`（默认）与显式 `drop_optional`。`EncodeDialogue` 在候选、预览及执行阶段复用同一策略。
+仅移除可选的 Responses `web_search`/`web_search_preview` 声明，兼容 Codex `additional_tools`。
+强制搜索和其他不支持的能力仍会拒绝；不执行外部搜索，也不根据模型名称推断能力。
+响应头 `X-XHub-Dropped-Capabilities: web_search`、持久化诊断 `dropped_capabilities`
+和日志详情中的双语提示记录降级。关闭搜索不等于获得联网能力。

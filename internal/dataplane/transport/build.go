@@ -16,4 +16,6 @@ type Upstream struct {
 	Header http.Header
 	// 编码后的出站正文，与入站或护栏前的原始正文分别保存。
 	Body []byte
+	// 管理员允许的能力降级，执行器写入响应头与请求诊断，不参与鉴权。
+	DroppedCapabilities []string
 }

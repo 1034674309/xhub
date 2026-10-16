@@ -93,3 +93,13 @@ Messages field validation, native Turn encoding and caller/model/endpoint/sessio
 connection ownership. It neither decrypts ciphertext nor forwards this extension
 to unrelated native Chat/Anthropic deployments. Clients dropping the extension
 retain ordinary Chat behavior without a persisted-reasoning guarantee.
+
+Optional web search downgrade reference (MIT): LiteLLM `35970c3`,
+`responses/litellm_completion_transformation/transformation.py`,
+`_responses_tool_to_chat_form` and `_should_drop_derived_web_search_options`.
+XHub reuses the provider-capability decision pattern, not the Python runtime.
+Unlike the reference's implicit drop, XHub defaults to rejection, requires an explicit
+per-deployment `drop_optional` policy, rejects required search and exposes the downgrade
+in response headers and persisted diagnostics. Native Responses search remains unchanged
+unless the deployment explicitly declares it unsupported. External search execution is
+not implemented by this change.

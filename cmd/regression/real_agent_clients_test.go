@@ -24,15 +24,22 @@ import (
 // CLI 收到流终态即可退出，账单可能随后提交；有界等待真实账单完成，不把异步落库时序误判为丢账。
 // Claude→Responses 首轮返回密文，续轮须原样携带并复用客户端原生会话，测试不注入 X-Session-Id。
 // XHUB_AGENT_LIVE=1 并提供 LIVE_KEY/BASE 时显式改用真实上游，会产生费用；默认不访问外部服务。
-// CLI 禁用用户配置/外部 MCP/网页搜索/持久会话，隔离桌面工具环境；两种 OpenAI 上游均需跑通文件读取。
+// CLI 禁用用户配置/外部 MCP/持久会话；普通用例关闭网页搜索，专项用例显式开启 Codex 托管搜索声明并验证显式降级。
 // 仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理；不认证服务端检索工具。
 func TestRealAgentClients(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("real CLI fixture process-group cleanup is validated on POSIX only")
 	}
-	for _, variant := range []struct{ client, transport string }{{"codex", "responses"}, {"codex", "chat"}, {"claude", "responses"}, {"claude", "chat"}} {
+	for _, variant := range []struct {
+		client, transport string
+		search            bool
+	}{{"codex", "responses", false}, {"codex", "chat", false}, {"claude", "responses", false}, {"claude", "chat", false}, {"codex", "chat", true}} {
 		client, transport := variant.client, variant.transport
-		t.Run(client+"/"+transport, func(t *testing.T) {
+		name := client + "/" + transport
+		if variant.search {
+			name += "-optional-search"
+		}
+		t.Run(name, func(t *testing.T) {
 			variable := "XHUB_TEST_CODEX_BIN"
 			if client == "claude" {
 				variable = "XHUB_TEST_CLAUDE_BIN"
@@ -55,6 +62,7 @@ func TestRealAgentClients(t *testing.T) {
 			var mu sync.Mutex
 			requests := 0
 			toolReturned := false
+			sawSearch := false
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var body map[string]any
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -147,7 +155,7 @@ func TestRealAgentClients(t *testing.T) {
 						tool, _ = tool["function"].(map[string]any)
 					}
 					name, _ := tool["name"].(string)
-					if client == "codex" && transport == "chat" && name == "functions__exec" {
+					if client == "codex" && transport == "chat" && (name == "functions__exec" || name == "exec") {
 						toolName = name
 						args, _ := json.Marshal(map[string]any{"cmd": "cat " + file, "workdir": directory, "max_output_tokens": 1000})
 						wrapped, _ := json.Marshal(map[string]any{"content": "text(await tools.exec_command(" + string(args) + "));"})
@@ -233,14 +241,28 @@ func TestRealAgentClients(t *testing.T) {
 			dep.ModelInfo["transport"] = "bypass_openai_" + transport
 			dep.ModelInfo["endpoint_types"] = []string{"chat", "responses", "messages"}
 			dep.ModelInfo["id"] = "real-cli-deployment"
+			if variant.search {
+				dep.ModelInfo["web_search_support"] = "unsupported"
+				dep.ModelInfo["web_search_fallback"] = "drop_optional"
+			}
 			h := newHarness(t, dep)
 			baseHandler := h.server.Config.Handler
 			h.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/v1/messages" {
+				if r.URL.Path == "/v1/messages" || (variant.search && r.URL.Path == "/v1/responses") {
 					raw, _ := io.ReadAll(r.Body)
 					r.Body = io.NopCloser(bytes.NewReader(raw))
 					var body map[string]any
 					_ = json.Unmarshal(raw, &body)
+					if variant.search {
+						// 记录真实 CLI 自带的搜索声明，避免测试在客户端没有发送搜索时误报降级成功。
+						if report := os.Getenv("XHUB_AGENT_REPORT_DIR"); report != "" {
+							_ = os.MkdirAll(report, 0700)
+							_ = os.WriteFile(filepath.Join(report, "codex-search-request.json"), mustJSON(body), 0600)
+						}
+						mu.Lock()
+						sawSearch = sawSearch || strings.Contains(string(mustJSON(body)), `"type":"web_search"`) || strings.Contains(string(mustJSON(body)), `"type":"web_search_preview"`)
+						mu.Unlock()
+					}
 					t.Logf("Claude 桥接能力参数 context_management=%s thinking=%s output_config=%s", mustJSON(body["context_management"]), mustJSON(body["thinking"]), mustJSON(body["output_config"]))
 				}
 				baseHandler.ServeHTTP(w, r)
@@ -258,6 +280,47 @@ func TestRealAgentClients(t *testing.T) {
 					sandbox = "read-only"
 				}
 				args = []string{"exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "-C", directory, "-s", sandbox, "--json", "-m", dep.ModelName, "-c", `model_provider="xhub"`, "-c", fmt.Sprintf(`model_providers.xhub={name="XHub",base_url="%s/v1",env_key="XHUB_AGENT_TEST_KEY",wire_api="responses",requires_openai_auth=false,supports_websockets=false}`, h.server.URL), "-c", `model_reasoning_effort="medium"`, "-c", `web_search="disabled"`, "-c", `apps._default.enabled=false`, "-c", `features.plugins=false`, "-c", `features.remote_plugin=false`, "-c", `analytics.enabled=false`, prompt}
+				if variant.search {
+					// 自定义供应商可能过滤内置目录，令未知模型失去搜索能力；用二进制自带目录建立隔离测试配置。
+					// 只改临时目录中的能力声明，不修改用户配置，也不通过伪造 HTTP 请求补搜索工具。
+					catalogCommand := exec.CommandContext(ctx, binary, "debug", "models", "--bundled")
+					catalogRaw, catalogErr := catalogCommand.Output()
+					if catalogErr != nil {
+						t.Fatalf("读取 Codex 内置模型目录失败: %v", catalogErr)
+					}
+					var catalog map[string]any
+					if err := json.Unmarshal(catalogRaw, &catalog); err != nil {
+						t.Fatal(err)
+					}
+					entries, _ := catalog["models"].([]any)
+					var entry map[string]any
+					for _, value := range entries {
+						candidate, _ := value.(map[string]any)
+						if candidate["slug"] == dep.ModelName {
+							entry = candidate
+							break
+						}
+					}
+					if entry == nil {
+						t.Fatal("Codex 内置目录没有测试模型")
+					}
+					entry["supports_search_tool"] = true
+					entry["use_responses_lite"] = false
+					catalog["models"] = []any{entry}
+					catalogFile := filepath.Join(directory, "codex-search-models.json")
+					if err := os.WriteFile(catalogFile, mustJSON(catalog), 0600); err != nil {
+						t.Fatal(err)
+					}
+					args = append([]string{"exec", "-c", `features.enable_request_compression=false`, "-c", fmt.Sprintf("model_catalog_json=%q", catalogFile)}, args[1:]...)
+
+					// 显式开启 live，验证真实客户端确实发出搜索声明；网关只降级，不执行外部搜索。
+					for i := 0; i+1 < len(args); i++ {
+						if args[i] == "-c" && args[i+1] == `web_search="disabled"` {
+							args[i+1] = `web_search="live"`
+							break
+						}
+					}
+				}
 				env = []string{"XHUB_AGENT_TEST_KEY=" + owner.key}
 			} else {
 				args = []string{"--bare", "--print", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--tools", "Read", "--allowedTools", "Read", "--max-turns", "3", "--output-format", "json", "--model", dep.ModelName, "--effort", "low", prompt}
@@ -282,7 +345,7 @@ func TestRealAgentClients(t *testing.T) {
 				if err := os.MkdirAll(report, 0700); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(report, client+"-"+transport+".jsonl"), []byte(safe), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(report, strings.ReplaceAll(name, "/", "-")+".jsonl"), []byte(safe), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -290,8 +353,11 @@ func TestRealAgentClients(t *testing.T) {
 				t.Fatalf("实际 %s CLI 失败: %v\n%s", client, err, safe)
 			}
 			mu.Lock()
-			count, returned := requests, toolReturned
+			count, returned, searched := requests, toolReturned, sawSearch
 			mu.Unlock()
+			if variant.search && !searched {
+				t.Fatal("Codex 没有发送开启后的 web_search 声明，未覆盖用户故障")
+			}
 			if count < 2 || !returned || (!strings.Contains(safe, "AGENT_OK") || !strings.Contains(safe, sentinel)) {
 				t.Fatalf("%s 没有完成真实工具往返: requests=%d returned=%v\n%s", client, count, returned, safe)
 			}
@@ -306,6 +372,16 @@ func TestRealAgentClients(t *testing.T) {
 			}
 			if len(rows) != count {
 				t.Fatalf("%s CLI 调用数与成功账单不符: calls=%d rows=%d", client, count, len(rows))
+			}
+			if variant.search {
+				for _, row := range rows {
+					detail := logDetail(t, h, admin, stringField(row, "request_id"))
+					meta := detail["metadata"].(map[string]any)
+					diagnostic, _ := meta["upstream_response"].(map[string]any)
+					if string(mustJSON(diagnostic["dropped_capabilities"])) != `["web_search"]` {
+						t.Fatalf("真实 Codex 降级未记录: %v", diagnostic)
+					}
+				}
 			}
 			t.Logf("实际 %s CLI：%d 次网关请求、一次文件工具往返、%d 条账单", client, count, len(rows))
 		})

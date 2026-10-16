@@ -134,6 +134,13 @@ func (d routeDiagnosis) Failure(alias string) (int, string, string) {
 		return 400, "invalid_request", "model not found: " + alias
 	}
 	if d.compatible == 0 {
+		searchOnly := len(d.decisions) > 0
+		for _, decision := range d.decisions {
+			searchOnly = searchOnly && decision.SearchUnsupported
+		}
+		if searchOnly {
+			return 400, "unsupported_capability", llmdialogue.ErrWebSearchUnsupported.Error()
+		}
 		return 400, "model_unavailable", fmt.Sprintf("model %s exists but has no deployment compatible with endpoint %s and this request; check model transport, endpoint configuration and request capabilities", alias, d.endpoint)
 	}
 	if d.zeroWeight == d.compatible {

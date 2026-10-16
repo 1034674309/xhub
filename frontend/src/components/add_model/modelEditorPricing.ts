@@ -179,6 +179,8 @@ export function editorDefaults(model?: EditorModel): Record<string, unknown> {
     transport: info.transport ?? "",
     endpoint_types: info.endpoint_types ?? [],
     disabled: info.disabled === true,
+    web_search_support: info.web_search_support ?? "inherit",
+    web_search_fallback: info.web_search_fallback ?? "reject",
     pricing_source: info.pricing_source ?? (hasPrice(params) ? "manual" : "catalog"),
     pricing_model: info.base_model ?? params.model ?? "",
     billing_mode: billingModeOf(params),
@@ -201,8 +203,15 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
     transport: values.transport,
     endpoint_types: values.endpoint_types,
     disabled: values.disabled === true,
+    web_search_support: values.web_search_support ?? "inherit",
+    web_search_fallback: values.web_search_fallback ?? "reject",
     pricing_source: values.pricing_source,
   };
+  if (!["inherit", "supported", "unsupported"].includes(String(info.web_search_support)) ||
+      !["reject", "drop_optional"].includes(String(info.web_search_fallback)))
+    throw new Error(t("providerGuideUI.invalidSearchPolicy"));
+  if (info.web_search_support === "supported" && values.transport !== "bypass_openai_responses")
+    throw new Error(t("providerGuideUI.searchRequiresResponses"));
   const name = String(values.model_name ?? "").trim();
   if (!name || !params.model || !params.custom_llm_provider || !values.supplier)
     throw new Error(t("providerGuideUI.requiredModel"));

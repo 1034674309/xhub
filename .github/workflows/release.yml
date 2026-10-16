@@ -55,7 +55,7 @@ jobs:
       # 固定真实 CLI 版本，离线协议夹具验证文件工具往返；不使用生产供应商凭据。
       - name: Install agent compatibility clients
         run: |
-          npm install --prefix .e2e/agent-clients --no-audit --no-fund @openai/codex@0.162.1 @anthropic-ai/claude-code@2.1.300
+          npm install --prefix .e2e/agent-clients --no-audit --no-fund @openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.300
           .e2e/agent-clients/node_modules/.bin/codex --version
           .e2e/agent-clients/node_modules/.bin/claude --version
       # 完整回归日志落盘，失败只展示最后 16 KiB，避免 Actions 截断步骤日志。
@@ -84,7 +84,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       # 真实登录、密钥轮换、推理及旧库升级后的日志/用量/监控；使用专属 Redis 和本地上游，运行器清理资源。
-      - run: bash scripts/e2e.sh scenarios/legacy/login/sc-056.test.ts scenarios/keys/rotation-secret.test.ts scenarios/legacy/playground-workspace/sc-109.test.ts scenarios/regression/usage-upgrade-en.test.ts scenarios/regression/usage-upgrade-zh-CN.test.ts agent-native-protocol.test.ts messages-reasoning.test.ts agent-chat-bridge.test.ts chat-encrypted-reasoning.test.ts agent-proxy-timeout.test.ts
+      - run: bash scripts/e2e.sh scenarios/legacy/login/sc-056.test.ts scenarios/keys/rotation-secret.test.ts scenarios/legacy/playground-workspace/sc-109.test.ts scenarios/regression/usage-upgrade-en.test.ts scenarios/regression/usage-upgrade-zh-CN.test.ts agent-native-protocol.test.ts messages-reasoning.test.ts agent-chat-bridge.test.ts chat-encrypted-reasoning.test.ts agent-proxy-timeout.test.ts web-search-policy.test.ts
         env:
           E2E_RUN_DIR: ${{ github.workspace }}/.e2e/release
           E2E_PORTABLE_CONSOLE: '1'
