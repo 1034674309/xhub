@@ -7,7 +7,7 @@ import (
 )
 
 // TestResponsesMessagesEncryptedRoundTrip 验证有/无公开摘要的密文推理经 Messages 工具续轮完整回到 Responses。
-// 参数 t 为测试上下文；前置内存上游结果，断言密文不进入正文、无伪造 ID、Chat/原厂 Messages 候选拒绝；无外部资源需清理。
+// 参数 t 为测试上下文；前置内存上游结果，断言密文不进入正文、无伪造 ID、Chat 输出扩展保留但 Messages 封装不得转投其他上游；无外部资源需清理。
 func TestResponsesMessagesEncryptedRoundTrip(t *testing.T) {
 	for _, summary := range []bool{false, true} {
 		name := "redacted"
@@ -67,8 +67,8 @@ func TestResponsesMessagesEncryptedRoundTrip(t *testing.T) {
 					t.Fatalf("Responses 密文被发送到 %s", target)
 				}
 			}
-			if _, err := EncodeDialogueResult(result, "openai-chat", "other"); err == nil {
-				t.Fatal("Chat 回复不能承载 Responses 密文")
+			if encoded, err := EncodeDialogueResult(result, "openai-chat", "other"); err != nil || !strings.Contains(string(encoded), `"reasoning_items"`) {
+				t.Fatalf("Chat 回复未保留 Responses 推理扩展: %v %s", err, encoded)
 			}
 		})
 	}

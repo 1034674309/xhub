@@ -419,12 +419,12 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					if dpdialogue.CallerProtocol(op) != "" && resp.StatusCode < 400 {
 						execution, _ := providerdeployment.Execution(dep)
 						// 终态发送前提交归属与历史，使收到完成事件的客户端能立即续接。
-						// commit 参数 result 为验证后的回复，无返回值；Responses 历史和 Messages 密文归属均须先于终态可见。
+						// commit 参数 result 为验证后的回复，无返回值；Responses 历史及 Chat/Messages 推理归属均须先于终态可见。
 						commit := func(result llmdialogue.DialogueResult) {
 							if op == "responses" {
 								plan.History = dpdialogue.ResponseHistory(dialogue, body, result)
 							}
-							if op == "responses" || op == "messages" {
+							if op == "responses" || op == "messages" || op == "chat" {
 								h.CommitRoute(plan, router.DeploymentID(rawDep), result.ID)
 							}
 						}

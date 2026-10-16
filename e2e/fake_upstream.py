@@ -296,17 +296,24 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
-        if model in ("e2e-agent-messages", "e2e-agent-messages-encrypted", "e2e-agent-messages-redacted", "e2e-agent-chat-tools") and ("responses" in path or "chat/completions" in path):
-            # Messages 推理桥接夹具：校验工具续轮还原独立推理及调用 ID，而不是把推理当普通答案。
+        if model in ("e2e-agent-messages", "e2e-agent-messages-encrypted", "e2e-agent-messages-redacted", "e2e-agent-chat-tools", "e2e-agent-chat-reasoning") and ("responses" in path or "chat/completions" in path):
+            # Chat/Messages 推理桥接夹具：校验工具续轮还原独立推理及调用 ID，而不是把推理当普通答案。
             is_responses = "responses" in path
             items = req.get("input" if is_responses else "messages", [])
             second = isinstance(items, list) and any(i.get("type") == "function_call_output" or i.get("role") == "tool" for i in items)
-            encrypted = model in ("e2e-agent-messages-encrypted", "e2e-agent-messages-redacted")
+            chat_reasoning = model == "e2e-agent-chat-reasoning"
+            encrypted = model in ("e2e-agent-messages-encrypted", "e2e-agent-messages-redacted", "e2e-agent-chat-reasoning")
             redacted = model == "e2e-agent-messages-redacted"
             if second and ((not redacted and "Plan" not in json.dumps(items)) or "call_1" not in json.dumps(items)):
                 self.send_error(400, "public reasoning or tool identity lost")
                 return
-            if second and encrypted and not any(i.get("type") == "reasoning" and i.get("encrypted_content") == "fixture-encrypted" and "id" not in i for i in items):
+            if second and chat_reasoning:
+                # Chat 扩展保留原厂 ID；客户端忽略扩展时允许普通文本/工具历史，有密文则必须原样还原。
+                opaque_items = [i for i in items if i.get("encrypted_content")]
+                if any(i.get("type") != "reasoning" or i.get("id") != "rs_public" or i.get("encrypted_content") not in ("fixture-encrypted", "fixture-encrypted-terminal") for i in opaque_items):
+                    self.send_error(400, "Chat reasoning identity or ciphertext changed")
+                    return
+            if second and encrypted and not chat_reasoning and not any(i.get("type") == "reasoning" and i.get("encrypted_content") == "fixture-encrypted" and "id" not in i for i in items):
                 # 只接受客户端原样回传的封装还原结果；夹具不替网关补齐密文或伪造 ID。
                 self.send_error(400, "encrypted reasoning replay lost")
                 return

@@ -10,6 +10,21 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_chat_reasoning_fixture(self):
+        """目的：Chat 专属密文夹具保留原厂 ID 和终态密文，支持普通历史并拒绝错误身份；前置本地服务，tearDown 清理线程，不访问供应商。"""
+        body = {"model": "e2e-agent-chat-reasoning", "input": [{"role": "user", "content": "Read the file."}], "tools": [{"name": "read"}]}
+        first = self.request("/v1/responses", body)
+        reasoning = first["output"][0]
+        self.assertEqual(reasoning["id"], "rs_public")
+        history = [*body["input"], reasoning, first["output"][1], {"type": "function_call_output", "call_id": "call_1", "output": "file-value"}]
+        self.assertEqual(self.request("/v1/responses", {**body, "input": history})["output"][1]["content"][0]["text"], "e2e-ok")
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {**body, "input": [*history[:1], {**reasoning, "id": "wrong-id"}, *history[2:]]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        plain = {"type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan"}]}
+        self.assertEqual(self.request("/v1/responses", {**body, "input": [*history[:1], plain, *history[2:]]})["output"][1]["content"][0]["text"], "e2e-ok")
+
     def test_slow_agent_proxy_fixture(self):
         """目的：仅专属模型触发超时边界等待并返回正常用量；前置本地服务，单元层替换等待避免耗时，浏览器层实际等待31秒，tearDown关闭服务。"""
         with patch("e2e.fake_upstream.time.sleep") as wait:
