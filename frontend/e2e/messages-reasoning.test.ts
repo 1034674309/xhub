@@ -13,6 +13,7 @@ function messagesContent(raw: string, stream: boolean): Record<string, unknown>[
       const block = blocks[event.index];
       const delta = event.delta;
       if (delta.type === "thinking_delta") block.thinking = String(block.thinking || "") + delta.thinking;
+      if (delta.type === "signature_delta") block.signature = String(block.signature || "") + delta.signature;
       if (delta.type === "text_delta") block.text = String(block.text || "") + delta.text;
       if (delta.type === "input_json_delta") block.input = JSON.parse(delta.partial_json);
     }
@@ -28,9 +29,9 @@ async function requestMessages(page: Page, bearer: string, body: Record<string, 
   }, { bearer, body });
 }
 
-/** 验证控制台选用 Messages、Chat/Responses 上游公开推理的 JSON/SSE 工具续轮以及日志计费。参数来自真实 Playwright fixture，返回无；使用本地上游和专属部署，finally 删除本例创建的模型/凭据，运行器清理数据库。 */
+/** 验证控制台选用 Messages、Chat/Responses 公开及密文推理的 JSON/SSE 工具续轮和日志计费。参数来自真实 Playwright fixture，返回无；本地上游与专属部署，finally 删除模型/凭据，运行器清理数据库，不使用真实供应商 Key。 */
 test("messages bridge preserves public thinking and file tool continuation", async ({ page }) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   await loginAdmin(page);
   const bearer = await sessionBearer(page);
   const headers = { Authorization: "Bearer " + bearer };
@@ -41,13 +42,17 @@ test("messages bridge preserves public thinking and file tool continuation", asy
     credential_values: { api_base: UPSTREAM + "/v1", api_key: "sk-fake" },
   } })).status()).toBe(200);
   try {
-    for (const protocol of ["responses", "chat"]) {
+    for (const protocol of ["responses", "responses-encrypted", "responses-redacted", "chat"]) {
       const name = "e2e-public-thinking-" + protocol;
+      const encrypted = protocol === "responses-encrypted" || protocol === "responses-redacted";
+      const reasoning = protocol === "responses-redacted"
+        ? { type: "redacted_thinking", data: "xhub_responses_reasoning:fixture-encrypted" }
+        : { type: "thinking", thinking: "Plan", signature: encrypted ? "xhub_responses_reasoning:fixture-encrypted" : "" };
       const created = await page.request.post(GATEWAY + "/model/new", { headers, data: {
         model_name: name,
-        litellm_params: { model: "e2e-agent-messages", custom_llm_provider: "openai", litellm_credential_name: credential,
+        litellm_params: { model: encrypted ? "e2e-agent-messages-" + (protocol === "responses-redacted" ? "redacted" : "encrypted") : "e2e-agent-messages", custom_llm_provider: "openai", litellm_credential_name: credential,
           input_cost_per_token: 0.000001, output_cost_per_token: 0.000002 },
-        model_info: { transport: "bypass_openai_" + protocol, endpoint_types: ["messages"], pricing_source: "manual" },
+        model_info: { transport: "bypass_openai_" + (protocol.startsWith("responses") ? "responses" : protocol), endpoint_types: ["messages"], pricing_source: "manual" },
       } });
       expect(created.status(), await created.text()).toBe(200);
       ids.push((await created.json()).model_info.id);
@@ -69,7 +74,7 @@ test("messages bridge preserves public thinking and file tool continuation", asy
         });
         expect(first.status, first.text).toBe(200);
         const content = messagesContent(first.text, stream);
-        expect(content[0]).toMatchObject({ type: "thinking", thinking: "Plan" });
+        expect(content[0]).toMatchObject(reasoning);
         expect(content[1]).toMatchObject({ type: "tool_use", id: "call_1", name: "read", input: {} });
         const second = await requestMessages(page, bearer, {
           model: name, stream, max_tokens: 256, messages: [{ role: "user", content: "Read the file." },
@@ -77,7 +82,7 @@ test("messages bridge preserves public thinking and file tool continuation", asy
         });
         expect(second.status, second.text).toBe(200);
         expect(messagesContent(second.text, stream)).toEqual([
-          { type: "thinking", thinking: "Plan", signature: "" }, { type: "text", text: "e2e-ok" },
+          reasoning, { type: "text", text: "e2e-ok" },
         ]);
         for (const response of [first, second]) {
           await expect.poll(async () => {

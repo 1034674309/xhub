@@ -32,8 +32,8 @@ Additional public-thinking mapping reference (MIT): official LiteLLM
 `litellm/llms/anthropic/pass_through/adapters/transformation.py` and
 `responses_adapters/{transformation,streaming_iterator}.py`.
 The Go Messages bridge adapts public reasoning ↔ unsigned thinking and ordered
-content blocks. It does not implement that snapshot's encrypted-reasoning envelope
-or claim to manufacture Anthropic signatures. Parallel tool fragments are buffered
+content blocks. The encrypted-reasoning envelope is covered by the newer reference
+below; XHub does not manufacture Anthropic signatures. Parallel tool fragments are buffered
 until JSON validation and emitted serially using XHub's existing stream state.
 
 Additional Codex bridge and usage reference (MIT): official LiteLLM
@@ -50,5 +50,20 @@ are direct copies of LiteLLM. Long tool names use a stable bounded alias and
 tool-name collisions fail explicitly. Custom grammar is a best-effort model
 description on Chat, not a native grammar guarantee. Hosted web search remains
 unsupported on the generic Chat bridge and is disabled in file-tool acceptance.
-No OpenAI ciphertext is decrypted or fabricated and no signed-thinking envelope
-is implemented. Core governance and existing retry rules stay in XHub.
+No OpenAI ciphertext is decrypted or fabricated. Core governance and existing retry rules stay in XHub.
+
+
+Additional Responses → Messages encrypted-reasoning reference (MIT): official
+LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b` (2026-10-16),
+`llms/anthropic/pass_through/responses_adapters/{transformation,streaming_iterator}.py`
+and `litellm_core_utils/prompt_templates/common_utils.py`.
+XHub adapts the opaque round trip: summary plus ciphertext becomes
+`thinking.signature`; ciphertext without a summary becomes `redacted_thinking.data`.
+Its own `xhub_responses_reasoning:` namespace distinguishes these values from
+Anthropic signatures. Replay restores a Responses reasoning item without inventing
+an item ID. Completed SSE items carry the signature before their block closes;
+the terminal response validates duplicate/fallback items. XHub additionally requires
+known caller/model/session/connection ownership before replay and rejects carrying
+this ciphertext into Chat, native Anthropic or another supplier account. This is
+protocol adaptation, not encryption, Anthropic signature generation or general
+cross-vendor reasoning compatibility.

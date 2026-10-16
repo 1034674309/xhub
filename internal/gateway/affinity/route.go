@@ -8,6 +8,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/auth"
 	dpcontract "github.com/sunqirui1987/xhub/internal/dataplane/contract"
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 	providercapability "github.com/sunqirui1987/xhub/internal/provider/capability"
 	providerregistry "github.com/sunqirui1987/xhub/internal/provider/registry"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -297,6 +298,18 @@ func requiresNativeOwnership(body map[string]any) bool {
 		item, _ := value.(map[string]any)
 		if item["encrypted_content"] != nil {
 			return true
+		}
+	}
+	// LiteLLM 式 Messages 封装仍是原 Responses 上游的密文；复用相同的固定连接证明，不能按普通文本回退。
+	messages, _ := body["messages"].([]any)
+	for _, value := range messages {
+		message, _ := value.(map[string]any)
+		blocks, _ := message["content"].([]any)
+		for _, value := range blocks {
+			block, _ := value.(map[string]any)
+			if llmdialogue.IsResponsesReasoningSignature(block["signature"]) || llmdialogue.IsResponsesReasoningSignature(block["data"]) {
+				return true
+			}
 		}
 	}
 	return false

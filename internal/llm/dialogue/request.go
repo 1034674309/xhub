@@ -169,23 +169,28 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 					fields := []string{"type", "text", "id", "name", "input", "tool_use_id", "content", "is_error"}
 					if b["type"] == "thinking" {
 						fields = []string{"type", "thinking", "signature"}
+					} else if b["type"] == "redacted_thinking" {
+						fields = []string{"type", "data"}
 					}
 					if err := dialogueFields(b, fields...); err != nil {
 						return d, err
 					}
 					switch dialogueString(b["type"]) {
-					case "thinking":
-						// LiteLLM 同样把公开 thinking 保留为独立推理；空签名不代表 Anthropic 签名，不能接受任意厂商签名并跨协议重放。
-						text, ok := b["thinking"].(string)
-						if !ok || role != "assistant" {
-							return d, fmt.Errorf("thinking requires assistant text")
+					case "thinking", "redacted_thinking":
+						reasoning, err := messagesReasoningReplay(b, role)
+						if err != nil {
+							return d, err
 						}
-						if value := b["signature"]; value != nil {
-							if signature, ok := value.(string); !ok || signature != "" {
-								return d, fmt.Errorf("signed thinking requires native Messages")
+						if reasoning.Native != nil {
+							// 每份密文独立保留；不能合并两个推理项的密文，也不能把它们重放给 Chat 或原厂 Anthropic。
+							if turn.Text != "" || turn.Reasoning != "" || len(turn.Calls) > 0 {
+								d.Turns = append(d.Turns, turn)
+								turn = Turn{Role: role}
 							}
+							d.Turns = append(d.Turns, reasoning)
+						} else {
+							turn.Reasoning += reasoning.Reasoning
 						}
-						turn.Reasoning += text
 					case "text":
 						turn.Text += dialogueString(b["text"])
 					case "tool_use":
@@ -310,6 +315,12 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 // EncodeDialogue 按显式上游协议编码对话，型号原样传递。参数为内部表示、协议、真实型号；返回正文或能力错误。
 // 调用：统一执行器；工具 ID 和参数不重新生成，Messages 工具结果按相邻角色合并。
 func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) {
+	// 即使候选与客户端同为 Messages，网关封装的 OpenAI 密文也只能送回 Responses；先于原生正文直传检查。
+	for _, turn := range d.Turns {
+		if turn.Native != nil && turn.NativeProtocol != protocol {
+			return nil, fmt.Errorf("opaque history requires %s", turn.NativeProtocol)
+		}
+	}
 	if d.Source != "" {
 		if d.Source == protocol {
 			out, err := cloneObject(d.Native)

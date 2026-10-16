@@ -476,27 +476,16 @@ func ParseDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
 					}
 				}
 				items = append(items, item)
-			default:
-				if item["type"] == "reasoning" && dialogueString(item["id"]) == "" {
+			case "reasoning":
+				if dialogueString(item["id"]) == "" {
 					return DialogueResult{}, fmt.Errorf("reasoning item ID required")
 				}
-				if item["type"] == "reasoning" && item["encrypted_content"] == nil {
-					if value, exists := item["summary"]; exists {
-						if _, ok := value.([]any); !ok {
-							return DialogueResult{}, fmt.Errorf("invalid reasoning summary")
-						}
-					}
-					for _, part := range dialogueList(item["summary"]) {
-						if _, ok := dialogueMap(part)["text"].(string); !ok {
-							return DialogueResult{}, fmt.Errorf("invalid reasoning summary text")
-						}
-						if dialogueMap(part)["type"] != "summary_text" {
-							return DialogueResult{}, fmt.Errorf("invalid reasoning summary")
-						}
-					}
-				} else {
-					bridgeError = "output item " + dialogueString(item["type"])
+				// Responses 的 store=false 现会默认携带密文。校验后交给 Messages 的不透明封装，不能因此丢弃正常答案。
+				if _, err := MessagesReasoningBlock(item); err != nil {
+					return DialogueResult{}, err
 				}
+			default:
+				bridgeError = "output item " + dialogueString(item["type"])
 			}
 		}
 		projection["output"] = items
