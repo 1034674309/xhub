@@ -99,3 +99,5 @@ node --test scripts/test_release_workflow.cjs
 实际供应商测试必须显式设置 `XHUB_AGENT_LIVE=1`、`XHUB_AGENT_LIVE_KEY`、`XHUB_AGENT_LIVE_BASE`（以 `/v1` 结束），模型矩阵还可指定逗号分隔的 `XHUB_AGENT_LIVE_MODELS`（最多 12 个），再运行 `go test ./cmd/regression -run '^Test(LiveTextProtocolMatrix|RealAgentClients)$' -count=1`。真实 CLI 仍需上述二进制路径。此模式会产生供应商费用；CI 不设置这些凭据。不要把密钥放进代码或报告。
 
 参考：[LiteLLM Responses](https://docs.litellm.ai/docs/response_api)、[官方推理指南](https://developers.openai.com/api/docs/guides/reasoning)、[DeepSeek Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude Code 网关](https://code.claude.com/docs/en/llm-gateway)。适配器的固定源码版本见授权目录。
+
+Claude Code 原生会话：Messages 优先使用网关 `X-Session-Id` / `session_id`，随后读取 `X-Claude-Code-Session-Id`，或从 `metadata.user_id` 的 JSON 字符串 / 旧 `user_…_account_…_session_…` 格式中提取会话 ID；两类明确会话的日志来源均记为 `explicit`。这参考 LiteLLM 同一官方快照的会话提取规则，避免工具续轮修改首条用户内容或缓存提示后丢失密文归属。普通用户名、设备和账号标识不会被当作会话；原生头必须为 1–256 字节的 ASCII 字母、数字、连字符或下划线，冲突头拒绝，无法识别的可选 metadata 仍按原规则推断。调用方、模型、入口和原连接校验保持有效。已有密文但没有客户端会话归属的旧对话需重新开始。

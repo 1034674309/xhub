@@ -21,12 +21,14 @@ function messagesContent(raw: string, stream: boolean): Record<string, unknown>[
   return blocks;
 }
 
-/** 通过真实浏览器同源 /gw 发送 Messages；参数为页面、会话和请求体，返回 HTTP 状态、正文及调用 ID。沿用浏览器测试域名解析，不拦截网络；仅产生本例隔离请求日志。 */
-async function requestMessages(page: Page, bearer: string, body: Record<string, unknown>) {
-  return page.evaluate(async ({ bearer, body }) => {
-    const response = await fetch("/gw/v1/messages", { method: "POST", headers: { Authorization: "Bearer " + bearer, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    return { status: response.status, text: await response.text(), callID: response.headers.get("x-litellm-call-id") };
-  }, { bearer, body });
+/** 通过真实浏览器同源 /gw 发送 Messages；参数为页面、认证、正文及可选 Claude 原生会话 ID，返回状态、正文、调用和会话 ID。沿用真实网络，不注入网关 X-Session-Id；仅产生本例隔离日志。 */
+async function requestMessages(page: Page, bearer: string, body: Record<string, unknown>, claudeSession?: string) {
+  return page.evaluate(async ({ bearer, body, claudeSession }) => {
+    const headers: Record<string, string> = { Authorization: "Bearer " + bearer, "Content-Type": "application/json" };
+    if (claudeSession) headers["X-Claude-Code-Session-Id"] = claudeSession;
+    const response = await fetch("/gw/v1/messages", { method: "POST", headers, body: JSON.stringify(body) });
+    return { status: response.status, text: await response.text(), callID: response.headers.get("x-litellm-call-id"), sessionID: response.headers.get("x-session-id") };
+  }, { bearer, body, claudeSession });
 }
 
 /** 验证控制台选用 Messages、Chat/Responses 公开及密文推理的 JSON/SSE 工具续轮和日志计费。参数来自真实 Playwright fixture，返回无；本地上游与专属部署，finally 删除模型/凭据，运行器清理数据库，不使用真实供应商 Key。 */
@@ -68,22 +70,35 @@ test("messages bridge preserves public thinking and file tool continuation", asy
       expect((await pending).status()).toBe(200);
       await expect(page.getByText("e2e-ok", { exact: true }).last()).toBeVisible();
       for (const stream of [false, true]) {
+        const sessionID = `claude-e2e-${protocol}-${stream}`;
+        const nativeHeader = protocol === "responses-encrypted" ? sessionID : undefined;
+        const metadata = { user_id: JSON.stringify({ device_id: "device", session_id: nativeHeader ? "lower-priority-" + sessionID : sessionID }) };
         const first = await requestMessages(page, bearer, {
-          model: name, stream, max_tokens: 256, messages: [{ role: "user", content: "Read the file." }],
+          model: name, stream, max_tokens: 256, metadata, messages: [{ role: "user", content: "Read the file." }],
           tools: [{ name: "read", input_schema: { type: "object", properties: {} } }],
-        });
+        }, nativeHeader);
         expect(first.status, first.text).toBe(200);
+        expect(first.sessionID).toBe(sessionID);
         const content = messagesContent(first.text, stream);
         expect(content[0]).toMatchObject(reasoning);
         expect(content[1]).toMatchObject({ type: "tool_use", id: "call_1", name: "read", input: {} });
         const second = await requestMessages(page, bearer, {
-          model: name, stream, max_tokens: 256, messages: [{ role: "user", content: "Read the file." },
+          model: name, stream, max_tokens: 256, metadata, messages: [{ role: "user", content: [{ type: "text", text: "Read the file.", cache_control: { type: "ephemeral" } }] },
             { role: "assistant", content }, { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: "file-value" }] }],
-        });
+        }, nativeHeader);
         expect(second.status, second.text).toBe(200);
+        expect(second.sessionID).toBe(first.sessionID);
         expect(messagesContent(second.text, stream)).toEqual([
           reasoning, { type: "text", text: "e2e-ok" },
         ]);
+        if (encrypted) {
+          const rejected = await requestMessages(page, bearer, {
+            model: name, stream, max_tokens: 256, metadata,
+            messages: [{ role: "user", content: "Read the file." }, { role: "assistant", content }],
+          }, "unowned-" + sessionID);
+          expect(rejected.status, rejected.text).toBe(400);
+          expect(rejected.text).toContain("owned session");
+        }
         for (const response of [first, second]) {
           await expect.poll(async () => {
             const bill = await page.request.get(GATEWAY + "/spend/logs/ui/" + response.callID, { headers });

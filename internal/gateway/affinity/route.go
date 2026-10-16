@@ -30,7 +30,7 @@ import (
 // 返回值为当前请求私有的 RoutePlan，调用方必须先检查 Err，再使用其余字段：
 //   - SessionID / SessionSource：会话标识及来源，供响应头、日志归组及偏好缓存使用。
 //     有 previous_response_id 时继承父响应会话（明确 ID 必须与其一致）；否则依次使用
-//     明确 ID、prompt_cache_key 指纹、稳定首轮内容指纹，最后生成随机 ID。
+//     网关明确 ID、Claude Code 原生会话、prompt_cache_key 指纹、稳定首轮内容指纹，最后生成随机 ID。
 //   - Target / Pinned / Required：目标快照、稳定部署 ID 和是否必须使用原部署。
 //     普通请求读取的是可重新选择的动态偏好；父响应续接读取的是固定归属，不能把
 //     响应游标交给其他部署，也不能让当前动态偏好覆盖父响应的目标。
@@ -68,6 +68,18 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 	}
 	if explicit != "" {
 		plan.SessionID, plan.SessionSource = explicit, "explicit"
+	}
+	if plan.SessionID == "" && (endpoint == "messages" || endpoint == "bypass:anthropic-messages") {
+		// Claude 工具续轮可能改写首条用户消息的 cache_control 等字段；客户端会话信号不受这些变化影响。
+		// 会话 ID 仍与可信 Caller、公开模型和入口一起隔离，不能代替密文原连接归属证明。
+		id, err := claudeSessionID(r, body)
+		if err != nil {
+			plan.Err = err
+			return plan
+		}
+		if id != "" {
+			plan.SessionID, plan.SessionSource = id, "explicit"
+		}
 	}
 	// 3. previous_response_id 表示续接已存在的响应，优先级高于普通会话推断。
 	// 这里检查“字段是否存在”，所以空值或非字符串会被拒绝，而非当成新请求。

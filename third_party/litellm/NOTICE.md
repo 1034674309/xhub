@@ -69,3 +69,13 @@ known caller/model/session/connection ownership before replay and rejects carryi
 this ciphertext into Chat, native Anthropic or another supplier account. This is
 protocol adaptation, not encryption, Anthropic signature generation or general
 cross-vendor reasoning compatibility.
+
+
+Claude Code session extraction additionally adapts the same official snapshot's
+`proxy/litellm_pre_call_utils.py` (`_get_anthropic_session_id_from_metadata` and
+native session-header handling) and `llms/anthropic/pass_through/utils.py`
+(`prompt_cache_key_from_user_id`). XHub reads only the known Claude header or the
+session component of JSON/legacy `metadata.user_id`; plain user/device/account IDs
+never identify a conversation. Explicit gateway session IDs keep priority. Unlike
+the reference's general header matching, XHub limits this fallback to Messages,
+bounds and validates IDs, and keeps caller/model/endpoint/connection ownership.

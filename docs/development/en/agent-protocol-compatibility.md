@@ -99,3 +99,14 @@ node --test scripts/test_release_workflow.cjs
 PostgreSQL and a local `redis-server` executable are prerequisites. Tests create and clean private schemas. Explicit live mode requires `XHUB_AGENT_LIVE=1`, `XHUB_AGENT_LIVE_KEY`, `XHUB_AGENT_LIVE_BASE` (ending in `/v1`) and optional comma-separated `XHUB_AGENT_LIVE_MODELS` (maximum 12), then `go test ./cmd/regression -run '^Test(LiveTextProtocolMatrix|RealAgentClients)$' -count=1`. Real clients also need their binary paths. This spends supplier credits; CI provides no live credentials. Keep secrets out of code and reports.
 
 References: [LiteLLM Responses](https://docs.litellm.ai/docs/response_api), [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning), [DeepSeek thinking](https://api-docs.deepseek.com/guides/thinking_mode/), [Claude Code gateway](https://code.claude.com/docs/en/llm-gateway). Pinned source references are in the attribution directory.
+
+Claude Code sessions: Messages prefers gateway `X-Session-Id` / `session_id`, then
+`X-Claude-Code-Session-Id`, or the session component of JSON-string / legacy
+`user_…_account_…_session_…` values in `metadata.user_id`. Both explicit sources
+retain the `explicit` log classification. This follows the same official LiteLLM
+snapshot's session extraction and survives first-user/cache-hint changes during
+tool turns. Plain user, device and account IDs never identify a conversation.
+Native headers require 1–256 ASCII letters, digits, hyphens or underscores;
+conflicting headers fail, while unrecognized optional metadata uses the existing
+inference fallback. Caller/model/endpoint/connection checks still apply. Existing
+ciphertext conversations without native session ownership need a fresh session.

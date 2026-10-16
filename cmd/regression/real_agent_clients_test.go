@@ -22,6 +22,7 @@ import (
 // 参数 t 为回归上下文；显式 XHUB_TEST_CODEX_BIN/XHUB_TEST_CLAUDE_BIN 才运行，未安装时明确跳过。
 // 私有数据库和本地协议夹具隔离供应商波动；验证真实 CLI 请求/工具结果、日志及费用，不代表真实模型质量或上游兼容认证。
 // CLI 收到流终态即可退出，账单可能随后提交；有界等待真实账单完成，不把异步落库时序误判为丢账。
+// Claude→Responses 首轮返回密文，续轮须原样携带并复用客户端原生会话，测试不注入 X-Session-Id。
 // XHUB_AGENT_LIVE=1 并提供 LIVE_KEY/BASE 时显式改用真实上游，会产生费用；默认不访问外部服务。
 // CLI 禁用用户配置/外部 MCP/网页搜索/持久会话，隔离桌面工具环境；两种 OpenAI 上游均需跑通文件读取。
 // 仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理；不认证服务端检索工具。
@@ -81,6 +82,9 @@ func TestRealAgentClients(t *testing.T) {
 				done := (strings.Contains(string(raw), "function_call_output") || strings.Contains(string(raw), "custom_tool_call_output") || strings.Contains(string(raw), `"role":"tool"`)) && strings.Contains(string(raw), sentinel)
 				if done {
 					toolReturned = true
+					if client == "claude" && transport == "responses" && !strings.Contains(string(raw), `"encrypted_content":"test-cipher"`) {
+						t.Error("实际 Claude Code 续轮丢失推理密文")
+					}
 				}
 				if live {
 					encoded, _ := json.Marshal(body)
@@ -215,7 +219,12 @@ func TestRealAgentClients(t *testing.T) {
 				if transport == "chat" {
 					writeChatAgentResponse(w, fmt.Sprintf("chat_cli_%d", requests), "", toolName, argument, body["stream"] == true)
 				} else {
-					writeAgentResponse(w, publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", call), body["stream"] == true)
+					response := publicAgentResponse(fmt.Sprintf("resp_cli_%d", requests), "", call)
+					if client == "claude" {
+						// 密文首轮复现 codex-auto-review 的真实行为，要求 CLI 自带会话信号足以续轮。
+						response["output"].([]any)[0].(map[string]any)["encrypted_content"] = "test-cipher"
+					}
+					writeAgentResponse(w, response, body["stream"] == true)
 				}
 			}))
 			t.Cleanup(upstream.Close)
@@ -223,6 +232,7 @@ func TestRealAgentClients(t *testing.T) {
 			dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
 			dep.ModelInfo["transport"] = "bypass_openai_" + transport
 			dep.ModelInfo["endpoint_types"] = []string{"chat", "responses", "messages"}
+			dep.ModelInfo["id"] = "real-cli-deployment"
 			h := newHarness(t, dep)
 			baseHandler := h.server.Config.Handler
 			h.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
