@@ -29,6 +29,8 @@ type dialogueStream struct {
 	reasoning        string
 	reasoningStarted bool
 	reasoningBlock   int
+	// Chat 的 reasoning_items 只在 Responses 终态校验后发布，避免泄漏半截密文或伪造成功。
+	chatReasoningItems []any
 	// Responses -> Messages 的签名仅在推理项完成时可靠；在此之前保留正文顺序，其他协议不使用这些状态。
 	responsesMessages        bool
 	responsePrelude          bool
@@ -363,7 +365,8 @@ func (s *dialogueStream) finish() error {
 			r.Calls = append(r.Calls, *c)
 		}
 	}
-	if len(r.Calls) > 0 {
+	// 达到输出上限的工具回复仍是截断，不能被工具存在这一事实覆盖成可执行的正常结束。
+	if len(r.Calls) > 0 && r.Stop != "length" {
 		r.Stop = "tool_calls"
 	}
 	switch s.protocol {
@@ -380,7 +383,15 @@ func (s *dialogueStream) finish() error {
 		}
 		return s.emit("", out)
 	case "openai-chat":
-		if err := s.chat(map[string]any{}, r.Stop); err != nil {
+		delta := map[string]any{}
+		if len(s.chatReasoningItems) > 0 {
+			delta["reasoning_items"] = s.chatReasoningItems
+		}
+		if s.beforeComplete != nil {
+			// Chat 客户端收到工具终态即可回传扩展；先发布原连接归属，避免紧接的工具续轮出现竞态。
+			s.beforeComplete(r)
+		}
+		if err := s.chat(delta, r.Stop); err != nil {
 			return err
 		}
 		if err := s.emit("", map[string]any{"id": s.id, "object": "chat.completion.chunk", "model": s.model, "choices": []any{}, "usage": s.usage}); err != nil {
@@ -660,6 +671,12 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				}
 				if _, err = llmdialogue.EncodeDialogueResult(result, s.protocol, s.model); err != nil {
 					return err
+				}
+				if s.protocol == "openai-chat" {
+					s.chatReasoningItems, err = llmdialogue.ChatReasoningItems(result)
+					if err != nil {
+						return err
+					}
 				}
 				if s.responsesMessages {
 					// 终态复核已经发出的推理项，同时兼容只在 completed/incomplete 才给完整项的提供商。

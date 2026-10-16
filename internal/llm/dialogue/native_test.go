@@ -105,7 +105,7 @@ func TestDeepSeekReasoningRoundTrip(t *testing.T) {
 	}
 }
 
-// TestNativeResponseReasoning 验证 Responses 的密文、摘要及供应商用量完整输出，加密项禁止跨协议。
+// TestNativeResponseReasoning 验证 Responses 原生输出及 Chat 扩展保留密文、摘要及供应商用量，其他不兼容输出拒绝。
 // 参数 t 为上下文，前置有效原生响应；模型只改公开别名，错误终态和损坏 JSON 失败，无需清理。
 func TestNativeResponseReasoning(t *testing.T) {
 	raw := []byte(`{"id":"resp_native","object":"response","status":"completed","model":"real","output":[{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Plan"}],"encrypted_content":"cipher"},{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"Done","annotations":[]}]}],"usage":{"input_tokens":8,"output_tokens":2,"output_tokens_details":{"reasoning_tokens":1},"vendor_counter":42}}`)
@@ -120,8 +120,11 @@ func TestNativeResponseReasoning(t *testing.T) {
 	if !strings.Contains(string(out), "cipher") || !strings.Contains(string(out), "vendor_counter") || !strings.Contains(string(out), `"model":"public"`) {
 		t.Fatalf("原生响应丢失: %s", out)
 	}
-	if _, err = EncodeDialogueResult(r, "openai-chat", "public"); err == nil {
-		t.Fatal("加密推理不应跨协议")
+	if out, err = EncodeDialogueResult(r, "openai-chat", "public"); err != nil || !strings.Contains(string(out), `"reasoning_items"`) {
+		t.Fatalf("Chat 未保留加密推理扩展: %v %s", err, out)
+	}
+	if _, err = EncodeDialogueResult(r, "gemini", "public"); err == nil {
+		t.Fatal("密文不能投影到没有承载机制的协议")
 	}
 	for _, bad := range []string{`{`, `{"status":"failed","output":[]}`, `{"status":"completed","output":42}`} {
 		if _, err := ParseDialogueResult("openai-responses", []byte(bad)); err == nil {

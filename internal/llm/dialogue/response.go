@@ -153,7 +153,7 @@ func dialogueFieldShape(raw string, shape byte, nullable bool) bool {
 
 // EncodeDialogueResult 将共享回复输出到用户协议；参数为结果、入口协议及公开型号，返回 JSON。
 // 调用：统一同步入口及 SSE 终态；Responses 上游 store=false，网关通过临时上下文支持 previous_response_id。
-// Messages 把公开推理放入独立 thinking 块，签名为空；不能把推理混入正文或伪造厂商签名，密文仍由 BridgeError 拒绝。
+// Messages 把推理封装为 thinking/redacted_thinking，Chat 使用 reasoning_items 扩展；不解密、不混入正文或伪造厂商签名。
 func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, error) {
 	if r.Source == protocol && r.Native != nil {
 		out, err := cloneObject(r.Native)
@@ -166,7 +166,7 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	if r.BridgeError != "" {
 		return nil, fmt.Errorf("unsupported response bridge: %s", r.BridgeError)
 	}
-	if r.Source == "openai-responses" && protocol != "anthropic-messages" {
+	if r.Source == "openai-responses" && protocol != "anthropic-messages" && protocol != "openai-chat" {
 		for _, value := range dialogueList(r.Native["output"]) {
 			item := dialogueMap(value)
 			if item["type"] == "reasoning" && dialogueString(item["encrypted_content"]) != "" {
@@ -185,6 +185,13 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	switch protocol {
 	case "openai-chat":
 		msg := map[string]any{"role": "assistant", "content": r.Text}
+		items, err := ChatReasoningItems(r)
+		if err != nil {
+			return nil, err
+		}
+		if len(items) > 0 {
+			msg["reasoning_items"] = items
+		}
 		if r.Reasoning != "" {
 			msg["reasoning_content"] = r.Reasoning
 		}

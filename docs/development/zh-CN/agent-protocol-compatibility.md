@@ -26,7 +26,7 @@
 | 文本、函数工具、工具结果 | 支持 | 支持 | 支持 |
 | JSON / SSE 与实测 usage | 支持，保留原生事件 | 支持，保留 `reasoning_content` 增量 | 转换共享文本/工具/公开推理事件 |
 | 推理 effort | 原样保留，合法值由模型决定 | 原样保留 | 映射字段；不会替模型接受不支持的值 |
-| 推理摘要 / 加密项 | 原生保留 | 公开推理保留 | 公开文本可转换；摘要粒度和 `include: reasoning.encrypted_content` 为可选返回提示，不阻断 Chat；真正密文历史仍拒绝 |
+| 推理摘要 / 加密项 | 原生保留 | 公开推理保留 | 公开文本可转换；Responses 输出的密文通过 Chat `reasoning_items` 扩展原样回传；直接把 Responses 密文历史投影成普通 Chat 仍拒绝 |
 | JSON Schema | 原生保留 | 原生保留 | 转换格式结构；最终能力仍由上游决定 |
 | Codex custom / namespace 工具、`additional_tools` | 原生保留 | 函数表达 | 单层 namespace 名称双向映射，custom 字符串通过函数 JSON 包装，内联声明投影为工具；grammar 仅为提示约束 |
 | 拒绝响应（refusal） | 原生保留，允许原生续轮 | 原生保留 | 明确拒绝未实现的转换，不能生成空白成功 |
@@ -41,7 +41,7 @@
 
 固定续接还会核对首次外发时已解析凭据的连接指纹。保留部署 ID 修改地址、上游型号、传输、凭据名或同名凭据中的密钥后，旧续接返回 409；普通请求更新路由偏好也不会重新绑定旧密文。新版本部署前缓存的归属若没有连接指纹，需要开启新会话；缓存只保存哈希，不保存密钥明文。
 
-Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影。Responses → Messages 进一步参考 LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b`：有摘要的密文封装在 `thinking.signature`，无摘要时放入 `redacted_thinking.data`，统一使用 `xhub_responses_reasoning:` 前缀；它不是 Anthropic 原厂签名。工具续轮按原字节还原为 Responses reasoning 项，省略重建项 ID，并要求同一调用方、公开模型、会话和供应商连接。流式在推理项结束时发送完整封装，先发送签名再关闭内容块；终态再复核公开内容并补缺失项。供应商可在终态重新加密同一推理，因此不要求密文字节相等，已发送的封装保持原样。该密文仍不能转到 Chat、原生 Anthropic 或其他账户，真实厂商签名继续要求原生通道。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
+Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影。Responses → Messages 进一步参考 LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b`：有摘要的密文封装在 `thinking.signature`，无摘要时放入 `redacted_thinking.data`，统一使用 `xhub_responses_reasoning:` 前缀；它不是 Anthropic 原厂签名。工具续轮按原字节还原为 Responses reasoning 项，省略重建项 ID，并要求同一调用方、公开模型、会话和供应商连接。流式在推理项结束时发送完整封装，先发送签名再关闭内容块；终态再复核公开内容并补缺失项。供应商可在终态重新加密同一推理，因此不要求密文字节相等，已发送的封装保持原样。Messages 封装仍不能作为 Chat 输入或转到原生 Anthropic、其他账户，真实厂商签名继续要求原生通道。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
 
 ## 真实供应商验收：2026-10-15
 
@@ -101,3 +101,12 @@ node --test scripts/test_release_workflow.cjs
 参考：[LiteLLM Responses](https://docs.litellm.ai/docs/response_api)、[官方推理指南](https://developers.openai.com/api/docs/guides/reasoning)、[DeepSeek Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude Code 网关](https://code.claude.com/docs/en/llm-gateway)。适配器的固定源码版本见授权目录。
 
 Claude Code 原生会话：Messages 优先使用网关 `X-Session-Id` / `session_id`，随后读取 `X-Claude-Code-Session-Id`，或从 `metadata.user_id` 的 JSON 字符串 / 旧 `user_…_account_…_session_…` 格式中提取会话 ID；两类明确会话的日志来源均记为 `explicit`。这参考 LiteLLM 同一官方快照的会话提取规则，避免工具续轮修改首条用户内容或缓存提示后丢失密文归属。普通用户名、设备和账号标识不会被当作会话；原生头必须为 1–256 字节的 ASCII 字母、数字、连字符或下划线，冲突头拒绝，无法识别的可选 metadata 仍按原规则推断。调用方、模型、入口和原连接校验保持有效。已有密文但没有客户端会话归属的旧对话需重新开始。
+
+
+## Chat 的 Responses 推理扩展
+
+进一步参考 LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b` 的 `completion_extras/litellm_responses_transformation/transformation.py`：Chat 客户端调用 Responses 上游时，正常返回 `content`、`tool_calls` 和 usage，公开摘要放在 `reasoning_content`，推理项的原始 `id`、`summary`、`encrypted_content` 放在助手消息的 `reasoning_items` 扩展数组。密文不会被解密或当作可见文本。
+
+普通客户端可以忽略此扩展，继续发送可见消息和工具结果，但无法保留该推理状态；这不保证与完整推理历史有相同的效果。需要保持推理的客户端应原样保留助手的 `reasoning_items`，并回传响应头 `X-Session-Id`，随后添加 `role: tool` 的工具结果。扩展只接受 assistant 上的推理数组；仅可送回同一身份、公开模型、入口、会话和供应商连接的 Responses 部署，未知/失效归属及更换连接会拒绝。不会把它直接发送到原生 Chat、Anthropic 或其他厂商。
+
+流式扩展只在上游完整终态校验后随结束 chunk 发布，随后正常返回 usage 和 `[DONE]`；终态重新加密时保留终态的有效值。工具归属先于终态发布。上游失败、损坏推理或截断流不会伪造正常完成；显式 `response.incomplete` 保留 `finish_reason: length`，不会因含工具调用而变成正常结束。这是 LiteLLM 风格扩展，不是 OpenAI Chat 标准字段，也不会给忽略它的客户端暗中补上推理记忆。

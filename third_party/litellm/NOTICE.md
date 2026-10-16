@@ -79,3 +79,17 @@ session component of JSON/legacy `metadata.user_id`; plain user/device/account I
 never identify a conversation. Explicit gateway session IDs keep priority. Unlike
 the reference's general header matching, XHub limits this fallback to Messages,
 bounds and validates IDs, and keeps caller/model/endpoint/connection ownership.
+
+
+The Responses → Chat reasoning extension additionally adapts the same official
+`dba86bec28cb483c9937470c5d950f5e03699d3b` snapshot's
+`completion_extras/litellm_responses_transformation/transformation.py`:
+`_build_reasoning_item`, `_reasoning_items_from_output_items`,
+`_convert_response_output_to_choices`, `_reasoning_input_items`, and
+`OpenAiResponsesToChatCompletionStreamIterator`. Public summaries remain in
+`reasoning_content`; original reasoning IDs and ciphertext survive in optional
+`reasoning_items`, including the terminal SSE delta. XHub uses its existing
+Messages field validation, native Turn encoding and caller/model/endpoint/session/
+connection ownership. It neither decrypts ciphertext nor forwards this extension
+to unrelated native Chat/Anthropic deployments. Clients dropping the extension
+retain ordinary Chat behavior without a persisted-reasoning guarantee.

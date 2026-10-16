@@ -105,7 +105,7 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 		}
 		fields := []string{"role", "content"}
 		if protocol == "openai-chat" {
-			fields = append(fields, "tool_call_id", "tool_calls", "reasoning_content")
+			fields = append(fields, "tool_call_id", "tool_calls", "reasoning_content", "reasoning_items")
 		}
 		if protocol == "openai-responses" {
 			fields = append(fields, "type", "call_id", "name", "arguments", "output", "id", "status", "summary")
@@ -162,6 +162,17 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 			}
 		}
 		turn := Turn{Role: role, ID: dialogueString(m["tool_call_id"]), Reasoning: dialogueString(m["reasoning_content"])}
+		if protocol == "openai-chat" {
+			reasoning, err := chatReasoningReplay(m["reasoning_items"], role)
+			if err != nil {
+				return d, err
+			}
+			if len(reasoning) > 0 {
+				// 扩展已经携带原始摘要，不能再把 reasoning_content 合成为一份重复的推理项。
+				d.Turns = append(d.Turns, reasoning...)
+				turn.Reasoning = ""
+			}
+		}
 		if protocol == "anthropic-messages" {
 			if parts, ok := m["content"].([]any); ok {
 				for _, p := range parts {
@@ -315,7 +326,7 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 // EncodeDialogue 按显式上游协议编码对话，型号原样传递。参数为内部表示、协议、真实型号；返回正文或能力错误。
 // 调用：统一执行器；工具 ID 和参数不重新生成，Messages 工具结果按相邻角色合并。
 func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) {
-	// 即使候选与客户端同为 Messages，网关封装的 OpenAI 密文也只能送回 Responses；先于原生正文直传检查。
+	// 即使候选与客户端同为 Chat/Messages，扩展携带的 OpenAI 推理也只能送回 Responses；先于原生正文直传检查。
 	for _, turn := range d.Turns {
 		if turn.Native != nil && turn.NativeProtocol != protocol {
 			return nil, fmt.Errorf("opaque history requires %s", turn.NativeProtocol)

@@ -301,7 +301,7 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 	}
 }
 
-// requiresNativeOwnership 判断 Responses 输入是否含供应商绑定的不透明历史。
+// requiresNativeOwnership 判断对话输入是否含供应商绑定的不透明推理历史。
 // 参数 body 为未改写的用户正文，返回是否必须固定原部署；PlanRoute 调用，不解密、不写缓存。
 // 普通推理摘要和 DeepSeek 公开 reasoning_content 不触发固定；加密项即使格式错误也不能触发跨账户重试。
 func requiresNativeOwnership(body map[string]any) bool {
@@ -312,10 +312,16 @@ func requiresNativeOwnership(body map[string]any) bool {
 			return true
 		}
 	}
-	// LiteLLM 式 Messages 封装仍是原 Responses 上游的密文；复用相同的固定连接证明，不能按普通文本回退。
+	// LiteLLM 式 Chat 扩展和 Messages 封装属于原 Responses 上游；复用固定连接证明，不能按普通文本回退。
 	messages, _ := body["messages"].([]any)
 	for _, value := range messages {
 		message, _ := value.(map[string]any)
+		if value := message["reasoning_items"]; value != nil {
+			items, ok := value.([]any)
+			if !ok || len(items) > 0 {
+				return true
+			}
+		}
 		blocks, _ := message["content"].([]any)
 		for _, value := range blocks {
 			block, _ := value.(map[string]any)

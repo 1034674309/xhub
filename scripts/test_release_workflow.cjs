@@ -244,6 +244,7 @@ test('agent compatibility uses pinned real clients and a governed browser flow',
   assert.ok(browser.run.split(/\s+/).includes('agent-native-protocol.test.ts'), '发布缺少原生 Agent/工具续轮/计费浏览器闭环');
   assert.ok(browser.run.split(/\s+/).includes('messages-reasoning.test.ts'), '发布缺少 Messages 公开推理和工具续轮浏览器闭环');
   assert.ok(browser.run.split(/\s+/).includes('agent-chat-bridge.test.ts'), '发布缺少 Codex namespace/custom Chat 桥接闭环');
+  assert.ok(browser.run.split(/\s+/).includes('chat-encrypted-reasoning.test.ts'), '发布缺少 Responses 密文经 Chat 扩展续轮的浏览器闭环');
   assert.ok(browser.run.split(/\s+/).includes('agent-proxy-timeout.test.ts'), '发布缺少超过30秒的非流式推理代理闭环');
   const artifact = verify.find(item => item.uses === 'actions/upload-artifact@v4');
   assert.equal(artifact.if, 'always()');
