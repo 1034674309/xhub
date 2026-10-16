@@ -80,9 +80,22 @@ func TestResponsesMessagesMalformedReasoning(t *testing.T) {
 		}
 	}
 	raw := "data: " + `{"type":"response.output_item.done","item":{"id":"rs","type":"reasoning","summary":[],"encrypted_content":"one"}}` + "\n\n" +
-		"data: " + `{"type":"response.completed","response":{"id":"r","status":"completed","output":[{"id":"rs","type":"reasoning","summary":[],"encrypted_content":"two"}]}}` + "\n\n"
+		"data: " + `{"type":"response.completed","response":{"id":"r","status":"completed","output":[{"id":"rs","type":"reasoning","summary":[{"type":"summary_text","text":"Changed"}],"encrypted_content":"two"}]}}` + "\n\n"
 	_, _, _, out, err := PipeDialogue(httptest.NewRecorder(), &http.Response{Body: io.NopCloser(strings.NewReader(raw))}, time.Now(), "public", "openai-responses", "anthropic-messages")
 	if err == nil || !strings.Contains(err.Error(), "conflicting completed reasoning item") || strings.Contains(string(out), "message_stop") {
 		t.Fatalf("完成项与终态密文冲突未被拒绝: %v %s", err, out)
+	}
+}
+
+// TestResponsesMessagesReencryptedTerminal 验证上游在终态重新加密同一推理时不误报冲突。
+// 参数 t 为上下文；本地 SSE 的公开摘要相同、密文不同，要求只发送单项完成时的封装并正常结束；无外部资源需清理。
+func TestResponsesMessagesReencryptedTerminal(t *testing.T) {
+	for _, summary := range []string{`[]`, `[{"type":"summary_text","text":"Plan"}]`} {
+		raw := "data: " + `{"type":"response.output_item.done","item":{"id":"rs","type":"reasoning","summary":` + summary + `,"encrypted_content":"one"}}` + "\n\n" +
+			"data: " + `{"type":"response.completed","response":{"id":"r","status":"completed","output":[{"id":"rs","type":"reasoning","summary":` + summary + `,"encrypted_content":"two"}]}}` + "\n\n"
+		_, _, _, out, err := PipeDialogue(httptest.NewRecorder(), &http.Response{Body: io.NopCloser(strings.NewReader(raw))}, time.Now(), "public", "openai-responses", "anthropic-messages")
+		if err != nil || strings.Count(string(out), "xhub_responses_reasoning:one") != 1 || strings.Contains(string(out), "xhub_responses_reasoning:two") || !strings.Contains(string(out), "message_stop") {
+			t.Fatalf("终态重新加密导致重复封装或失败: %v %s", err, out)
+		}
 	}
 }

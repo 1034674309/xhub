@@ -645,7 +645,7 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 		case "response.output_item.done":
 			item := streamMap(m["item"])
 			if s.responsesMessages && item["type"] == "reasoning" {
-				if err := s.responseReasoningItem(item); err != nil {
+				if err := s.responseReasoningItem(item, false); err != nil {
 					return err
 				}
 				return s.flushResponseText()
@@ -667,7 +667,7 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 					for _, value := range items {
 						item := streamMap(value)
 						if item["type"] == "reasoning" {
-							if err = s.responseReasoningItem(item); err != nil {
+							if err = s.responseReasoningItem(item, true); err != nil {
 								return err
 							}
 						}

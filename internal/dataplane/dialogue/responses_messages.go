@@ -8,9 +8,9 @@ import (
 )
 
 // responseReasoningItem 把完整 Responses 推理项输出为一个已关闭的 Messages 内容块。
-// 参数为 output_item.done 或终态中的推理项，返回字段/重复冲突/写出错误；consume 调用，不解密或复制厂商签名。
-// 等到单项完成才发送封装，避免 signature 到达时 thinking 块已被正文关闭；终态重复项必须完全一致。
-func (s *dialogueStream) responseReasoningItem(item map[string]any) error {
+// 参数为完整推理项及是否来自响应终态，返回字段/重复冲突/写出错误；consume 调用，不解密或复制厂商签名。
+// 等到单项完成才发送封装；供应商可能在终态重新加密同一项，密文字节变化不能作为内容矛盾的证据。
+func (s *dialogueStream) responseReasoningItem(item map[string]any, terminal bool) error {
 	id := streamString(item["id"])
 	if id == "" {
 		return fmt.Errorf("reasoning item ID required")
@@ -22,7 +22,14 @@ func (s *dialogueStream) responseReasoningItem(item map[string]any) error {
 	raw, _ := json.Marshal(block)
 	if previous, exists := s.responseReasoningBlocks[id]; exists {
 		if previous != string(raw) {
-			return fmt.Errorf("conflicting completed reasoning item")
+			var before map[string]any
+			_ = json.Unmarshal([]byte(previous), &before)
+			// 按 LiteLLM 的 output_item.done 关闭一次内容块；终态仅补缺失项。
+			// 相同明文可产生不同密文，已发出的封装保持原样；类型、公开摘要或有无密文的变化仍需拒绝。
+			if !terminal || before["type"] != block["type"] || before["thinking"] != block["thinking"] ||
+				(streamString(before["signature"]) != "") != (streamString(block["signature"]) != "") {
+				return fmt.Errorf("conflicting completed reasoning item")
+			}
 		}
 		return nil
 	}

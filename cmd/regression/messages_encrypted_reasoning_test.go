@@ -90,7 +90,23 @@ func TestMessagesEncryptedReasoningToolRoundTrip(t *testing.T) {
 					if !summary {
 						response["output"].([]any)[0].(map[string]any)["summary"] = []any{}
 					}
-					writeAgentResponse(w, response, body["stream"] == true)
+					if body["stream"] == true {
+						// 实测供应商在 completed 重新加密相同明文；客户端应保留 item.done 已发出的有效密文。
+						recorder := httptest.NewRecorder()
+						writeAgentResponse(recorder, response, true)
+						raw := recorder.Body.String()
+						marker := `"encrypted_content":"test-cipher"`
+						index := strings.LastIndex(raw, marker)
+						if index < 0 {
+							t.Error("夹具终态缺少推理密文")
+							w.WriteHeader(500)
+							return
+						}
+						w.Header().Set("Content-Type", "text/event-stream")
+						fmt.Fprint(w, raw[:index]+strings.Replace(raw[index:], marker, `"encrypted_content":"test-cipher-terminal"`, 1))
+					} else {
+						writeAgentResponse(w, response, false)
+					}
 				}))
 				t.Cleanup(up.Close)
 				dep := chatDeployment("messages-encrypted-roundtrip")

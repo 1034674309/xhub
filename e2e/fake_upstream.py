@@ -344,7 +344,9 @@ class Handler(BaseHTTPRequestHandler):
                     events.extend([{"type": "response.output_item.added", "output_index": 1, "item": {"type": "function_call", "call_id": "call_1", "name": "read", "arguments": ""}}, {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": "{}"}])
                 else:
                     events.append({"type": "response.output_text.delta", "delta": "e2e-ok"})
-                events.append({"type": "response.completed", "response": payload})
+                # 部分真实 GPT 连接会在终态重新加密同一推理，item.done 的有效封装不能被重复或覆盖。
+                terminal = {**payload, "output": [{**output[0], "encrypted_content": "fixture-encrypted-terminal"}, *output[1:]]} if encrypted else payload
+                events.append({"type": "response.completed", "response": terminal})
             else:
                 message = {"role": "assistant", "content": None if tool else "e2e-ok", "reasoning_content": "Plan"}
                 if tool:

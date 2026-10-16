@@ -62,7 +62,9 @@ XHub adapts the opaque round trip: summary plus ciphertext becomes
 Its own `xhub_responses_reasoning:` namespace distinguishes these values from
 Anthropic signatures. Replay restores a Responses reasoning item without inventing
 an item ID. Completed SSE items carry the signature before their block closes;
-the terminal response validates duplicate/fallback items. XHub additionally requires
+the terminal response validates public content and fills missing items. Providers may
+re-encrypt the same reasoning at the terminal snapshot; the already emitted opaque
+envelope remains intact rather than requiring ciphertext equality. XHub additionally requires
 known caller/model/session/connection ownership before replay and rejects carrying
 this ciphertext into Chat, native Anthropic or another supplier account. This is
 protocol adaptation, not encryption, Anthropic signature generation or general

@@ -71,6 +71,13 @@ class ArkUpstreamTest(unittest.TestCase):
             first = self.request("/v1/responses", body)
             reasoning = dict(first["output"][0])
             self.assertEqual(reasoning["encrypted_content"], "fixture-encrypted")
+            with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+                events = [json.loads(line[5:]) for line in response.read().decode().splitlines() if line.startswith("data:")]
+            done = next(event["item"] for event in events if event["type"] == "response.output_item.done")
+            final = events[-1]["response"]["output"][0]
+            self.assertEqual(done["summary"], final["summary"])
+            self.assertEqual(done["encrypted_content"], "fixture-encrypted")
+            self.assertEqual(final["encrypted_content"], "fixture-encrypted-terminal")
             if suffix == "redacted":
                 self.assertEqual(reasoning["summary"], [])
             del reasoning["id"]
