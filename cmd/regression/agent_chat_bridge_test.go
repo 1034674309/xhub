@@ -11,13 +11,18 @@ import (
 )
 
 // writeChatAgentResponse 输出带公开推理和后置 usage 的 Chat JSON/SSE 夹具。
-// 参数为写入器、响应 ID、正文、可空函数名/参数及流开关；后台契约与真实 CLI 夹具调用，无返回，不执行工具，服务关闭即回收。
-func writeChatAgentResponse(w http.ResponseWriter, id, text, name, arguments string, stream bool) {
+// 参数为写入器、响应 ID、正文、可空函数名/参数、流开关和可选调用 ID；后台契约与真实 CLI 夹具调用，无返回，不执行工具，服务关闭即回收。
+func writeChatAgentResponse(w http.ResponseWriter, id, text, name, arguments string, stream bool, callIDs ...string) {
 	message := map[string]any{"role": "assistant", "content": text, "reasoning_content": "Inspect the file before answering."}
 	stop := "stop"
 	if name != "" {
+		// 默认保持历史夹具 ID；三轮工具发现测试显式提供不同 ID，验证搜索与普通工具的结果不会串轮。
+		callID := "call_chat"
+		if len(callIDs) > 0 {
+			callID = callIDs[0]
+		}
 		message["content"] = nil
-		message["tool_calls"] = []any{map[string]any{"index": 0, "id": "call_chat", "type": "function", "function": map[string]any{"name": name, "arguments": arguments}}}
+		message["tool_calls"] = []any{map[string]any{"index": 0, "id": callID, "type": "function", "function": map[string]any{"name": name, "arguments": arguments}}}
 		stop = "tool_calls"
 	}
 	usage := map[string]any{"prompt_tokens": 8, "completion_tokens": 2}

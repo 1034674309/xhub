@@ -33,11 +33,15 @@ func TestRealAgentClients(t *testing.T) {
 	for _, variant := range []struct {
 		client, transport string
 		search            bool
-	}{{"codex", "responses", false}, {"codex", "chat", false}, {"claude", "responses", false}, {"claude", "chat", false}, {"codex", "chat", true}} {
+		standardTools     bool
+	}{{"codex", "responses", false, false}, {"codex", "chat", false, false}, {"claude", "responses", false, false}, {"claude", "chat", false, false}, {"codex", "chat", true, false}, {"codex", "chat", true, true}} {
 		client, transport := variant.client, variant.transport
 		name := client + "/" + transport
 		if variant.search {
 			name += "-optional-search"
+		}
+		if variant.standardTools {
+			name += "-standard-tools"
 		}
 		t.Run(name, func(t *testing.T) {
 			variable := "XHUB_TEST_CODEX_BIN"
@@ -158,7 +162,12 @@ func TestRealAgentClients(t *testing.T) {
 					if client == "codex" && transport == "chat" && (name == "functions__exec" || name == "exec") {
 						toolName = name
 						args, _ := json.Marshal(map[string]any{"cmd": "cat " + file, "workdir": directory, "max_output_tokens": 1000})
-						wrapped, _ := json.Marshal(map[string]any{"content": "text(await tools.exec_command(" + string(args) + "));"})
+						// 搜索专项复现七牛的 input 包装，防止实际 CLI 回归只用理想 content 夹具蒙混通过。
+						field := "content"
+						if variant.search {
+							field = "input"
+						}
+						wrapped, _ := json.Marshal(map[string]any{field: "text(await tools.exec_command(" + string(args) + "));"})
 						argument = string(wrapped)
 						break
 					}
@@ -296,7 +305,11 @@ func TestRealAgentClients(t *testing.T) {
 					var entry map[string]any
 					for _, value := range entries {
 						candidate, _ := value.(map[string]any)
-						if candidate["slug"] == dep.ModelName {
+						template := dep.ModelName
+						if variant.standardTools {
+							template = "gpt-5.5"
+						}
+						if candidate["slug"] == template {
 							entry = candidate
 							break
 						}
@@ -305,6 +318,7 @@ func TestRealAgentClients(t *testing.T) {
 						t.Fatal("Codex 内置目录没有测试模型")
 					}
 					entry["supports_search_tool"] = true
+					entry["slug"] = dep.ModelName
 					entry["use_responses_lite"] = false
 					catalog["models"] = []any{entry}
 					catalogFile := filepath.Join(directory, "codex-search-models.json")

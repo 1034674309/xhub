@@ -96,6 +96,15 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 				}
 				responseTools = append(responseTools, definitions...)
 				continue
+			case "tool_search_call", "tool_search_output":
+				// 客户端执行工具发现等价于一次工具往返；结果中的定义必须在下一次 Chat 请求中真正可调用。
+				definitions, err := projectClientSearchHistory(cp)
+				if err != nil {
+					// 托管搜索历史没有通用 Chat 等价物；保留原生正文，桥接明确拒绝，不假装已经执行搜索。
+					bridgeError = err.Error()
+					continue
+				}
+				responseTools = append(responseTools, definitions...)
 			case "", "message", "function_call", "function_call_output", "custom_tool_call", "custom_tool_call_output":
 				if err := projectAgentCall(cp); err != nil {
 					return Dialogue{}, err
@@ -166,8 +175,12 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 			bridgeError = unsupported
 		}
 		// 指定的 namespace/custom 工具选择也必须使用相同的 Chat 函数名，避免选择一个未注册名称。
-		if choice := dialogueMap(native["tool_choice"]); choice != nil && (choice["type"] == "function" || choice["type"] == "custom") {
-			projected["tool_choice"] = map[string]any{"type": "function", "name": qualifiedToolName(dialogueString(choice["namespace"]), dialogueString(choice["name"]))}
+		if choice := dialogueMap(native["tool_choice"]); choice != nil {
+			if choice["type"] == "function" || choice["type"] == "custom" {
+				projected["tool_choice"] = map[string]any{"type": "function", "name": qualifiedToolName(dialogueString(choice["namespace"]), dialogueString(choice["name"]))}
+			} else if choice["type"] == "tool_search" && bindings["tool_search"].ClientSearch {
+				projected["tool_choice"] = map[string]any{"type": "function", "name": "tool_search"}
+			}
 		}
 	}
 	for _, value := range dialogueList(native["tools"]) {

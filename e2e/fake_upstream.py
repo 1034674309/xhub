@@ -296,6 +296,37 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
+        if model == "e2e-client-tool-search":
+            # 客户端发现三轮夹具：只接收真正转换的 Chat，明确检查动态工具加载和结果关联；不替网关转换请求或补身份。
+            tools = req.get("tools", [])
+            if "chat/completions" not in path or any(t.get("type") != "function" for t in tools):
+                self.send_error(400, "client search fixture requires Chat functions")
+                return
+            names = [t.get("function", {}).get("name") for t in tools]
+            messages = req.get("messages", [])
+            results = [m for m in messages if m.get("role") == "tool"]
+            done = any(m.get("tool_call_id") == "read_1" and "file-value" in str(m.get("content")) for m in results)
+            discovered = any(m.get("tool_call_id") == "search_1" for m in results)
+            name = "fs__read" if discovered else "tool_search"
+            if not done and name not in names:
+                self.send_error(400, "client search did not load the required function")
+                return
+            message = {"role": "assistant", "content": "e2e-ok" if done else None}
+            stop = "stop" if done else "tool_calls"
+            if not done:
+                # 七牛实测返回 input 别名，浏览器验收必须覆盖这个实际差异，不能继续只返回理想 content 包装。
+                arguments = {"input": "Read the file."} if discovered else {"query": "read a file"}
+                message["tool_calls"] = [{"index": 0, "id": "read_1" if discovered else "search_1", "type": "function", "function": {"name": name, "arguments": json.dumps(arguments)}}]
+            usage = {"prompt_tokens": 8, "completion_tokens": 2}
+            if req.get("stream"):
+                self._sse([
+                    {"id": "chat_search", "choices": [{"index": 0, "delta": message, "finish_reason": stop}]},
+                    {"id": "chat_search", "choices": [], "usage": usage},
+                    "[DONE]",
+                ])
+            else:
+                self._json({"id": "chat_search", "choices": [{"message": message, "finish_reason": stop}], "usage": usage})
+            return
         if model in ("e2e-agent-messages", "e2e-agent-messages-encrypted", "e2e-agent-messages-redacted", "e2e-agent-chat-tools", "e2e-agent-chat-reasoning") and ("responses" in path or "chat/completions" in path):
             # Chat/Messages 推理桥接夹具：校验工具续轮还原独立推理及调用 ID，而不是把推理当普通答案。
             is_responses = "responses" in path
@@ -558,9 +589,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _sse(self, events: list[dict]) -> None:
-        """输出本地原厂协议事件；参数为完整事件列表，无返回值，E2E 数据面转换调用，进程结束清理。"""
-        body = "".join("data: " + json.dumps(event) + "\n\n" for event in events).encode()
+    def _sse(self, events: list[dict | str]) -> None:
+        """输出本地原厂协议事件；参数为对象列表或 Chat 的原始 [DONE] 结束标记，无返回，E2E 转换调用，进程结束清理。"""
+        body = "".join("data: " + (event if isinstance(event, str) else json.dumps(event)) + "\n\n" for event in events).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(body)))

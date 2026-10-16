@@ -110,3 +110,13 @@ Claude Code 原生会话：Messages 优先使用网关 `X-Session-Id` / `session
 普通客户端可以忽略此扩展，继续发送可见消息和工具结果，但无法保留该推理状态；这不保证与完整推理历史有相同的效果。需要保持推理的客户端应原样保留助手的 `reasoning_items`，并回传响应头 `X-Session-Id`，随后添加 `role: tool` 的工具结果。扩展只接受 assistant 上的推理数组；仅可送回同一身份、公开模型、入口、会话和供应商连接的 Responses 部署，未知/失效归属及更换连接会拒绝。不会把它直接发送到原生 Chat、Anthropic 或其他厂商。
 
 流式扩展只在上游完整终态校验后随结束 chunk 发布，随后正常返回 usage 和 `[DONE]`；终态重新加密时保留终态的有效值。工具归属先于终态发布。上游失败、损坏推理或截断流不会伪造正常完成；显式 `response.incomplete` 保留 `finish_reason: length`，不会因含工具调用而变成正常结束。这是 LiteLLM 风格扩展，不是 OpenAI Chat 标准字段，也不会给忽略它的客户端暗中补上推理记忆。
+
+## 可选联网搜索与客户端工具发现
+
+Chat 部署默认拒绝不能兑现的 `web_search`。管理员可设置 `model_info.web_search_support=unsupported` 与 `model_info.web_search_fallback=drop_optional`，仅移除可选搜索声明；强制搜索仍拒绝。降级通过 `X-XHub-Dropped-Capabilities: web_search` 和日志 `dropped_capabilities` 明示，不提供真正的联网搜索。原生 Responses 部署维持原有行为，除非明确声明不支持搜索。
+
+`tool_search` 与联网搜索不同：`execution=client` 用于让 Codex 发现其本机/MCP 工具。XHub 将它映射为普通 Chat 函数，返回对象参数的 `tool_search_call`；客户端执行发现后回传 `tool_search_output`，其中的工具定义加载到下一轮 Chat 请求。JSON/SSE 都保留 `call_id`、命名空间和结果历史；原生请求不改写。网关不执行 MCP 工具，不支持通用 Chat 部署上的服务端托管工具搜索。`defer_loading` 只作为加载性能提示处理，不能授予额外权限。
+
+custom 工具继续使用 LiteLLM 风格的 `content` 字符串包装，兼容七牛 DeepSeek 实际返回的单字段 `input` 字符串；不改写代码、不猜测其他参数，不接受非字符串或含额外字段的歧义包装。与 LiteLLM 的原文回退相比，此边界更严格。真实 Codex 0.163.0 的 code-mode、普通函数模式，以及通过 `tool_search` 发现只读 MCP 工具的流程，均以七牛 `deepseek/deepseek-v4.1-flash` 验收；该结果不代表所有模型、任意 MCP 或原生联网搜索均已认证。
+
+参考实现固定版本及差异见 `third_party/litellm/NOTICE.md`；客户端搜索结构见 [OpenAI Tool search](https://developers.openai.com/api/docs/guides/tools-tool-search)。
