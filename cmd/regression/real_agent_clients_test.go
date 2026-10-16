@@ -21,6 +21,7 @@ import (
 // TestRealAgentClients 使用实际 Codex/Claude Code 二进制完成一次本地文件工具往返。
 // 参数 t 为回归上下文；显式 XHUB_TEST_CODEX_BIN/XHUB_TEST_CLAUDE_BIN 才运行，未安装时明确跳过。
 // 私有数据库和本地协议夹具隔离供应商波动；验证真实 CLI 请求/工具结果、日志及费用，不代表真实模型质量或上游兼容认证。
+// CLI 收到流终态即可退出，账单可能随后提交；有界等待真实账单完成，不把异步落库时序误判为丢账。
 // XHUB_AGENT_LIVE=1 并提供 LIVE_KEY/BASE 时显式改用真实上游，会产生费用；默认不访问外部服务。
 // CLI 禁用用户配置/外部 MCP/网页搜索/持久会话，隔离桌面工具环境；两种 OpenAI 上游均需跑通文件读取。
 // 仅执行固定测试目录读取命令，二进制由调用方提供，目录/schema/密钥由测试清理；不认证服务端检索工具。
@@ -286,6 +287,13 @@ func TestRealAgentClients(t *testing.T) {
 			}
 			h.flushSpend()
 			rows := h.successRows(t, admin, dep.ModelName)
+			deadline := time.Now().Add(3 * time.Second)
+			for len(rows) < count && time.Now().Before(deadline) {
+				// 等待本轮 HTTP 处理器完成 RecordSpend；刷新队列不能代替尚未发生的入队。
+				time.Sleep(10 * time.Millisecond)
+				h.flushSpend()
+				rows = h.successRows(t, admin, dep.ModelName)
+			}
 			if len(rows) != count {
 				t.Fatalf("%s CLI 调用数与成功账单不符: calls=%d rows=%d", client, count, len(rows))
 			}
