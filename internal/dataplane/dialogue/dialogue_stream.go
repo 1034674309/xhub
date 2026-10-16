@@ -29,6 +29,12 @@ type dialogueStream struct {
 	reasoning        string
 	reasoningStarted bool
 	reasoningBlock   int
+	// Responses -> Messages 的签名仅在推理项完成时可靠；在此之前保留正文顺序，其他协议不使用这些状态。
+	responsesMessages        bool
+	responsePrelude          bool
+	responseReasoningPending bool
+	pendingResponseText      string
+	responseReasoningBlocks  map[string]string
 	// Messages 同时只开放一个内容块；工具参数完成校验后串行发送，避免并行片段写入已关闭块。
 	messageBlockKind  string
 	messageBlockIndex int
@@ -484,6 +490,10 @@ func (s *dialogueStream) finish() error {
 		if len(r.Calls) > 0 {
 			stop = "tool_use"
 		}
+		if s.beforeComplete != nil {
+			// Messages 客户端收到工具终态即可续轮，先发布密文的原连接归属，避免立即重放时缓存尚未写入。
+			s.beforeComplete(r)
+		}
 		if err := s.emit("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": llmdialogue.DialogueOutputUsage(s.usage, "anthropic-messages")}); err != nil {
 			return err
 		}
@@ -601,16 +611,45 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				return fmt.Errorf("refusal stream requires native protocol")
 			}
 		case "response.reasoning_summary_text.delta":
+			if s.responsesMessages {
+				s.reasoning += streamString(m["delta"])
+				s.responseReasoningPending = true
+				return s.start()
+			}
 			return s.reasoningDelta(streamString(m["delta"]))
 		case "response.output_text.delta":
+			if s.responsesMessages && (s.responsePrelude || s.responseReasoningPending) {
+				s.pendingResponseText += streamString(m["delta"])
+				return nil
+			}
 			return s.textDelta(streamString(m["delta"]))
 		case "response.output_item.added":
 			item := streamMap(m["item"])
+			if s.responsesMessages {
+				s.responsePrelude = false
+				if item["type"] == "reasoning" {
+					s.responseReasoningPending = true
+					return s.start()
+				}
+				if !s.responseReasoningPending {
+					if err := s.flushResponseText(); err != nil {
+						return err
+					}
+				}
+			}
 			if item["type"] == "function_call" {
 				return s.toolDelta(streamIndex(m["output_index"]), streamString(item["call_id"]), streamString(item["name"]), streamString(item["arguments"]))
 			}
 		case "response.function_call_arguments.delta":
 			return s.toolDelta(streamIndex(m["output_index"]), "", "", streamString(m["delta"]))
+		case "response.output_item.done":
+			item := streamMap(m["item"])
+			if s.responsesMessages && item["type"] == "reasoning" {
+				if err := s.responseReasoningItem(item, false); err != nil {
+					return err
+				}
+				return s.flushResponseText()
+			}
 		case "response.completed", "response.incomplete":
 			// 达到输出上限仍是可观察终态，必须与 completed 使用相同的密文/拒绝校验，不能静默降级为普通推理。
 			if response := streamMap(m["response"]); response != nil && response["output"] != nil && !s.observeOnly {
@@ -622,7 +661,25 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				if _, err = llmdialogue.EncodeDialogueResult(result, s.protocol, s.model); err != nil {
 					return err
 				}
-				if s.reasoning == "" {
+				if s.responsesMessages {
+					// 终态复核已经发出的推理项，同时兼容只在 completed/incomplete 才给完整项的提供商。
+					items, _ := response["output"].([]any)
+					for _, value := range items {
+						item := streamMap(value)
+						if item["type"] == "reasoning" {
+							if err = s.responseReasoningItem(item, true); err != nil {
+								return err
+							}
+						}
+					}
+					s.reasoning = result.Reasoning
+					if s.text == "" && s.pendingResponseText == "" {
+						s.pendingResponseText = result.Text
+					}
+					if err = s.flushResponseText(); err != nil {
+						return err
+					}
+				} else if s.reasoning == "" {
 					if err = s.reasoningDelta(result.Reasoning); err != nil {
 						return err
 					}
@@ -720,6 +777,10 @@ func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start tim
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	s := dialogueStream{writer: w, protocol: caller, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}, toolBindings: bindings}
+	if upstream == "openai-responses" && caller == "anthropic-messages" {
+		s.responsesMessages, s.responsePrelude = true, true
+		s.responseReasoningBlocks = map[string]string{}
+	}
 	if len(beforeComplete) > 0 {
 		s.beforeComplete = beforeComplete[0]
 	}

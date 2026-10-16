@@ -41,7 +41,7 @@
 
 固定续接还会核对首次外发时已解析凭据的连接指纹。保留部署 ID 修改地址、上游型号、传输、凭据名或同名凭据中的密钥后，旧续接返回 409；普通请求更新路由偏好也不会重新绑定旧密文。新版本部署前缓存的归属若没有连接指纹，需要开启新会话；缓存只保存哈希，不保存密钥明文。
 
-Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影；非空密文、真实厂商签名和 redacted thinking 仍不能跨此 Messages 桥接。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
+Claude Code 使用 `/v1/messages`，并非 Responses 客户端。公开推理现在按 LiteLLM 的规则转换为无厂商签名的 `thinking` 块，工具续轮还原为 Chat 的 `reasoning_content` 或 Responses 的独立推理摘要项。流式 thinking / text 块依次关闭，交错工具参数在完成校验后逐个发送，避免向已关闭块追加内容。Codex 历史中的 `encrypted_content: null` 仅是空占位，可以投影。Responses → Messages 进一步参考 LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b`：有摘要的密文封装在 `thinking.signature`，无摘要时放入 `redacted_thinking.data`，统一使用 `xhub_responses_reasoning:` 前缀；它不是 Anthropic 原厂签名。工具续轮按原字节还原为 Responses reasoning 项，省略重建项 ID，并要求同一调用方、公开模型、会话和供应商连接。流式在推理项结束时发送完整封装，先发送签名再关闭内容块；终态再复核公开内容并补缺失项。供应商可在终态重新加密同一推理，因此不要求密文字节相等，已发送的封装保持原样。该密文仍不能转到 Chat、原生 Anthropic 或其他账户，真实厂商签名继续要求原生通道。本轮额外验证现有 Messages 桥接：文本、函数工具、缓存提示、客户端归属提示、adaptive effort，以及 `clear_thinking_20251015 + keep=all`（保持历史、不执行清理）。缓存提示不保证跨供应商命中，`metadata.user_id` 不替代网关身份。手工 thinking budget、其他清理规则、未知 safeguards / 输出格式及带签名推理不属于本轮跨协议能力，会明确拒绝。真实 2.1.300 CLI 对不支持的 safeguards 会自行重试不带该字段的请求。
 
 ## 真实供应商验收：2026-10-15
 
@@ -99,3 +99,5 @@ node --test scripts/test_release_workflow.cjs
 实际供应商测试必须显式设置 `XHUB_AGENT_LIVE=1`、`XHUB_AGENT_LIVE_KEY`、`XHUB_AGENT_LIVE_BASE`（以 `/v1` 结束），模型矩阵还可指定逗号分隔的 `XHUB_AGENT_LIVE_MODELS`（最多 12 个），再运行 `go test ./cmd/regression -run '^Test(LiveTextProtocolMatrix|RealAgentClients)$' -count=1`。真实 CLI 仍需上述二进制路径。此模式会产生供应商费用；CI 不设置这些凭据。不要把密钥放进代码或报告。
 
 参考：[LiteLLM Responses](https://docs.litellm.ai/docs/response_api)、[官方推理指南](https://developers.openai.com/api/docs/guides/reasoning)、[DeepSeek Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude Code 网关](https://code.claude.com/docs/en/llm-gateway)。适配器的固定源码版本见授权目录。
+
+Claude Code 原生会话：Messages 优先使用网关 `X-Session-Id` / `session_id`，随后读取 `X-Claude-Code-Session-Id`，或从 `metadata.user_id` 的 JSON 字符串 / 旧 `user_…_account_…_session_…` 格式中提取会话 ID；两类明确会话的日志来源均记为 `explicit`。这参考 LiteLLM 同一官方快照的会话提取规则，避免工具续轮修改首条用户内容或缓存提示后丢失密文归属。普通用户名、设备和账号标识不会被当作会话；原生头必须为 1–256 字节的 ASCII 字母、数字、连字符或下划线，冲突头拒绝，无法识别的可选 metadata 仍按原规则推断。调用方、模型、入口和原连接校验保持有效。已有密文但没有客户端会话归属的旧对话需重新开始。

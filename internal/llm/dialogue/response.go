@@ -166,6 +166,14 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	if r.BridgeError != "" {
 		return nil, fmt.Errorf("unsupported response bridge: %s", r.BridgeError)
 	}
+	if r.Source == "openai-responses" && protocol != "anthropic-messages" {
+		for _, value := range dialogueList(r.Native["output"]) {
+			item := dialogueMap(value)
+			if item["type"] == "reasoning" && dialogueString(item["encrypted_content"]) != "" {
+				return nil, fmt.Errorf("encrypted reasoning requires Responses or Messages envelope")
+			}
+		}
+	}
 	if protocol == "gemini" || protocol == "vertex" {
 		return encodeGoogleDialogueResult(r)
 	}
@@ -212,9 +220,9 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 			out["incomplete_details"] = map[string]any{"reason": "max_output_tokens"}
 		}
 	case "anthropic-messages":
-		content := []any{}
-		if r.Reasoning != "" {
-			content = append(content, map[string]any{"type": "thinking", "thinking": r.Reasoning, "signature": ""})
+		content, err := messagesReasoningContent(r)
+		if err != nil {
+			return nil, err
 		}
 		if r.Text != "" {
 			content = append(content, map[string]any{"type": "text", "text": r.Text})

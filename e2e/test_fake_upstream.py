@@ -64,6 +64,32 @@ class ArkUpstreamTest(unittest.TestCase):
             self.assertEqual(error.exception.code, 400)
             error.exception.close()
 
+    def test_messages_encrypted_reasoning_fixture(self):
+        """目的：密文夹具要求原文往返且不伪造 ID，覆盖公开摘要和无摘要；前置本地随机端口服务，tearDown 回收，不调用外部供应商。"""
+        for suffix in ("encrypted", "redacted"):
+            body = {"model": "e2e-agent-messages-" + suffix, "input": [{"role": "user", "content": "Read the file."}], "tools": [{"name": "read"}]}
+            first = self.request("/v1/responses", body)
+            reasoning = dict(first["output"][0])
+            self.assertEqual(reasoning["encrypted_content"], "fixture-encrypted")
+            with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+                events = [json.loads(line[5:]) for line in response.read().decode().splitlines() if line.startswith("data:")]
+            done = next(event["item"] for event in events if event["type"] == "response.output_item.done")
+            final = events[-1]["response"]["output"][0]
+            self.assertEqual(done["summary"], final["summary"])
+            self.assertEqual(done["encrypted_content"], "fixture-encrypted")
+            self.assertEqual(final["encrypted_content"], "fixture-encrypted-terminal")
+            if suffix == "redacted":
+                self.assertEqual(reasoning["summary"], [])
+            del reasoning["id"]
+            history = [*body["input"], reasoning, first["output"][1], {"type": "function_call_output", "call_id": "call_1", "output": "file-value"}]
+            second = self.request("/v1/responses", {**body, "input": history})
+            self.assertEqual(second["output"][1]["content"][0]["text"], "e2e-ok")
+            bad_history = [item for item in history if item.get("type") != "reasoning"]
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/responses", {**body, "input": bad_history})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+
     def test_permission_probe_counts_success_and_failure(self):
         """目的：权限探针读操作不增加计数，成功和失败推理均增加；前置本地服务，tearDown 回收线程及状态。"""
         before = self.request("/e2e/request-count")["requests"]

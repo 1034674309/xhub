@@ -40,7 +40,7 @@ Full encrypted history requires known session deployment ownership too. It must 
 
 Fixed continuations also verify a fingerprint of the resolved connection used at creation. Keeping a deployment ID while changing its address, upstream model, transport, credential name or a named credential's key makes old continuations return 409. Plain requests updating routing preferences cannot rebind old ciphertext. Cached ownership predating this fingerprint requires a new conversation; the cache stores a hash, never the plaintext key.
 
-Public reasoning now maps to unsigned Messages `thinking` blocks following LiteLLM. Tool turns restore Chat `reasoning_content` or separate Responses reasoning-summary items. Streaming thinking/text blocks close in order; interleaved tool arguments are emitted serially only after completion validation. Codex history with `encrypted_content: null` is a nullable placeholder; nonempty ciphertext, vendor signatures and redacted thinking remain unsupported across this Messages bridge.
+Public reasoning now maps to unsigned Messages `thinking` blocks following LiteLLM. Tool turns restore Chat `reasoning_content` or separate Responses reasoning-summary items. Streaming thinking/text blocks close in order; interleaved tool arguments are emitted serially only after completion validation. Codex history with `encrypted_content: null` is a nullable placeholder. Following LiteLLM `dba86bec28cb483c9937470c5d950f5e03699d3b`, Responses → Messages now wraps summary plus ciphertext in `thinking.signature`, or ciphertext alone in `redacted_thinking.data`, using `xhub_responses_reasoning:` rather than an Anthropic signature. Tool continuation restores the original Responses ciphertext without inventing an item ID and requires the same caller, public model, session and supplier connection. SSE emits the signature before closing the completed reasoning block and validates public content at the terminal response. Re-encryption of the same reasoning may change ciphertext bytes; the emitted envelope remains intact. Chat, native Anthropic and cross-account ciphertext replay remain rejected; genuine supplier signatures still require native transport.
 
 Claude Code uses `/v1/messages`, not Responses. Existing bridging is additionally exercised for text/function tools, cache hints, caller metadata, adaptive effort and `clear_thinking_20251015 + keep=all` (no trimming). Cache hints do not guarantee cross-provider cache hits; `metadata.user_id` never replaces gateway identity. Manual thinking budgets, other trimming rules, unknown safeguards/output settings and signed reasoning are outside this bridge and receive explicit errors. Actual Claude Code 2.1.300 retries without unsupported safeguards.
 
@@ -99,3 +99,14 @@ node --test scripts/test_release_workflow.cjs
 PostgreSQL and a local `redis-server` executable are prerequisites. Tests create and clean private schemas. Explicit live mode requires `XHUB_AGENT_LIVE=1`, `XHUB_AGENT_LIVE_KEY`, `XHUB_AGENT_LIVE_BASE` (ending in `/v1`) and optional comma-separated `XHUB_AGENT_LIVE_MODELS` (maximum 12), then `go test ./cmd/regression -run '^Test(LiveTextProtocolMatrix|RealAgentClients)$' -count=1`. Real clients also need their binary paths. This spends supplier credits; CI provides no live credentials. Keep secrets out of code and reports.
 
 References: [LiteLLM Responses](https://docs.litellm.ai/docs/response_api), [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning), [DeepSeek thinking](https://api-docs.deepseek.com/guides/thinking_mode/), [Claude Code gateway](https://code.claude.com/docs/en/llm-gateway). Pinned source references are in the attribution directory.
+
+Claude Code sessions: Messages prefers gateway `X-Session-Id` / `session_id`, then
+`X-Claude-Code-Session-Id`, or the session component of JSON-string / legacy
+`user_…_account_…_session_…` values in `metadata.user_id`. Both explicit sources
+retain the `explicit` log classification. This follows the same official LiteLLM
+snapshot's session extraction and survives first-user/cache-hint changes during
+tool turns. Plain user, device and account IDs never identify a conversation.
+Native headers require 1–256 ASCII letters, digits, hyphens or underscores;
+conflicting headers fail, while unrecognized optional metadata uses the existing
+inference fallback. Caller/model/endpoint/connection checks still apply. Existing
+ciphertext conversations without native session ownership need a fresh session.

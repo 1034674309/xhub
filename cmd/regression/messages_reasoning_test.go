@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// TestMessagesEncryptedIncompleteFailure 验证真实后台对带密文 incomplete 流输出错误并记失败日志。
-// 参数 t 为上下文；前置本地 SSE/隔离数据库/用户 Key，不能出现成功终态或成功账单；harness 清理服务、身份和日志。
-func TestMessagesEncryptedIncompleteFailure(t *testing.T) {
+// TestMessagesEncryptedIncompleteContract 验证真实后台对合法密文 incomplete 流保留封装及 max_tokens 终态。
+// 参数 t 为上下文；前置本地 SSE/隔离数据库/用户 Key，要求成功结束并正确记账；harness 清理服务、身份和日志。
+func TestMessagesEncryptedIncompleteContract(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Plan\"}\n\n")
@@ -30,13 +30,13 @@ func TestMessagesEncryptedIncompleteFailure(t *testing.T) {
 	admin := h.adminSession()
 	owner := h.openScope(t, admin, "incomplete-owner")
 	reply := h.do("POST", "/v1/messages", owner.key, map[string]any{"model": dep.ModelName, "stream": true, "messages": []any{map[string]any{"role": "user", "content": "Hello"}}})
-	if strings.Contains(reply.text(), "message_stop") || !strings.Contains(reply.text(), `"type":"error"`) {
-		t.Fatalf("密文 incomplete 流被当成成功: %s", reply.describe())
+	if !strings.Contains(reply.text(), "message_stop") || !strings.Contains(reply.text(), `"stop_reason":"max_tokens"`) || !strings.Contains(reply.text(), "xhub_responses_reasoning:test-cipher") {
+		t.Fatalf("合法密文 incomplete 流未保留封装和生成上限: %s", reply.describe())
 	}
 	h.flushSpend()
 	bill := h.ok("GET", "/spend/logs/ui/"+reply.header("x-litellm-call-id"), admin, nil).json()
-	if bill["status"] == "success" || bill["api_key"] != owner.keyID {
-		t.Fatalf("密文失败日志状态或归属错误: %v", bill)
+	if bill["status"] != "success" || bill["api_key"] != owner.keyID {
+		t.Fatalf("密文日志状态或归属错误: %v", bill)
 	}
 }
 
