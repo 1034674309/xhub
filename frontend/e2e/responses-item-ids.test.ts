@@ -26,13 +26,14 @@ async function replay(page: Page, bearer: string, body: Record<string, unknown>)
 
 for (const stream of [false, true]) {
   /** 前置真实浏览器/Go 后台/隔离数据库和严格 ID 上游；验证保存模型、页面切换、JSON/SSE完整历史与旧历史回放、错误和日志计费。
-   * 只用本地声明凭据；finally 删除两个部署和连接，运行器删除身份、账单与 schema。 */
+   * 只用本地声明凭据；finally 删除三个部署和连接，运行器删除身份、账单与 schema。 */
   test("Responses item IDs survive model switch " + (stream ? "SSE" : "JSON"), async ({ page }) => {
     test.setTimeout(120000);
     await loginAdmin(page);
     const bearer = await sessionBearer(page),
       headers = { Authorization: "Bearer " + bearer };
     const source = "item-id-source-" + stream,
+      grok = "item-id-grok-" + stream,
       target = "item-id-target-" + stream,
       credential = "item-id-connection-" + stream;
     const ids: string[] = [];
@@ -51,6 +52,7 @@ for (const stream of [false, true]) {
     try {
       for (const [name, upstream, transport] of [
         [source, "e2e-item-id-chat", "bypass_openai_chat"],
+        [grok, "e2e-item-id-grok", "bypass_openai_responses"],
         [target, "e2e-item-id-native", "bypass_openai_responses"],
       ]) {
         const response = await page.request.post(GATEWAY + "/model/new", {
@@ -110,12 +112,25 @@ for (const stream of [false, true]) {
       await expect(page.getByText("e2e-switched", { exact: true }).last()).toBeVisible();
       const input = [{ role: "user", content: "Hello" }, ...result.output, { role: "user", content: "Continue" }];
       const calls = [first.headers()["x-litellm-call-id"], next.headers()["x-litellm-call-id"]];
-      for (const legacy of [false, true]) {
-        const history = structuredClone(input);
-        if (legacy)
+      for (const mode of ["current", "legacy-chat", "legacy-grok", "native-grok"]) {
+        let history = structuredClone(input);
+        if (mode === "native-grok") {
+          const sourceReply = await replay(page, bearer, {
+            model: grok,
+            input: [{ role: "user", content: "Hello" }],
+            stream,
+          });
+          expect(sourceReply.status, sourceReply.raw).toBe(200);
+          const grokOutput = completed(sourceReply.raw, stream).output;
+          expect(grokOutput[0]).toMatchObject({ id: "rs_92ae29c5-9e2c-9cbd-a94b-2fd2abc135be", status: "completed" });
+          history = [{ role: "user", content: "Hello" }, ...grokOutput, { role: "user", content: "Continue" }];
+        }
+        if (mode.startsWith("legacy-"))
           for (const item of history)
             if (item.type === "message" || item.type === "reasoning")
-              item.id = "chatcmpl-old_" + (item.type === "message" ? "message" : "reasoning");
+              item.id =
+                (mode === "legacy-grok" ? "92ae29c5-9e2c-9cbd-a94b-2fd2abc135be_" : "chatcmpl-old_") +
+                (item.type === "message" ? "message" : "reasoning");
         const reply = await replay(page, bearer, { model: target, input: history, stream, store: false });
         expect(reply.status, reply.raw).toBe(200);
         expect(completed(reply.raw, stream).output[0].id).toBe("msg_e2e_native");

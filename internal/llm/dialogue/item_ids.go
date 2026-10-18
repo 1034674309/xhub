@@ -3,8 +3,12 @@ package dialogue
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strings"
 )
+
+// responseUUID 只识别 Grok 实际返回的完整 UUID；不把任意 _message/_reasoning 后缀误判为旧网关产物。
+var responseUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // ResponseTextItemID 为网关合成的 Responses 正文或公开推理项生成稳定 ID。
 // 参数 prefix 是调用方固定的 msg/rs 类型前缀，responseID 是上游响应级 ID；返回类型前缀、xhub 命名空间和十六进制摘要组成的 ID。
@@ -14,10 +18,11 @@ func ResponseTextItemID(prefix, responseID string) string {
 	return prefix + "_xhub_" + hex.EncodeToString(sum[:16])
 }
 
-// normalizeLegacyResponsesTextIDs 修复旧桥接正文 ID，并移除网关合成的公开推理历史 ID。
+// normalizeLegacyResponsesTextIDs 修复旧 Chat/Grok 桥接正文 ID，并规范公开推理历史。
 // 参数 body 是已复制的 Responses 正文；原地处理完整公开项，无返回值、无外部副作用。
 // 公开摘要不是原厂存储引用；仅改成 rs_ 前缀仍会触发 item not found，因此回放时省略合成 ID、保留摘要。
-// 原生合法 ID、非字符串 ID、加密项和 item_reference 均不改写；被引用项也保持原样，避免把引用伪造成新归属。
+// Grok 原生公开摘要的 rs_UUID/status 在严格原生目标触发存储引用/字段错误；仅对已识别完整公开项省略这两项元数据。
+// 其他原生 ID、非字符串 ID、加密项和 item_reference 均不改写；被引用项也保持原样，避免把引用伪造成新归属。
 func normalizeLegacyResponsesTextIDs(body map[string]any) {
 	items := dialogueList(body["input"])
 	references := map[string]bool{}
@@ -35,19 +40,31 @@ func normalizeLegacyResponsesTextIDs(body map[string]any) {
 		}
 		if item["type"] == "reasoning" && strings.HasPrefix(id, "rs_xhub_") && len(id) == len("rs_xhub_")+32 {
 			delete(item, "id")
+			if item["status"] == nil || item["status"] == "completed" {
+				delete(item, "status")
+			}
 			continue
 		}
-		if !strings.HasPrefix(id, "chatcmpl-") {
+		// 完整公开 Grok 摘要可跨厂商回放，但其 UUID 不能被解释成 OpenAI 存储引用。
+		// 只规范已完成或空状态；未知状态、引用项和密文仍交原协议校验，不能通过清洗绕过安全边界。
+		if _, public := item["summary"].([]any); public && item["type"] == "reasoning" && strings.HasPrefix(id, "rs_") && responseUUID.MatchString(strings.TrimPrefix(id, "rs_")) && (item["status"] == nil || item["status"] == "completed") {
+			delete(item, "id")
+			delete(item, "status")
 			continue
 		}
 		switch item["type"] {
 		case "message":
-			if strings.HasSuffix(id, "_message") {
-				item["id"] = ResponseTextItemID("msg", strings.TrimSuffix(id, "_message"))
+			seed := strings.TrimSuffix(id, "_message")
+			if seed != id && (strings.HasPrefix(seed, "chatcmpl-") || responseUUID.MatchString(seed)) {
+				item["id"] = ResponseTextItemID("msg", seed)
 			}
 		case "reasoning":
-			if strings.HasSuffix(id, "_reasoning") {
+			seed := strings.TrimSuffix(id, "_reasoning")
+			if seed != id && (strings.HasPrefix(seed, "chatcmpl-") || responseUUID.MatchString(seed)) {
 				delete(item, "id")
+				if item["status"] == nil || item["status"] == "completed" {
+					delete(item, "status")
+				}
 			}
 		}
 	}

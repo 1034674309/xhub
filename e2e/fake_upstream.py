@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
         if self._ark(req) or self._fal(req):
             return
         model = req.get("model") or "gpt-4o-mini"
-        if model in ("e2e-item-id-chat", "e2e-item-id-native"):
+        if model in ("e2e-item-id-chat", "e2e-item-id-native", "e2e-item-id-grok"):
             # 严格原生夹具按真实 GPT 的 item 类型检查 ID，浏览器必须回放真实桥接产物而非手工修正。
             if self.headers.get("Authorization") != "Bearer sk-fake":
                 self.send_error(401)
@@ -230,9 +230,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(items, list) or "responses" not in self.path:
                 self.send_error(400, "Native target requires Responses history")
                 return
-            for item in items:
+            for item in items if model == "e2e-item-id-native" else []:
                 prefix = {"message": "msg_", "reasoning": "rs_"}.get(item.get("type"))
-                if item.get("type") == "reasoning" and str(item.get("id", "")).startswith("rs_xhub_"):
+                if item.get("type") == "reasoning" and (str(item.get("id", "")).startswith("rs_xhub_") or "92ae29c5-" in str(item.get("id", "")) or "status" in item):
                     self._response(400, json.dumps({"error": {"message": "Synthetic reasoning item not found"}}).encode(), "application/json")
                     return
                 if prefix and item.get("id") and not str(item["id"]).startswith(prefix):
@@ -240,6 +240,11 @@ class Handler(BaseHTTPRequestHandler):
                     return
             item = {"id": "msg_e2e_native", "type": "message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "e2e-switched", "annotations": []}]}
             payload = {"id": "resp_e2e_native", "object": "response", "status": "completed", "output": [item], "usage": {"input_tokens": 8, "output_tokens": 2}}
+            if model == "e2e-item-id-grok":
+                # 真实 Grok 原生 Responses 公开摘要包含 UUID/status；这些输出元数据必须在跨厂商回放时规范化。
+                seed = "92ae29c5-9e2c-9cbd-a94b-2fd2abc135be"
+                item["id"] = "msg_" + seed
+                payload["output"] = [{"type": "reasoning", "id": "rs_" + seed, "status": "completed", "summary": [{"type": "summary_text", "text": "Public Grok plan"}]}, item]
             if req.get("stream"):
                 self._sse([{"type": "response.created", "response": {"id": payload["id"], "status": "in_progress", "output": []}}, {"type": "response.output_item.added", "output_index": 0, "item": {**item, "status": "in_progress", "content": []}}, {"type": "response.output_text.delta", "item_id": item["id"], "output_index": 0, "content_index": 0, "delta": "e2e-switched"}, {"type": "response.output_item.done", "output_index": 0, "item": item}, {"type": "response.completed", "response": payload}])
             else:

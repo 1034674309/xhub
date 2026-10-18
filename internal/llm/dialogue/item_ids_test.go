@@ -99,3 +99,62 @@ func TestLegacyResponsesTextHistoryIDs(t *testing.T) {
 		}
 	}
 }
+
+// TestGrokPublicHistoryIDs 验证真实 Grok UUID 旧桥接与原生公开摘要的跨厂商回放映射。
+// 参数由表驱动提供旧 ID、公开状态、密文和引用边界；应只规范已识别完整公开项，正文与源请求不变，无外部数据清理。
+func TestGrokPublicHistoryIDs(t *testing.T) {
+	const seed = "92ae29c5-9e2c-9cbd-a94b-2fd2abc135be"
+	for _, tc := range []struct {
+		name, kind, id, wantID string
+		status                 any
+		opaque, reference      bool
+		wantStatus             any
+	}{
+		{name: "legacy_message", kind: "message", id: seed + "_message", wantID: ResponseTextItemID("msg", seed)},
+		{name: "legacy_reasoning", kind: "reasoning", id: seed + "_reasoning"},
+		{name: "native_public_reasoning", kind: "reasoning", id: "rs_" + seed, status: "completed"},
+		{name: "native_public_null_status", kind: "reasoning", id: "rs_" + seed},
+		{name: "opaque_reasoning", kind: "reasoning", id: "rs_" + seed, status: "completed", opaque: true, wantID: "rs_" + seed, wantStatus: "completed"},
+		{name: "referenced_reasoning", kind: "reasoning", id: "rs_" + seed, status: "completed", reference: true, wantID: "rs_" + seed, wantStatus: "completed"},
+		{name: "other_native_reasoning", kind: "reasoning", id: "rs_native", status: "completed", wantID: "rs_native", wantStatus: "completed"},
+		{name: "invalid_status", kind: "reasoning", id: "rs_" + seed, status: "invalid", wantID: "rs_" + seed, wantStatus: "invalid"},
+		{name: "unrecognized_message_suffix", kind: "message", id: "foreign_message", wantID: "foreign_message"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := map[string]any{"type": tc.kind, "id": tc.id}
+			if tc.kind == "message" {
+				item["role"], item["content"] = "assistant", []any{map[string]any{"type": "output_text", "text": "Old answer"}}
+			} else {
+				item["summary"], item["status"] = []any{map[string]any{"type": "summary_text", "text": "Keep this public summary."}}, tc.status
+			}
+			if tc.opaque {
+				item["encrypted_content"] = "cipher-keep"
+			}
+			input := []any{item, map[string]any{"role": "user", "content": "Continue"}}
+			if tc.reference {
+				input = append(input, map[string]any{"type": "item_reference", "id": tc.id})
+			}
+			body := map[string]any{"input": input}
+			original, _ := cloneObject(body)
+			d, err := ParseDialogue("openai-responses", body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := EncodeDialogue(d, "openai-responses", "native")
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual := dialogueMap(dialogueList(encoded["input"])[0])
+			_, statusPresent := actual["status"]
+			if dialogueString(actual["id"]) != tc.wantID || actual["status"] != tc.wantStatus || (tc.wantStatus == nil && statusPresent) || !reflect.DeepEqual(body, original) {
+				t.Fatalf("Grok 历史 ID/status 或请求隔离错误: %v", actual)
+			}
+			if tc.kind == "reasoning" && !reflect.DeepEqual(actual["summary"], item["summary"]) {
+				t.Fatal("公开摘要内容被改写")
+			}
+			if tc.opaque && actual["encrypted_content"] != "cipher-keep" {
+				t.Fatal("Grok 密文被改写")
+			}
+		})
+	}
+}

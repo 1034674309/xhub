@@ -25,7 +25,7 @@ func cloneObject(body map[string]any) (map[string]any, error) {
 // ParseDialogue 同时保存原协议正文和可桥接的文本/函数投影，参数为入口协议与护栏后的正文。
 // 统一入口调用；同协议交由上游校验新增字段，跨协议仅允许已映射的能力，返回输入错误或私有对话。
 // 参考 LiteLLM 的原生适配优先、桥接后备分层，不按模型名称猜测协议；未知能力不会被悄悄删除后外发。
-// Responses 仅处理网关合成的完整公开历史 ID；原生项、密文和引用仍保留原协议身份。
+// Responses 规范已识别的完整公开历史：旧桥接 ID 和 Grok 公开摘要元数据；其他原生项、密文和引用保留身份。
 func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	if protocol != "openai-responses" && protocol != "openai-chat" && protocol != "anthropic-messages" {
 		return parseUnifiedDialogue(protocol, body)

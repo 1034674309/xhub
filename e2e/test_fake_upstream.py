@@ -26,6 +26,18 @@ class ArkUpstreamTest(unittest.TestCase):
             self.request("/v1/responses", public)
         self.assertEqual(error.exception.code, 400)
         error.exception.close()
+        # Grok 原生完整公开项是真实 HTTP 产物；只清理 status 或只清理 id 都仍需失败，两者规范后成功。
+        grok = self.request("/v1/responses", {"model": "e2e-item-id-grok", "input": []})
+        reasoning = grok["output"][0]
+        self.assertEqual(reasoning["id"], "rs_92ae29c5-9e2c-9cbd-a94b-2fd2abc135be")
+        for omit in ((), ("id",), ("status",)):
+            invalid_public = {"model": "e2e-item-id-native", "input": [{k: v for k, v in reasoning.items() if k not in omit}]}
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/responses", invalid_public)
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+        normalized = {"type": "reasoning", "summary": reasoning["summary"]}
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [normalized]})["status"], "completed")
         history[0]["id"] = source["id"] + "_message"
         for path, invalid, key in [("/v1/responses", body, "Bearer sk-fake"), ("/v1/responses", {"model": "e2e-item-id-chat"}, "Bearer sk-fake"), ("/v1/chat/completions", {"model": "e2e-item-id-chat"}, "Bearer invalid")]:
             with self.assertRaises(HTTPError) as error:

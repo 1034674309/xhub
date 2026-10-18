@@ -55,7 +55,7 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 						prefix = "rs_"
 					}
 					// 合成公开推理并非原厂存储对象：即使 rs_ 前缀合法，也不能携带这个引用 ID。
-					if item["type"] == "reasoning" && strings.HasPrefix(id, "rs_xhub_") {
+					if item["type"] == "reasoning" && (strings.HasPrefix(id, "rs_xhub_") || strings.Contains(id, "92ae29c5-") || item["status"] != nil) {
 						w.WriteHeader(400)
 						writeJSON(w, map[string]any{"error": map[string]any{"message": "Synthetic reasoning item not found"}})
 						return
@@ -99,6 +99,20 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 			}
 			legacy := []any{map[string]any{"role": "user", "content": "Hello"}, map[string]any{"type": "reasoning", "id": "chatcmpl-old_reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": "Plan"}}}, map[string]any{"type": "message", "id": "chatcmpl-old_message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Old answer"}}}, map[string]any{"role": "user", "content": "Continue"}}
 			h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": legacy, "stream": stream})
+			// Grok 的 Chat 响应级 UUID 与原生公开推理 UUID/status 都不能作为 OpenAI 存储引用回放。
+			for _, nativeGrok := range []bool{false, true} {
+				const seed = "92ae29c5-9e2c-9cbd-a94b-2fd2abc135be"
+				grokReasoning := map[string]any{"type": "reasoning", "id": seed + "_reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": "Public plan"}}}
+				grokMessage := map[string]any{"type": "message", "id": seed + "_message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Old Grok answer"}}}
+				if nativeGrok {
+					grokReasoning["id"], grokReasoning["status"], grokMessage["id"] = "rs_"+seed, "completed", "msg_"+seed
+				}
+				grok := []any{grokReasoning, grokMessage, map[string]any{"role": "user", "content": "Continue"}}
+				r := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": grok, "stream": stream})
+				if completedItemResponse(t, r, stream)["status"] != "completed" {
+					t.Fatalf("Grok 完整公开历史跨模型回放失败: %s", r.describe())
+				}
+			}
 			legacy[2].(map[string]any)["id"] = "foreign_invalid"
 			bad := h.do("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": legacy})
 			if bad.status != 400 || !strings.Contains(bad.text(), "Invalid item id prefix") {
