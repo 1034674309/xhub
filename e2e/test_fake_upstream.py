@@ -38,6 +38,14 @@ class ArkUpstreamTest(unittest.TestCase):
             error.exception.close()
         normalized = {"type": "reasoning", "summary": reasoning["summary"]}
         self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [normalized]})["status"], "completed")
+        tracked = self.request("/v1/responses", {"model": "e2e-item-id-tracked", "input": []})["output"][0]
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [tracked]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        for key in ("internal_chat_message_metadata_passthrough", "metadata"):
+            tracked.pop(key)
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [tracked]})["status"], "completed")
         history[0]["id"] = source["id"] + "_message"
         for path, invalid, key in [("/v1/responses", body, "Bearer sk-fake"), ("/v1/responses", {"model": "e2e-item-id-chat"}, "Bearer sk-fake"), ("/v1/chat/completions", {"model": "e2e-item-id-chat"}, "Bearer invalid")]:
             with self.assertRaises(HTTPError) as error:

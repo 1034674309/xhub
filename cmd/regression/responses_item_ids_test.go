@@ -37,6 +37,12 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 			chatUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var body map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&body)
+				encoded, _ := json.Marshal(body)
+				if strings.Contains(string(encoded), "internal_chat_message_metadata_passthrough") || strings.Contains(string(encoded), `"phase"`) {
+					w.WriteHeader(400)
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "Tracking or phase was not projected to Chat"}})
+					return
+				}
 				writeChatAgentResponse(w, "chatcmpl-source", "Old answer", "", "", body["stream"] == true)
 			}))
 			t.Cleanup(chatUp.Close)
@@ -47,6 +53,11 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 				for _, value := range body["input"].([]any) {
 					item := value.(map[string]any)
 					id, _ := item["id"].(string)
+					if item["internal_chat_message_metadata_passthrough"] != nil || item["metadata"] != nil {
+						w.WriteHeader(400)
+						writeJSON(w, map[string]any{"error": map[string]any{"message": "Unknown input message tracking metadata"}})
+						return
+					}
 					prefix := ""
 					if item["type"] == "message" {
 						prefix = "msg_"
@@ -111,6 +122,14 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 				r := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": grok, "stream": stream})
 				if completedItemResponse(t, r, stream)["status"] != "completed" {
 					t.Fatalf("Grok 完整公开历史跨模型回放失败: %s", r.describe())
+				}
+			}
+			// Fenno 偶发原样输出内部追踪字段：原生回放清理跟踪字段，Chat 投影复用既有 phase 映射，不丢原文。
+			for _, target := range []string{native.ModelName, chat.ModelName} {
+				tracked := []any{map[string]any{"type": "message", "id": "msg_tracked", "role": "assistant", "phase": "final_answer", "content": []any{map[string]any{"type": "output_text", "text": "Old answer"}}, "internal_chat_message_metadata_passthrough": map[string]any{"create_time": 1.0, "turn_id": "trace"}, "metadata": map[string]any{"turn_id": "trace"}}, map[string]any{"role": "user", "content": "Continue"}}
+				r := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": target, "input": tracked, "stream": stream})
+				if completedItemResponse(t, r, stream)["status"] != "completed" {
+					t.Fatalf("带供应商输出追踪字段的历史回放失败: %s", r.describe())
 				}
 			}
 			legacy[2].(map[string]any)["id"] = "foreign_invalid"

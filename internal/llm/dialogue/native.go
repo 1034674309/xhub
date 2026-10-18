@@ -36,6 +36,7 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	}
 	if protocol == "openai-responses" {
 		normalizeLegacyResponsesTextIDs(native)
+		normalizeResponsesMessageMetadata(native)
 	}
 	// 后台异步生成需要检索/取消生命周期，当前标准入口只有受控的临时续接，必须在外发前拒绝。
 	if value := native["background"]; value != nil {
