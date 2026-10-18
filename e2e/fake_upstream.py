@@ -219,12 +219,16 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_error(400, "Chat source received wrong protocol")
                     return
                 message = {"role": "assistant", "content": "e2e-source", "reasoning_content": "Plan"}
+                stop = "stop"
+                if req.get("tools"):
+                    message.update(content=None, tool_calls=[{"index": 0, "id": "call-e2e", "type": "function", "function": {"name": "lookup_value", "arguments": "{}"}}])
+                    stop = "tool_calls"
                 usage = {"prompt_tokens": 8, "completion_tokens": 2}
-                chunk = {"id": "chatcmpl-e2e-source", "choices": [{"index": 0, "delta": message, "finish_reason": "stop"}]}
+                chunk = {"id": "chatcmpl-e2e-source", "choices": [{"index": 0, "delta": message, "finish_reason": stop}]}
                 if req.get("stream"):
                     self._sse([chunk, {"id": "chatcmpl-e2e-source", "choices": [], "usage": usage}, "[DONE]"])
                 else:
-                    self._json({"id": "chatcmpl-e2e-source", "choices": [{"message": message, "finish_reason": "stop"}], "usage": usage})
+                    self._json({"id": "chatcmpl-e2e-source", "choices": [{"message": message, "finish_reason": stop}], "usage": usage})
                 return
             items = req.get("input", [])
             if not isinstance(items, list) or "responses" not in self.path:
@@ -234,7 +238,7 @@ class Handler(BaseHTTPRequestHandler):
                 if "internal_chat_message_metadata_passthrough" in item or "metadata" in item:
                     self._response(400, json.dumps({"error": {"message": "Unknown input message tracking metadata"}}).encode(), "application/json")
                     return
-                prefix = {"message": "msg_", "reasoning": "rs_"}.get(item.get("type"))
+                prefix = {"message": "msg_", "reasoning": "rs_", "function_call": "fc_"}.get(item.get("type"))
                 if item.get("type") == "reasoning" and (str(item.get("id", "")).startswith("rs_xhub_") or "92ae29c5-" in str(item.get("id", "")) or "status" in item):
                     self._response(400, json.dumps({"error": {"message": "Synthetic reasoning item not found"}}).encode(), "application/json")
                     return

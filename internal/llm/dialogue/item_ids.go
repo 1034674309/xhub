@@ -10,15 +10,15 @@ import (
 // responseUUID 只识别 Grok 实际返回的完整 UUID；不把任意 _message/_reasoning 后缀误判为旧网关产物。
 var responseUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// ResponseTextItemID 为网关合成的 Responses 正文或公开推理项生成稳定 ID。
-// 参数 prefix 是调用方固定的 msg/rs 类型前缀，responseID 是上游响应级 ID；返回类型前缀、xhub 命名空间和十六进制摘要组成的 ID。
+// ResponseItemID 为网关合成的 Responses 正文、公开推理或函数项生成稳定 ID。
+// 参数 prefix 是调用方固定的 msg/rs/fc 类型前缀，responseID 是上游响应级或函数关联 ID；返回类型前缀、xhub 命名空间和十六进制摘要组成的 ID。
 // 同步与 SSE 编码器共用；xhub 命名空间标识合成项，空或特殊上游 ID 不直接拼入结果，不修改原生 ID/工具 call_id。
-func ResponseTextItemID(prefix, responseID string) string {
+func ResponseItemID(prefix, responseID string) string {
 	sum := sha256.Sum256([]byte("xhub:responses-text:v1\x00" + prefix + "\x00" + responseID))
 	return prefix + "_xhub_" + hex.EncodeToString(sum[:16])
 }
 
-// normalizeLegacyResponsesTextIDs 修复旧 Chat/Grok 桥接正文 ID，并规范公开推理历史。
+// normalizeLegacyResponsesTextIDs 修复旧 Chat/Grok 桥接正文及函数 ID，并规范公开推理历史。
 // 参数 body 是已复制的 Responses 正文；原地处理完整公开项，无返回值、无外部副作用。
 // 公开摘要不是原厂存储引用；仅改成 rs_ 前缀仍会触发 item not found，因此回放时省略合成 ID、保留摘要。
 // Grok 原生公开摘要的 rs_UUID/status 在严格原生目标触发存储引用/字段错误；仅对已识别完整公开项省略这两项元数据。
@@ -36,6 +36,11 @@ func normalizeLegacyResponsesTextIDs(body map[string]any) {
 		item := dialogueMap(value)
 		id := dialogueString(item["id"])
 		if references[id] || item["encrypted_content"] != nil {
+			continue
+		}
+		// 旧 Chat 桥接把关联 call_id 同时用作函数 item.id；只修复完整的同值函数项，不改 call_id 或原生 fc_ 身份。
+		if item["type"] == "function_call" && id != "" && id == item["call_id"] && !strings.HasPrefix(id, "fc_") {
+			item["id"] = ResponseItemID("fc", id)
 			continue
 		}
 		if item["type"] == "reasoning" && strings.HasPrefix(id, "rs_xhub_") && len(id) == len("rs_xhub_")+32 {
@@ -56,7 +61,7 @@ func normalizeLegacyResponsesTextIDs(body map[string]any) {
 		case "message":
 			seed := strings.TrimSuffix(id, "_message")
 			if seed != id && (strings.HasPrefix(seed, "chatcmpl-") || responseUUID.MatchString(seed)) {
-				item["id"] = ResponseTextItemID("msg", seed)
+				item["id"] = ResponseItemID("msg", seed)
 			}
 		case "reasoning":
 			seed := strings.TrimSuffix(id, "_reasoning")

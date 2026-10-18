@@ -46,6 +46,15 @@ class ArkUpstreamTest(unittest.TestCase):
         for key in ("internal_chat_message_metadata_passthrough", "metadata"):
             tracked.pop(key)
         self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [tracked]})["status"], "completed")
+        tool_source = self.request("/v1/chat/completions", {"model": "e2e-item-id-chat", "tools": [{"type": "function", "function": {"name": "lookup_value"}}]})
+        self.assertEqual(tool_source["choices"][0]["message"]["tool_calls"][0]["id"], "call-e2e")
+        function = {"type": "function_call", "id": "call-e2e", "call_id": "call-e2e", "name": "lookup_value", "arguments": "{}"}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [function]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        function["id"] = "fc_xhub_" + "a" * 32
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [function]})["status"], "completed")
         history[0]["id"] = source["id"] + "_message"
         for path, invalid, key in [("/v1/responses", body, "Bearer sk-fake"), ("/v1/responses", {"model": "e2e-item-id-chat"}, "Bearer sk-fake"), ("/v1/chat/completions", {"model": "e2e-item-id-chat"}, "Bearer invalid")]:
             with self.assertRaises(HTTPError) as error:

@@ -180,15 +180,15 @@ func (s *dialogueStream) reasoningDelta(text string) error {
 		s.reasoningStarted = true
 		s.reasoningBlock = s.nextBlock
 		s.nextBlock++
-		item := map[string]any{"id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{}}
+		item := map[string]any{"id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{}}
 		if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.reasoningBlock, "item": item}); err != nil {
 			return err
 		}
-		if err := s.emit("response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}}); err != nil {
+		if err := s.emit("response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}}); err != nil {
 			return err
 		}
 	}
-	return s.emit("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "delta": text})
+	return s.emit("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "delta": text})
 }
 
 // textDelta 累积并按调用方协议输出一段文本增量。
@@ -213,14 +213,14 @@ func (s *dialogueStream) textDelta(text string) error {
 		if s.textBlock < 0 {
 			s.textBlock = s.nextBlock
 			s.nextBlock++
-			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.textBlock, "item": map[string]any{"id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}); err != nil {
+			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.textBlock, "item": map[string]any{"id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}); err != nil {
 				return err
 			}
-			if err := s.emit("response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}}); err != nil {
+			if err := s.emit("response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}}); err != nil {
 				return err
 			}
 		}
-		return s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "delta": text})
+		return s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "delta": text})
 	case "anthropic-messages":
 		return s.messageDelta(map[string]any{"type": "text", "text": ""}, map[string]any{"type": "text_delta", "text": text})
 	}
@@ -305,12 +305,12 @@ func (s *dialogueStream) toolDelta(index int, id, name, args string) error {
 			return nil
 		}
 		if fresh {
-			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": block, "item": map[string]any{"id": call.ID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": "", "status": "in_progress"}}); err != nil {
+			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": block, "item": map[string]any{"id": llmdialogue.ResponseItemID("fc", call.ID), "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": "", "status": "in_progress"}}); err != nil {
 				return err
 			}
 		}
 		if args != "" {
-			return s.emit("response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "output_index": block, "item_id": call.ID, "delta": args})
+			return s.emit("response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "output_index": block, "item_id": llmdialogue.ResponseItemID("fc", call.ID), "delta": args})
 		}
 	case "anthropic-messages":
 		// Chat 可以交错多个工具片段，Messages 要求内容块有序；finish 校验完整 JSON 后逐个发送，保留各工具身份。
@@ -417,11 +417,11 @@ func (s *dialogueStream) finish() error {
 		items := make([]any, s.nextBlock)
 		if s.reasoningStarted {
 			part := map[string]any{"type": "summary_text", "text": s.reasoning}
-			item := map[string]any{"id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{part}}
+			item := map[string]any{"id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{part}}
 			items[s.reasoningBlock] = item
 			for _, event := range []map[string]any{
-				{"type": "response.reasoning_summary_text.done", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "text": s.reasoning},
-				{"type": "response.reasoning_summary_part.done", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": part},
+				{"type": "response.reasoning_summary_text.done", "item_id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "text": s.reasoning},
+				{"type": "response.reasoning_summary_part.done", "item_id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": part},
 				{"type": "response.output_item.done", "output_index": s.reasoningBlock, "item": item},
 			} {
 				if err := s.emit(streamString(event["type"]), event); err != nil {
@@ -431,11 +431,11 @@ func (s *dialogueStream) finish() error {
 		}
 		if s.textBlock >= 0 {
 			part := map[string]any{"type": "output_text", "text": s.text, "annotations": []any{}}
-			item := map[string]any{"id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "completed", "content": []any{part}}
+			item := map[string]any{"id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "completed", "content": []any{part}}
 			items[s.textBlock] = item
 			for _, event := range []map[string]any{
-				{"type": "response.output_text.done", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "text": s.text},
-				{"type": "response.content_part.done", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": part},
+				{"type": "response.output_text.done", "item_id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "text": s.text},
+				{"type": "response.content_part.done", "item_id": llmdialogue.ResponseItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": part},
 				{"type": "response.output_item.done", "output_index": s.textBlock, "item": item},
 			} {
 				if err := s.emit(streamString(event["type"]), event); err != nil {
@@ -482,11 +482,11 @@ func (s *dialogueStream) finish() error {
 				if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": block, "item": started}); err != nil {
 					return err
 				}
-				if err := s.emit(prefix+".delta", map[string]any{"type": prefix + ".delta", "item_id": c.ID, "output_index": block, "delta": item[field]}); err != nil {
+				if err := s.emit(prefix+".delta", map[string]any{"type": prefix + ".delta", "item_id": item["id"], "output_index": block, "delta": item[field]}); err != nil {
 					return err
 				}
 			}
-			if err := s.emit(prefix+".done", map[string]any{"type": prefix + ".done", "item_id": c.ID, "output_index": block, field: item[field]}); err != nil {
+			if err := s.emit(prefix+".done", map[string]any{"type": prefix + ".done", "item_id": item["id"], "output_index": block, field: item[field]}); err != nil {
 				return err
 			}
 			if err := s.emit("response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": block, "item": item}); err != nil {

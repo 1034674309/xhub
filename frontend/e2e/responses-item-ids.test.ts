@@ -114,7 +114,15 @@ for (const stream of [false, true]) {
       await expect(page.getByText("e2e-switched", { exact: true }).last()).toBeVisible();
       const input = [{ role: "user", content: "Hello" }, ...result.output, { role: "user", content: "Continue" }];
       const calls = [first.headers()["x-litellm-call-id"], next.headers()["x-litellm-call-id"]];
-      for (const mode of ["current", "legacy-chat", "legacy-grok", "native-grok", "tracked-gpt"]) {
+      for (const mode of [
+        "current",
+        "legacy-chat",
+        "legacy-grok",
+        "native-grok",
+        "tracked-gpt",
+        "function-new",
+        "function-legacy",
+      ]) {
         let history = structuredClone(input);
         if (mode === "native-grok") {
           const sourceReply = await replay(page, bearer, {
@@ -137,6 +145,25 @@ for (const stream of [false, true]) {
           const trackedOutput = completed(sourceReply.raw, stream).output;
           expect(trackedOutput[0].metadata).toEqual({ turn_id: "trace" });
           history = [{ role: "user", content: "Hello" }, ...trackedOutput, { role: "user", content: "Continue" }];
+        }
+        if (mode.startsWith("function-")) {
+          const toolReply = await replay(page, bearer, {
+            model: source,
+            input: [{ role: "user", content: "Call lookup_value." }],
+            tools: [{ type: "function", name: "lookup_value", parameters: { type: "object" } }],
+            stream,
+          });
+          expect(toolReply.status, toolReply.raw).toBe(200);
+          const toolOutput = completed(toolReply.raw, stream).output;
+          const call = toolOutput.find((item: { type: string }) => item.type === "function_call");
+          expect(call.id).toMatch(/^fc_xhub_[a-f0-9]{32}$/);
+          expect(call.call_id).toBe("call-e2e");
+          if (mode === "function-legacy") call.id = call.call_id;
+          history = [
+            { role: "user", content: "Call lookup_value." },
+            ...toolOutput,
+            { type: "function_call_output", call_id: call.call_id, output: "KNOWN_TEST_VALUE" },
+          ];
         }
         if (mode.startsWith("legacy-"))
           for (const item of history)

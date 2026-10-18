@@ -207,10 +207,10 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	case "openai-responses":
 		items := []any{}
 		if r.Reasoning != "" {
-			items = append(items, map[string]any{"id": ResponseTextItemID("rs", r.ID), "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": r.Reasoning}}})
+			items = append(items, map[string]any{"id": ResponseItemID("rs", r.ID), "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": r.Reasoning}}})
 		}
 		if r.Text != "" {
-			items = append(items, map[string]any{"id": ResponseTextItemID("msg", r.ID), "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
+			items = append(items, map[string]any{"id": ResponseItemID("msg", r.ID), "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
 		}
 		for _, c := range r.Calls {
 			item, err := ResponseToolItem(c, r.ToolBindings, "completed")

@@ -164,9 +164,10 @@ func projectAgentCall(item map[string]any) error {
 }
 
 // ResponseToolItem 根据本请求的映射还原 Responses 工具项；参数为完整函数调用、映射和生命周期状态，返回项或 custom/搜索参数错误。
-// JSON 及 SSE 编码器共用；custom 兼容 content/input 单字符串包装，不修补代码；客户端负责执行和语法校验。
+// JSON 及 SSE 编码器共用；函数 item.id 使用 fc_ 合成身份，与关联 call_id 分离；原生 custom/客户端搜索保持既有身份契约。
+// custom 兼容 content/input 单字符串包装，不修补代码；客户端负责执行和语法校验。
 func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string) (map[string]any, error) {
-	item := map[string]any{"id": call.ID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": call.Arguments, "status": status}
+	item := map[string]any{"id": ResponseItemID("fc", call.ID), "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": call.Arguments, "status": status}
 	binding, ok := bindings[call.Name]
 	if !ok {
 		return item, nil
@@ -176,6 +177,7 @@ func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string)
 		item["namespace"] = binding.Namespace
 	}
 	if binding.ClientSearch {
+		item["id"] = call.ID
 		var args map[string]any
 		if json.Unmarshal([]byte(call.Arguments), &args) != nil || args == nil {
 			return nil, fmt.Errorf("client tool_search arguments must be an object")
@@ -183,6 +185,7 @@ func ResponseToolItem(call Turn, bindings map[string]ToolBinding, status string)
 		item["type"], item["execution"], item["arguments"] = "tool_search_call", "client", args
 		delete(item, "name")
 	} else if binding.Custom {
+		item["id"] = call.ID
 		var args map[string]any
 		if json.Unmarshal([]byte(call.Arguments), &args) != nil {
 			return nil, fmt.Errorf("invalid custom tool arguments")

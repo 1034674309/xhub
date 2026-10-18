@@ -8,16 +8,16 @@ import (
 	"testing"
 )
 
-// TestResponseTextItemID 验证合成 ID 的类型、稳定性和特殊上游标识边界；纯内存输入，无外部依赖或清理。
-func TestResponseTextItemID(t *testing.T) {
+// TestResponseItemID 验证合成 ID 的类型、稳定性和特殊上游标识边界；纯内存输入，无外部依赖或清理。
+func TestResponseItemID(t *testing.T) {
 	for _, seed := range []string{"chatcmpl-example", "msg_native", "", "invalid /\n中文", strings.Repeat("x", 10000)} {
-		for _, prefix := range []string{"msg", "rs"} {
-			id := ResponseTextItemID(prefix, seed)
-			if !regexp.MustCompile("^"+prefix+"_xhub_[0-9a-f]{32}$").MatchString(id) || id != ResponseTextItemID(prefix, seed) {
+		for _, prefix := range []string{"msg", "rs", "fc"} {
+			id := ResponseItemID(prefix, seed)
+			if !regexp.MustCompile("^"+prefix+"_xhub_[0-9a-f]{32}$").MatchString(id) || id != ResponseItemID(prefix, seed) {
 				t.Fatalf("合成 %s ID 不合法或不稳定: %q", prefix, id)
 			}
 		}
-		if ResponseTextItemID("msg", seed) == ResponseTextItemID("rs", seed) || ResponseTextItemID("msg", seed) == ResponseTextItemID("msg", seed+"next") {
+		if ResponseItemID("msg", seed) == ResponseItemID("rs", seed) || ResponseItemID("msg", seed) == ResponseItemID("msg", seed+"next") {
 			t.Fatal("不同类型或响应的 ID 发生碰撞")
 		}
 	}
@@ -33,7 +33,7 @@ func TestResponsesGeneratedTextItemIDs(t *testing.T) {
 	var out map[string]any
 	_ = json.Unmarshal(raw, &out)
 	items := dialogueList(out["output"])
-	if dialogueMap(items[0])["id"] != ResponseTextItemID("rs", r.ID) || dialogueMap(items[1])["id"] != ResponseTextItemID("msg", r.ID) || dialogueMap(items[2])["call_id"] != "call_keep" || out["id"] != r.ID {
+	if dialogueMap(items[0])["id"] != ResponseItemID("rs", r.ID) || dialogueMap(items[1])["id"] != ResponseItemID("msg", r.ID) || dialogueMap(items[2])["call_id"] != "call_keep" || out["id"] != r.ID {
 		t.Fatalf("同步桥接混淆 item/response/tool ID: %s", raw)
 	}
 	native := map[string]any{"id": "resp_native", "output": []any{map[string]any{"type": "message", "id": "msg_native", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "OK"}}}}}
@@ -51,9 +51,9 @@ func TestLegacyResponsesTextHistoryIDs(t *testing.T) {
 		opaque, reference bool
 		want              string
 	}{
-		{name: "legacy_message", kind: "message", id: "chatcmpl-old_message", want: ResponseTextItemID("msg", "chatcmpl-old")},
+		{name: "legacy_message", kind: "message", id: "chatcmpl-old_message", want: ResponseItemID("msg", "chatcmpl-old")},
 		{name: "legacy_reasoning", kind: "reasoning", id: "chatcmpl-old_reasoning", want: ""},
-		{name: "synthetic_reasoning", kind: "reasoning", id: ResponseTextItemID("rs", "current"), want: ""},
+		{name: "synthetic_reasoning", kind: "reasoning", id: ResponseItemID("rs", "current"), want: ""},
 		{name: "native_reasoning", kind: "reasoning", id: "rs_native", want: "rs_native"},
 		{name: "native_message", kind: "message", id: "msg_native_message", want: "msg_native_message"},
 		{name: "other_invalid_id", kind: "message", id: "foreign_bad", want: "foreign_bad"},
@@ -110,7 +110,7 @@ func TestGrokPublicHistoryIDs(t *testing.T) {
 		opaque, reference      bool
 		wantStatus             any
 	}{
-		{name: "legacy_message", kind: "message", id: seed + "_message", wantID: ResponseTextItemID("msg", seed)},
+		{name: "legacy_message", kind: "message", id: seed + "_message", wantID: ResponseItemID("msg", seed)},
 		{name: "legacy_reasoning", kind: "reasoning", id: seed + "_reasoning"},
 		{name: "native_public_reasoning", kind: "reasoning", id: "rs_" + seed, status: "completed"},
 		{name: "native_public_null_status", kind: "reasoning", id: "rs_" + seed},
@@ -154,6 +154,45 @@ func TestGrokPublicHistoryIDs(t *testing.T) {
 			}
 			if tc.opaque && actual["encrypted_content"] != "cipher-keep" {
 				t.Fatal("Grok 密文被改写")
+			}
+		})
+	}
+}
+
+// TestResponsesFunctionItemIDs 验证函数项与关联 call_id 分离、旧完整函数历史修复及原生/引用边界。
+// 前置内存同步回复与工具结果；新旧回放保持参数和工具关联，原生 fc_ 与引用不改，无外部清理。
+func TestResponsesFunctionItemIDs(t *testing.T) {
+	call := Turn{ID: "call-old", Name: "lookup_value", Arguments: "{}"}
+	item, err := ResponseToolItem(call, nil, "completed")
+	if err != nil || item["id"] != ResponseItemID("fc", call.ID) || item["call_id"] != call.ID {
+		t.Fatalf("函数 item/call 身份混淆: %v %v", item, err)
+	}
+	for _, tc := range []struct {
+		name, id  string
+		reference bool
+		want      string
+	}{
+		{name: "legacy", id: call.ID, want: ResponseItemID("fc", call.ID)},
+		{name: "native", id: "fc_native", want: "fc_native"},
+		{name: "arbitrary", id: "foreign_invalid", want: "foreign_invalid"},
+		{name: "reference", id: call.ID, reference: true, want: call.ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			history := []any{map[string]any{"type": "function_call", "id": tc.id, "call_id": call.ID, "name": call.Name, "arguments": call.Arguments}, map[string]any{"type": "function_call_output", "call_id": call.ID, "output": "KNOWN_TEST_VALUE"}}
+			if tc.reference {
+				history = append(history, map[string]any{"type": "item_reference", "id": tc.id})
+			}
+			d, err := ParseDialogue("openai-responses", map[string]any{"input": history})
+			if err != nil {
+				t.Fatal(err)
+			}
+			native, err := EncodeDialogue(d, "openai-responses", "real")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := dialogueMap(dialogueList(native["input"])[0])
+			if got["id"] != tc.want || got["call_id"] != call.ID || got["arguments"] != "{}" {
+				t.Fatalf("函数历史规范化丢失工具关联: %v", got)
 			}
 		})
 	}

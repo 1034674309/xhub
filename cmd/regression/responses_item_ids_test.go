@@ -43,6 +43,10 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 					writeJSON(w, map[string]any{"error": map[string]any{"message": "Tracking or phase was not projected to Chat"}})
 					return
 				}
+				if body["tools"] != nil {
+					writeChatAgentResponse(w, "chatcmpl-source", "", "lookup_value", "{}", body["stream"] == true)
+					return
+				}
 				writeChatAgentResponse(w, "chatcmpl-source", "Old answer", "", "", body["stream"] == true)
 			}))
 			t.Cleanup(chatUp.Close)
@@ -64,6 +68,12 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 					}
 					if item["type"] == "reasoning" {
 						prefix = "rs_"
+					}
+					if item["type"] == "function_call" {
+						prefix = "fc_"
+						if item["call_id"] != "call_chat" {
+							t.Error("函数历史关联 call_id 被改写")
+						}
 					}
 					// 合成公开推理并非原厂存储对象：即使 rs_ 前缀合法，也不能携带这个引用 ID。
 					if item["type"] == "reasoning" && (strings.HasPrefix(id, "rs_xhub_") || strings.Contains(id, "92ae29c5-") || item["status"] != nil) {
@@ -133,6 +143,26 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 				}
 			}
 			legacy[2].(map[string]any)["id"] = "foreign_invalid"
+			// 真实 Chat 工具产物必须分离函数 item.id 与 call_id；两种历史形状都能带结果切换原生 GPT。
+			tool := []any{map[string]any{"type": "function", "name": "lookup_value", "parameters": map[string]any{"type": "object"}}}
+			toolReply := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": chat.ModelName, "input": "Call lookup_value", "tools": tool, "stream": stream})
+			toolItems := completedItemResponse(t, toolReply, stream)["output"].([]any)
+			for _, oldTool := range []bool{false, true} {
+				for _, value := range toolItems {
+					item := value.(map[string]any)
+					if item["type"] == "function_call" {
+						if !oldTool && !strings.HasPrefix(item["id"].(string), "fc_") {
+							t.Fatalf("新函数历史仍使用关联 ID: %v", item)
+						}
+						if oldTool {
+							item["id"] = item["call_id"]
+						}
+					}
+				}
+				input := append([]any{}, toolItems...)
+				input = append(input, map[string]any{"type": "function_call_output", "call_id": "call_chat", "output": "KNOWN_TEST_VALUE"})
+				h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": input, "stream": stream})
+			}
 			bad := h.do("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": legacy})
 			if bad.status != 400 || !strings.Contains(bad.text(), "Invalid item id prefix") {
 				t.Fatalf("任意错误 ID 被静默改写: %s", bad.describe())
