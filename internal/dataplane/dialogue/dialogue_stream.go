@@ -46,6 +46,8 @@ type dialogueStream struct {
 	capture bytes.Buffer
 	// 客户端协议、公开模型、响应 ID、累计文本与归一结束原因；均为本请求私有状态。
 	protocol, model, id, text, stop string
+	// responseItemSeed 在首次输出时固定；上游迟到或重复的响应 ID 不得改变已发布的 item_id。
+	responseItemSeed string
 	// 上游工具索引到累积调用的映射，逐帧拼接名称和 JSON 参数。
 	calls map[int]*llmdialogue.Turn
 	// 上游工具索引到稳定输出内容块索引的映射，避免与文本块碰撞。
@@ -123,12 +125,13 @@ func (s *dialogueStream) emit(event string, data any) error {
 // start 按调用方协议发送首次生命周期事件，保证同一请求只开始一次。
 // 无参数；返回写入/不支持协议错误；textDelta、toolDelta 与完成处理在首次输出前调用。
 // Chat 输出 assistant 角色，Responses 输出 created，Messages 输出 message_start；Google 不需要独立开始帧。
-// 修改 started 并可能写 HTTP；重复调用直接成功，不重置 ID、用量或块索引。
+// 修改 started 并固定合成文本项的 ID 种子，可能写 HTTP；重复调用不重置种子、用量或块索引。
 func (s *dialogueStream) start() error {
 	if s.started {
 		return nil
 	}
 	s.started = true
+	s.responseItemSeed = s.id
 	switch s.protocol {
 	case "gemini", "vertex":
 		return nil
@@ -177,15 +180,15 @@ func (s *dialogueStream) reasoningDelta(text string) error {
 		s.reasoningStarted = true
 		s.reasoningBlock = s.nextBlock
 		s.nextBlock++
-		item := map[string]any{"id": s.id + "_reasoning", "type": "reasoning", "summary": []any{}}
+		item := map[string]any{"id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{}}
 		if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.reasoningBlock, "item": item}); err != nil {
 			return err
 		}
-		if err := s.emit("response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}}); err != nil {
+		if err := s.emit("response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}}); err != nil {
 			return err
 		}
 	}
-	return s.emit("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "delta": text})
+	return s.emit("response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "delta": text})
 }
 
 // textDelta 累积并按调用方协议输出一段文本增量。
@@ -210,14 +213,14 @@ func (s *dialogueStream) textDelta(text string) error {
 		if s.textBlock < 0 {
 			s.textBlock = s.nextBlock
 			s.nextBlock++
-			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.textBlock, "item": map[string]any{"id": s.id + "_message", "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}); err != nil {
+			if err := s.emit("response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": s.textBlock, "item": map[string]any{"id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}}}); err != nil {
 				return err
 			}
-			if err := s.emit("response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": s.id + "_message", "output_index": s.textBlock, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}}); err != nil {
+			if err := s.emit("response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}}); err != nil {
 				return err
 			}
 		}
-		return s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": s.id + "_message", "output_index": s.textBlock, "content_index": 0, "delta": text})
+		return s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "delta": text})
 	case "anthropic-messages":
 		return s.messageDelta(map[string]any{"type": "text", "text": ""}, map[string]any{"type": "text_delta", "text": text})
 	}
@@ -414,11 +417,11 @@ func (s *dialogueStream) finish() error {
 		items := make([]any, s.nextBlock)
 		if s.reasoningStarted {
 			part := map[string]any{"type": "summary_text", "text": s.reasoning}
-			item := map[string]any{"id": s.id + "_reasoning", "type": "reasoning", "summary": []any{part}}
+			item := map[string]any{"id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{part}}
 			items[s.reasoningBlock] = item
 			for _, event := range []map[string]any{
-				{"type": "response.reasoning_summary_text.done", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "text": s.reasoning},
-				{"type": "response.reasoning_summary_part.done", "item_id": s.id + "_reasoning", "output_index": s.reasoningBlock, "summary_index": 0, "part": part},
+				{"type": "response.reasoning_summary_text.done", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "text": s.reasoning},
+				{"type": "response.reasoning_summary_part.done", "item_id": llmdialogue.ResponseTextItemID("rs", s.responseItemSeed), "output_index": s.reasoningBlock, "summary_index": 0, "part": part},
 				{"type": "response.output_item.done", "output_index": s.reasoningBlock, "item": item},
 			} {
 				if err := s.emit(streamString(event["type"]), event); err != nil {
@@ -428,11 +431,11 @@ func (s *dialogueStream) finish() error {
 		}
 		if s.textBlock >= 0 {
 			part := map[string]any{"type": "output_text", "text": s.text, "annotations": []any{}}
-			item := map[string]any{"id": s.id + "_message", "type": "message", "role": "assistant", "status": "completed", "content": []any{part}}
+			item := map[string]any{"id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "type": "message", "role": "assistant", "status": "completed", "content": []any{part}}
 			items[s.textBlock] = item
 			for _, event := range []map[string]any{
-				{"type": "response.output_text.done", "item_id": s.id + "_message", "output_index": s.textBlock, "content_index": 0, "text": s.text},
-				{"type": "response.content_part.done", "item_id": s.id + "_message", "output_index": s.textBlock, "content_index": 0, "part": part},
+				{"type": "response.output_text.done", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "text": s.text},
+				{"type": "response.content_part.done", "item_id": llmdialogue.ResponseTextItemID("msg", s.responseItemSeed), "output_index": s.textBlock, "content_index": 0, "part": part},
 				{"type": "response.output_item.done", "output_index": s.textBlock, "item": item},
 			} {
 				if err := s.emit(streamString(event["type"]), event); err != nil {

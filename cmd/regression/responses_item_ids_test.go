@@ -1,0 +1,121 @@
+package regression
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+// completedItemResponse 提取真实 JSON/SSE 的 Responses 完成对象；参数为测试上下文、HTTP 回复及流模式，缺失终态则失败，无外部清理。
+func completedItemResponse(t *testing.T, r reply, stream bool) map[string]any {
+	t.Helper()
+	if !stream {
+		return r.json()
+	}
+	for _, line := range strings.Split(r.text(), "\n") {
+		if strings.HasPrefix(line, "data: {") {
+			var event map[string]any
+			if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) == nil && event["type"] == "response.completed" {
+				return event["response"].(map[string]any)
+			}
+		}
+	}
+	t.Fatalf("Responses SSE 缺少完成对象: %s", r.describe())
+	return nil
+}
+
+// TestResponsesItemIDModelSwitch 验证真实 HTTP/数据库的 Chat→Responses→严格原生模型切换，含旧历史、JSON/SSE、错误和记账。
+// 前置两个本地上游、专属 PostgreSQL schema 和个人虚拟 Key；正常历史应放行，非法 ID/未认证仍拒绝；harness 回收身份、账单及服务。
+func TestResponsesItemIDModelSwitch(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint(stream), func(t *testing.T) {
+			var nativeCalls atomic.Int32
+			chatUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				writeChatAgentResponse(w, "chatcmpl-source", "Old answer", "", "", body["stream"] == true)
+			}))
+			t.Cleanup(chatUp.Close)
+			nativeUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nativeCalls.Add(1)
+				var body map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				for _, value := range body["input"].([]any) {
+					item := value.(map[string]any)
+					id, _ := item["id"].(string)
+					prefix := ""
+					if item["type"] == "message" {
+						prefix = "msg_"
+					}
+					if item["type"] == "reasoning" {
+						prefix = "rs_"
+					}
+					// 合成公开推理并非原厂存储对象：即使 rs_ 前缀合法，也不能携带这个引用 ID。
+					if item["type"] == "reasoning" && strings.HasPrefix(id, "rs_xhub_") {
+						w.WriteHeader(400)
+						writeJSON(w, map[string]any{"error": map[string]any{"message": "Synthetic reasoning item not found"}})
+						return
+					}
+					if id != "" && prefix != "" && !strings.HasPrefix(id, prefix) {
+						w.WriteHeader(400)
+						writeJSON(w, map[string]any{"error": map[string]any{"message": "Invalid item id prefix"}})
+						return
+					}
+				}
+				writeAgentResponse(w, nativeAgentResponse("resp_strict", "Switched OK", false, nil), body["stream"] == true)
+			}))
+			t.Cleanup(nativeUp.Close)
+			chat, native := chatDeployment("bridge-source"), chatDeployment("strict-native")
+			chat.LiteLLMParams["api_base"] = chatUp.URL + "/v1"
+			native.LiteLLMParams["api_base"] = nativeUp.URL + "/v1"
+			chat.ModelInfo["transport"] = "bypass_openai_chat"
+			native.ModelInfo["transport"] = "bypass_openai_responses"
+			chat.ModelInfo["endpoint_types"], native.ModelInfo["endpoint_types"] = []string{"responses"}, []string{"responses"}
+			h := newHarness(t, chat, native)
+			admin := h.adminSession()
+			owner := h.openScope(t, admin, "item-switch")
+			first := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": chat.ModelName, "input": "Hello", "stream": stream})
+			items := completedItemResponse(t, first, stream)["output"].([]any)
+			for _, value := range items {
+				item := value.(map[string]any)
+				prefix := "msg_"
+				if item["type"] == "reasoning" {
+					prefix = "rs_"
+				}
+				if !strings.HasPrefix(item["id"].(string), prefix) {
+					t.Fatalf("Chat 桥接生成了错误 item ID: %v", item)
+				}
+			}
+			input := append([]any{map[string]any{"role": "user", "content": "Hello"}}, items...)
+			input = append(input, map[string]any{"role": "user", "content": "Continue"})
+			second := h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": input, "stream": stream, "store": false})
+			output := completedItemResponse(t, second, stream)["output"].([]any)
+			if output[0].(map[string]any)["id"] != "msg_resp_strict" {
+				t.Fatal("合法原生 item ID 被改写")
+			}
+			legacy := []any{map[string]any{"role": "user", "content": "Hello"}, map[string]any{"type": "reasoning", "id": "chatcmpl-old_reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": "Plan"}}}, map[string]any{"type": "message", "id": "chatcmpl-old_message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Old answer"}}}, map[string]any{"role": "user", "content": "Continue"}}
+			h.ok("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": legacy, "stream": stream})
+			legacy[2].(map[string]any)["id"] = "foreign_invalid"
+			bad := h.do("POST", "/v1/responses", owner.key, map[string]any{"model": native.ModelName, "input": legacy})
+			if bad.status != 400 || !strings.Contains(bad.text(), "Invalid item id prefix") {
+				t.Fatalf("任意错误 ID 被静默改写: %s", bad.describe())
+			}
+			before := nativeCalls.Load()
+			unauth := h.do("POST", "/v1/responses", "", map[string]any{"model": native.ModelName, "input": "Hello"})
+			if unauth.status != 401 || nativeCalls.Load() != before {
+				t.Fatalf("缺少凭据的请求触达上游: %s", unauth.describe())
+			}
+			h.flushSpend()
+			for _, r := range []reply{first, second} {
+				bill := h.ok("GET", "/spend/logs/ui/"+r.header("x-litellm-call-id"), admin, nil).json()
+				if bill["status"] != "success" || bill["api_key"] != owner.keyID {
+					t.Fatalf("跨模型续聊记账归属错误: %v", bill)
+				}
+			}
+		})
+	}
+}

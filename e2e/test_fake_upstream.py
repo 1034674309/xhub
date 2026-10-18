@@ -10,6 +10,29 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_item_id_model_switch_fixture(self):
+        """目的：验证 Chat源/严格原生目标夹具的成功、错误ID、协议及鉴权；前置本机服务，tearDown关闭，无真实凭据。"""
+        source = self.request("/v1/chat/completions", {"model": "e2e-item-id-chat", "messages": []})
+        self.assertTrue(source["id"].startswith("chatcmpl-"))
+        history = [{"type": "message", "id": "msg_valid", "role": "assistant", "content": [{"type": "output_text", "text": "Hello"}]}]
+        body = {"model": "e2e-item-id-native", "input": history}
+        self.assertEqual(self.request("/v1/responses", body)["output"][0]["id"], "msg_e2e_native")
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode(), headers={"Authorization": "Bearer sk-fake"}), timeout=2) as response:
+            self.assertIn("response.completed", response.read().decode())
+        public = {"model": "e2e-item-id-native", "input": [{"type": "reasoning", "summary": []}]}
+        self.assertEqual(self.request("/v1/responses", public)["status"], "completed")
+        public["input"][0]["id"] = "rs_xhub_" + "a" * 32
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", public)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        history[0]["id"] = source["id"] + "_message"
+        for path, invalid, key in [("/v1/responses", body, "Bearer sk-fake"), ("/v1/responses", {"model": "e2e-item-id-chat"}, "Bearer sk-fake"), ("/v1/chat/completions", {"model": "e2e-item-id-chat"}, "Bearer invalid")]:
+            with self.assertRaises(HTTPError) as error:
+                self.request(path, invalid, key)
+            self.assertIn(error.exception.code, (400, 401))
+            error.exception.close()
+
     def test_client_search_fixture(self):
         """目的：验证发现→加载→执行结果三轮及错误路径；前置本机夹具，断言真实 JSON/SSE 返回，tearDown 关闭服务，无供应商调用。"""
         search = {"type": "function", "function": {"name": "tool_search", "parameters": {"type": "object"}}}
