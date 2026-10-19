@@ -1,4 +1,5 @@
 "use client";
+import { QuotaGuide } from "@/components/shared/QuotaGuide";
 
 import { useKeyInfo } from "@/app/(dashboard)/hooks/keys/useKeyInfo";
 import { useKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
@@ -249,7 +250,7 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
       return <div className="p-4 text-sm text-muted-foreground">{t("pages.apiKeys.loadingKey")}</div>;
     }
     return (
-      <div className="w-full h-full overflow-hidden">
+      <div className="h-full min-h-0 w-full flex-1 overflow-hidden">
         <KeyInfoView
           keyId={selectedKeyId}
           onClose={() => void setSelectedKeyId(null)}
@@ -270,6 +271,7 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
         subtitle={t("pages.apiKeys.subtitle")}
         primaryAction={headerActions}
       />
+      <QuotaGuide scope="key" />
       <DataTable
         data={keyList}
         columns={columns}
@@ -289,7 +291,7 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
         columnResizeMode="onChange"
         isLoading={isPending || isPlaceholderData}
         loadingMessage={t("Loading keys...")}
-        noDataMessage="No keys found"
+        noDataMessage={t("No keys found")}
         fillHeight
         size="compact"
         toolbar={(table) => (

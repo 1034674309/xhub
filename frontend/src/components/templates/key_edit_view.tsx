@@ -1,72 +1,31 @@
-import { canDetachKeyProject, KeyProjectField } from "./KeyProjectField";
-import GuardrailSelector from "@/components/guardrails/GuardrailSelector";
-import { useOrganizations } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
-import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings";
+import { z } from "zod/v4";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FieldGroup } from "@/components/ui/field";
 import { FormField } from "@/components/shared/form/FormField";
-import React, { useEffect, useState } from "react";
-import { hasCapability } from "../../utils/capabilities";
-import { isProxyAdminRole, rolesWithWriteAccess } from "../../utils/roles";
-import AccessGroupSelector from "../common_components/AccessGroupSelector";
-import BudgetDurationDropdown from "../common_components/budget_duration_dropdown";
-import { mapInternalToDisplayNames } from "../callback_info_helpers";
-import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
-
-import OrganizationDropdown from "../common_components/OrganizationDropdown";
-import RouteTemplateSelect from "../route_templates/RouteTemplateSelect";
-import { estimateTooltips, withNormalizedEstimates } from "./estimatedOutputTokens";
-import {
-  keyTypeFromRoutes,
-  modelSentinelOptions,
-  parseAllowedRoutes,
-} from "./keyEditFieldNormalizers";
-import {
-  KeyBudgetNumberField,
-  KeyMetadataField,
-  KeyTypeSelect,
-  labelWithHint,
-  moveMetadataTagsToTagsField,
-} from "./KeyEditViewControls";
-import {
-  KeyEditFormValues,
-  keyEditFormSchema,
-  toKeyEditFormValues,
-  toSubmittedValues,
-} from "./keyEditFormValues";
-import { BudgetFallbacksEditor } from "../key_team_helpers/BudgetFallbacksEditor";
-import { ModelMaxBudgetField } from "../key_team_helpers/ModelMaxBudgetEditor";
-import { useModelMaxBudgetField } from "../key_team_helpers/useModelMaxBudgetField";
-import { BudgetWindowEntry, BudgetWindowsEditor } from "../key_team_helpers/BudgetWindowsEditor";
-import {
-  TagRateLimitEditor,
-  TagRateLimitEntry,
-  tagLimitsToRows,
-  tagRowsToLimits,
-} from "../key_team_helpers/TagRateLimitEditor";
-import { excludeProxyWideSentinel, hasAllModelsSentinel } from "../key_team_helpers/fetch_available_models_team_key";
-import { KeyResponse } from "../key_team_helpers/key_list";
-import { toast } from "@/lib/toast";
-import { modelAvailableCall, tagListCall } from "../networking";
-import { fetchTeamModels } from "../organisms/create_key_button";
-import NumericalInput from "../shared/numerical_input";
-import { MultiSelect } from "../shared/MultiSelect";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
-import { Tag } from "../tag_management/types";
-import EditLoggingSettings from "../team/EditLoggingSettings";
+import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import { useT } from "@/i18n";
+import { useT, t } from "@/i18n";
+import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
+import RouteTemplateSelect from "../route_templates/RouteTemplateSelect";
+import { KeyResponse } from "../key_team_helpers/key_list";
+import { excludeProxyWideSentinel, hasAllModelsSentinel } from "../key_team_helpers/fetch_available_models_team_key";
+import { modelAvailableCall } from "../networking";
+import { fetchTeamModels } from "../organisms/create_key_button";
+import { MultiSelect } from "../shared/MultiSelect";
+import NumericalInput from "../shared/numerical_input";
+import { KeyTypeSelect } from "./KeyEditViewControls";
+import { keyTypeFromRoutes, modelSentinelOptions, parseAllowedRoutes } from "./keyEditFieldNormalizers";
+import { keyEditFormSchema, KeyEditFormValues } from "./keyEditFormValues";
 
+/** 编辑器参数：密钥及用户上下文用于读取模型，回调负责保存或取消；保留团队及授权属性以兼容调用方。 */
 interface KeyEditViewProps {
+  /** 详情标题和折叠说明，随表单一起滚动；创建式独立编辑器可省略。 */
+  header?: React.ReactNode;
   keyData: KeyResponse;
   onCancel: () => void;
-  onSubmit: (values: any) => Promise<void>;
+  onSubmit: (values: Record<string, unknown>) => Promise<void>;
   teams?: any[] | null;
   accessToken: string | null;
   userID: string | null;
@@ -74,8 +33,52 @@ interface KeyEditViewProps {
   premiumUser?: boolean;
 }
 
-/** 编辑个人密钥配置；参数为密钥、权限与保存/取消回调，返回表单。分钟配额只提供固定值或留空共享，越界阻止提交，跨层超配由后台拒绝。 */
+/** 构建精简编辑器校验；无参数，返回当前语言的 schema，空期限保留现状，非法期限阻止提交。 */
+function editorSchema() {
+  const duration = z
+    .custom<string | null | undefined>()
+    .refine((value) => !value?.trim() || /^[1-9][0-9]*[smhd]$/.test(value.trim()), {
+      error: () => t("keyEditor.invalidDuration"),
+    });
+  return keyEditFormSchema
+    .pick({
+      key_alias: true,
+      models: true,
+      allowed_routes: true,
+      max_budget: true,
+      rpm_limit: true,
+      tpm_limit: true,
+      route_template_id: true,
+      auto_rotate: true,
+    })
+    .extend({ duration, rotation_interval: z.custom<string | undefined>() })
+    .superRefine((value, context) => {
+      if (value.auto_rotate && !/^[1-9][0-9]*[smhd]$/.test(value.rotation_interval ?? "")) {
+        context.addIssue({ code: "custom", path: ["duration"], message: t("keyEditor.invalidDuration") });
+      }
+    });
+}
+
+/** 从服务端密钥快照初始化基础表单，返回可见字段；到期输入留空，避免普通保存延长有效期，无副作用。 */
+function defaults(key: KeyResponse): KeyEditFormValues {
+  return {
+    key_alias: key.key_alias ?? "",
+    models: key.models ?? [],
+    allowed_routes: (key.allowed_routes ?? []).join(","),
+    max_budget: key.max_budget,
+    rpm_limit: key.rpm_limit,
+    tpm_limit: key.tpm_limit,
+    route_template_id: key.route_template_id ?? "",
+    duration: "",
+    auto_rotate: key.auto_rotate ?? false,
+    rotation_interval: key.rotation_interval || "30d",
+  };
+}
+
+/** 提供与创建密钥一致的基础表单；参数含密钥、身份及保存回调，返回界面。
+ * 只提交可见设置；未修改的路由类型和空期限不提交，保留既有权限、期限及高级配置。保存失败由调用方展示。 */
 export function KeyEditView({
+  header,
   keyData,
   onCancel,
   onSubmit,
@@ -83,232 +86,69 @@ export function KeyEditView({
   accessToken,
   userID,
   userRole,
-  premiumUser = false,
 }: KeyEditViewProps) {
   const t = useT();
-  const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
-  const canViewPolicies = hasCapability(userRole, "viewPolicies");
-  const canViewPrompts = hasCapability(userRole, "viewPrompts");
-  const canEditEstimates = userRole != null && isProxyAdminRole(userRole);
-  const estimateTooltip = estimateTooltips(canEditEstimates);
-  const form = useZodForm<KeyEditFormValues, KeyEditFormValues>(keyEditFormSchema, {
-    defaultValues: toKeyEditFormValues(keyData),
-  });
-  const [promptsList, setPromptsList] = useState<string[]>([]);
-  const [tagsList, setTagsList] = useState<Record<string, Tag>>({});
-  const team = teams?.find((team) => team.team_id === keyData.team_id);
+  const form = useZodForm<KeyEditFormValues, KeyEditFormValues>(editorSchema(), { defaultValues: defaults(keyData) });
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [disabledCallbacks, setDisabledCallbacks] = useState<string[]>(
-    Array.isArray(keyData.metadata?.litellm_disabled_callbacks)
-      ? mapInternalToDisplayNames(keyData.metadata.litellm_disabled_callbacks)
-      : [],
-  );
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(keyData.organization_id || null);
-  const [autoRotationEnabled, setAutoRotationEnabled] = useState<boolean>(keyData.auto_rotate || false);
-  const [rotationInterval, setRotationInterval] = useState<string>(keyData.rotation_interval || "");
-  const [neverExpire, setNeverExpire] = useState<boolean>(!keyData.expires);
-  const [isKeySaving, setIsKeySaving] = useState(false);
-  const [budgetLimits, setBudgetLimits] = useState<BudgetWindowEntry[]>(
-    Array.isArray(keyData.budget_limits) ? keyData.budget_limits : [],
-  );
-  const [tagRateLimits, setTagRateLimits] = useState<TagRateLimitEntry[]>(
-    tagLimitsToRows(keyData.metadata?.tag_rpm_limit),
-  );
-  const [budgetFallbacks, setBudgetFallbacks] = useState<Record<string, string[]>>(
-    keyData.budget_fallbacks && typeof keyData.budget_fallbacks === "object" ? keyData.budget_fallbacks : {},
-  );
-  const modelBudget = useModelMaxBudgetField(keyData.token, keyData.model_max_budget);
-  const keyTypeFieldId = React.useId();
-  const keyId = keyData.token_id || keyData.token;
-  const { data: organizations, isLoading: isOrganizationsLoading } = useOrganizations();
-  const { data: uiSettingsData } = useUISettings();
-  const enableProjectsUI = Boolean(uiSettingsData?.values?.enable_projects_ui);
-  const hasProject = Boolean(keyData.project_id);
-  const detachProject = hasProject && form.watch("project_id") === null;
-  const canDetachProject = canDetachKeyProject(team, organizations, userID, userRole);
-
-  const allowedRoutesValue = form.watch("allowed_routes");
-  const selectedModels = (form.watch("models") as string[] | undefined) ?? [];
-  const allowedRoutes = parseAllowedRoutes(allowedRoutesValue);
-  const isModelsDisabled = allowedRoutes.includes("management_routes") || allowedRoutes.includes("info_routes");
-  const mcpSelection = form.watch("mcp_servers_and_groups") as
-    | { servers?: string[]; accessGroups?: string[]; toolsets?: string[] }
-    | undefined;
-  const mcpToolPermissions = form.watch("mcp_tool_permissions");
+  const [modelsError, setModelsError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const team = teams?.find((item) => item.team_id === keyData.team_id);
+  const routes = parseAllowedRoutes(form.watch("allowed_routes"));
+  const modelsDisabled = routes.includes("management_routes") || routes.includes("info_routes");
+  const selectedModels = form.watch("models") ?? [];
 
   useEffect(() => {
-    const fetchModels = async () => {
-      if (!userID || !userRole || !accessToken) return;
-
-      try {
-        if (keyData.team_id === null) {
-          // Fetch user models if no team
-          const model_available = await modelAvailableCall(accessToken, userID, userRole);
-          const available_model_names = model_available["data"].map((element: { id: string }) => element.id);
-          setAvailableModels(excludeProxyWideSentinel(available_model_names));
-        } else if (team?.team_id) {
-          // Fetch team models if team exists
-          const models = await fetchTeamModels(userID, userRole, accessToken, team.team_id);
-          setAvailableModels(excludeProxyWideSentinel(Array.from(new Set([...team.models, ...models]))));
-        }
-      } catch (error) {
-        console.error("Error fetching models:", error);
-      }
-    };
-
-    fetchModels();
-  }, [userID, userRole, accessToken, team, keyData.team_id]);
-
-  // Sync disabled callbacks with form when component mounts
-  useEffect(() => {
-    form.setValue("disabled_callbacks", disabledCallbacks);
-  }, [form, disabledCallbacks]);
-
-  useEffect(() => {
-    form.reset(toKeyEditFormValues(keyData));
+    form.reset(defaults(keyData));
   }, [keyData, form]);
-
-  // Sync auto-rotation state with form values
   useEffect(() => {
-    form.setValue("auto_rotate", autoRotationEnabled);
-  }, [autoRotationEnabled, form]);
-
-  useEffect(() => {
-    if (rotationInterval) {
-      form.setValue("rotation_interval", rotationInterval);
-    }
-  }, [rotationInterval, form]);
-
-  // Fetch tags for selector
-  useEffect(() => {
-    const fetchTags = async () => {
-      if (!accessToken) return;
+    let cancelled = false;
+    setAvailableModels([]);
+    setModelsError(false);
+    /** 读取团队或个人模型；无参数/返回，卸载后不写状态，失败保留既有选择供用户继续编辑。 */
+    async function loadModels() {
+      if (!accessToken || !userID || !userRole) return;
       try {
-        const response = await tagListCall(accessToken);
-        setTagsList(response);
-      } catch (error) {
-        toast.fromError(t("Error fetching tags: ") + error);
+        const models =
+          keyData.team_id && team
+            ? [...(team.models ?? []), ...(await fetchTeamModels(userID, userRole, accessToken, team.team_id))]
+            : (await modelAvailableCall(accessToken, userID, userRole)).data.map((model: { id: string }) => model.id);
+        if (!cancelled) setAvailableModels(excludeProxyWideSentinel([...new Set<string>(models)]));
+      } catch {
+        if (!cancelled) setModelsError(true);
       }
+    }
+    void loadModels();
+    return () => {
+      cancelled = true;
     };
-    fetchTags();
-  }, [accessToken]);
+  }, [accessToken, userID, userRole, keyData.team_id, team]);
 
-  const handleSubmit = async (values: any) => {
+  /** 保存已验证的基础字段，返回保存 Promise；省略未变更路由及空期限，异常仍释放保存锁。 */
+  async function save(values: KeyEditFormValues) {
+    setSaving(true);
     try {
-      setIsKeySaving(true);
-
-      // Parse allowed_routes from comma-separated string to array
-      if (typeof values.allowed_routes === "string") {
-        const trimmedInput = values.allowed_routes.trim();
-        if (trimmedInput === "") {
-          values.allowed_routes = [];
-        } else {
-          values.allowed_routes = trimmedInput
-            .split(",")
-            .map((route: string) => route.trim())
-            .filter((route: string) => route.length > 0);
-        }
-      }
-      // If it's already an array (shouldn't happen, but handle it), keep as is
-
-      // Backend rejects non-empty allowed_routes from non-admins, so re-sending
-      // an unchanged value 403s a team admin. Set compare tolerates reorder.
-      const originalRoutesSet = new Set<string>(Array.isArray(keyData.allowed_routes) ? keyData.allowed_routes : []);
-      const submittedRoutesSet = new Set<string>(Array.isArray(values.allowed_routes) ? values.allowed_routes : []);
-      const allowedRoutesUnchanged =
-        originalRoutesSet.size === submittedRoutesSet.size &&
-        [...submittedRoutesSet].every((r) => originalRoutesSet.has(r));
-      if (allowedRoutesUnchanged) {
-        delete values.allowed_routes;
-      }
-
-      if (neverExpire) {
-        values.duration = null;
-      }
-
-      if (keyData.budget_duration && !values.budget_duration) {
-        values.budget_duration = null;
-      }
-
-      // Reconcile multi-window budget limits from the editor state, dropping
-      // incomplete entries (no max_budget). The backend treats any budget_limits
-      // in a /key/update request as an admin-only budget change, so re-sending
-      // the stored windows on an unrelated edit 403s a non-admin key owner
-      // (issue #33246). Only send the field when the user actually changed the
-      // windows, mirroring how allowed_routes is dropped above when unchanged:
-      // compare on (duration, cap), ignoring server-owned reset_at and order.
-      // Sending [] clears every window, so send it only when the user removed
-      // the last one; otherwise leave the field off (JSON.stringify drops the
-      // undefined key) so an unchanged or incomplete editor state never touches
-      // storage.
-      const windowSignature = (windows: Array<{ budget_duration: string; max_budget: number | null }> | undefined) =>
-        (windows ?? [])
-          .filter((w) => w.budget_duration && w.max_budget !== null && w.max_budget !== undefined)
-          .map((w) => `${w.budget_duration}:${w.max_budget}`)
-          .sort()
-          .join("|");
-      const validWindows = budgetLimits.filter(
-        (w) => w.budget_duration && w.max_budget !== null && w.max_budget !== undefined,
-      );
-      const budgetLimitsUnchanged = windowSignature(keyData.budget_limits) === windowSignature(validWindows);
-      if (budgetLimitsUnchanged) {
-        // no-op: leave budget_limits off the payload
-      } else if (validWindows.length > 0) {
-        values.budget_limits = validWindows;
-      } else if (budgetLimits.length === 0) {
-        values.budget_limits = [];
-      }
-
-      // Always send the current per-tag limit map so removing every row
-      // clears the stored limits ({} overwrites the metadata field).
-      const { tag_rpm_limit } = tagRowsToLimits(tagRateLimits);
-      values.tag_rpm_limit = tag_rpm_limit;
-
-      const hadExistingFallbacks = keyData.budget_fallbacks != null && Object.keys(keyData.budget_fallbacks).length > 0;
-      if (Object.keys(budgetFallbacks).length > 0) {
-        values.budget_fallbacks = budgetFallbacks;
-      } else if (hadExistingFallbacks) {
-        values.budget_fallbacks = {};
-      }
-
-      modelBudget.applyTo(values);
-
-      await onSubmit(
-        withNormalizedEstimates({
-          ...values,
-          ...(detachProject && enableProjectsUI && canDetachProject ? { project_id: null } : {}),
-        }),
-      );
+      const payload: Record<string, unknown> = {
+        token: keyData.token_id || keyData.token,
+        key_alias: values.key_alias,
+        models: values.models,
+        max_budget: values.max_budget,
+        rpm_limit: values.rpm_limit,
+        tpm_limit: values.tpm_limit,
+        route_template_id: values.route_template_id,
+        auto_rotate: values.auto_rotate,
+      };
+      if (values.allowed_routes !== (keyData.allowed_routes ?? []).join(","))
+        payload.allowed_routes = parseAllowedRoutes(values.allowed_routes);
+      if (values.duration?.trim()) payload.duration = values.duration.trim();
+      if (values.auto_rotate) payload.rotation_interval = values.rotation_interval;
+      await onSubmit(payload);
     } finally {
-      setIsKeySaving(false);
+      setSaving(false);
     }
-  };
-
-  const handleOrganizationChange = (setField: (value: string | null) => void, orgId: string | null) => {
-    setField(orgId);
-    setSelectedOrganizationId(orgId);
-    form.setValue("team_id", null);
-  };
-
-  const handleTeamChange = (setField: (value: string | null) => void, teamId: string | null) => {
-    setField(teamId);
-    const selectedTeam = teams?.find((t) => t.team_id === teamId) || null;
-    if (selectedTeam?.organization_id) {
-      setSelectedOrganizationId(selectedTeam.organization_id);
-      form.setValue("organization_id", selectedTeam.organization_id);
-    } else if (!teamId) {
-      setSelectedOrganizationId(null);
-      form.setValue("organization_id", null);
-    }
-  };
-
-  const handleDisabledCallbacksChange = (internalValues: string[]) => {
-    setDisabledCallbacks(mapInternalToDisplayNames(internalValues));
-    form.setValue("disabled_callbacks", internalValues);
-  };
+  }
 
   const modelOptions = [
-    ...modelSentinelOptions(keyData.team_id, team != null),
+    ...modelSentinelOptions(keyData.team_id, !!team),
     ...availableModels.map((model) => ({
       value: model,
       label: model,
@@ -316,426 +156,148 @@ export function KeyEditView({
     })),
   ];
 
-  const visibleTeams = selectedOrganizationId
-    ? teams?.filter((t) => t.organization_id === selectedOrganizationId)
-    : teams;
-
   return (
-    <TooltipProvider>
-      <form
-        onSubmit={(event) => {
-          moveMetadataTagsToTagsField(form);
-          return form.handleSubmit((values) =>
-            handleSubmit(toSubmittedValues(values, { canViewPolicies, canViewPrompts })),
-          )(event);
-        }}
+    <form noValidate className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-background" onSubmit={form.handleSubmit(save)}>
+      <div
+        role="region"
+        aria-label={t("Key Settings")}
+        tabIndex={0}
+        className="key-details-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-scroll p-5 sm:p-6"
+        style={{ scrollbarGutter: "stable" }}
       >
-        <FieldGroup>
-          <FormField control={form.control} name="key_alias" label={t("Key Alias")}>
-            {(field) => <Input {...field} value={(field.value as string | undefined) ?? ""} />}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="models"
-            label={t("Models")}
-            description={isModelsDisabled ? t("Models field is disabled for this key type") : undefined}
-          >
-            {({ value, onChange, id }) => (
-              <MultiSelect
-                id={id}
-                options={modelOptions}
-                value={isModelsDisabled ? [] : (value as string[] | undefined) ?? []}
-                onValueChange={(next) => {
-                  if (next.includes("all-team-models")) {
-                    onChange(["all-team-models"]);
-                  } else if (next.includes("all-proxy-models")) {
-                    onChange(["all-proxy-models"]);
-                  } else {
-                    onChange(next);
-                  }
-                }}
-                disabled={isModelsDisabled}
-                placeholder={t("Select models")}
-              />
-            )}
-          </FormField>
-
-          <Field>
-            <FieldLabel htmlFor={keyTypeFieldId}>{t("Key Type")}</FieldLabel>
-            <KeyTypeSelect
-              id={keyTypeFieldId}
-              value={keyTypeFromRoutes(allowedRoutes)}
-              onChange={(value) => {
-                switch (value) {
-                  case "default":
-                    form.setValue("allowed_routes", "");
-                    break;
-                  case "llm_api":
-                    form.setValue("allowed_routes", "llm_api_routes");
-                    break;
-                  case "management":
-                    form.setValue("allowed_routes", "management_routes");
-                    form.setValue("models", []);
-                    break;
-                }
-              }}
-            />
-          </Field>
-
-          <FormField
-            control={form.control}
-            name="allowed_routes"
-            label={labelWithHint(
-              t("Allowed Routes"),
-              "List of allowed routes for the key (comma-separated). Can be specific routes (e.g., '/chat/completions') or route patterns (e.g., 'llm_api_routes', 'management_routes', '/keys/*'). Leave empty to allow all routes.",
-            )}
-          >
-            {(field) => (
-              <Input
-                {...field}
-                value={(field.value as string | undefined) ?? ""}
-                placeholder={t("Enter allowed routes (comma-separated). Special values: llm_api_routes, management_routes. Examples: llm_api_routes, /chat/completions, /keys/*. Leave empty to allow all routes")}
-              />
-            )}
-          </FormField>
-
-          <KeyBudgetNumberField
-            control={form.control}
-            name="max_budget"
-            label={t("Max Budget (USD)")}
-            placeholder={t("Enter a numerical value")}
-          />
-
-          <KeyBudgetNumberField
-            control={form.control}
-            name="soft_budget"
-            label={t("Soft Budget (USD)")}
-            placeholder={t("Get alerts when spend crosses this value, without blocking requests")}
-          />
-
-          <FormField control={form.control} name="budget_duration" label={t("Reset Budget")}>
-            {({ value, onChange, id }) => (
-              <BudgetDurationDropdown
-                id={id}
-                value={value as string | null}
-                onChange={(next) => onChange(next ?? null)}
-                placeholder={t("Never resets")}
-              />
-            )}
-          </FormField>
-
-          <Field>
-            <FieldLabel>
-              {labelWithHint(
-                t("Budget Windows"),
-                t("Set multiple independent budget windows (e.g., hourly $10 AND monthly $200). Each window tracks spend separately and resets on its own schedule."),
-              )}
-            </FieldLabel>
-            <BudgetWindowsEditor value={budgetLimits} onChange={setBudgetLimits} />
-          </Field>
-
-          <ModelMaxBudgetField
-            key={keyData.token}
-            premiumUser={premiumUser}
-            value={modelBudget.value}
-            onChange={modelBudget.setValue}
-            availableModels={availableModels}
-            usage={keyData.model_max_budget_usage}
-            hint={t("Cap spend on individual models, each with its own reset window. Enforced across every request this key makes.")}
-          />
-
-          <Field>
-            <FieldLabel>
-              {labelWithHint(
-                t("Budget Fallbacks"),
-                t("When a model exceeds its per-model budget, requests automatically reroute to fallback models instead of failing"),
-              )}
-            </FieldLabel>
-            <BudgetFallbacksEditor
-              value={budgetFallbacks}
-              onChange={setBudgetFallbacks}
-              availableModels={availableModels}
-            />
-          </Field>
-
-          <p className="text-sm text-muted-foreground">{t("quotaGuide.rates")}</p>
-          <FormField control={form.control} name="tpm_limit" label={t("TPM Limit")}>
-            {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} max={2147483647} step={1} placeholder={t("quotaGuide.rateBlank")} />}
-          </FormField>
-
-          <FormField control={form.control} name="rpm_limit" label={t("RPM Limit")}>
-            {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} max={2147483647} step={1} placeholder={t("quotaGuide.rateBlank")} />}
-          </FormField>
-
-
-
-          <FormField
-            control={form.control}
-            name="throttle_on_budget_exceeded"
-            label={labelWithHint(
-              t("Throttle on budget exceeded"),
-              t("When this key exceeds its max budget, throttle its TPM/RPM to the globally configured percentage instead of blocking access entirely. Requires budget_exceeded_throttle_percentage in litellm_settings and a TPM/RPM limit on the key."),
-            )}
-          >
-            {({ value, onChange, ref: _ref, ...field }) => (
-              <Switch {...field} checked={Boolean(value)} onCheckedChange={onChange} />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="enable_prompt_caching"
-            label={labelWithHint(
-              t("Enable Prompt Caching"),
-              t("Automatically add prompt caching breakpoints (cache_control markers) to requests made with this key, cutting input cost on repeated prompts. Applies to Anthropic and Bedrock Claude models; requests that already set their own cache_control markers are left untouched."),
-            )}
-          >
-            {({ value, onChange, ref: _ref, ...field }) => (
-              <Switch {...field} checked={Boolean(value)} onCheckedChange={onChange} />
-            )}
-          </FormField>
-
-          <FormField control={form.control} name="max_parallel_requests" label={t("Max Parallel Requests")}>
-            {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} step={1} placeholder={t("quotaGuide.rateBlank")} />}
-          </FormField>
-
-          <FormField control={form.control} name="model_tpm_limit" label={t("Model TPM Limit")}>
-            {(field) => (
-              <Textarea
-                {...field}
-                value={(field.value as string | undefined) ?? ""}
-                rows={4}
-                placeholder='{"gpt-4": 100, "claude-v1": 200}'
-              />
-            )}
-          </FormField>
-
-          <FormField control={form.control} name="model_rpm_limit" label={t("Model RPM Limit")}>
-            {(field) => (
-              <Textarea
-                {...field}
-                value={(field.value as string | undefined) ?? ""}
-                rows={4}
-                placeholder='{"gpt-4": 100, "claude-v1": 200}'
-              />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="default_estimated_output_tokens"
-            label={labelWithHint(t("Estimated Output Tokens"), estimateTooltip.estimate)}
-          >
-            {({ ref: _ref, ...field }) => (
-              <NumericalInput {...field} value={field.value ?? ""} min={1} step={1} disabled={!canEditEstimates} />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="default_estimated_output_tokens_per_model"
-            label={labelWithHint(t("Estimated Output Tokens Per Model"), estimateTooltip.perModel)}
-          >
-            {(field) => (
-              <Textarea
-                {...field}
-                value={(field.value as string | undefined) ?? ""}
-                rows={4}
-                placeholder='{"gpt-4": 4096}'
-                disabled={!canEditEstimates}
-              />
-            )}
-          </FormField>
-
-          <Field>
-            <FieldLabel>
-              {labelWithHint(
-                t("Per-Tag Rate Limits"),
-                t("Scope rate limits to a request tag so each tag (e.g. a cell or group) gets its own RPM counter. Requests without a matching tag fall back to the key-level limit."),
-              )}
-            </FieldLabel>
-            <TagRateLimitEditor value={tagRateLimits} onChange={setTagRateLimits} />
-          </Field>
-
-          <FormField control={form.control} name="guardrails" label={t("Guardrails")}>
-            {({ value, onChange }) =>
-              accessToken ? (
-                <GuardrailSelector
-                  onChange={onChange}
-                  value={value as string[] | undefined}
-                  accessToken={accessToken}
-                  disabled={!canEditGuardrails}
-                />
-              ) : (
-                <div />
-              )
-            }
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="disable_global_guardrails"
-            label={labelWithHint(
-              t("Disable Global Guardrails"),
-              t("When enabled, this key will bypass any guardrails configured to run on every request (global guardrails)"),
-            )}
-          >
-            {({ value, onChange, ref: _ref, ...field }) => (
-              <Switch {...field} checked={Boolean(value)} onCheckedChange={onChange} disabled={!canEditGuardrails} />
-            )}
-          </FormField>
-
-          <FormField control={form.control} name="tags" label={t("Tags")}>
-            {({ value, onChange, id }) => (
-              <TagsInput
-                id={id}
-                value={(value as string[] | undefined) ?? []}
-                onValueChange={onChange}
-                options={Object.values(tagsList).map((tag) => ({ value: tag.name, label: tag.name }))}
-                placeholder={t("Select or enter tags")}
-              />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="access_group_ids"
-            label={labelWithHint(
-              t("Access Groups"),
-              t("Assign access groups to this key. Access groups control which models, MCP servers, and agents this key can use"),
-            )}
-          >
-            {({ value, onChange }) => (
-              <AccessGroupSelector
-                value={value as string[] | undefined}
-                onChange={onChange}
-                placeholder={t("Select access groups (optional)")}
-              />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="organization_id"
-            label={labelWithHint(
-              t("Organization"),
-              t("The organization this key belongs to. Selecting an organization filters the available teams."),
-            )}
-            description={hasProject ? t("Organization is locked because this key belongs to a project") : undefined}
-          >
-            {({ value, onChange, id }) => (
-              <OrganizationDropdown
-                id={id}
-                value={value}
-                organizations={organizations}
-                loading={isOrganizationsLoading}
-                disabled={userRole !== "Admin" || hasProject}
-                onChange={(orgId) => handleOrganizationChange(onChange, orgId)}
-              />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
-            name="team_id"
-            label={t("Team ID")}
-            description={hasProject ? t("Team is locked because this key belongs to a project") : undefined}
-          >
-            {({ value, onChange, id }) => (
-              <Select
-                value={(value as string | null) ?? null}
-                onValueChange={(teamId: string | null) => handleTeamChange(onChange, teamId)}
-                disabled={hasProject}
-                items={Object.fromEntries(
-                  (visibleTeams ?? []).map((t) => [t.team_id, `${t.team_alias} (${t.team_id})`]),
-                )}
+        {header}
+        <div className="mt-6">
+          <FieldGroup className="gap-8">
+            <section className="space-y-5">
+              <h2 className="text-base font-semibold">{t("keyEditor.basics")}</h2>
+              <FormField control={form.control} name="key_alias" label={t("Key Alias")}>
+                {(field) => <Input {...field} value={field.value ?? ""} />}
+              </FormField>
+              <FormField
+                control={form.control}
+                name="models"
+                label={t("Models")}
+                description={t(modelsDisabled ? "Models field is disabled for this key type" : "keyEditor.modelsHint")}
               >
-                <SelectTrigger id={id} className="w-full">
-                  <SelectValue placeholder={t("Select team")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibleTeams?.map((t) => (
-                    <SelectItem key={t.team_id} value={t.team_id}>
-                      {`${t.team_alias} (${t.team_id})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </FormField>
-
-          {enableProjectsUI && hasProject && (
-            <KeyProjectField
-              projectId={keyData.project_id}
-              canDetach={canDetachProject}
-              pending={detachProject}
-              disabled={isKeySaving}
-              onToggle={() => form.setValue("project_id", detachProject ? keyData.project_id : null)}
-            />
-          )}
-
-          {/* The router template this key selects. It replaced a free-form
-              router settings block whose value the gateway never read: it was
-              collected into the save payload and dropped, so every field in it
-              was decoration. A selection is what the request path actually
-              honours. */}
-          <FormField control={form.control} name="route_template_id" label={t("pages.routeTemplates.title")}>
-            {({ value, onChange }) => (
-              <RouteTemplateSelect
-                accessToken={accessToken || ""}
-                value={value ?? ""}
-                onChange={onChange}
-                scope="key"
-                scopeId={keyId}
-              />
-            )}
-          </FormField>
-
-          <FormField control={form.control} name="logging_settings" label={t("Logging Settings")}>
-            {({ value, onChange }) => (
-              <EditLoggingSettings
-                value={(value as unknown[] | undefined) ?? []}
-                onChange={onChange}
-                disabledCallbacks={disabledCallbacks}
-                onDisabledCallbacksChange={handleDisabledCallbacksChange}
-              />
-            )}
-          </FormField>
-
-          <KeyMetadataField form={form} />
-
-          <div className="mb-4">
-            <FormField control={form.control} name="duration">
-              {({ value, onChange, id }) => (
-                <KeyLifecycleSettings
-                  id={id}
-                  value={(value as string | null) ?? ""}
-                  onChange={onChange}
-                  autoRotationEnabled={autoRotationEnabled}
-                  onAutoRotationChange={setAutoRotationEnabled}
-                  rotationInterval={rotationInterval}
-                  onRotationIntervalChange={setRotationInterval}
-                  neverExpire={neverExpire}
-                  onNeverExpireChange={setNeverExpire}
-                />
+                {({ value, onChange, id }) => (
+                  <MultiSelect
+                    id={id}
+                    options={modelOptions}
+                    value={modelsDisabled ? [] : (value ?? [])}
+                    disabled={modelsDisabled}
+                    placeholder={t("Select models")}
+                    onValueChange={(next) =>
+                      onChange(
+                        next.includes("all-team-models")
+                          ? ["all-team-models"]
+                          : next.includes("all-proxy-models")
+                            ? ["all-proxy-models"]
+                            : next,
+                      )
+                    }
+                  />
+                )}
+              </FormField>
+              {modelsError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {t("keyEditor.modelsError")}
+                </p>
               )}
-            </FormField>
-          </div>
-        </FieldGroup>
-
-        <div className="sticky z-chrome bg-background p-4 border-t border-border -bottom-6 -inset-x-6">
-          <div className="flex justify-end items-center gap-2">
-            <Button type="button" variant="secondary" onClick={onCancel} disabled={isKeySaving}>
-              {t("Cancel")}
-            </Button>
-            <Button type="submit" disabled={isKeySaving} aria-busy={isKeySaving}>
-              {isKeySaving && <UiLoadingSpinner className="size-4" />}
-              {t("Save Changes")}
-            </Button>
-          </div>
+              <FormField control={form.control} name="allowed_routes" label={t("Key Type")}>
+                {({ id, onChange }) => (
+                  <KeyTypeSelect
+                    id={id}
+                    value={keyTypeFromRoutes(routes)}
+                    onChange={(type) => {
+                      onChange(
+                        type === "llm_api" ? "llm_api_routes" : type === "management" ? "management_routes" : "",
+                      );
+                      if (type === "management") form.setValue("models", []);
+                    }}
+                  />
+                )}
+              </FormField>
+            </section>
+            <section className="space-y-5 border-t pt-6">
+              <h2 className="text-base font-semibold">{t("Budget and Routing")}</h2>
+              <p className="text-sm text-muted-foreground">{t("keyEditor.budgetHint")}</p>
+              <div className="grid gap-5 sm:grid-cols-3">
+                <FormField control={form.control} name="max_budget" label={t("Max Budget (USD)")}>
+                  {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} />}
+                </FormField>
+                {(["rpm_limit", "tpm_limit"] as const).map((name) => (
+                  <FormField
+                    key={name}
+                    control={form.control}
+                    name={name}
+                    label={t(name === "rpm_limit" ? "RPM Limit" : "TPM Limit")}
+                  >
+                    {({ ref: _ref, ...field }) => (
+                      <NumericalInput
+                        {...field}
+                        value={field.value ?? ""}
+                        min={0}
+                        max={2147483647}
+                        step={1}
+                        placeholder={t("quotaGuide.rateBlank")}
+                      />
+                    )}
+                  </FormField>
+                ))}
+                <FormField
+                  control={form.control}
+                  name="route_template_id"
+                  label={t("pages.routeTemplates.title")}
+                  className="sm:col-span-3"
+                >
+                  {({ value, onChange }) => (
+                    <RouteTemplateSelect
+                      accessToken={accessToken}
+                      value={value ?? ""}
+                      onChange={onChange}
+                      scope="key"
+                      scopeId={keyData.token_id || keyData.token}
+                    />
+                  )}
+                </FormField>
+              </div>
+            </section>
+            <section className="space-y-5 border-t pt-6">
+              <h2 className="text-base font-semibold">{t("keyEditor.lifecycle")}</h2>
+              <div>
+                <FormField control={form.control} name="duration">
+                  {({ value, onChange, id }) => (
+                    <KeyLifecycleSettings
+                      key={keyData.token_id || keyData.token}
+                      id={id}
+                      value={value ?? ""}
+                      onChange={onChange}
+                      autoRotationEnabled={!!form.watch("auto_rotate")}
+                      onAutoRotationChange={(enabled) => form.setValue("auto_rotate", enabled)}
+                      rotationInterval={form.watch("rotation_interval") ?? "30d"}
+                      onRotationIntervalChange={(interval) => form.setValue("rotation_interval", interval)}
+                    />
+                  )}
+                </FormField>
+              </div>
+            </section>
+          </FieldGroup>
         </div>
-      </form>
-    </TooltipProvider>
+      </div>
+      {/* 操作栏独立占据布局空间，不能叠在可滚动字段上方。 */}
+      <div
+        className="shrink-0 border-t border-border bg-background px-5 py-4 sm:px-6 flex justify-end gap-2"
+        role="group"
+        aria-label={t("keyEditor.actions")}
+      >
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={saving}>
+          {t("Cancel")}
+        </Button>
+        <Button type="submit" disabled={saving} aria-busy={saving}>
+          {saving && <UiLoadingSpinner className="size-4" />}
+          {t("Save Changes")}
+        </Button>
+      </div>
+    </form>
   );
 }

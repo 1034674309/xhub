@@ -154,6 +154,7 @@ func dialogueFieldShape(raw string, shape byte, nullable bool) bool {
 // EncodeDialogueResult 将共享回复输出到用户协议；参数为结果、入口协议及公开型号，返回 JSON。
 // 调用：统一同步入口及 SSE 终态；Responses 上游 store=false，网关通过临时上下文支持 previous_response_id。
 // Messages 把推理封装为 thinking/redacted_thinking，Chat 使用 reasoning_items 扩展；不解密、不混入正文或伪造厂商签名。
+// 合成 Responses 文本项使用 msg_/rs_ 类型 ID，避免上游 chatcmpl 响应级 ID 污染客户端历史；原生结果不重写。
 func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, error) {
 	if r.Source == protocol && r.Native != nil {
 		out, err := cloneObject(r.Native)
@@ -206,10 +207,10 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 	case "openai-responses":
 		items := []any{}
 		if r.Reasoning != "" {
-			items = append(items, map[string]any{"id": r.ID + "_reasoning", "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": r.Reasoning}}})
+			items = append(items, map[string]any{"id": ResponseItemID("rs", r.ID), "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": r.Reasoning}}})
 		}
 		if r.Text != "" {
-			items = append(items, map[string]any{"id": r.ID + "_message", "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
+			items = append(items, map[string]any{"id": ResponseItemID("msg", r.ID), "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": r.Text, "annotations": []any{}}}})
 		}
 		for _, c := range r.Calls {
 			item, err := ResponseToolItem(c, r.ToolBindings, "completed")

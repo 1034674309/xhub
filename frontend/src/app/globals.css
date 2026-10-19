@@ -302,3 +302,12 @@
 [data-slot="dialog-content"][data-nested-dialog-open] {
   visibility: hidden;
 }
+
+/* 密钥长表单使用独立滚动容器，固定预留滚动条空间，底部按钮随内容可达。 */
+.key-details-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.key-details-scrollbar::-webkit-scrollbar { width: 8px; }
+.key-details-scrollbar::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+.key-details-scrollbar::-webkit-scrollbar-track { background: transparent; }

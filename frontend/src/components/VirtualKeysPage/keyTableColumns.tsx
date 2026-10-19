@@ -318,6 +318,10 @@ export const getKeyTableColumns = ({
 ];
 
 export const KEY_TABLE_HIDDEN_COLUMNS: Record<string, boolean> = {
+  team_alias: false,
+  user: false,
+  last_active: false,
+  budget_reset_at: false,
   token: false,
   organization_alias: false,
   created_by: false,
