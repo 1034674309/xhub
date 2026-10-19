@@ -454,6 +454,37 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(payload)
             return
+        if model in ("e2e-portable-gpt", "e2e-portable-grok", "e2e-portable-deepseek", "e2e-portable-outside"):
+            # 迁移夹具模拟不同账户的密文边界，所有网络仍经真实网关和本地 HTTP。
+            encoded = json.dumps(req)
+            if (model != "e2e-portable-outside" and "outside-cipher" in encoded) or (model == "e2e-portable-outside" and "gateway-cipher" in encoded):
+                self.send_error(400, "foreign encrypted reasoning")
+                return
+            items = req.get("input", [])
+            second = isinstance(items, list) and any(item.get("type") == "function_call_output" for item in items)
+            if "chat/completions" in path:
+                payload = {"id": "chat-portable", "choices": [{"message": {"role": "assistant", "content": "portable-ok"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 8, "completion_tokens": 2}}
+                if req.get("stream"):
+                    event = {"id": "chat-portable", "choices": [{"index": 0, "delta": {"content": "portable-ok"}, "finish_reason": "stop"}], "usage": payload["usage"]}
+                    self._response(200, ("data: " + json.dumps(event) + "\n\ndata: [DONE]\n\n").encode(), "text/event-stream")
+                else:
+                    self._json(payload)
+                return
+            reasoning = {"id": "rs_portable", "type": "reasoning", "summary": [{"type": "summary_text", "text": "Public plan"}], "encrypted_content": "gateway-cipher"}
+            answer = {"id": "msg_portable", "type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "portable-ok"}]}
+            if req.get("tools") and not second:
+                answer = {"id": "fc_portable", "type": "function_call", "call_id": "call_portable", "name": "read", "arguments": "{}"}
+            payload = {"id": "resp_" + uuid.uuid4().hex, "object": "response", "status": "completed", "model": model, "output": [reasoning, answer], "usage": {"input_tokens": 8, "output_tokens": 2}}
+            if req.get("stream"):
+                events = [{"type": "response.output_item.added", "output_index": 0, "item": reasoning}, {"type": "response.output_item.done", "output_index": 0, "item": reasoning}]
+                events.append({"type": "response.output_item.added", "output_index": 1, "item": answer})
+                if answer["type"] == "message":
+                    events.append({"type": "response.output_text.delta", "item_id": answer["id"], "output_index": 1, "delta": "portable-ok"})
+                events.extend([{"type": "response.output_item.done", "output_index": 1, "item": answer}, {"type": "response.completed", "response": payload}])
+                self._sse(events)
+            else:
+                self._json(payload)
+            return
         if "responses" in path and model == "e2e-agent-native":
             # 专属 Agent 夹具检查字段和完整历史，网关仍是真实实现；不连接任何外部服务。
             advanced = "reasoning" in req or "include" in req
@@ -462,7 +493,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             items = req.get("input", [])
             second = isinstance(items, list) and any(i.get("type") == "function_call_output" for i in items)
-            if second and not any(i.get("encrypted_content") == "fixture-cipher" for i in items):
+            if second and not any(i.get("encrypted_content") == "fixture-cipher" or (i.get("type") == "reasoning" and i.get("summary")) for i in items):
                 self.send_error(400, "reasoning history lost")
                 return
             output = []

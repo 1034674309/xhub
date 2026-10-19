@@ -25,7 +25,7 @@ async function replay(page: Page, bearer: string, body: Record<string, unknown>)
 }
 
 for (const stream of [false, true]) {
-  /** 前置真实浏览器/Go 后台/隔离数据库和严格 ID 上游；验证保存模型、页面切换、JSON/SSE完整历史与旧历史回放、错误和日志计费。
+  /** 前置真实浏览器/Go 后台/隔离数据库和严格 ID 上游；验证保存模型、页面切换、无来源推理的 JSON/SSE 完整历史与旧历史回放、错误和日志计费。
    * 只用本地声明凭据；finally 删除四个部署和连接，运行器删除身份、账单与 schema。 */
   test("Responses item IDs survive model switch " + (stream ? "SSE" : "JSON"), async ({ page }) => {
     test.setTimeout(120000);
@@ -96,8 +96,14 @@ for (const stream of [false, true]) {
       const first = await firstPending;
       expect(first.status()).toBe(200);
       const result = completed(await first.text(), stream);
-      for (const item of result.output)
-        expect(item.id).toMatch(item.type === "reasoning" ? /^rs_xhub_[a-f0-9]{32}$/ : /^msg_xhub_[a-f0-9]{32}$/);
+      // 统一入口的推理不暴露来源引用；消息仍必须使用合法且稳定的 msg_ 标识。
+      for (const item of result.output) {
+        if (item.type === "reasoning") {
+          for (const field of ["id", "status", "encrypted_content"]) expect(item).not.toHaveProperty(field);
+        } else {
+          expect(item.id).toMatch(/^msg_xhub_[a-f0-9]{32}$/);
+        }
+      }
       await expect(page.getByText("e2e-source", { exact: true }).last()).toBeVisible();
       await page.getByPlaceholder(t("Select a Model"), { exact: true }).click();
       await page.getByRole("option", { name: target, exact: true }).click();
@@ -132,7 +138,9 @@ for (const stream of [false, true]) {
           });
           expect(sourceReply.status, sourceReply.raw).toBe(200);
           const grokOutput = completed(sourceReply.raw, stream).output;
-          expect(grokOutput[0]).toMatchObject({ id: "rs_92ae29c5-9e2c-9cbd-a94b-2fd2abc135be", status: "completed" });
+          expect(grokOutput[0]).toMatchObject({ type: "reasoning" });
+          expect(grokOutput[0].summary).not.toHaveLength(0);
+          for (const field of ["id", "status", "encrypted_content"]) expect(grokOutput[0]).not.toHaveProperty(field);
           history = [{ role: "user", content: "Hello" }, ...grokOutput, { role: "user", content: "Continue" }];
         }
         if (mode === "tracked-gpt") {

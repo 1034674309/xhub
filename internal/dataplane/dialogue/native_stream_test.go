@@ -69,3 +69,36 @@ func TestDeepSeekReasoningStreamBridge(t *testing.T) {
 		t.Fatalf("DeepSeek 推理流失败: %s %v", captured, err)
 	}
 }
+
+// TestPortableResponsesStream 验证统一入口的全部 SSE 快照不泄露密文，内部续接仍保存原文。
+// 参数 t 为上下文；前置本地有效或截断流，验证回调时机、用量、摘要、工具 ID 和失败，无外部数据需清理。
+func TestPortableResponsesStream(t *testing.T) {
+	item := `{"type":"reasoning","id":"rs_private","summary":[{"type":"summary_text","text":"Plan"}],"encrypted_content":"secret-cipher"}`
+	response := `{"id":"resp_portable","status":"completed","output":[` + item + `,{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read","arguments":"{}"}],"usage":{"input_tokens":8,"output_tokens":2}}`
+	prefix := "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":" + item + "}\n\n" +
+		"data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":" + item + "}\n\n"
+	for _, complete := range []bool{false, true} {
+		raw := prefix
+		if complete {
+			raw += "data: {\"type\":\"response.completed\",\"response\":" + response + "}\n\n"
+		}
+		w := httptest.NewRecorder()
+		commits := 0
+		wrote, usage, _, capture, err := PipePortableResponses(w, &http.Response{Body: io.NopCloser(strings.NewReader(raw))}, time.Now(), "public", func(result llmdialogue.DialogueResult) {
+			commits++
+			encoded, _ := json.Marshal(result.Native)
+			if !strings.Contains(string(encoded), "secret-cipher") || strings.Contains(w.Body.String(), "response.completed") {
+				t.Fatal("内部历史丢失或提交晚于终态")
+			}
+		})
+		if !wrote || (err == nil) != complete || commits != map[bool]int{false: 0, true: 1}[complete] {
+			t.Fatalf("流生命周期不正确: complete=%v commits=%d err=%v", complete, commits, err)
+		}
+		if strings.Contains(string(capture), "secret-cipher") || strings.Contains(string(capture), "rs_private") || !strings.Contains(string(capture), "Plan") {
+			t.Fatalf("公开流未去除来源推理: %s", capture)
+		}
+		if complete && (usage["total_tokens"] != float64(10) || !strings.Contains(string(capture), "call_1")) {
+			t.Fatal("工具标识或用量丢失")
+		}
+	}
+}

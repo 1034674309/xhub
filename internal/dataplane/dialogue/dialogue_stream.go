@@ -97,6 +97,13 @@ func (s *dialogueStream) emit(event string, data any) error {
 	}
 	if s.protocol == "openai-responses" {
 		if m, ok := data.(map[string]any); ok {
+			// 跨协议桥接与原生统一入口使用相同的可迁移推理策略，不能向客户端泄漏桥接来源 ID。
+			if item, ok := m["item"].(map[string]any); ok {
+				m["item"] = llmdialogue.PortableReasoningItems([]any{item}).([]any)[0]
+			}
+			if response, ok := m["response"].(map[string]any); ok {
+				m["response"] = llmdialogue.PortableResponsesObject(response, "output")
+			}
 			m["sequence_number"] = s.sequence
 			s.sequence++
 		}

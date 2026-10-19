@@ -337,7 +337,8 @@ func TestRealAgentClients(t *testing.T) {
 				}
 				env = []string{"XHUB_AGENT_TEST_KEY=" + owner.key}
 			} else {
-				args = []string{"--bare", "--print", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--tools", "Read", "--allowedTools", "Read", "--max-turns", "3", "--output-format", "json", "--model", dep.ModelName, "--effort", "low", prompt}
+				// 显式禁用用户设置来源，避免本机 settings.env 覆盖临时网关地址而误调用个人供应商。
+				args = []string{"--setting-sources", "", "--bare", "--print", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--tools", "Read", "--allowedTools", "Read", "--max-turns", "3", "--output-format", "json", "--model", dep.ModelName, "--effort", "low", prompt}
 				env = []string{"ANTHROPIC_API_KEY=" + owner.key, "ANTHROPIC_BASE_URL=" + h.server.URL, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1", "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"}
 			}
 			command := exec.CommandContext(ctx, binary, args...)

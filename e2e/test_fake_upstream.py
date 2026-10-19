@@ -97,6 +97,29 @@ class ArkUpstreamTest(unittest.TestCase):
         plain = {"type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan"}]}
         self.assertEqual(self.request("/v1/responses", {**body, "input": [*history[:1], plain, *history[2:]]})["output"][1]["content"][0]["text"], "e2e-ok")
 
+    def test_portable_history_encryption_boundaries(self):
+        """目的：严格区分外部与网关账户密文并保留公开工具往返；前置本地 HTTP，验证正常/失败/流式，tearDown 清理服务。"""
+        source = {"type": "reasoning", "id": "rs_outside", "summary": [{"type": "summary_text", "text": "Public plan"}], "encrypted_content": "outside-cipher"}
+        for model in ("e2e-portable-gpt", "e2e-portable-grok", "e2e-portable-deepseek"):
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/responses", {"model": model, "input": [source]})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+            result = self.request("/v1/responses", {"model": model, "input": [{"role": "user", "content": "Hello"}]})
+            self.assertEqual(result["output"][0]["encrypted_content"], "gateway-cipher")
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-portable-outside", "input": [source]})["status"], "completed")
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {"model": "e2e-portable-outside", "input": result["output"]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        first = self.request("/v1/responses", {"model": "e2e-portable-gpt", "input": "Read", "tools": [{"type": "function", "name": "read"}]})
+        self.assertEqual(first["output"][1]["call_id"], "call_portable")
+        public = [{"type": "reasoning", "summary": source["summary"]}, first["output"][1], {"type": "function_call_output", "call_id": "call_portable", "output": "file-value"}]
+        second = self.request("/v1/responses", {"model": "e2e-portable-gpt", "input": public})
+        self.assertEqual(second["output"][1]["content"][0]["text"], "portable-ok")
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({"model": "e2e-portable-gpt", "input": "Hello", "stream": True}).encode()), timeout=2) as response:
+            self.assertIn('"response.completed"', response.read().decode())
+
     def test_slow_agent_proxy_fixture(self):
         """目的：仅专属模型触发超时边界等待并返回正常用量；前置本地服务，单元层替换等待避免耗时，浏览器层实际等待31秒，tearDown关闭服务。"""
         with patch("e2e.fake_upstream.time.sleep") as wait:

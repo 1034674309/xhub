@@ -12,7 +12,7 @@ import (
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
-// TestResponsesStreamTextItemIDs 验证 Chat→Responses SSE 各生命周期共享合法且稳定的 ID；覆盖缺少首帧 ID/末帧变更，内存流无清理。
+// TestResponsesStreamTextItemIDs 验证 Chat→Responses SSE 的消息及增量共享稳定 ID、推理快照不携带来源引用；覆盖缺少首帧 ID/末帧变更，内存流无清理。
 func TestResponsesStreamTextItemIDs(t *testing.T) {
 	for _, late := range []bool{false, true} {
 		first := "chatcmpl-first"
@@ -32,6 +32,22 @@ func TestResponsesStreamTextItemIDs(t *testing.T) {
 			t.Fatal(err)
 		}
 		seen := map[string]int{}
+		reasoningItems := 0
+		// 检查 added/done/completed 的公开快照；推理仅按 output_index 关联，消息 ID 与增量仍保持一致。
+		checkItem := func(item map[string]any) {
+			if item["type"] == "reasoning" {
+				reasoningItems++
+				if item["id"] != nil || item["status"] != nil || item["encrypted_content"] != nil {
+					t.Fatalf("公开推理泄漏来源引用: %v", item)
+				}
+				return
+			}
+			id, ok := item["id"].(string)
+			if !ok {
+				t.Fatalf("公开消息缺少合法 item ID: %v", item)
+			}
+			seen[id]++
+		}
 		for _, line := range strings.Split(writer.Body.String(), "\n") {
 			if !strings.HasPrefix(line, "data: ") {
 				continue
@@ -44,16 +60,16 @@ func TestResponsesStreamTextItemIDs(t *testing.T) {
 				seen[id]++
 			}
 			if item, ok := event["item"].(map[string]any); ok {
-				seen[item["id"].(string)]++
+				checkItem(item)
 			}
 			if event["type"] == "response.completed" {
 				r := event["response"].(map[string]any)
 				for _, value := range r["output"].([]any) {
-					seen[value.(map[string]any)["id"].(string)]++
+					checkItem(value.(map[string]any))
 				}
 			}
 		}
-		if len(seen) != 2 || seen[llmdialogue.ResponseItemID("msg", first)] < 4 || seen[llmdialogue.ResponseItemID("rs", first)] < 4 {
+		if len(seen) != 2 || seen[llmdialogue.ResponseItemID("msg", first)] < 4 || seen[llmdialogue.ResponseItemID("rs", first)] < 1 || reasoningItems < 3 {
 			t.Fatalf("SSE item ID 未保持一致，late=%v: %v", late, seen)
 		}
 	}

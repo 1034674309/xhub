@@ -29,7 +29,7 @@ func completedItemResponse(t *testing.T, r reply, stream bool) map[string]any {
 }
 
 // TestResponsesItemIDModelSwitch 验证真实 HTTP/数据库的 Chat→Responses→严格原生模型切换，含旧历史、JSON/SSE、错误和记账。
-// 前置两个本地上游、专属 PostgreSQL schema 和个人虚拟 Key；正常历史应放行，非法 ID/未认证仍拒绝；harness 回收身份、账单及服务。
+// 前置两个本地上游、专属 PostgreSQL schema 和个人虚拟 Key；正常历史应放行，推理不携带来源引用，非法消息 ID/未认证仍拒绝；harness 回收身份、账单及服务。
 func TestResponsesItemIDModelSwitch(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprint(stream), func(t *testing.T) {
@@ -103,11 +103,15 @@ func TestResponsesItemIDModelSwitch(t *testing.T) {
 			items := completedItemResponse(t, first, stream)["output"].([]any)
 			for _, value := range items {
 				item := value.(map[string]any)
-				prefix := "msg_"
+				// 统一入口的推理只保留公开内容；消息仍须输出合法 ID，不能把来源推理引用重新写入历史。
 				if item["type"] == "reasoning" {
-					prefix = "rs_"
+					if item["id"] != nil || item["status"] != nil || item["encrypted_content"] != nil {
+						t.Fatalf("Chat 桥接泄漏了来源推理引用: %v", item)
+					}
+					continue
 				}
-				if !strings.HasPrefix(item["id"].(string), prefix) {
+				id, _ := item["id"].(string)
+				if !strings.HasPrefix(id, "msg_") {
 					t.Fatalf("Chat 桥接生成了错误 item ID: %v", item)
 				}
 			}

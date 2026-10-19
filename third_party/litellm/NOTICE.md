@@ -23,7 +23,8 @@ No code from LiteLLM `enterprise/` is included. See [LICENSE](LICENSE).
 
 Changes from the reference include explicit unsupported-bridge errors rather than
 silently dropping parameters, no fabricated blank DeepSeek reasoning, and requiring
-known deployment ownership before replaying encrypted history. The current DeepSeek
+known deployment ownership before replaying opaque history on native endpoints.
+The unified Responses entry instead uses the portable-history policy documented below. The current DeepSeek
 API supports more effort controls and native endpoints than the cited legacy adapter;
 XHub preserves provider-supported native values instead of forcing its older on/off mapping.
 
@@ -118,3 +119,20 @@ search-result history and client-provided tool definitions according to the
 It does not execute search in the gateway or pretend server-executed search is supported.
 Identical loaded declarations deduplicate; conflicting aliases remain errors. Native
 requests preserve their tool definitions and discovery history unchanged.
+
+
+Portable Responses history reference (MIT): official LiteLLM
+`35970c3eacb9f4f8746af215586f23f3a2a17941`,
+`litellm/router_utils/pre_call_checks/encrypted_content_affinity_check.py`
+(`strip_reasoning_the_targets_cannot_decrypt`) and `litellm/responses/utils.py`
+(`strip_encrypted_reasoning_from_input`, `_without_encrypted_reasoning`).
+The reference removes ciphertext and its origin ID when the target cannot decrypt it,
+retaining readable summary/content and tool history. XHub adapts this idea in Go, with
+an additional portable-history contract for its unified `/v1/responses`: client-supplied
+reasoning and every outgoing JSON/SSE reasoning item omit ciphertext, origin IDs and
+provider-specific output status. Native bypass does not change. Original validated
+upstream output is retained only in the existing caller-scoped temporary history for
+explicit `previous_response_id` continuation. XHub does not decode, wrap or generate
+ciphertext, does not edit client-side stored history, and cannot recover plaintext
+from opaque compaction items. This deliberately trades transferable hidden reasoning
+state for model/provider switching without poisoning the client's history.
