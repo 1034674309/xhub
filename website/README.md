@@ -9,7 +9,7 @@
 ## 1. 发布前准备
 
 - 一个 GitHub 仓库，以及修改仓库设置和推送代码的权限。
-- 本地安装 Git、Node.js 22 或以上；推荐 Node.js 24，与自动发布环境一致。
+- 本地安装 Git、Node.js 22.12.0 或以上（Mermaid 12 的最低要求）；推荐 Node.js 24，与自动发布环境一致。
 - 仓库包含整个项目，尤其是 `website/`、`docs/`、模块 Markdown 和 [网站发布工作流](../.github/workflows/website.yml)。网站构建会读取这些文档和截图，不能只上传 `website/`。
 - GitHub 仓库已启用 Actions。公开仓库可使用 GitHub Pages；私有仓库能否使用 Pages 取决于 GitHub 账户或组织套餐。
 
