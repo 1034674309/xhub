@@ -13,7 +13,7 @@
 - 仓库包含整个项目，尤其是 `website/`、`docs/`、模块 Markdown 和 [网站发布工作流](../.github/workflows/website.yml)。网站构建会读取这些文档和截图，不能只上传 `website/`。
 - GitHub 仓库已启用 Actions。公开仓库可使用 GitHub Pages；私有仓库能否使用 Pages 取决于 GitHub 账户或组织套餐。
 
-当前项目的发布分支是 `main`，仓库为 [sunqirui1987/xhub](https://github.com/sunqirui1987/xhub)。以下步骤按这个仓库说明。
+当前项目的发布分支是 `main`，仓库为 [qiniu/xhub](https://github.com/qiniu/xhub)。以下步骤按这个仓库说明。
 
 ## 2. 先在本地预览
 
@@ -33,7 +33,7 @@ npm run dev
 
 ## 3. 在 GitHub 启用 Pages
 
-1. 打开 [仓库设置](https://github.com/sunqirui1987/xhub/settings/pages)。
+1. 打开 [仓库设置](https://github.com/qiniu/xhub/settings/pages)。
 2. 在左侧选择 **Pages**。
 3. 找到 **Build and deployment → Source**，选择 **GitHub Actions**。
 4. 如果仓库的 Actions 被关闭，在 **Settings → Actions → General** 中启用工作流。组织仓库还需允许工作流使用 `actions/*` 官方操作。
@@ -74,10 +74,10 @@ git push origin main
 
 | 内容 | 地址 |
 | --- | --- |
-| 中文官网 | <https://sunqirui1987.github.io/xhub/> |
-| 英文官网 | <https://sunqirui1987.github.io/xhub/en/> |
-| 中文文档入口 | <https://sunqirui1987.github.io/xhub/docs/README.zh-CN.html> |
-| Docker 安装指南 | <https://sunqirui1987.github.io/xhub/docs/getting-started.zh-CN.html> |
+| 中文官网 | <https://qiniu.github.io/xhub/> |
+| 英文官网 | <https://qiniu.github.io/xhub/en/> |
+| 中文文档入口 | <https://qiniu.github.io/xhub/docs/README.zh-CN.html> |
+| Docker 安装指南 | <https://qiniu.github.io/xhub/docs/getting-started.zh-CN.html> |
 
 以上是部署成功后的预期地址；本地构建成功不代表远端已经上线。首次发布或更新后，GitHub Pages 可能需要短暂时间传播新版本。
 
@@ -113,7 +113,7 @@ Fork、迁移或改名后，更新以下地址，使客户能返回正确的项�
 可以在项目根目录查找需要调整的引用：
 
 ```bash
-rg -n 'sunqirui1987|sunqirui1987.github.io' website/src README.md README.zh-CN.md website/README.md
+rg -n 'qiniu/xhub|qiniu.github.io' website/src README.md README.zh-CN.md website/README.md
 ```
 
 如果发布分支不是 `main`，同时修改工作流的 `push.branches` 与 `deploy.if` 分支条件，以及源码链接中的分支名。

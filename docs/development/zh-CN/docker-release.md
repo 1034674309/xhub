@@ -2,7 +2,7 @@
 
 工作流：.github/workflows/release.yml。拉取请求执行验证；推送 main（或在 main 手动运行）通过验证后发布开发镜像；推送版本标签自动发布版本镜像并创建 GitHub Release。
 
-镜像：ghcr.io/sunqirui1987/xhub-gateway 和 ghcr.io/sunqirui1987/xhub-console，支持 Linux amd64。main 构建带 main、sha 标签；正式版本带版本号、sha、latest 标签；alpha、beta、rc 预发布不修改 latest。Release 自动生成变更记录，附件 docker-images.txt 保存两个镜像的不可变 digest。
+镜像：ghcr.io/qiniu/xhub-gateway 和 ghcr.io/qiniu/xhub-console，支持 Linux amd64。main 构建带 main、sha 标签；正式版本带版本号、sha、latest 标签；alpha、beta、rc 预发布不修改 latest。Release 自动生成变更记录，附件 docker-images.txt 保存两个镜像的不可变 digest。
 
 启用仓库 Actions，允许工作流创建 Release、写入 Packages。使用自动提供的 GITHUB_TOKEN，无需 Docker Hub 密钥。如需匿名拉取，将首次创建的 GHCR 包设为公开；组织策略可能限制权限。
 
@@ -17,7 +17,7 @@
 
 部署时将 Compose 中 gateway、console 的 image 替换为发布镜像，去掉 build，保留 PostgreSQL、Redis 和服务名 gateway。控制台使用 3000，网关使用 4000；远程部署设置 XHUB_PUBLIC_ORIGIN，使浏览器能访问网关公开地址。
 
-    docker pull ghcr.io/sunqirui1987/xhub-gateway:1.0.0
-    docker pull ghcr.io/sunqirui1987/xhub-console:1.0.0
+    docker pull ghcr.io/qiniu/xhub-gateway:1.0.0
+    docker pull ghcr.io/qiniu/xhub-console:1.0.0
 
 真实 GHCR 写入和 Release 创建需在 GitHub 验证；本地夹具不会发布资源。现有本地 Dockerfile 和 deploy/build.sh 保持原用法，CI 控制台使用 deploy/Dockerfile.release 保留 Next.js standalone 目录层级。

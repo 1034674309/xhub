@@ -1,5 +1,5 @@
-export const repository = "https://github.com/sunqirui1987/xhub";
-export const quickstart = "git clone https://github.com/sunqirui1987/xhub.git\ncd xhub\nbash deploy/build.sh\ndocker compose up -d --no-build";
+export const repository = "https://github.com/qiniu/xhub";
+export const quickstart = "git clone https://github.com/qiniu/xhub.git\ncd xhub\nbash deploy/build.sh\ndocker compose up -d --no-build";
 export const integration = `from openai import OpenAI
 
 client = OpenAI(

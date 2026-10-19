@@ -89,7 +89,7 @@ test("链接拒绝脚本和畸形编码，源码指向 GitHub", () => {
   assert.equal(rewriteLink("javascript:alert(1)", "docs/a.md", "docs/a.html", mapping), "");
   assert.equal(rewriteLink("%zz.md", "docs/a.md", "docs/a.html", mapping), "");
   assert.equal(rewriteLink("https://example.com", "docs/a.md", "docs/a.html", mapping), "https://example.com");
-  assert.match(rewriteLink("../go.mod", "docs/a.md", "docs/a.html", mapping), /github.com.*blob\/main\/go.mod/);
+  assert.match(rewriteLink("../go.mod", "docs/a.md", "docs/a.html", mapping), /^https:\/\/github\.com\/qiniu\/xhub\/blob\/main\/go\.mod$/);
 });
 
 // 验证标题、表格、代码复制和重复锚点生成；前置为 GFM 内容，返回完整文档结构，无需清理。
