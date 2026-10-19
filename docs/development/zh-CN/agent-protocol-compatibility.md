@@ -1,6 +1,6 @@
 # Agent 协议兼容对照与验收（Issue #9）
 
-本轮范围是 GPT、Grok、DeepSeek 的文本、函数工具、公开/加密推理及 Responses / Chat Completions；图像、音视频及其他厂商本轮不认证。模型名称不是协议能力声明，供应商目录中的模型也不等于当前 Key 有可用渠道。
+本轮范围是 GPT、Grok、DeepSeek 的文本、函数工具、公开/加密推理及 Responses / Chat Completions；用户图片输入的协议支持见下方识图说明；音视频、图片生成及其他厂商本轮不认证。模型名称不是协议能力声明，供应商目录中的模型也不等于当前 Key 有可用渠道。
 
 ## LiteLLM 的做法与本次复用
 
@@ -31,7 +31,8 @@
 | Codex custom / namespace 工具、`additional_tools` | 原生保留 | 函数表达 | 单层 namespace 名称双向映射，custom 字符串通过函数 JSON 包装，内联声明投影为工具；grammar 仅为提示约束 |
 | 拒绝响应（refusal） | 原生保留，允许原生续轮 | 原生保留 | 明确拒绝未实现的转换，不能生成空白成功 |
 | 多候选 `n > 1` / `background: true` | 外发前拒绝 | 多候选外发前拒绝 | 不支持 |
-| 图片、音视频、其他原生工具服务 | 本轮不认证 | 本轮不认证 | 本轮不认证 |
+| 用户图片输入 | 原生保留 URL / Base64 / file_id | 原生保留 image_url | 三种文本协议之间保留图文顺序、URL/Base64/MIME；详见下文 |
+| 音视频、图片生成、其他原生工具服务 | 本轮不认证 | 本轮不认证 | 本轮不认证 |
 
 标准端点仍为 `/v1/responses`、`/v1/chat/completions`，员工使用 XHub 虚拟密钥和公开模型别名。部署中的 `bypass_openai_responses` / `bypass_openai_chat` 是现有**上游执行方式名称**，不表示员工必须使用 `/bypass/...`；该对外路径仍需单独启用。
 
@@ -120,3 +121,26 @@ Chat 部署默认拒绝不能兑现的 `web_search`。管理员可设置 `model_
 custom 工具继续使用 LiteLLM 风格的 `content` 字符串包装，兼容七牛 DeepSeek 实际返回的单字段 `input` 字符串；不改写代码、不猜测其他参数，不接受非字符串或含额外字段的歧义包装。与 LiteLLM 的原文回退相比，此边界更严格。真实 Codex 0.163.0 的 code-mode、普通函数模式，以及通过 `tool_search` 发现只读 MCP 工具的流程，均以七牛 `deepseek/deepseek-v4.1-flash` 验收；该结果不代表所有模型、任意 MCP 或原生联网搜索均已认证。
 
 参考实现固定版本及差异见 `third_party/litellm/NOTICE.md`；客户端搜索结构见 [OpenAI Tool search](https://developers.openai.com/api/docs/guides/tools-tool-search)。
+
+
+## 用户图片输入（Issue #15）
+
+标准 Responses、Chat Completions、Messages 入口支持用户消息中的图片：
+`input_image.image_url`、`image_url.url`、`image.source`（`base64` 或 `url`）。
+同协议保留原生请求；跨协议采用有序文本/图片表示，保留图片及其前后文字、多图顺序、
+PNG/JPEG/GIF/WebP 的 MIME 和 Base64 字节。图片单独输入也不会因文本为空被丢弃。
+这不增加模型的视觉能力，最终图片格式、尺寸、远程 URL 可达性及识别质量由上游决定。
+
+OpenAI `detail` 的 `auto/low/high/original` 在 Responses ↔ Chat 之间保持原值。
+Messages 没有等价精度字段，桥接显式 `low/high/original` 会报能力错误；默认或 `auto` 可以转换。
+Responses 的 `file_id` 仅在原生 Responses 保留，不下载文件，也不将供应商私有引用假装成 URL。
+本轮不支持工具结果里的图片、音视频、PDF、Google 视觉桥接或图片生成；这些能力继续明确拒绝。
+
+网关不会为图片 URL 发起下载、重定向或读取本机文件；仅转发 HTTP(S) URL 或校验过的 Base64 data URL。
+文本护栏仍处理图片旁的文字，图片不转换成伪文本；计费使用上游实测 token。
+纯文本日志/护栏不具备图片 OCR 或图片内容审查能力。
+测试包括三协议九种路由的同步/流式、非法输入和鉴权、文本拦截/脱敏、日志计费，以及中英文浏览器上传闭环。
+真实供应商图片识别结果见本 PR 验收记录，不以 HTTP 200 代替识别结果正确。
+
+字段参考：[OpenAI 图片输入](https://developers.openai.com/api/docs/guides/images-vision)。
+LiteLLM 来源、函数与许可证见 `third_party/litellm/NOTICE.md`。

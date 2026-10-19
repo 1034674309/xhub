@@ -1,6 +1,6 @@
 # Agent protocol compatibility and acceptance (Issue #9)
 
-Scope: GPT, Grok and DeepSeek text, function tools, reasoning, Responses and Chat Completions. Images, audio/video and other providers are not certified by this change. A catalog model ID is not evidence of endpoint/parameter support or an available channel for a particular key.
+Scope: GPT, Grok and DeepSeek text, function tools, reasoning, Responses and Chat Completions. User image inputs are covered below; audio/video, image generation and other providers are not certified by this change. A catalog model ID is not evidence of endpoint/parameter support or an available channel for a particular key.
 
 ## LiteLLM reference and reuse
 
@@ -30,7 +30,8 @@ The follow-up references official `35970c3eacb9f4f8746af215586f23f3a2a17941`: na
 | Codex custom/namespace tools and `additional_tools` | Preserve | Function representation | Flatten/restore single-level namespaces; wrap custom strings as function JSON; project inline declarations; grammar becomes a model hint |
 | Refusal | Preserve, including native continuation | Preserve | Reject unimplemented conversion explicitly |
 | `n > 1`, `background: true` | Reject before dispatch | Reject multiple completions | Unsupported |
-| Images/audio/video/other native services | Not certified here | Not certified here | Not certified here |
+| User image inputs | Preserve URL/Base64/file_id | Preserve image_url | Ordered text/images, URL/Base64/MIME across the three text protocols; see below |
+| Audio/video/image generation/other native services | Not certified here | Not certified here | Not certified here |
 
 Clients keep `/v1/responses` or `/v1/chat/completions`, an XHub virtual key and a public model alias. Existing `bypass_openai_responses` / `bypass_openai_chat` deployment names select the **upstream execution transport**; they do not require clients to call `/bypass/...`. Public bypass endpoints still require separate enablement.
 
@@ -129,3 +130,26 @@ Chat deployments reject unsupported `web_search` by default. Administrators can 
 Custom tools retain LiteLLM-style `content` string wrapping and additionally accept Qiniu DeepSeek's observed single-field `input` string wrapper. Executable text is never repaired; non-string and ambiguous multi-field wrappers remain errors. This is stricter than LiteLLM's raw-text fallback. Actual Codex 0.163.0 acceptance covers code mode, standard functions, and discovering a read-only MCP tool through `tool_search`, using Qiniu `deepseek/deepseek-v4.1-flash`. It does not certify every model, arbitrary MCP servers or native web search.
 
 Pinned references and deviations are recorded in `third_party/litellm/NOTICE.md`; see the [OpenAI Tool search contract](https://developers.openai.com/api/docs/guides/tools-tool-search) for client item schemas.
+
+
+## User image input (Issue #15)
+
+Unified Responses, Chat Completions and Messages accept images in user messages:
+`input_image.image_url`, `image_url.url` and `image.source` (`base64` or `url`).
+Native bodies remain intact; bridges retain ordered text/image blocks, multiple images,
+HTTP(S) URLs and PNG/JPEG/GIF/WebP Base64 bytes/MIME. Image-only messages are not dropped.
+This does not grant vision to a text-only model: provider capabilities, size limits,
+remote URL access and recognition quality remain provider-specific.
+
+Responses ↔ Chat retains `detail` values `auto/low/high/original`. Messages cannot express
+explicit `low/high/original`, so those bridges fail explicitly; default/`auto` can bridge.
+Responses `file_id` stays native-only. No private file is fetched or converted into an invented URL.
+Images in tool results, audio/video, PDF, Google vision bridges and image generation remain unsupported.
+XHub never downloads remote image URLs or follows image redirects and does not read local files.
+Text guardrails still process adjacent text; image pixels are not OCR-scanned by text guardrails.
+Billing uses measured upstream usage. Tests cover nine protocol routes in JSON/SSE, input/auth errors,
+text blocking/redaction, logs/billing and English/Chinese browser upload workflows.
+Live recognition evidence belongs in the PR acceptance record; HTTP 200 alone is not recognition success.
+
+See [OpenAI image inputs](https://developers.openai.com/api/docs/guides/images-vision)
+and `third_party/litellm/NOTICE.md` for pinned LiteLLM mappings and licensing.

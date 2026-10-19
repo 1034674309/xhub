@@ -6,10 +6,34 @@ from unittest.mock import patch
 from http.server import HTTPServer
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT_DIAGNOSTIC
+from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT_DIAGNOSTIC, VISION_PNG, vision_answer
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_vision_payload(self):
+        """前置真实本地 HTTP 上游；图片字节正确才回答，错误图片/缺图必须失败，覆盖 JSON/SSE；tearDown 清理服务。"""
+        image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + VISION_PNG}}
+        body = {"model": "e2e-vision-chat", "messages": [{"role": "user", "content": [image]}]}
+        self.assertEqual(self.request("/v1/chat/completions", body)["choices"][0]["message"]["content"], "green-pixel")
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            self.assertIn("green-pixel", response.read().decode())
+        response_image = {"type": "input_image", "image_url": image["image_url"]["url"]}
+        native = {"model": "e2e-vision-native", "input": [{"role": "user", "content": [response_image]}]}
+        self.assertEqual(self.request("/v1/responses", native)["output"][0]["content"][0]["text"], "green-pixel")
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**native, "stream": True}).encode()), timeout=2) as response:
+            self.assertIn("response.completed", response.read().decode())
+        for parts in ([], [{"type": "image_url", "image_url": {"url": "data:image/png;base64,changed"}}]):
+            body["messages"][0]["content"] = parts
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/chat/completions", body)
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+        messages = {"messages": [{"content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": VISION_PNG}}]}]}
+        self.assertEqual(vision_answer(messages, "/v1/messages"), "green-pixel")
+        messages["messages"][0]["content"][0]["source"]["media_type"] = "image/jpeg"
+        with self.assertRaises(ValueError):
+            vision_answer(messages, "/v1/messages")
+
     def test_item_id_model_switch_fixture(self):
         """目的：验证 Chat源/严格原生目标夹具的成功、错误ID、协议及鉴权；前置本机服务，tearDown关闭，无真实凭据。"""
         source = self.request("/v1/chat/completions", {"model": "e2e-item-id-chat", "messages": []})

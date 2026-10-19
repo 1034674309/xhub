@@ -25,6 +25,35 @@ ERROR_LOG_TEXT_DIAGNOSTIC = (
 )
 
 
+VISION_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNg+M8AAAICAQB7CYF4AAAAAElFTkSuQmCC"
+
+
+def vision_answer(req: dict, path: str) -> str:
+    """校验真实图片是否按目标协议完整抵达；参数为请求和上游路径，返回仅由图片决定的标记。
+
+    前置浏览器上传的绿色 PNG，验证协议、MIME、Base64 字节与可读提示，缺图或错误内容抛 ValueError；不下载远程地址或保存文件。
+    """
+    messages = req.get("input" if path.endswith("/responses") else "messages", [])
+    images = []
+    for message in messages:
+        for part in message.get("content", []) if isinstance(message.get("content"), list) else []:
+            kind = part.get("type")
+            if kind == "input_image" and path.endswith("/responses"):
+                images.append(part.get("image_url"))
+            elif kind == "image_url" and path.endswith("/chat/completions"):
+                images.append(part.get("image_url", {}).get("url"))
+            elif kind == "image" and path.endswith("/messages"):
+                source = part.get("source", {})
+                if source.get("type") != "base64" or source.get("media_type") != "image/png":
+                    raise ValueError("invalid vision MIME or source")
+                images.append("data:image/png;base64," + source.get("data", ""))
+            elif kind not in ("text", "input_text", "output_text"):
+                raise ValueError("wrong image protocol")
+    if images != ["data:image/png;base64," + VISION_PNG]:
+        raise ValueError("image payload lost or changed")
+    return "green-pixel"
+
+
 def codex_answer(req: dict) -> str:
     """用途：校验隔离 Codex 模拟器真实外发的历史；参数为 Chat 上游正文，返回项目标记。
 
@@ -207,6 +236,27 @@ class Handler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             req = {}
         if self._ark(req) or self._fal(req):
+            return
+        if req.get("model", "").startswith("e2e-vision-"):
+            try:
+                text = vision_answer(req, self.path)
+            except (ValueError, TypeError, AttributeError):
+                self._response(400, b'{"error":{"message":"image payload invalid"}}', "application/json")
+                return
+            usage = {"prompt_tokens": 8, "completion_tokens": 2}
+            if self.path.endswith("/chat/completions"):
+                payload = {"id": "chatcmpl_vision", "choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": "stop"}], "usage": usage}
+                if req.get("stream"):
+                    self._sse([{"id": "chatcmpl_vision", "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}], "usage": usage}, "[DONE]"])
+                else:
+                    self._json(payload)
+            else:
+                item = {"type": "message", "id": "msg_vision", "role": "assistant", "content": [{"type": "output_text", "text": text}]}
+                payload = {"id": "resp_vision", "status": "completed", "output": [item], "usage": {"input_tokens": 8, "output_tokens": 2}}
+                if req.get("stream"):
+                    self._sse([{"type": "response.output_text.delta", "delta": text}, {"type": "response.completed", "response": payload}])
+                else:
+                    self._json(payload)
             return
         model = req.get("model") or "gpt-4o-mini"
         if model in ("e2e-item-id-chat", "e2e-item-id-native", "e2e-item-id-grok", "e2e-item-id-tracked"):

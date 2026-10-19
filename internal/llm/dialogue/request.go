@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// parseUnifiedDialogue 将已投影的用户 OpenAI、Anthropic、Gemini/Vertex 对话解码成共享表示。参数为协议及正文；返回对话或字段错误。
+// parseUnifiedDialogue 将已投影的用户 OpenAI、Anthropic、Gemini/Vertex 对话解码成共享表示（图片仅三种文本协议）。参数为协议及正文；返回对话或字段错误。
 // 调用：ParseDialogue 的共享投影或 Google 解析分支；不支持的能力明确拒绝，无外部副作用。
 func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error) {
 	if protocol == "gemini" || protocol == "vertex" {
@@ -175,11 +175,19 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 		}
 		if protocol == "anthropic-messages" {
 			if parts, ok := m["content"].([]any); ok {
+				hasImage := false
+				for _, part := range parts {
+					if dialogueMap(part)["type"] == "image" {
+						hasImage = true
+					}
+				}
 				for _, p := range parts {
 					b := dialogueMap(p)
 					fields := []string{"type", "text", "id", "name", "input", "tool_use_id", "content", "is_error"}
 					if b["type"] == "thinking" {
 						fields = []string{"type", "thinking", "signature"}
+					} else if b["type"] == "image" {
+						fields = []string{"type", "source"}
 					} else if b["type"] == "redacted_thinking" {
 						fields = []string{"type", "data"}
 					}
@@ -203,7 +211,19 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 							turn.Reasoning += reasoning.Reasoning
 						}
 					case "text":
+						if _, ok := b["text"].(string); !ok {
+							return d, fmt.Errorf("content text must be string")
+						}
 						turn.Text += dialogueString(b["text"])
+						if hasImage {
+							turn.Content = append(turn.Content, ContentPart{Type: "text", Text: dialogueString(b["text"])})
+						}
+					case "image":
+						image, e := parseImagePart(b, protocol, role)
+						if e != nil {
+							return d, e
+						}
+						turn.Content = append(turn.Content, image)
 					case "tool_use":
 						a, e := json.Marshal(b["input"])
 						if e != nil {
@@ -231,11 +251,11 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 				turn.Text = s
 			}
 		} else {
-			s, e := textContent(m["content"])
+			s, content, e := messageContent(m["content"], protocol, role)
 			if e != nil {
 				return d, e
 			}
-			turn.Text = s
+			turn.Text, turn.Content = s, content
 			if value, exists := m["tool_calls"]; exists {
 				if _, ok := value.([]any); !ok {
 					return d, fmt.Errorf("tool_calls must be an array")
@@ -256,7 +276,7 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 				turn.Calls = append(turn.Calls, Turn{ID: dialogueString(c["id"]), Name: dialogueString(f["name"]), Arguments: dialogueString(f["arguments"])})
 			}
 		}
-		if turn.Text != "" || turn.Reasoning != "" || len(turn.Calls) > 0 || role == "tool" {
+		if turn.Text != "" || len(turn.Content) > 0 || turn.Reasoning != "" || len(turn.Calls) > 0 || role == "tool" {
 			d.Turns = append(d.Turns, turn)
 		}
 	}
@@ -323,7 +343,7 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 	return d, nil
 }
 
-// EncodeDialogue 按显式上游协议编码对话，型号原样传递。参数为内部表示、协议、真实型号；返回正文或能力错误。
+// EncodeDialogue 按显式上游协议编码图文/工具对话，型号原样传递，不能表达的图片能力明确返回错误。参数为内部表示、协议、真实型号；返回正文或能力错误。
 // 调用：统一执行器；工具 ID 和参数不重新生成，Messages 工具结果按相邻角色合并。
 func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) {
 	// 即使候选与客户端同为 Chat/Messages，扩展携带的 OpenAI 推理也只能送回 Responses；先于原生正文直传检查。
@@ -371,6 +391,11 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 		return bridgeOptions(d, protocol, out)
 	}
 	if protocol == "gemini" || protocol == "vertex" {
+		for _, turn := range d.Turns {
+			if len(turn.Content) > 0 {
+				return nil, fmt.Errorf("image content requires an implemented image protocol")
+			}
+		}
 		return encodeGoogleDialogue(d)
 	}
 	out := map[string]any{"model": model, "stream": d.Stream}
@@ -409,6 +434,13 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 		switch protocol {
 		case "openai-chat":
 			m := map[string]any{"role": t.Role, "content": t.Text}
+			if len(t.Content) > 0 {
+				content, err := encodeImageContent(t.Content, protocol)
+				if err != nil {
+					return nil, err
+				}
+				m["content"] = content
+			}
 			if t.Role == "assistant" && (pendingReasoning != "" || t.Reasoning != "") {
 				m["reasoning_content"] = pendingReasoning + t.Reasoning
 				pendingReasoning = ""
@@ -435,7 +467,13 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 				messages = append(messages, map[string]any{"type": "function_call_output", "call_id": t.ID, "output": t.Text})
 				continue
 			}
-			if t.Text != "" {
+			if len(t.Content) > 0 {
+				content, err := encodeImageContent(t.Content, protocol)
+				if err != nil {
+					return nil, err
+				}
+				messages = append(messages, map[string]any{"role": t.Role, "content": content})
+			} else if t.Text != "" {
 				messages = append(messages, map[string]any{"role": t.Role, "content": t.Text})
 			}
 			for _, c := range t.Calls {
@@ -456,7 +494,13 @@ func EncodeDialogue(d Dialogue, protocol, model string) (map[string]any, error) 
 					parts = append(parts, map[string]any{"type": "thinking", "thinking": pendingReasoning + t.Reasoning, "signature": ""})
 					pendingReasoning = ""
 				}
-				if t.Text != "" {
+				if len(t.Content) > 0 {
+					content, err := encodeImageContent(t.Content, protocol)
+					if err != nil {
+						return nil, err
+					}
+					parts = append(parts, content...)
+				} else if t.Text != "" {
 					parts = append(parts, map[string]any{"type": "text", "text": t.Text})
 				}
 				for _, c := range t.Calls {
