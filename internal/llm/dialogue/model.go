@@ -1,10 +1,12 @@
 package dialogue
 
-// Turn 是文本与函数工具的内部对话项；ID 是工具调用关联 ID，Arguments 保留 JSON 参数字符串。
+// Turn 是文本、用户图片与函数工具的内部对话项；ID 是工具调用关联 ID，Arguments 保留 JSON 参数字符串。
 // 输入、上游与输出分别编码一次，避免按供应商和协议组合维护转换函数。
 type Turn struct {
 	Role, Text, ID, Name, Arguments string
 	Calls                           []Turn
+	// Content 仅在有图片时保存有序多模态块；Text 保留文本投影供既有护栏、日志及工具链使用。
+	Content []ContentPart `json:",omitempty"`
 	// Reasoning 是可公开推理文本；加密项仅通过 Native 在同协议重放。
 	Reasoning string
 	// Native 保存受身份绑定的原协议历史项；跨协议不能直接重放不透明推理内容。

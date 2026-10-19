@@ -136,3 +136,18 @@ explicit `previous_response_id` continuation. XHub does not decode, wrap or gene
 ciphertext, does not edit client-side stored history, and cannot recover plaintext
 from opaque compaction items. This deliberately trades transferable hidden reasoning
 state for model/provider switching without poisoning the client's history.
+
+
+Vision input reference (MIT): the same `35970c3eacb9f4f8746af215586f23f3a2a17941`
+snapshot's `litellm/responses/litellm_completion_transformation/transformation.py`
+(`_transform_input_image_item_to_image_item`,
+`_transform_responses_api_content_to_chat_completion_content`) and
+`litellm/litellm_core_utils/prompt_templates/factory.py`
+(`create_anthropic_image_param`, `convert_generic_image_chunk_to_openai_image_obj`).
+XHub adapts the ordered text/image representation and the Responses `input_image`
+↔ Chat `image_url` ↔ Messages `image.source` field mappings in Go. Base64 bytes,
+MIME, image order and OpenAI detail values are retained. It does not reuse the Python
+runtime, fetch remote URLs, transform image pixels, or infer a model's visual capability.
+Unlike reference paths that download remote images, XHub passes HTTP(S) URL references
+through to the provider. Unavailable file-reference bridges, image tool results and
+unrepresentable explicit detail settings remain explicit errors.

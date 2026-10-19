@@ -25,7 +25,7 @@ func TestRequestValidationBoundaries(t *testing.T) {
 		{"response_output", "openai-responses", "{\"input\":[{\"type\":\"function_call_output\",\"output\":42}]}", "content"},
 		{"content_type", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":42}]}", "content"},
 		{"block_type", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":[42]}]}", "object"},
-		{"unknown_block", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\"}]}]}", "content capability"},
+		{"missing_image_source", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\"}]}]}", "source"},
 		{"tool_result_error", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"is_error\":true}]}]}", "is_error"},
 		{"tool_result_content", "anthropic-messages", "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"content\":42}]}]}", "content"},
 		{"call_array", "openai-chat", "{\"messages\":[{\"role\":\"assistant\",\"tool_calls\":42}]}", "array"},
