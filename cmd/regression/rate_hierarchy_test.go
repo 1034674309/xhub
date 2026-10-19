@@ -43,6 +43,8 @@ func TestRateHierarchyHTTP(t *testing.T) {
 				}
 				h.ok(method, path, admin, map[string]any{idField: id, dimension: limit})
 				if dimension == "rpm_limit" {
+					// 多个请求必须落在同一固定 UTC 分钟；新分钟正确放行不应被误报为限流回归。
+					waitForRateTestMinute(t)
 					h.ok(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("rates-model", "first"))
 					if scope == "key" {
 						h.ok(http.MethodPost, "/v1/chat/completions", tn.key, chatRequest("rates-model", "second"))

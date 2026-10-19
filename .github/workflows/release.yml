@@ -32,6 +32,7 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: node --test scripts/test_release_workflow.cjs
+      - run: node --test scripts/test_dependabot.cjs
       - run: python3 -m unittest scripts.test_deploy_build -v
       - run: python3 -m unittest scripts.test_regression_output scripts.test_makefile -v
       # 隔离回归夹具在随机端口启动本机 Redis，Compose 服务不能替代 redis-server 二进制。
@@ -79,6 +80,7 @@ jobs:
       - name: Console HTTP compatibility unit tests
         working-directory: frontend
         run: |
+          npx vitest run --project unit tests/dependency-compat.test.ts
           npx vitest run --project unit src/lib/http/resolveApiBase.test.ts src/lib/http/runtime.test.ts src/lib/http/api.test.ts src/utils/randomId.test.ts src/components/networking.test.ts
           npx vitest run --project component 'src/app/(dashboard)/playground/hooks/useChatHistory.test.ts'
       - run: npx playwright install --with-deps chromium
@@ -223,6 +225,7 @@ jobs:
           prerelease=()
           if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease --latest=false); fi
           if ! gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes "${prerelease[@]}"
+            # Bash 3.2 在 nounset 下将空数组视为未定义；只在有预发布参数时展开，避免本机验证误失败。
+            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes ${prerelease[@]+"${prerelease[@]}"}
           fi
           gh release upload "$VERSION" docker-images.txt --clobber
