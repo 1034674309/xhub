@@ -8,13 +8,16 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.8
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.8
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.3
+	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/openai/openai-go/v3 v3.74.0
+	github.com/qiniu/go-sdk/v7 v7.26.4
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/tiktoken-go/tokenizer v0.7.0
 	golang.org/x/crypto v0.55.0
+	golang.org/x/oauth2 v0.30.0
 	google.golang.org/genai v1.73.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -37,16 +40,13 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
-	github.com/coreos/go-oidc/v3 v3.16.0 // indirect
 	github.com/gammazero/toposort v0.1.1 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
-	github.com/qiniu/go-sdk/v7 v7.26.4 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
 	modernc.org/fileutil v1.0.0 // indirect
 )
 
