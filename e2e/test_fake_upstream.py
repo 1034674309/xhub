@@ -10,6 +10,58 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_item_id_model_switch_fixture(self):
+        """目的：验证 Chat源/严格原生目标夹具的成功、错误ID、协议及鉴权；前置本机服务，tearDown关闭，无真实凭据。"""
+        source = self.request("/v1/chat/completions", {"model": "e2e-item-id-chat", "messages": []})
+        self.assertTrue(source["id"].startswith("chatcmpl-"))
+        history = [{"type": "message", "id": "msg_valid", "role": "assistant", "content": [{"type": "output_text", "text": "Hello"}]}]
+        body = {"model": "e2e-item-id-native", "input": history}
+        self.assertEqual(self.request("/v1/responses", body)["output"][0]["id"], "msg_e2e_native")
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode(), headers={"Authorization": "Bearer sk-fake"}), timeout=2) as response:
+            self.assertIn("response.completed", response.read().decode())
+        public = {"model": "e2e-item-id-native", "input": [{"type": "reasoning", "summary": []}]}
+        self.assertEqual(self.request("/v1/responses", public)["status"], "completed")
+        public["input"][0]["id"] = "rs_xhub_" + "a" * 32
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", public)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        # Grok 原生完整公开项是真实 HTTP 产物；只清理 status 或只清理 id 都仍需失败，两者规范后成功。
+        grok = self.request("/v1/responses", {"model": "e2e-item-id-grok", "input": []})
+        reasoning = grok["output"][0]
+        self.assertEqual(reasoning["id"], "rs_92ae29c5-9e2c-9cbd-a94b-2fd2abc135be")
+        for omit in ((), ("id",), ("status",)):
+            invalid_public = {"model": "e2e-item-id-native", "input": [{k: v for k, v in reasoning.items() if k not in omit}]}
+            with self.assertRaises(HTTPError) as error:
+                self.request("/v1/responses", invalid_public)
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+        normalized = {"type": "reasoning", "summary": reasoning["summary"]}
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [normalized]})["status"], "completed")
+        tracked = self.request("/v1/responses", {"model": "e2e-item-id-tracked", "input": []})["output"][0]
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [tracked]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        for key in ("internal_chat_message_metadata_passthrough", "metadata"):
+            tracked.pop(key)
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [tracked]})["status"], "completed")
+        tool_source = self.request("/v1/chat/completions", {"model": "e2e-item-id-chat", "tools": [{"type": "function", "function": {"name": "lookup_value"}}]})
+        self.assertEqual(tool_source["choices"][0]["message"]["tool_calls"][0]["id"], "call-e2e")
+        function = {"type": "function_call", "id": "call-e2e", "call_id": "call-e2e", "name": "lookup_value", "arguments": "{}"}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [function]})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        function["id"] = "fc_xhub_" + "a" * 32
+        self.assertEqual(self.request("/v1/responses", {"model": "e2e-item-id-native", "input": [function]})["status"], "completed")
+        history[0]["id"] = source["id"] + "_message"
+        for path, invalid, key in [("/v1/responses", body, "Bearer sk-fake"), ("/v1/responses", {"model": "e2e-item-id-chat"}, "Bearer sk-fake"), ("/v1/chat/completions", {"model": "e2e-item-id-chat"}, "Bearer invalid")]:
+            with self.assertRaises(HTTPError) as error:
+                self.request(path, invalid, key)
+            self.assertIn(error.exception.code, (400, 401))
+            error.exception.close()
+
     def test_client_search_fixture(self):
         """目的：验证发现→加载→执行结果三轮及错误路径；前置本机夹具，断言真实 JSON/SSE 返回，tearDown 关闭服务，无供应商调用。"""
         search = {"type": "function", "function": {"name": "tool_search", "parameters": {"type": "object"}}}
