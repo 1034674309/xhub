@@ -53,13 +53,49 @@ export function registerKeyWrite(kind: "edit" | "block" | "unblock" | "delete", 
         expect(block.status(), await block.text()).toBe(200); await rejected();
       } else expect((await invoke()).status()).toBe(200);
       await stableGoto(page, "/api-keys?key=" + key.token_id);
-      await page.getByRole("tab", {name:t("Settings"), exact:true}).click();
       if (kind === "edit") {
-        await page.getByRole("button", {name:t("Edit Settings"), exact:true}).click();
+        await page.setViewportSize({ width: 1440, height: 700 });
+        const guide = page.getByRole("complementary", { name: t("quotaGuide.title") });
+        await expect(guide.locator("details")).not.toHaveAttribute("open");
+        await guide.locator("summary").click();
+        await expect(guide.getByText(t("quotaGuide.chain"), { exact: true })).toBeVisible();
+        await guide.locator("summary").click();
+        await expect(page.getByRole("tab", { name: t("Settings"), exact: true })).toHaveCount(0);
+        const scroll = page.getByRole("region", { name: t("Key Settings"), exact: true });
+        const actions = page.getByRole("group", { name: t("keyEditor.actions"), exact: true });
+        // 布局约束由浏览器实测：全宽、可滚动、操作栏与内容区互不遮挡。
+        const bounds = await scroll.boundingBox();
+        expect(bounds!.width).toBeGreaterThan(1000);
+        expect(await scroll.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+        expect(await scroll.evaluate(node => getComputedStyle(node).overflowY)).toBe("scroll");
+        const footerBounds = await actions.boundingBox();
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(footerBounds!.y + 1);
+        expect(Math.abs(bounds!.x - footerBounds!.x)).toBeLessThan(2);
+        expect(Math.abs(bounds!.width - footerBounds!.width)).toBeLessThan(2);
+        // 窄屏保持同一面板且无横向溢出，保存按钮在视口内。
+        await page.setViewportSize({ width: 720, height: 640 });
+        expect(await scroll.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+        await expect(actions.getByRole("button", { name: t("Save Changes"), exact: true })).toBeInViewport();
+        await page.setViewportSize({ width: 1440, height: 700 });
+        await scroll.hover(); await page.mouse.wheel(0, 1800);
+        await expect.poll(() => scroll.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+        await expect(page.getByRole("switch", { name: t("keyEditor.enableRotation"), exact: true })).toBeInViewport();
+        await expect(actions.getByRole("button", { name: t("Save Changes"), exact: true })).toBeInViewport();
+        // 切换真实语言后保留用户输入，覆盖中英文标签。
+        await page.getByRole("button", { name: "English", exact: true }).click();
+        await expect(page.getByLabel("Key Alias", { exact: true })).toHaveValue(alias);
+        await expect(page.getByRole("switch", { name: "Enable Auto-Rotation", exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "中文", exact: true }).click();
+        await page.getByLabel(t("Max Budget (USD)"), { exact: true }).fill("10");
+        await page.getByLabel(t("RPM Limit"), { exact: true }).fill("100");
+        await page.getByLabel(t("TPM Limit"), { exact: true }).fill("100000");
+        await page.getByLabel(t("keyEditor.expire"), { exact: true }).fill("30d");
         await page.getByRole("textbox", {name:t("Key Alias"), exact:true}).fill(alias + "-renamed");
         const saved = page.waitForResponse(r => new URL(r.url()).pathname === "/key/update" && r.request().method() === "POST");
         await page.getByRole("button", {name:t("Save Changes"), exact:true}).last().click(); expect((await saved).status()).toBe(200);
-        expect((await info()).key_alias).toBe(alias + "-renamed");
+        const stored = await info();
+        expect(stored).toMatchObject({ key_alias: alias + "-renamed", max_budget: 10, rpm_limit: 100, tpm_limit: 100000 });
+        expect(stored.expires).toBeTruthy();
         await page.reload(); await expect(page.getByRole("heading").filter({has:page.getByText(alias + "-renamed", {exact:true})})).toBeVisible();
         expect((await invoke()).status()).toBe(200);
       } else {

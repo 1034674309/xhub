@@ -11,15 +11,6 @@ import { useT } from "@/i18n";
 
 const PREDEFINED_INTERVALS = ["7d", "30d", "90d", "180d", "365d"] as const;
 
-const INTERVAL_LABELS: Record<string, string> = {
-  "7d": "7 days",
-  "30d": "30 days",
-  "90d": "90 days",
-  "180d": "180 days",
-  "365d": "365 days",
-  custom: "Custom interval",
-};
-
 interface KeyLifecycleSettingsProps {
   value?: string;
   onChange?: (value: string) => void;
@@ -33,6 +24,7 @@ interface KeyLifecycleSettingsProps {
   id?: string;
 }
 
+/** 为期限和轮换说明渲染提示图标；参数为已翻译说明，返回可访问提示，无写入副作用。 */
 const hintIcon = (hint: string): React.ReactNode => (
   <Tooltip>
     <TooltipTrigger
@@ -43,6 +35,7 @@ const hintIcon = (hint: string): React.ReactNode => (
   </Tooltip>
 );
 
+/** 渲染共享的密钥生命周期控件；参数及回调控制期限、永不过期与轮换，返回表单片段；编辑留空保留期限，启用轮换显示间隔。 */
 const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
   value,
   onChange,
@@ -61,8 +54,17 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
   const [showCustomInput, setShowCustomInput] = useState(isCustomInterval);
   const [customInterval, setCustomInterval] = useState(isCustomInterval ? rotationInterval : "");
 
+  /** 根据当前语言格式化间隔；输入协议值，返回可见标签，未知自定义值原样保留。 */
+  const intervalLabel = (interval: string) =>
+    interval === "custom"
+      ? t("keyEditor.custom")
+      : PREDEFINED_INTERVALS.includes(interval as never)
+        ? t("keyEditor.days", { count: Number(interval.slice(0, -1)) })
+        : interval;
+
   const durationId = id ?? "key-lifecycle-duration";
 
+  /** 处理预设或自定义间隔；输入选项值，返回无，自定义选项只展开输入而不提前提交。 */
   const handleIntervalChange = (next: string) => {
     if (next === "custom") {
       setShowCustomInput(true);
@@ -73,11 +75,13 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
     onRotationIntervalChange(next);
   };
 
+  /** 将自定义间隔输入同步给调用方；参数为输入事件，返回无，不改写用户输入内容。 */
   const handleCustomIntervalChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setCustomInterval(event.target.value);
     onRotationIntervalChange(event.target.value);
   };
 
+  /** 同步永不过期选项；参数为选中状态，返回无，勾选时清除相对期限输入。 */
   const handleNeverExpireChange = (checked: boolean) => {
     onNeverExpireChange?.(checked);
     if (checked) {
@@ -89,14 +93,12 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
     <TooltipProvider>
       <div className="space-y-6">
         <div className="space-y-4">
-          <span className="text-sm font-medium text-foreground">{t("Key Expiry Settings")}</span>
+          <span className="text-sm font-medium text-foreground">{t("keyEditor.expiryTitle")}</span>
 
           <div className="space-y-2">
             <div className="flex items-center space-x-1 text-sm font-medium text-foreground">
-              <label htmlFor={durationId}>{t("Expire Key")}</label>
-              {hintIcon(
-                "Set when this key should expire. Format: 30s (seconds), 30m (minutes), 30h (hours), 30d (days). Leave empty to keep the current expiry unchanged.",
-              )}
+              <label htmlFor={durationId}>{t("keyEditor.expire")}</label>
+              {hintIcon(t("keyEditor.expiryHint"))}
               {!isCreateMode && onNeverExpireChange && (
                 <span className="ml-2 flex items-center gap-2 text-sm font-normal text-muted-foreground">
                   <Checkbox
@@ -105,7 +107,7 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
                     onCheckedChange={handleNeverExpireChange}
                   />
                   <label htmlFor={`${durationId}-never-expire`} className="cursor-pointer">
-                    {t("Never Expire")}
+                    {t("keyEditor.neverExpire")}
                   </label>
                 </span>
               )}
@@ -114,7 +116,7 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
               id={durationId}
               value={value ?? ""}
               onChange={(event) => onChange?.(event.target.value)}
-              placeholder={isCreateMode ? t("e.g., 30d or leave empty to never expire") : "e.g., 30d"}
+              placeholder={isCreateMode ? t("keyEditor.createPlaceholder") : t("keyEditor.editPlaceholder")}
               className="w-full"
               disabled={!isCreateMode && neverExpire}
             />
@@ -124,51 +126,51 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
         <Separator />
 
         <div className="space-y-4">
-          <span className="text-sm font-medium text-foreground">{t("Auto-Rotation Settings")}</span>
+          <span className="text-sm font-medium text-foreground">{t("keyEditor.rotationTitle")}</span>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="flex items-center space-x-1 text-sm font-medium text-foreground">
-                <span>{t("Enable Auto-Rotation")}</span>
-                {hintIcon(t("Key will automatically regenerate at the specified interval for enhanced security."))}
+                <span>{t("keyEditor.enableRotation")}</span>
+                {hintIcon(t("keyEditor.rotationHint"))}
               </label>
-              <Switch checked={autoRotationEnabled} onCheckedChange={onAutoRotationChange} />
+              <Switch
+                aria-label={t("keyEditor.enableRotation")}
+                checked={autoRotationEnabled}
+                onCheckedChange={onAutoRotationChange}
+              />
             </div>
 
             {autoRotationEnabled && (
               <div className="space-y-2">
                 <label className="flex items-center space-x-1 text-sm font-medium text-foreground">
-                  <span>{t("Rotation Interval")}</span>
-                  {hintIcon(
-                    t("How often the key should be automatically rotated. Choose the interval that best fits your security requirements."),
-                  )}
+                  <span>{t("keyEditor.interval")}</span>
+                  {hintIcon(t("keyEditor.intervalHint"))}
                 </label>
                 <div className="space-y-2">
                   <Select
                     value={showCustomInput ? "custom" : rotationInterval || null}
                     onValueChange={(next: string | null) => next !== null && handleIntervalChange(next)}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t("Select interval")}>
+                    <SelectTrigger className="w-full" aria-label={t("keyEditor.interval")}>
+                      <SelectValue placeholder={t("keyEditor.selectInterval")}>
                         {(selected: string | null) =>
                           selected === null ? (
-                            t("Select interval")
+                            t("keyEditor.selectInterval")
                           ) : (
-                            <span title={INTERVAL_LABELS[selected] ?? selected}>
-                              {INTERVAL_LABELS[selected] ?? selected}
-                            </span>
+                            <span title={intervalLabel(selected)}>{intervalLabel(selected)}</span>
                           )
                         }
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {PREDEFINED_INTERVALS.map((interval) => (
-                        <SelectItem key={interval} value={interval} title={INTERVAL_LABELS[interval]}>
-                          {INTERVAL_LABELS[interval]}
+                        <SelectItem key={interval} value={interval} title={intervalLabel(interval)}>
+                          {intervalLabel(interval)}
                         </SelectItem>
                       ))}
-                      <SelectItem value="custom" title={INTERVAL_LABELS.custom}>
-                        {INTERVAL_LABELS.custom}
+                      <SelectItem value="custom" title={intervalLabel("custom")}>
+                        {intervalLabel("custom")}
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -178,11 +180,10 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
                       <Input
                         value={customInterval}
                         onChange={handleCustomIntervalChange}
-                        placeholder="e.g., 1s, 5m, 2h, 14d"
+                        aria-label={t("keyEditor.custom")}
+                        placeholder={t("keyEditor.customPlaceholder")}
                       />
-                      <div className="text-xs text-muted-foreground">
-                        Supported formats: seconds (s), minutes (m), hours (h), days (d)
-                      </div>
+                      <div className="text-xs text-muted-foreground">{t("keyEditor.formats")}</div>
                     </div>
                   )}
                 </div>
@@ -191,9 +192,7 @@ const KeyLifecycleSettings: React.FC<KeyLifecycleSettingsProps> = ({
           </div>
 
           {autoRotationEnabled && (
-            <div className="rounded-md bg-info/10 p-3 text-sm text-info">
-              {t("When rotation occurs, you'll receive a notification with the new key. The old key will be deactivated after a brief grace period.")}
-            </div>
+            <div className="rounded-md bg-info/10 p-3 text-sm text-info">{t("keyEditor.rotationNotice")}</div>
           )}
         </div>
       </div>

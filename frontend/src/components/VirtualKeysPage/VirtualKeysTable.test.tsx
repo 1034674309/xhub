@@ -185,6 +185,14 @@ const lastKeyParam = (onUrlUpdate: Mock<OnUrlUpdateFunction>) => lastSearchParam
 
 const lastHistoryMode = (onUrlUpdate: Mock<OnUrlUpdateFunction>) => onUrlUpdate.mock.calls.at(-1)?.[0].options.history;
 
+/** 按可访问名称开启精简列表的可选列；参数为列标题，返回操作 Promise，仅影响当前 DOM。 */
+async function showOptionalColumn(title: string) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Columns" }));
+  await user.click(await screen.findByText(title));
+  await user.keyboard("{Escape}");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 
@@ -202,8 +210,11 @@ it("should render VirtualKeysTable component", () => {
   expect(screen.getByText("Test Key Alias")).toBeInTheDocument();
 });
 
-it("shows the Budget Reset column by default", async () => {
+/** 默认精简列隐藏重置时间；主动打开后仍显示原信息，测试框架清理 DOM。 */
+it("shows Budget Reset only when enabled", async () => {
   renderWithProviders(<VirtualKeysTable />);
+  expect(screen.queryByText("Budget Reset")).not.toBeInTheDocument();
+  await showOptionalColumn("Budget Reset");
   await waitFor(() => {
     expect(screen.getByText("Budget Reset")).toBeInTheDocument();
   });
@@ -229,6 +240,7 @@ it("left-anchors the create-key CTA below the title, between the header and the 
 
 it("should display key information correctly", async () => {
   renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("Team");
 
   await waitFor(() => {
     expect(screen.getByText("Test Key Alias")).toBeInTheDocument();
@@ -240,6 +252,7 @@ it("should display key information correctly", async () => {
 
 it("should display user email correctly", async () => {
   renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("User");
 
   await waitFor(() => {
     expect(screen.getByText("user@example.com")).toBeInTheDocument();
@@ -252,6 +265,7 @@ it("shows the user alias over the email in the visible cell when both exist", as
   );
 
   renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("User");
 
   const row = (await screen.findByText("Test Key Alias")).closest("tr") as HTMLElement;
   expect(within(row).getByText("The User")).toBeInTheDocument();
@@ -323,7 +337,7 @@ it("should render the redesigned table headers", () => {
   renderWithProviders(<VirtualKeysTable />);
 
   expect(screen.getByText("Key")).toBeInTheDocument();
-  expect(screen.getByText("Team")).toBeInTheDocument();
+  expect(screen.queryByText("Team")).not.toBeInTheDocument();
   expect(screen.getByText("Models")).toBeInTheDocument();
   expect(screen.getByText(/^(Spend|消费)$/, { selector: "[data-sort-field='spend']" })).toBeInTheDocument();
   expect(screen.getByText(/^(Budget|预算)$/, { selector: "[data-sort-field='max_budget']" })).toBeInTheDocument();
@@ -403,12 +417,12 @@ it("renders KeyInfoView when the URL has ?key= for a key on the current page, wi
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token }, onUrlUpdate });
 
   await waitFor(() => {
-    expect(screen.getByText("Back to Keys")).toBeInTheDocument();
+    expect(screen.getByText("Back to keys")).toBeInTheDocument();
   });
   expect(screen.queryByTestId("pagination-range")).not.toBeInTheDocument();
   expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: false, scope: "personal" });
 
-  fireEvent.click(screen.getByText("Back to Keys"));
+  fireEvent.click(screen.getByText("Back to keys"));
 
   await waitFor(() => {
     expect(lastKeyParam(onUrlUpdate)).toBeNull();
@@ -426,8 +440,6 @@ it("keeps the personal key detail id after an update returns a masked token", as
   const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: key.token }, onUrlUpdate });
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("tab", { name: "Settings" }));
-  await user.click(screen.getByRole("button", { name: "Edit Settings" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Key Alias" }), { target: { value: "Updated Personal Key" } });
   await user.click(screen.getByRole("button", { name: "Save Changes" }));
   expect(await screen.findByRole("heading", { name: "Updated Personal Key" })).toBeInTheDocument();
@@ -445,7 +457,8 @@ it("repoints ?key= to the rotated hash once the regenerate dialog is dismissed",
   const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token }, onUrlUpdate });
 
-  await user.click(await screen.findByRole("button", { name: /regenerate key/i }));
+  await user.click(await screen.findByRole("button", { name: "More key actions" }));
+  await user.click(await screen.findByRole("menuitem", { name: /regenerate key/i }));
   await user.click(await screen.findByRole("button", { name: /^Regenerate$/ }));
   expect(await screen.findAllByText("sk-rotated-plaintext")).not.toHaveLength(0);
   expect(lastKeyParam(onUrlUpdate)).toBeUndefined();
@@ -467,7 +480,7 @@ it("fetches the key by id when the URL has ?key= for a key not in the loaded pag
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: "other-key-hash" } });
 
   await waitFor(() => {
-    expect(screen.getByText("Back to Keys")).toBeInTheDocument();
+    expect(screen.getByText("Back to keys")).toBeInTheDocument();
   });
   expect(mockUseKeyInfo).toHaveBeenLastCalledWith("other-key-hash", { enabled: true, scope: "personal" });
   expect(screen.getAllByText("Fetched Key Alias").length).toBeGreaterThan(0);
@@ -503,6 +516,7 @@ it("should display 'Default Proxy Admin' for user_id when value is 'default_user
   );
 
   renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("User");
 
   await waitFor(() => {
     expect(screen.getByText("Default Proxy Admin")).toBeInTheDocument();
@@ -522,6 +536,8 @@ describe("entity links out of the key rows", () => {
 
   it("points the User and Team cells at their detail pages", async () => {
     renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("User");
+  await showOptionalColumn("Team");
 
     const row = await keyRow();
     expect(within(row).getByRole("link", { name: "user@example.com" })).toHaveAttribute(
@@ -578,6 +594,7 @@ describe("entity links out of the key rows", () => {
     );
     const user = userEvent.setup();
     renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("User");
     await enableCreatedByColumn(user);
 
     const row = await keyRow();
@@ -588,6 +605,7 @@ describe("entity links out of the key rows", () => {
   it("leaves the litellm-dashboard session team unlinked", async () => {
     mockUseKeys.mockReturnValue(keysResult([{ ...mockKey, team_id: "litellm-dashboard" }]));
     renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("Team");
 
     const row = await keyRow();
     expect(within(row).getByText("litellm-dashboard")).toBeInTheDocument();
@@ -611,6 +629,7 @@ it("should display 'Unknown' for last_active when value is null", async () => {
   mockUseKeys.mockReturnValue(keysResult([{ ...mockKey, last_active: null }]));
 
   renderWithProviders(<VirtualKeysTable />);
+  await showOptionalColumn("Last Active");
 
   await waitFor(() => {
     expect(screen.getByText("Unknown")).toBeInTheDocument();
