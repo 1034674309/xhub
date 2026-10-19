@@ -18,6 +18,18 @@ import (
 // Responses 校验完成对象并在终态可见前提交历史；Chat 必须同时看到 finish_reason 与 DONE。
 // 截断、供应商失败、写入错误均返回失败，已写出时不能重试；关闭上游正文，捕获最多 2 MiB，不修改不透明推理项。
 func PipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	return pipeNativeDialogue(w, resp, start, alias, protocol, false, beforeComplete...)
+}
+
+// PipePortableResponses 在统一 Responses 流发布前清理账户绑定推理，参数、返回及错误策略与 PipeNativeDialogue 相同。
+// Serve 调用；终态回调收到完整原生对象，客户端只收到无密文、无来源推理 ID 的历史；不影响 bypass、工具 ID、用量或失败事件。
+func PipePortableResponses(w http.ResponseWriter, resp *http.Response, start time.Time, alias string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	return pipeNativeDialogue(w, resp, start, alias, "openai-responses", true, beforeComplete...)
+}
+
+// pipeNativeDialogue 共享原生 SSE 验证和输出，portable 决定是否只发布公开推理，其余参数和返回与公开入口相同。
+// 两个流入口调用；每帧及最终快照都清理，防止 added/done 帧泄漏密文；读取和记账仍使用原始数据。
+func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, portable bool, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -98,7 +110,15 @@ func PipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.T
 			}
 			completed = true
 		}
-		// 仅改响应顶层公开模型；密文、工具 ID、序号及其他供应商字段完整保留。
+		if portable {
+			if item := streamMap(payload["item"]); item != nil {
+				payload["item"] = llmdialogue.PortableReasoningItems([]any{item}).([]any)[0]
+			}
+			if response := streamMap(payload["response"]); response != nil {
+				payload["response"] = llmdialogue.PortableResponsesObject(response, "output")
+			}
+		}
+		// 公开模型始终使用别名；原生透传保留密文，统一入口只保留可读推理和原有工具/用量事件。
 		if _, ok := payload["model"]; ok {
 			payload["model"] = alias
 		}

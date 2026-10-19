@@ -46,7 +46,8 @@ test("native agent protocols preserve reasoning and tool continuation through th
         return { status: response.status, text: await response.text(), callID: response.headers.get("x-litellm-call-id")!, sessionID: response.headers.get("x-session-id")! };
       }, { bearer, body: { ...options, input: "Read the file", stream, tools: [{ type: "function", name: "read", parameters: { type: "object", properties: {} } }] } });
       expect(result.status, result.text).toBe(200);
-      expect(result.text).toContain("fixture-cipher");
+      expect(result.text).not.toContain("encrypted_content");
+      expect(result.text).toContain("Plan");
       expect(result.text).toContain("function_call");
       callIDs.push(result.callID);
       const completed = stream ? JSON.parse(result.text.split("\n").find(line => line.startsWith("data:") && line.includes('"response.completed"'))!.slice(5)).response : JSON.parse(result.text);
@@ -72,16 +73,16 @@ test("native agent protocols preserve reasoning and tool continuation through th
     expect((await chat.json()).choices[0].message.content).toBe("e2e-ok");
     callIDs.push(chat.headers()["x-litellm-call-id"]);
 
-    // 使用真实管理接口更新同名凭据；稳定部署 ID 不变，但旧游标和密文必须在外发前拒绝。
+    // 更新凭据后旧游标仍拒绝；客户端自行提交的公开完整历史允许使用新连接。
     const ownedHeaders = { ...headers, "X-Session-Id": "e2e-connection-snapshot" };
     const snapshot = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: { ...options, input: "Start an owned conversation." } });
     expect(snapshot.status(), await snapshot.text()).toBe(200);
     const saved = await snapshot.json();
-    expect(saved.output).toEqual(expect.arrayContaining([expect.objectContaining({ encrypted_content: "fixture-cipher" })]));
+    expect(JSON.stringify(saved.output)).not.toContain("encrypted_content");
     callIDs.push(snapshot.headers()["x-litellm-call-id"]);
     expect((await page.request.patch(GATEWAY + "/credentials/" + credential, { headers, data: { credential_values: { api_base: UPSTREAM + "/v1", api_key: "sk-fake-updated" } } })).status()).toBe(200);
     const history = [{ role: "user", content: "Start an owned conversation." }, ...saved.output, { role: "user", content: "Continue." }];
-    for (const body of [{ ...options, previous_response_id: saved.id, input: "Continue." }, { ...options, input: history }]) {
+    for (const body of [{ ...options, previous_response_id: saved.id, input: "Continue." }]) {
       const blocked = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: body });
       expect(blocked.status(), await blocked.text()).toBe(409);
     }
@@ -93,7 +94,8 @@ test("native agent protocols preserve reasoning and tool continuation through th
     expect(fresh.status(), await fresh.text()).toBe(200);
     callIDs.push(fresh.headers()["x-litellm-call-id"]);
     const stillBlocked = await page.request.post(GATEWAY + "/v1/responses", { headers: ownedHeaders, data: { ...options, input: history } });
-    expect(stillBlocked.status(), await stillBlocked.text()).toBe(409);
+    expect(stillBlocked.status(), await stillBlocked.text()).toBe(200);
+    callIDs.push(stillBlocked.headers()["x-litellm-call-id"]);
 
     for (const callID of callIDs) {
       expect(callID).toBeTruthy();

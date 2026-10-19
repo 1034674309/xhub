@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestResponseConnectionChanges 验证保留部署 ID 修改连接后，旧父响应和完整密文均在外发前被拒绝。
+// TestResponseConnectionChanges 验证连接变更后旧游标及原生密文拒绝，统一入口公开完整历史仍可继续。
 // 参数 t 为上下文；真实 HTTP/PostgreSQL 创建供应商、用户、模型及账单，覆盖统一/原生入口和地址、型号、凭据名、同名凭据更新。
 // 验证原连接续接、未授权拒绝、普通请求仍可重新选路、成功记账；本地 HTTP 上游和私有 schema 由 Cleanup/harness 回收。
 func TestResponseConnectionChanges(t *testing.T) {
@@ -57,22 +57,34 @@ func TestResponseConnectionChanges(t *testing.T) {
 				if mutation != "credential_values" {
 					h.ok("PATCH", "/model/"+id+"/update", admin, map[string]any{"litellm_params": params})
 				}
-				for _, body := range []map[string]any{previous, full} {
+				expectedCalls := int32(2)
+				for index, body := range []map[string]any{previous, full} {
+					expectedStatus := 409
+					if path == "/v1/responses" && index == 1 {
+						expectedStatus = 200
+						expectedCalls++
+					}
 					blocked := h.doHeaders("POST", path, owner.key, body, headers)
-					if blocked.status != 409 || calls.Load() != 2 {
+					if blocked.status != expectedStatus || calls.Load() != expectedCalls {
 						t.Fatalf("连接变化后历史仍外发: %s %s", mutation, blocked.describe())
 					}
 				}
-				if bad := h.doHeaders("POST", path, "sk-invalid", previous, headers); bad.status != 401 || calls.Load() != 2 {
+				if bad := h.doHeaders("POST", path, "sk-invalid", previous, headers); bad.status != 401 || calls.Load() != expectedCalls {
 					t.Fatalf("未授权续接没有拒绝: %s", bad.describe())
 				}
-				// 即便同一会话先成功执行普通请求，动态偏好也不能替旧密文重新签发连接归属。
+				// 原生入口不能用普通请求替旧密文重新签发归属；统一入口自身公开历史允许迁移。
 				fresh := h.doHeaders("POST", path, owner.key, map[string]any{"model": "connection-change", "input": "A fresh plain request"}, headers)
-				if fresh.status != 200 || calls.Load() != 3 {
+				expectedCalls++
+				if fresh.status != 200 || calls.Load() != expectedCalls {
 					t.Fatalf("普通请求不能重新选路: %s", fresh.describe())
 				}
+				expectedStatus := 409
+				if path == "/v1/responses" {
+					expectedStatus = 200
+					expectedCalls++
+				}
 				blocked := h.doHeaders("POST", path, owner.key, full, headers)
-				if blocked.status != 409 || calls.Load() != 3 {
+				if blocked.status != expectedStatus || calls.Load() != expectedCalls {
 					t.Fatalf("普通偏好更新绕过了旧历史归属: %s", blocked.describe())
 				}
 				h.flushSpend()

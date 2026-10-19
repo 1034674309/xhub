@@ -9,3 +9,21 @@ Prompt fingerprints hash initial system/developer instructions and the first mea
 Affinity is scoped by caller, session, requested model or group and endpoint. The target is a deployment, not a provider brand. Each request validates current authorization, capability, credentials, enabled state, weight and cooldown. A valid preference is tried first; otherwise current model defaults and the selected template determine routing. Retry and fallback policies govern failure handling; successful switching updates the preference without changing session identity.
 
 Templates resolve through key, team and organization without widening model permissions. Affinity uses runtime cache state and does not create a database table. Provider prompt-cache hits remain an upstream property; affinity cannot guarantee a hit or replace actual usage evidence. See [routing](routing.md), [model endpoints](model-endpoints.md) and [runtime](runtime.md).
+
+
+## Portable history on the unified Responses entry
+
+The unified `/v1/responses` entry returns `X-XHub-History-Mode: portable`.
+Full client-supplied history is forwarded as a request-local copy without reasoning
+ciphertext, reasoning origin IDs or provider-specific reasoning status. JSON and all
+SSE item/terminal snapshots expose readable reasoning only, including Chat bridges.
+Messages, visible answers, summaries and tool calls/results keep their content and
+`call_id`. This prevents a model/provider switch from requiring ownership of another
+account's opaque reasoning, and avoids adding new foreign ciphertext to client history.
+
+This loses the non-transferable hidden reasoning state, not the visible conversation.
+Original upstream output stays in the existing temporary, caller-scoped history for
+explicit `previous_response_id` continuation. Cross-user cursors, expired cursors and
+changed originating connections still fail. Native `/bypass/openai/v1/responses` keeps
+its existing opaque ownership checks and full-fidelity response behavior. The gateway
+does not rewrite a client's stored conversation or decrypt existing compaction blobs.

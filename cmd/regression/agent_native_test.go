@@ -159,7 +159,7 @@ func TestAgentNativeProtocolMatrix(t *testing.T) {
 					if reply.status != 200 {
 						t.Fatalf("%s stream=%v: %s", model.ModelName, stream, reply.describe())
 					}
-					if !strings.Contains(string(reply.body), map[string]string{"responses": "test-cipher", "chat": "Plan"}[protocol]) {
+					if !strings.Contains(string(reply.body), map[string]string{"responses": "Read the file first.", "chat": "Plan"}[protocol]) {
 						t.Fatalf("原生推理字段丢失: %s", reply.body)
 					}
 					h.flushSpend()
@@ -260,8 +260,8 @@ func TestNativeAgentCancellation(t *testing.T) {
 	}
 }
 
-// TestNativeEncryptedHistoryOwnership 验证原生加密全量历史固定实际供应商，禁用后不得切换备用连接。
-// 参数 t 为上下文；真实管理接口创建两个同名部署和私有用户，覆盖合法续轮、跨身份拒绝、目标停用及普通文本仍可选备用。
+// TestNativeEncryptedHistoryOwnership 验证统一入口返回公开历史，增量游标固定原连接，完整公开历史允许换连接。
+// 参数 t 为上下文；真实管理接口创建同名部署和私有用户，覆盖公开续轮、游标跨身份拒绝、目标停用和备用连接。
 // 上游仅为本地 HTTP，部署/账单/凭据均位于隔离 schema；清理由 harness 和 t.Cleanup 执行。
 func TestNativeEncryptedHistoryOwnership(t *testing.T) {
 	var calls atomic.Int32
@@ -309,16 +309,20 @@ func TestNativeEncryptedHistoryOwnership(t *testing.T) {
 	}
 	stranger := h.openScope(t, admin, "cipher-stranger")
 	denied := h.doHeaders("POST", "/v1/responses", stranger.key, body, headers)
-	if denied.status != 400 || calls.Load() != 2 {
-		t.Fatalf("跨身份加密历史未拒绝: %s", denied.describe())
+	if denied.status != 200 || calls.Load() != 3 {
+		t.Fatalf("自行提交的公开历史未正常执行: %s", denied.describe())
+	}
+	private := h.do("POST", "/v1/responses", stranger.key, map[string]any{"model": "encrypted-native", "previous_response_id": first.json()["id"], "input": "Continue"})
+	if private.status != 400 || calls.Load() != 3 {
+		t.Fatalf("跨身份游标未拒绝: %s", private.describe())
 	}
 	h.ok("PATCH", "/model/"+ids[original]+"/update", admin, map[string]any{"model_info": map[string]any{"disabled": true}})
 	unavailable := h.doHeaders("POST", "/v1/responses", owner.key, body, headers)
-	if unavailable.status != 409 || calls.Load() != 2 {
-		t.Fatalf("密文原部署禁用后仍切换上游: %s", unavailable.describe())
+	if unavailable.status != 200 || calls.Load() != 4 {
+		t.Fatalf("公开历史未允许备用连接: %s", unavailable.describe())
 	}
 	plain := h.do("POST", "/v1/responses", stranger.key, map[string]any{"model": "encrypted-native", "input": "A fresh conversation"})
-	if plain.status != 200 || calls.Load() != 3 {
+	if plain.status != 200 || calls.Load() != 5 {
 		t.Fatalf("普通新会话未使用剩余连接: %s", plain.describe())
 	}
 }

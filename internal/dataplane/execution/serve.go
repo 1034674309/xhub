@@ -81,6 +81,12 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 		return
 	}
 	// 会话计划先于调度生成；这里只读偏好或父响应归属，最终候选仍要按当前配置重新验证。
+	if op == "responses" {
+		// 统一入口的完整客户端历史允许跨模型迁移；不把未知来源的账户密文当作访问旧会话的凭据。
+		// 仅改本次副本；previous_response_id 仍走严格归属并在下方恢复服务器保存的原始推理。
+		body = llmdialogue.PortableResponsesObject(body, "input")
+		w.Header().Set("X-XHub-History-Mode", "portable")
+	}
 	plan := h.PlanRoute(r, alias, body, p)
 	w.Header().Set("X-Session-Id", plan.SessionID)
 	h.AnnotateCall(callID, dpcontract.CallNote{SessionID: plan.SessionID, SessionSource: plan.SessionSource})
@@ -436,7 +442,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 								h.CommitRoute(plan, router.DeploymentID(rawDep), result.ID)
 							}
 						}
-						wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogueWithTools(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), dialogue.ToolBindings, commit)
+						if op == "responses" && execution.Protocol == "openai-responses" {
+							wrote, usage, ttft, streamed, streamErr = dpdialogue.PipePortableResponses(w, resp, start, alias, commit)
+						} else {
+							wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogueWithTools(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), dialogue.ToolBindings, commit)
+						}
 					} else {
 						wrote, usage, ttft, streamed, streamErr = dpstream.PipeStream(w, resp, start)
 					}
@@ -500,6 +510,14 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					}
 					result.ToolBindings = dialogue.ToolBindings
 					respBody, conversionErr = llmdialogue.EncodeDialogueResult(result, dpdialogue.CallerProtocol(op), alias)
+					if conversionErr == nil && op == "responses" {
+						// 编码后统一清理，覆盖原生和 Chat 桥接生成的 reasoning ID；原始结果仍供服务器续接。
+						var public map[string]any
+						conversionErr = json.Unmarshal(respBody, &public)
+						if conversionErr == nil {
+							respBody, conversionErr = json.Marshal(llmdialogue.PortableResponsesObject(public, "output"))
+						}
+					}
 					if conversionErr != nil {
 						lastErr = conversionErr
 						// 编码失败同样不能提交路由归属；记录部署失败后再尝试候选项。
