@@ -26,7 +26,7 @@ Use a **fresh PostgreSQL database**.
 Clone the repository and build the gateway and console locally:
 
 ```bash
-git clone https://github.com/sunqirui1987/xhub.git
+git clone https://github.com/qiniu/xhub.git
 cd xhub
 bash deploy/build.sh
 docker compose up -d

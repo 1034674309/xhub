@@ -55,7 +55,7 @@ for (const document of documents.filter((item) => /^development\/(en|zh-CN)\//.t
 }
 await emit("en/index.html", homepage("en"));
 await emit("search-index.json", JSON.stringify(documents.map(({ source, title, text, lang }) => ({ url: documentPath(source), title, text, lang }))));
-await emit("404.html", `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面未找到 · XHub</title><body><h1>页面未找到 / Page not found</h1><p>请从站点首页重新打开文档。 / Open documentation from the site home.</p><a href="https://sunqirui1987.github.io/xhub/">XHub 官网 / Website</a></body></html>`);
+await emit("404.html", `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面未找到 · XHub</title><body><h1>页面未找到 / Page not found</h1><p>请从站点首页重新打开文档。 / Open documentation from the site home.</p><a href="https://qiniu.github.io/xhub/">XHub 官网 / Website</a></body></html>`);
 await emit(".nojekyll", "");
 await emit("assets/favicon.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="13" fill="#146b50"/><path d="M14 13h6l4 7 4-7h6L27 24l7 11h-6l-4-7-4 7h-6l7-11z" fill="#fff"/></svg>`);
 await cp(path.join(root, "docs/assets"), path.join(output, "assets"), { recursive: true });

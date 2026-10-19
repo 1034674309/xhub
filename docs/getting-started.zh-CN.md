@@ -26,7 +26,7 @@ XHub 包含两个服务：Go API 网关默认监听 `4000`，Next.js 控制台�
 克隆仓库，在本机构建服务，再启动：
 
 ```bash
-git clone https://github.com/sunqirui1987/xhub.git
+git clone https://github.com/qiniu/xhub.git
 cd xhub
 bash deploy/build.sh
 docker compose up -d

@@ -25,7 +25,7 @@ XHub is an **MIT-licensed, self-hosted AI gateway for teams using multiple model
 
 **Distinct XHub capabilities:** Compose enterprise pre-call checks in XGo, inherit routing templates through key/team/organization scopes, continue agent calls with Responses history, retain per-request price snapshots, and deduplicate settlement for supported asynchronous media tasks. Model catalogs, Playground, and call tracing connect these capabilities to everyday use.
 
-[Website and online documentation](https://sunqirui1987.github.io/xhub/en/) · [Static website deployment](website/README.md)
+[Website and online documentation](https://qiniu.github.io/xhub/en/) · [Static website deployment](website/README.md)
 
 ![XHub console: browse available models, capabilities, and prices](docs/assets/console-models.png)
 
@@ -164,7 +164,7 @@ The current deployment builds on your host and packages the output into Docker i
 ### 2. Build and start
 
 ```bash
-git clone https://github.com/sunqirui1987/xhub.git
+git clone https://github.com/qiniu/xhub.git
 cd xhub
 bash deploy/build.sh
 docker compose up -d --no-build
@@ -266,7 +266,7 @@ XHub is licensed under the [MIT License](LICENSE), allowing commercial use, modi
 
 ## Contributing
 
-XHub is actively evolving. [Open an issue](https://github.com/sunqirui1987/xhub/issues) with an enterprise use case or reproduction steps, improve the documentation, or submit a pull request. For code changes, follow the [developer guide](docs/development/en/README.md) and the relevant module's validation requirements.
+XHub is actively evolving. [Open an issue](https://github.com/qiniu/xhub/issues) with an enterprise use case or reproduction steps, improve the documentation, or submit a pull request. For code changes, follow the [developer guide](docs/development/en/README.md) and the relevant module's validation requirements.
 
 ### Hierarchical quota allocation
 

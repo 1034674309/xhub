@@ -27,6 +27,23 @@ try {
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  // 目的：迁移后中英文首页、安装正文及源码入口均指向七牛仓库；前置真实构建与 HTTP 服务，刷新验证后关闭上下文，不写业务数据。
+  await scenario("七牛仓库迁移 → 双语安装与源码链接 → 刷新", async () => {
+    for (const [home, setup] of [["", "getting-started.zh-CN"], ["en/", "getting-started"]]) {
+      await page.goto(base + home);
+      for (const link of await page.getByRole("link", { name: /^GitHub/ }).all()) {
+        await expect(link).toHaveAttribute("href", "https://github.com/qiniu/xhub");
+      }
+      assert.ok((await page.locator("main").innerText()).includes("git clone https://github.com/qiniu/xhub.git"), "首页安装命令必须来自新仓库");
+      await page.goto(base + "docs/" + setup + ".html");
+      await page.reload();
+      assert.ok((await page.getByRole("article").innerText()).includes("git clone https://github.com/qiniu/xhub.git"), "双语安装说明必须来自新仓库");
+      await expect(page.locator(".doc-end").getByRole("link").first()).toHaveAttribute("href", `https://github.com/qiniu/xhub/blob/main/docs/${setup}.md`);
+    }
+    const missing = await page.request.get(base + "404.html");
+    assert.equal(missing.status(), 200, "发布的 404 页面必须可读取");
+    assert.ok((await missing.text()).includes('href="https://qiniu.github.io/xhub/"'), "404 返回入口必须指向七牛站点");
+  });
   // 目的：双语性能说明切换和刷新后仍提供已跟踪的压测指南，报告仅显示本地路径；前置真实构建服务器，无外部请求和业务写入，最终关闭上下文。
   await scenario("性能说明 → 双语切换 → 压测指南与本地报告边界", async () => {
     await page.goto(base + "docs/development/zh-CN/api-performance-design.html");
@@ -37,7 +54,7 @@ try {
       const response = await page.request.get(page.url());
       assert.equal(response.status(), 200, `${locale} 性能文档必须可达`);
       const article = page.getByRole("article");
-      await expect(article.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", "https://github.com/sunqirui1987/xhub/blob/main/benchmarks/README.md");
+      await expect(article.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", "https://github.com/qiniu/xhub/blob/main/benchmarks/README.md");
       assert.ok((await article.innerText()).includes(boundary), `${locale} 必须说明报告不随仓库发布`);
       assert.ok((await article.innerText()).includes("benchmarks/reports/staircase/report.md"));
       assert.equal(await article.locator('a[href*="benchmarks/reports/"]').count(), 0, `${locale} 不能提供无效报告链接`);

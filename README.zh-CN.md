@@ -25,7 +25,7 @@ XHub 是采用 **MIT 许可证、面向多模型使用团队的自托管 AI 网�
 
 **XHub 的特色：** 用 XGo 编排企业调用前检查；让路由模板沿密钥、团队、组织继承；用 Responses 历史续接支持 Agent 连续调用；保留每次请求的价格快照，并对支持的异步媒体任务去重结算。模型目录、Playground 与调用追踪把这些能力连接到日常使用中。
 
-[官网与在线文档](https://sunqirui1987.github.io/xhub/) · [静态站点部署指南](website/README.md)
+[官网与在线文档](https://qiniu.github.io/xhub/) · [静态站点部署指南](website/README.md)
 
 ![XHub 控制台：浏览可用模型、能力与价格](docs/assets/console-models.png)
 
@@ -164,7 +164,7 @@ docker compose version
 ### 2. 构建并启动
 
 ```bash
-git clone https://github.com/sunqirui1987/xhub.git
+git clone https://github.com/qiniu/xhub.git
 cd xhub
 bash deploy/build.sh
 docker compose up -d --no-build
@@ -266,7 +266,7 @@ XHub 采用 [MIT 许可证](LICENSE)，允许商用、修改和再分发，但�
 
 ## 参与贡献
 
-XHub 正在持续迭代。欢迎带着企业使用场景[提交 Issue](https://github.com/sunqirui1987/xhub/issues)、改进文档或发起 Pull Request。修改代码前，请参考[开发指南](docs/development/zh-CN/README.md)与对应模块的验证要求。
+XHub 正在持续迭代。欢迎带着企业使用场景[提交 Issue](https://github.com/qiniu/xhub/issues)、改进文档或发起 Pull Request。修改代码前，请参考[开发指南](docs/development/zh-CN/README.md)与对应模块的验证要求。
 
 ### 逐级额度管理
 
