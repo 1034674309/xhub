@@ -19,7 +19,7 @@ export function registerOrganizationManagementScenario(locale: "en" | "zh-CN") {
   /** 调用本测试的真实管理接口；path/body 为请求，返回成功 JSON；资源仅属于当前场景并在 finally 清理。 */
   const create=async(path:string,body:unknown)=>{const r=await page.request.post(GATEWAY+path,{headers,data:body});expect(r.status(),path+": "+await r.text()).toBe(200);return r.json()};
   try {
-   modelID=(await create("/model/new",{model_name:name,litellm_params:{model:name,custom_llm_provider:"openai",api_base:UPSTREAM,api_key:"sk-fake",input_cost_per_token:0.01,output_cost_per_token:0.01},model_info:{transport:"bypass_openai_chat",pricing_source:"manual"}})).model_info.id;
+   modelID=(await create("/model/new",{model_name:name,litellm_params:{model:name,custom_llm_provider:"openai",api_base:UPSTREAM,api_key:"sk-fake",input_cost_per_token:0.01,output_cost_per_token:0.01},model_info:{transport:"bypass_openai_chat",pricing_source:"manual",max_input_tokens:64,max_output_tokens:8,supported_parameters:["max_completion_tokens"]}})).model_info.id;
    await stableGoto(page,"/organizations");
    await page.getByRole("button",{name:"+ "+tr("pages.organizations.create"),exact:true}).click();
    const dialog=page.getByRole("dialog");
@@ -53,12 +53,17 @@ export function registerOrganizationManagementScenario(locale: "en" | "zh-CN") {
    userID=(await create("/user/new",{user_email:email,password:"organization-test-password",team_id:teamID})).user_id;
    await create("/organization/member_add",{organization_id:orgID,member:{user_email:email,role:"org_admin"}});
    const credential=await create("/key/generate",{user_id:userID,key_alias:name});keyID=credential.token_id;
-   const request={model:name,messages:[{role:"user",content:"Verify the organization renewal budget."}]};
-   const call=()=>page.request.post(GATEWAY+"/v1/chat/completions",{headers:{Authorization:"Bearer "+credential.key},data:request});
-   expect((await call()).status()).toBe(200);
+   let requestSequence=0;
+   /** 每次提交不同的英文请求以验证真实准入；本地模型整窗输入 64、输出上限 8，返回原始 HTTP 响应，测试资源由 finally 清理。 */
+   const call=()=>page.request.post(GATEWAY+"/v1/chat/completions",{headers:{Authorization:"Bearer "+credential.key},data:{model:name,max_completion_tokens:8,messages:[{role:"user",content:"Verify the organization renewal budget. Request "+(++requestSequence)}]}});
+   const first=await call();expect(first.status(),await first.text()).toBe(200);
+   const reservationBound=Number(first.headers()["x-xhub-budget-reserved"]);
+   expect(reservationBound).toBeCloseTo(0.72,8);
    let spend=0;
    await expect.poll(async()=>{const o=await (await page.request.get(GATEWAY+"/organization/info?organization_id="+orgID,{headers})).json();spend=o.spend;return spend}).toBeGreaterThan(0);
-   expect((await page.request.patch(GATEWAY+"/organization/update",{headers,data:{organization_id:orgID,max_budget:spend}})).status()).toBe(200);
+   // 单次预占约 0.72、实际费用 0.10；将周期额度降至一次上界后，旧周期余额不足，新周期重置后恢复。
+   expect(spend).toBeCloseTo(0.1,8);
+   expect((await page.request.patch(GATEWAY+"/organization/update",{headers,data:{organization_id:orgID,max_budget:reservationBound}})).status()).toBe(200);
    expect((await call()).status()).toBe(429);
    expect((await page.request.post(control+"/organization/budget/due",{data:{organization_id:orgID,pending_previous:true}})).status()).toBe(200);
    expect((await call()).status()).toBe(200);
@@ -90,7 +95,7 @@ export function registerOrganizationManagementScenario(locale: "en" | "zh-CN") {
    const removed=page.waitForResponse(r=>r.url().endsWith("/organization/member_delete"));
    await page.getByTestId("delete-member").click();expect((await removed).status()).toBe(200);
    await expect(page.getByText(tr("No organization administrators"),{exact:true})).toBeVisible();
-   await info.attach("organization-budget",{body:JSON.stringify({orgID,duration:"7d",initialSpend:spend,renewed:true,readonly:true}),contentType:"application/json"});
+   await info.attach("organization-budget",{body:JSON.stringify({orgID,duration:"7d",initialSpend:spend,reservationBound,renewed:true,readonly:true}),contentType:"application/json"});
   } finally {
    test.setTimeout(test.info().timeout+30000);
    if(keyID)expect((await page.request.post(GATEWAY+"/key/delete",{headers,data:{keys:[keyID]}})).status()).toBe(200);
