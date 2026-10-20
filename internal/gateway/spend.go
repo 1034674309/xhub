@@ -113,6 +113,14 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		total, in, out = 0, 0, 0
 		charge = catalog.Charge{}
 	}
+	budgetID := ""
+	var budgetMetadata map[string]any
+	if frozen, active, valid, id, metadata := s.budgetCharge(callID, usage, status, cacheHit); active {
+		charge, okc = frozen, valid
+		total, in, out = charge.Total, charge.Input, charge.Output
+		budgetID, budgetMetadata = id, metadata
+		w.Header().Set("X-XHub-Budget-State", metadata["state"].(string))
+	}
 	// LiteLLM stores response_cost or 0.0. Unknown models still get a row, with spend 0.
 	spend := 0.0
 	if okc {
@@ -207,8 +215,9 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		UpstreamResponse: requestlog.DiagnosticJSON(note.Upstream, usage),
 		Streamed:         note.Streamed, TTFTMs: note.TTFTMs, Provider: note.Provider, CacheKey: note.CacheKey,
 		SessionID: note.SessionID, SessionSource: note.SessionSource, CachedTokens: cachedColumn(usage),
-		Guardrail:     guardrail,
-		PriceSnapshot: catalog.SnapshotUsage(charge, billed, okc),
+		Guardrail:           guardrail,
+		PriceSnapshot:       budgetPriceSnapshot(catalog.SnapshotUsage(charge, billed, okc), budgetMetadata),
+		BudgetReservationID: budgetID,
 	}
 	// 快照保存连接名称而非仅协议名；同协议的多家供应商不会合并。
 	row.Supplier, row.APIBase, row.UpstreamModel = note.Supplier, note.APIBase, note.UpstreamModel
@@ -359,7 +368,8 @@ func sessionLogBinding(ownerType, teamID, orgID string, memberships []iam.Member
 // 测试：无直接单测
 func usageFromSpend(row live.SpendLog, spend float64, messages, response, proxy string, start, end time.Time) iam.UsageRecord {
 	return iam.UsageRecord{
-		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
+		BudgetReservationID: row.BudgetReservationID,
+		InboundEndpoint:     row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
 		APIBase: row.APIBase, Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
 		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
 		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,

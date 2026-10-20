@@ -1,110 +1,300 @@
 package iam
 
 import (
- "context"
- "errors"
- "math"
+	"context"
+	"errors"
+	"math"
+	"time"
 
- "xorm.io/xorm"
+	"xorm.io/xorm"
 )
 
-// ErrBudgetUnavailable 表示本次预占超过某层可用余额；调用方返回429而不调用上游。
+// ErrBudgetUnavailable 表示本次预占超过某层可用余额；调用方返回 429，不调用上游。
 var ErrBudgetUnavailable = errors.New("budget reservation exceeds available balance")
 
-// BudgetReservation 保存正在执行请求的计费路径快照，不设自动过期以避免仍执行的请求被提前释放。
-// 崩溃后遗留占用必须由确认请求已终止的恢复流程释放，不能通过超时猜测释放资金。
+// BudgetReservation 保存每次上游尝试的计费路径和价格快照，不设自动过期。
+// RequestID 是尝试 ID，CallID 是对外请求 ID；未知已付费的占用须核对后恢复，不能按 TTL 猜测退款。
 type BudgetReservation struct {
- RequestID string `xorm:"pk 'request_id'"`
- Kind string `xorm:"'kind'"`
- NodeID string `xorm:"'node_id'"`
- KeyID string `xorm:"'key_id'"`
- UserID string `xorm:"'user_id'"`
- TeamID string `xorm:"'team_id'"`
- OrgID string `xorm:"'org_id'"`
- Amount float64 `xorm:"'amount'"`
+	RequestID string    `xorm:"pk 'request_id'" json:"reservation_id"`
+	CallID    string    `xorm:"'call_id'" json:"call_id"`
+	Kind      string    `xorm:"'kind'" json:"kind"`
+	NodeID    string    `xorm:"'node_id'" json:"node_id"`
+	KeyID     string    `xorm:"'key_id'" json:"key_id"`
+	UserID    string    `xorm:"'user_id'" json:"user_id"`
+	TeamID    string    `xorm:"'team_id'" json:"team_id"`
+	OrgID     string    `xorm:"'org_id'" json:"org_id"`
+	ProjectID string    `xorm:"'project_id'" json:"project_id"`
+	Amount    float64   `xorm:"'amount'" json:"amount"`
+	Snapshot  string    `xorm:"'snapshot'" json:"snapshot"`
+	State     string    `xorm:"'state'" json:"state"`
+	Reason    string    `xorm:"'reason'" json:"reason"`
+	StartedAt time.Time `xorm:"'started_at'" json:"started_at"`
+	CreatedAt time.Time `xorm:"created 'created_at'" json:"created_at"`
 }
 
-// TableName 返回预占表名；无参数和副作用，供xorm查询使用。
+// TableName 返回预占表名；无参数和副作用，供 xorm 查询使用。
 func (BudgetReservation) TableName() string { return "budget_reservations" }
 
-// applyBudgetHolds 将已占金额叠加到当前树的各层消费，避免固定额度和共享额度重复计数。
-// 参数s/nodes为同一事务与额度树；返回数据库错误，供分配校验和请求准入调用，不修改持久消费。
+// BudgetReservationOptions 为实际出站尝试补充可核对的请求 ID 与冻结计价快照。
+// 项目和五层身份必须由数据库推导，不能由调用者通过此配置覆盖。
+type BudgetReservationOptions struct {
+	CallID, Snapshot string
+	// StartedAt 与最终 UsageRecord.TS 一致，跨周期重试仍归属于原请求周期。
+	StartedAt time.Time
+}
+
+// applyBudgetHolds 在同一事务把已有预占加到额度树消费；用于管理分配和新请求准入。
+// 参数 s/nodes 为当前事务和节点；返回数据库错误，不修改持久消费，不会提前释放未结算费用。
 func applyBudgetHolds(s *xorm.Session, nodes map[string]*quotaNode) error {
- var holds []BudgetReservation
- if err := s.Find(&holds); err != nil { return err }
- for _, h := range holds {
-  for kind, id := range map[string]string{"key": h.KeyID, "user": h.UserID, "team": h.TeamID, "org": h.OrgID} {
-   if n := nodes[kind+":"+id]; n != nil { n.Spend += h.Amount }
-  }
- }
- return nil
+	var holds []BudgetReservation
+	if err := s.Find(&holds); err != nil {
+		return err
+	}
+	for _, h := range holds {
+		for kind, id := range map[string]string{"key": h.KeyID, "user": h.UserID, "team": h.TeamID, "org": h.OrgID} {
+			if n := nodes[kind+":"+id]; n != nil {
+				// 组织按请求开始时间归属周期；旧周期占用仍保留在其他层级与核对列表。
+				if kind == "org" && n.PeriodStart != nil && h.StartedAt.Before(*n.PeriodStart) {
+					continue
+				}
+				n.Spend += h.Amount
+			}
+		}
+	}
+	return nil
 }
 
-// ReserveBudget 在事务锁内为请求预占金额；参数ctx/requestID/kind/id/amount为上下文、幂等ID、主体和费用上界。
-// 返回持久快照或余额/存储错误；相同ID只允许相同主体金额重试，已结算ID不能重新占用。
-// 调用方必须在转发前执行，结算用RecordUsage原子释放，未转发或失败可用ReleaseBudget释放。
-func (db *DB) ReserveBudget(ctx context.Context, requestID, kind, id string, amount float64) (*BudgetReservation, error) {
- if requestID == "" || (kind != "key" && kind != "user") || id == "" || amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) { return nil, ErrInvalid }
- var hold BudgetReservation
- err := db.tx(ctx, func(s *xorm.Session) error {
-  found, err := s.ID(requestID).Get(&hold)
-  if err != nil { return err }
-  if found {
-   if hold.Kind != kind || hold.NodeID != id || hold.Amount != amount { return ErrConflict }
-   return nil
-  }
-  settled, err := s.Where("request_id = ?", requestID).Exist(new(UsageEvent))
-  if err != nil { return err }; if settled { return ErrConflict }
-  nodes, err := quotaTree(s)
-  if err != nil { return err }
-  n := nodes[kind+":"+id]
-  if n == nil { return ErrNotFound }
-  if err := applyBudgetHolds(s, nodes); err != nil { return err }
-  hold = BudgetReservation{RequestID: requestID, Kind: kind, NodeID: id, Amount: amount}
-  var child *quotaNode
-  credit := 0.0
-  for n != nil {
-   switch n.Kind {
-   case "key": hold.KeyID = n.ID
-   case "user": hold.UserID = n.ID
-   case "team": hold.TeamID = n.ID
-   case "org": hold.OrgID = n.ID
-   }
-   if n.Parent == "ambiguous" { return ErrMultipleTeams }
-   if n.Limit != nil {
-    reserved := 0.0
-    for _, c := range n.Children {
-     value := quotaReserved(c)
-     if c == child { value = math.Max(0, value-credit) }
-     reserved += value
-    }
-    if n.Spend+reserved+amount > *n.Limit+1e-9 { return ErrBudgetUnavailable }
-    credit = math.Max(0, *n.Limit-n.Spend)
-   }
-   child = n
-   if n.Parent != "" && nodes[n.Parent] == nil { return ErrInvalid }
-   n = nodes[n.Parent]
-  }
-  _, err = s.Insert(&hold)
-  return err
- })
- if err != nil { return nil, err }; return &hold, nil
+// reservationProject 从 Key 行读取项目归属；会话没有项目，返回 nil。
+// 参数 s/kind/id 为同一事务和身份；项目缺失返回错误，防止跳过已声明的预算限制。
+func reservationProject(s *xorm.Session, kind, id string) (*Project, error) {
+	if kind != "key" {
+		return nil, nil
+	}
+	var key Key
+	found, err := s.ID(id).Get(&key)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	if key.ProjectID == nil || *key.ProjectID == "" {
+		return nil, nil
+	}
+	var project Project
+	found, err = s.ID(*key.ProjectID).Get(&project)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	return &project, nil
 }
 
-// ReleaseBudget 释放确认不再执行的请求占用；参数ctx/requestID为上下文和请求ID，返回存储错误。
-// 调用：请求退出/恢复流程；重复释放无害，数据库不可用时保留占用而非允许超支。
+// RequiresBudget 判断本次身份或任一祖先/项目是否有限额，供网关决定是否必须构造严格上界。
+// 参数为数据库身份，返回是否需要预占或读取错误；实际余额检查仍须由 ReserveBudget 在事务锁内完成。
+func (db *DB) RequiresBudget(ctx context.Context, kind, id string) (bool, error) {
+	s := db.session(ctx)
+	defer s.Close()
+	nodes, err := quotaTreeFor(s, kind, id)
+	if err != nil {
+		return false, err
+	}
+	n := nodes[kind+":"+id]
+	if n == nil {
+		return false, ErrNotFound
+	}
+	for n != nil {
+		if n.Limit != nil {
+			return true, nil
+		}
+		if n.Parent == "ambiguous" {
+			return false, ErrMultipleTeams
+		}
+		if n.Parent != "" && nodes[n.Parent] == nil {
+			return false, ErrInvalid
+		}
+		n = nodes[n.Parent]
+	}
+	project, err := reservationProject(s, kind, id)
+	return project != nil && project.MaxBudget != nil, err
+}
+
+// ReserveBudget 在 PostgreSQL 事务级跨实例锁内预占每次尝试的费用上界，重试必须使用独立尝试 ID。
+// 参数 ctx/requestID/kind/id/amount 为上下文、尝试标识、身份和上界；可选配置保存请求及价格快照。
+// 返回持久身份快照或余额/存储错误；同 ID 只允许完全相同的金额身份重放；五层和项目全部成功才写入。
+// 结算由 RecordUsage 原子释放；仅确认未发送的请求可以主动 ReleaseBudget，绝不按超时自动释放。
+func (db *DB) ReserveBudget(ctx context.Context, requestID, kind, id string, amount float64, options ...BudgetReservationOptions) (*BudgetReservation, error) {
+	if requestID == "" || (kind != "key" && kind != "user") || id == "" || amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) || len(options) > 1 {
+		return nil, ErrInvalid
+	}
+	opt := BudgetReservationOptions{CallID: requestID}
+	if len(options) == 1 {
+		opt = options[0]
+		if opt.CallID == "" {
+			return nil, ErrInvalid
+		}
+	}
+	// PostgreSQL 时间精度为微秒，幂等重放比较必须使用同一精度。
+	if !opt.StartedAt.IsZero() {
+		opt.StartedAt = opt.StartedAt.UTC().Truncate(time.Microsecond)
+	}
+	var hold BudgetReservation
+	err := db.tx(ctx, func(s *xorm.Session) error {
+		found, err := s.ID(requestID).Get(&hold)
+		if err != nil {
+			return err
+		}
+		if found {
+			if hold.Kind != kind || hold.NodeID != id || hold.Amount != amount || hold.CallID != opt.CallID || hold.Snapshot != opt.Snapshot || (!opt.StartedAt.IsZero() && !hold.StartedAt.Equal(opt.StartedAt)) {
+				return ErrConflict
+			}
+			return nil
+		}
+		settled, err := s.Where("request_id = ?", opt.CallID).Exist(new(UsageEvent))
+		if err != nil {
+			return err
+		}
+		if settled {
+			return ErrConflict
+		}
+		nodes, err := quotaTreeFor(s, kind, id)
+		if err != nil {
+			return err
+		}
+		n := nodes[kind+":"+id]
+		if n == nil {
+			return ErrNotFound
+		}
+		if err := applyBudgetHolds(s, nodes); err != nil {
+			return err
+		}
+		hold = BudgetReservation{RequestID: requestID, CallID: opt.CallID, Kind: kind, NodeID: id, Amount: amount, Snapshot: opt.Snapshot, State: "reserved", StartedAt: opt.StartedAt}
+		if hold.StartedAt.IsZero() {
+			hold.StartedAt = time.Now().UTC()
+		}
+		var child *quotaNode
+		credit := 0.0
+		for n != nil {
+			switch n.Kind {
+			case "key":
+				hold.KeyID = n.ID
+			case "user":
+				hold.UserID = n.ID
+			case "team":
+				hold.TeamID = n.ID
+			case "org":
+				hold.OrgID = n.ID
+			}
+			if n.Parent == "ambiguous" {
+				return ErrMultipleTeams
+			}
+			if n.Limit != nil && !(n.Kind == "org" && n.PeriodStart != nil && hold.StartedAt.Before(*n.PeriodStart)) {
+				reserved := 0.0
+				for _, c := range n.Children {
+					value := quotaReserved(c)
+					if c == child {
+						value = math.Max(0, value-credit)
+					}
+					reserved += value
+				}
+				// 不使用正 epsilon 放宽边界；上界已向上取整，余额不足必须拒绝。
+				if n.Spend+reserved+amount > *n.Limit {
+					return ErrBudgetUnavailable
+				}
+				credit = math.Max(0, *n.Limit-n.Spend)
+			}
+			child = n
+			if n.Parent != "" && nodes[n.Parent] == nil {
+				return ErrInvalid
+			}
+			n = nodes[n.Parent]
+		}
+		project, err := reservationProject(s, kind, id)
+		if err != nil {
+			return err
+		}
+		if project != nil {
+			hold.ProjectID = project.ID
+			if project.MaxBudget != nil {
+				held, err := s.Where("project_id = ?", project.ID).Sum(new(BudgetReservation), "amount")
+				if err != nil {
+					return err
+				}
+				if project.Spend+held+amount > *project.MaxBudget {
+					return ErrBudgetUnavailable
+				}
+			}
+		}
+		_, err = s.Insert(&hold)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &hold, nil
+}
+
+// ReleaseBudget 释放已确认未发送的尝试；参数为上下文与尝试 ID，返回存储错误。
+// 重复调用无害，数据库不可用则保留占用；调用者不得用它释放提交上游后费用未知的请求。
 func (db *DB) ReleaseBudget(ctx context.Context, requestID string) error {
- if requestID == "" { return ErrInvalid }
- return db.tx(ctx, func(s *xorm.Session) error { _, err := s.ID(requestID).Delete(new(BudgetReservation)); return err })
+	if requestID == "" {
+		return ErrInvalid
+	}
+	return db.tx(ctx, func(s *xorm.Session) error { _, err := s.ID(requestID).Delete(new(BudgetReservation)); return err })
 }
 
-// settleBudgetHold 校验结算归属必须等于准入快照并删除占用；参数s/r为结算事务和账单，返回冲突或存储错误。
-// RecordUsage在写实际消费的同一事务调用；上游异常超出预占仍记录真实账单，不能隐瞒实际费用。
+// SetBudgetReservationState 为核对保留占用记录生命周期；参数为尝试 ID 和受支持状态。
+// 无退款副作用；执行器提交前写 submitted，成功排队写 settling，未知费用写 uncertain。
+func (db *DB) SetBudgetReservationState(ctx context.Context, id, state string, reasons ...string) error {
+	if len(reasons) > 1 || id == "" || (state != "submitted" && state != "settling" && state != "uncertain") {
+		return ErrInvalid
+	}
+	reason := ""
+	if len(reasons) == 1 {
+		reason = reasons[0]
+	}
+	return db.tx(ctx, func(s *xorm.Session) error {
+		_, err := s.ID(id).Cols("state", "reason").Update(&BudgetReservation{State: state, Reason: reason})
+		return err
+	})
+}
+
+// PendingKeyBudget 返回指定 Key 的未结算占用，供已鉴权的管理详情展示和人工核对。
+// 参数为 Key 行 ID，不接受哈希；调用方负责权限。按创建时间排序，只读，无副作用。
+func (db *DB) PendingKeyBudget(ctx context.Context, id string) ([]BudgetReservation, error) {
+	if id == "" {
+		return nil, ErrInvalid
+	}
+	s := db.session(ctx)
+	defer s.Close()
+	var rows []BudgetReservation
+	err := s.Where("key_id = ?", id).Asc("created_at").Find(&rows)
+	return rows, err
+}
+
+// settleBudgetHold 校验尝试和账单归属、价格上界并在入账事务内删除占用。
+// 参数 s/r 为事务和记录；未知或超出声明用量不得退款；所有检查失败均回滚账单和释放。
 func settleBudgetHold(s *xorm.Session, r UsageRecord) error {
- var h BudgetReservation
- found, err := s.ID(r.RequestID).Get(&h)
- if err != nil || !found { return err }
- if h.KeyID != r.KeyID || h.UserID != r.UserID || h.TeamID != r.TeamID || h.OrgID != r.OrganizationID { return ErrConflict }
- _, err = s.ID(r.RequestID).Delete(new(BudgetReservation))
- return err
+	id := r.BudgetReservationID
+	if id == "" {
+		id = r.RequestID
+	}
+	var h BudgetReservation
+	found, err := s.ID(id).Get(&h)
+	if err != nil || !found {
+		return err
+	}
+	if h.CallID != "" && h.CallID != r.RequestID {
+		return ErrConflict
+	}
+	if h.KeyID != r.KeyID || h.UserID != r.UserID || h.TeamID != r.TeamID || h.OrgID != r.OrganizationID || h.ProjectID != r.ProjectID {
+		return ErrConflict
+	}
+	if r.Cost > h.Amount {
+		return ErrBudgetUnavailable
+	}
+	_, err = s.ID(id).Delete(new(BudgetReservation))
+	return err
 }

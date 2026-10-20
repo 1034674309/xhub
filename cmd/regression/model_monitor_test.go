@@ -67,7 +67,7 @@ func TestModelMonitorOutputTPS(t *testing.T) {
 				transport, path = "bypass_anthropic_messages", "/v1/messages"
 				dep.LiteLLMParams["custom_llm_provider"] = "anthropic"
 			}
-			dep.ModelInfo = map[string]any{"id": "monitor-" + protocol, "transport": transport, "endpoint_types": []string{protocol}}
+			dep.ModelInfo = map[string]any{"max_input_tokens": 10000, "supported_parameters": []string{"max_tokens"}, "id": "monitor-" + protocol, "transport": transport, "endpoint_types": []string{protocol}}
 			dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
 			h := newHarness(t, dep)
 			session := h.personalBillingSession()

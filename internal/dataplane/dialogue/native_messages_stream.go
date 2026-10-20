@@ -43,10 +43,7 @@ func (s *nativeMessagesStream) consume(event map[string]any) (llmdialogue.Dialog
 		}
 		s.message = m
 		s.active = -1
-		s.usage = map[string]any{}
-		for k, v := range streamMap(m["usage"]) {
-			s.usage[k] = v
-		}
+		s.usage = llmdialogue.MergeDialogueUsage(nil, streamMap(m["usage"]))
 		return llmdialogue.DialogueResult{}, false, nil
 	}
 	if s.message == nil {
@@ -161,9 +158,7 @@ func (s *nativeMessagesStream) consume(event map[string]any) (llmdialogue.Dialog
 		for k, v := range delta {
 			s.message[k] = v
 		}
-		for k, v := range streamMap(event["usage"]) {
-			s.usage[k] = v
-		}
+		s.usage = llmdialogue.MergeDialogueUsage(s.usage, streamMap(event["usage"]))
 	case "message_stop":
 		if s.active != -1 || s.stop == "" {
 			return fail("message_stop without completed blocks and stop_reason")

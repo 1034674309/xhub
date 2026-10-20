@@ -33,6 +33,8 @@ export interface Team {
 }
 
 export interface KeyResponse {
+  budget_pending?: number;
+  budget_reservations?: import("../common_components/KeyBudgetStatus").BudgetReservationView[];
   token: string;
   token_id: string;
   key_name: string;

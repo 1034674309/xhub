@@ -5,6 +5,24 @@ import { pageDescriptionsZhCN } from "./pageDescriptions.zh-CN";
 import { routeTemplatesZhCN } from "./routeTemplates.zh-CN";
 
 export const zhCN = {
+  hardBudget: {
+    "detailsLoadFailed": "密钥详情与待结算额度加载失败，请重试成功后再编辑。",
+    "retry": "重试",
+    "details": "预算预占",
+    "contract": "Key 或上级设有额度时，每次尝试预占模型声明的完整输入上下文与输出上限（默认 {cap} Token）。所需可用余额可能高于最终费用。缺少可信上界或完整费率时会在外发前拒绝。 从不限额切换为限额前，应暂停新请求、等待在途调用结束并清空待结算账单；已放行的请求无法追溯预占。",
+    "pending": "待结算预占：${amount}",
+    "reconcile": "已提交但用量未知的尝试会保留预占，不会自动到期释放。请管理员核对上游账单后再恢复。",
+    "attempt": "${amount} · {state}",
+    "states": {
+      "reserved": "外发前已预占",
+      "submitted": "已提交上游",
+      "settling": "等待账单入库",
+      "uncertain": "需要核对"
+    },
+    "insufficient": "可用额度不足以覆盖声明的完整输入上下文和输出上限。",
+    "unsupported": "当前模型或请求没有经过验证的费用上界，请检查上下文上限、支持的输出限制和完整费率。",
+    "unavailable": "待结算额度暂时不可读，请等待账单存储恢复后重试。"
+  },
   keyEditor: {
     expiredDurationRequired: "已过期的密钥必须指定新的有效期",
     "apiOnly": "模型 API 密钥。管理操作需要登录会话。",

@@ -39,7 +39,7 @@ func deployment(public, upstream string, extra map[string]any) config.ModelEntry
 	return config.ModelEntry{
 		ModelName:     public,
 		LiteLLMParams: params,
-		ModelInfo:     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}},
+		ModelInfo:     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "max_input_tokens": 1024, "max_output_tokens": 131072, "supported_parameters": []string{"max_completion_tokens", "max_tokens"}},
 	}
 }
 

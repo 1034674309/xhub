@@ -10,6 +10,82 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_hard_budget_length(self):
+        """私有本地 HTTP 验证 cap8 的 JSON/SSE 保留 incomplete 和完整用量，错误 cap/协议拒绝；tearDown 关闭服务。"""
+        body = {"model": "pending-browser-hard-budget-length-unit", "input": "Verify normal output limit.", "max_output_tokens": 8}
+        result = self.request("/v1/responses", body)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["incomplete_details"], {"reason": "max_output_tokens"})
+        self.assertEqual(result["usage"], {"input_tokens": 8, "output_tokens": 8})
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            frames = [json.loads(line[6:]) for line in response.read().decode().splitlines() if line.startswith("data: {")]
+            self.assertEqual(frames, [{"type": "response.incomplete", "response": result}])
+        for path, cap in (("/v1/responses", 7), ("/v1/chat/completions", 8)):
+            with self.assertRaises(HTTPError) as error:
+                self.request(path, {**body, "max_output_tokens": cap})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+
+    def test_hard_budget_cache_projection(self):
+        """本地同步Chat夹具报告含缓存的输入总量，供真实Messages桥接计费；错误目标400，tearDown回收HTTP服务。"""
+        body = {"model": "pending-browser-hard-budget-projection", "messages": [{"role": "user", "content": "Verify cache projection."}]}
+        response = self.request("/v1/chat/completions", body)
+        self.assertEqual(response["usage"], {"prompt_tokens": 8, "completion_tokens": 2, "cache_write_tokens": 2, "prompt_tokens_details": {"cached_tokens": 2}})
+        self.assertEqual(response["choices"][0]["message"]["content"], "e2e-budget-cache-projection")
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/messages", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+
+    def test_hard_budget_cache_usage(self):
+        """本地HTTP覆盖缓存read/write矛盾、合法累计和非流拒绝；终态必须正常且原矛盾仍在中间帧，tearDown清理服务。"""
+        for mode in ("write", "read", "growth"):
+            with self.subTest(mode=mode):
+                prompt = "Verify cumulative cache usage." if mode == "growth" else f"Return contradictory cache {mode} usage."
+                body = {"model": "pending-browser-hard-budget-cache", "messages": [{"role": "user", "content": prompt}]}
+                with self.assertRaises(HTTPError) as error:
+                    self.request("/v1/chat/completions", body)
+                self.assertEqual(error.exception.code, 400)
+                error.exception.close()
+                with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+                    raw = response.read().decode()
+                    frames = [json.loads(line[6:]) for line in raw.splitlines() if line.startswith("data: {")]
+                    first = frames[0]["usage"]
+                    self.assertEqual(first["cache_creation_input_tokens"], 0)
+                    self.assertEqual(first["cache_write_tokens"], 50 if mode == "write" else 0)
+                    self.assertEqual(first["cached_tokens"], 0)
+                    self.assertEqual(first["prompt_tokens_details"]["cached_tokens"], 8 if mode == "read" else 0)
+                    self.assertEqual(frames[-1]["usage"], {"prompt_tokens": 8, "completion_tokens": 2, "cache_write_tokens": 2, "cached_tokens": 2})
+                    self.assertEqual(frames[-1]["choices"][0]["finish_reason"], "stop")
+                    self.assertIn("[DONE]", raw)
+
+    def test_hard_budget_conflicting_usage(self):
+        """私有本地HTTP夹具验证冲突中间帧/正常终态并存，非流输入明确400；tearDown清理服务。"""
+        body = {"model": "pending-browser-hard-budget-unit", "messages": [{"role": "user", "content": "Return contradictory usage."}]}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/chat/completions", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            text = response.read().decode()
+            self.assertIn('"input_tokens": 9', text)
+            self.assertIn('"prompt_tokens": 8', text)
+            self.assertIn('"finish_reason": "stop"', text)
+            self.assertIn("[DONE]", text)
+
+    def test_hard_budget_cumulative_usage(self):
+        """本地HTTP夹具首帧等价别名为零、末帧单一别名增长；验证合法累计与非流失败，tearDown清理服务。"""
+        body = {"model": "pending-browser-hard-budget-growth", "messages": [{"role": "user", "content": "Verify cumulative usage."}]}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/chat/completions", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            frames = [json.loads(line[6:]) for line in response.read().decode().splitlines() if line.startswith("data: {")]
+            self.assertEqual(frames[0]["usage"], {"prompt_tokens": 8, "input_tokens": 8, "completion_tokens": 0, "output_tokens": 0})
+            self.assertEqual(frames[-1]["usage"], {"prompt_tokens": 8, "completion_tokens": 2})
+            self.assertEqual(frames[0]["choices"][0]["delta"]["content"], "e2e-budget-growth")
+
     def test_monitor_tps_fixture(self):
         """前置真实本地上游；验证 TPS 夹具流式/同步用量一致、确有分帧间隔，非法协议返回 400；tearDown 关闭服务。"""
         import time

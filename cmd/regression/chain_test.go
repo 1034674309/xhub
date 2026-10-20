@@ -46,6 +46,19 @@ func requestChainSimulated(t *testing.T) {
 		t.Fatalf("fallback billed both deployments: %+v -> %+v", before, after)
 	}
 
+	// 夹具已明确返回无费用503，模拟管理员核对后恢复该尝试；产品不会因HTTP失败自动退款。
+	holds, err := h.db.PendingKeyBudget(t.Context(), c.keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hold := range holds {
+		if hold.State != "uncertain" {
+			t.Fatalf("失败回退占用状态错误: %+v", hold)
+		}
+		if err := h.db.ReleaseBudget(t.Context(), hold.RequestID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	h.scriptStatus("chain-cheap", 0)
 	spent := h.moneyOf(t, c).project
 	h.setProjectBudget(t, admin, c.projectID, spent)

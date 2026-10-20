@@ -197,7 +197,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   mockUseKeys.mockReturnValue(keysResult([mockKey]));
-  mockUseKeyInfo.mockReturnValue(keyInfoResult(undefined));
+  mockUseKeyInfo.mockImplementation((id) =>
+    keyInfoResult(id === mockKey.token || id === mockKey.token_id ? { ...mockKey, token: id, api_key: id } : undefined),
+  );
 
   mockUseTeams.mockReturnValue({
     teams: [mockTeam],
@@ -378,9 +380,13 @@ it("emphasizes the active field in the Spend / Budget header so the sorted colum
   await chooseSelectOption(user, screen.getByTestId("sort-trigger-spend"), /(Budget|预算) descending/, "menuitem");
 
   await waitFor(() => {
-    expect(screen.getByText(/^(Budget|预算)$/, { selector: "[data-sort-field='max_budget']" })).toHaveClass("font-semibold");
+    expect(screen.getByText(/^(Budget|预算)$/, { selector: "[data-sort-field='max_budget']" })).toHaveClass(
+      "font-semibold",
+    );
   });
-  expect(screen.getByText(/^(Spend|消费)$/, { selector: "[data-sort-field='spend']" })).toHaveClass("text-muted-foreground");
+  expect(screen.getByText(/^(Spend|消费)$/, { selector: "[data-sort-field='spend']" })).toHaveClass(
+    "text-muted-foreground",
+  );
 });
 
 /** 验证个人密钥页面查询和交互；前置模拟身份与接口，断言范围、URL 或界面结果；框架清理 DOM，无持久数据。 */
@@ -412,7 +418,7 @@ it("clicking the key cell deep-links via ?key=", async () => {
 });
 
 /** 验证个人密钥页面查询和交互；前置模拟身份与接口，断言范围、URL 或界面结果；框架清理 DOM，无持久数据。 */
-it("renders KeyInfoView when the URL has ?key= for a key on the current page, without refetching it", async () => {
+it("renders KeyInfoView when the URL has ?key= for a key on the current page and refreshes its detail", async () => {
   const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token }, onUrlUpdate });
 
@@ -420,7 +426,7 @@ it("renders KeyInfoView when the URL has ?key= for a key on the current page, wi
     expect(screen.getByText("Back to keys")).toBeInTheDocument();
   });
   expect(screen.queryByTestId("pagination-range")).not.toBeInTheDocument();
-  expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: false, scope: "personal" });
+  expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: true, scope: "personal" });
 
   fireEvent.click(screen.getByText("Back to keys"));
 
@@ -436,7 +442,11 @@ it("renders KeyInfoView when the URL has ?key= for a key on the current page, wi
 it("keeps the personal key detail id after an update returns a masked token", async () => {
   const key = { ...mockKey, token: mockKey.token_id, api_key: mockKey.token_id };
   mockUseKeys.mockReturnValue(keysResult([key]));
-  vi.mocked(keyUpdateCall).mockResolvedValue({ token_id: key.token_id, token: "sk-masked...", key_alias: "Updated Personal Key" });
+  vi.mocked(keyUpdateCall).mockResolvedValue({
+    token_id: key.token_id,
+    token: "sk-masked...",
+    key_alias: "Updated Personal Key",
+  });
   const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: key.token }, onUrlUpdate });
   const user = userEvent.setup();
@@ -493,13 +503,14 @@ it("shows a loading state while a deep-linked key is being fetched", () => {
   expect(screen.queryByTestId("pagination-range")).not.toBeInTheDocument();
 });
 
-it("shows 'Key not found' when the deep-linked key fails to load", async () => {
+/** 详情失败显示可重试错误；无列表回退，框架回收 DOM。 */
+it("shows a retryable error when the deep-linked key fails to load", async () => {
   mockUseKeyInfo.mockReturnValue(keyInfoResult(undefined, true));
 
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: "missing-key-hash" } });
 
   await waitFor(() => {
-    expect(screen.getByText("Key not found")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to load key details and pending budget");
   });
 });
 
@@ -536,8 +547,8 @@ describe("entity links out of the key rows", () => {
 
   it("points the User and Team cells at their detail pages", async () => {
     renderWithProviders(<VirtualKeysTable />);
-  await showOptionalColumn("User");
-  await showOptionalColumn("Team");
+    await showOptionalColumn("User");
+    await showOptionalColumn("Team");
 
     const row = await keyRow();
     expect(within(row).getByRole("link", { name: "user@example.com" })).toHaveAttribute(
@@ -594,7 +605,7 @@ describe("entity links out of the key rows", () => {
     );
     const user = userEvent.setup();
     renderWithProviders(<VirtualKeysTable />);
-  await showOptionalColumn("User");
+    await showOptionalColumn("User");
     await enableCreatedByColumn(user);
 
     const row = await keyRow();
@@ -605,7 +616,7 @@ describe("entity links out of the key rows", () => {
   it("leaves the litellm-dashboard session team unlinked", async () => {
     mockUseKeys.mockReturnValue(keysResult([{ ...mockKey, team_id: "litellm-dashboard" }]));
     renderWithProviders(<VirtualKeysTable />);
-  await showOptionalColumn("Team");
+    await showOptionalColumn("Team");
 
     const row = await keyRow();
     expect(within(row).getByText("litellm-dashboard")).toBeInTheDocument();
@@ -951,4 +962,38 @@ describe("table state lives in the URL so it survives leaving and returning to t
       expect(lastSearchParam(onUrlUpdate, "key_search")).toBeNull();
     });
   });
+});
+
+/** 验证列表含同一Key时仍回读详情并优先显示实时预占；使用隔离mock，DOM由框架清理。 */
+it("loads pending reservations even when selected key is already in the list", async () => {
+  mockUseKeyInfo.mockReturnValue(
+    keyInfoResult({
+      ...mockKey,
+      budget_pending: 0.1,
+      budget_reservations: [{ reservation_id: "visible-hold", amount: 0.1, state: "uncertain" }],
+    }),
+  );
+  renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token } });
+  expect(await screen.findByText("visible-hold")).toBeVisible();
+  expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: true, scope: "personal" });
+});
+
+/** 列表已有密钥时详情加载/失败仍不能冒充零预占；验证重试入口并由框架清理 DOM，无持久化。 */
+it("does not show a zero reservation from a list row when details fail", async () => {
+  const retry = vi.fn();
+  mockUseKeyInfo.mockReturnValue({ ...keyInfoResult(undefined, true), refetch: retry });
+  renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token } });
+  expect(screen.getByRole("alert")).toHaveTextContent("Unable to load key details and pending budget");
+  expect(screen.queryByText("Pending budget: $0")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry", exact: true }));
+  expect(retry).toHaveBeenCalledTimes(1);
+});
+
+/** 列表行存在但详情尚未返回时只显示加载态，避免短暂展示不真实的零预占；框架清理 DOM。 */
+it("waits for detail data even if the list already contains the key", () => {
+  mockUseKeyInfo.mockReturnValue(keyInfoResult(undefined));
+  renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token } });
+  expect(screen.getByText("Loading key...")).toBeVisible();
+  expect(screen.queryByText("Pending budget: $0")).not.toBeInTheDocument();
 });

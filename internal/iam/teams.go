@@ -1191,6 +1191,17 @@ func (db *DB) UpdateProject(ctx context.Context, by Actor, id string, in Project
 		if err := checkWithinTeam(s, cur.TeamID, "", in.Models, in.MaxBudget); err != nil {
 			return err
 		}
+		// 项目没有额度树节点，单独核对已花费与在途预占；调低额度不能追溯撤销已承诺费用。
+		if in.MaxBudget != nil {
+			held, err := s.Where("project_id = ?", id).Sum(new(BudgetReservation), "amount")
+			if err != nil {
+				return err
+			}
+			if cur.Spend+held > *in.MaxBudget {
+				return ErrQuotaAllocation
+			}
+		}
+
 		if in.Status == "" {
 			in.Status = cur.Status
 		}

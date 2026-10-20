@@ -31,7 +31,8 @@ func chatDeployment(name string) config.ModelEntry {
 			"input_cost_per_token":  testInputRate,
 			"output_cost_per_token": testOutputRate,
 		},
-		ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}},
+		// 本地夹具声明可信整窗与总输出cap，使有限预算回归走真实严格预占。
+		ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "max_input_tokens": 1024, "max_output_tokens": 131072, "supported_parameters": []string{"max_completion_tokens", "max_tokens"}},
 	}
 }
 

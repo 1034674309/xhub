@@ -233,6 +233,16 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 						return
 					}
 				}
+				if budget, ok := h.(dpcontract.BudgetHost); ok {
+					var allowed bool
+					payload, allowed = budget.PrepareBudgetAttempt(w, r, principal, callID, candidate, candidateHit.Transport.Protocol, payload, start)
+					if !allowed {
+						return
+					}
+					if !budget.MarkBudgetAttemptSubmitted(w, r, callID) {
+						return
+					}
+				}
 				tried = true
 				ctx, cancel := context.WithTimeout(r.Context(), time.Duration(settings.TimeoutSeconds()*float64(time.Second)))
 				response, err = dptransport.ForwardOfficial(h.HTTPClient(), r.WithContext(ctx), candidateHit.Action.Method, url, key, payload, r.Header, candidateHit.Transport, w)

@@ -53,7 +53,7 @@ func TestGuardrailBlockDoesNotConsumeBudget(t *testing.T) {
 
 	// 额度还完好：把上限设成一个很小的数，一次真实调用仍然能过。
 	// 如果被拦下的那几次占了额度，这里就会被拒。
-	h.setUserBudget(t, admin, tn.userID, expectedCost())
+	h.setUserBudget(t, admin, tn.userID, hardBudgetAmount(t, chatDeployment("regression-guard-budget")))
 	h.ok(http.MethodPost, "/v1/chat/completions", tn.key, map[string]any{
 		"model": "regression-guard-budget", "messages": []any{map[string]any{"role": "user", "content": "clean prompt"}},
 	})

@@ -3,6 +3,8 @@ package measurement
 import (
 	"encoding/json"
 	"strings"
+
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
 // NativeUsage 按原生协议建立用量提取器，只记录事实，不在传输层决定价格。
@@ -16,7 +18,7 @@ func NativeUsage(protocol string) func(map[string]any, map[string]any) map[strin
 			return nil
 		}
 		if protocol == "openai-responses" {
-			if status, _ := doc["status"].(string); status != "" && status != "completed" {
+			if status, _ := doc["status"].(string); status != "" && status != "completed" && !nativeResponsesTerminal(doc, "incomplete") {
 				return map[string]any{"pricing_blocked": "response_not_completed"}
 			}
 		}
@@ -28,9 +30,14 @@ func NativeUsage(protocol string) func(map[string]any, map[string]any) map[strin
 			return map[string]any{"prompt_tokens": source["promptTokenCount"], "completion_tokens": nativeNumber(source["candidatesTokenCount"]) + nativeNumber(source["thoughtsTokenCount"]), "prompt_tokens_details": map[string]any{"cached_tokens": source["cachedContentTokenCount"]}}
 		}
 		source, _ := doc["usage"].(map[string]any)
-		out := map[string]any{}
-		for k, v := range source {
-			out[k] = v
+		// 先保留原始计数冲突；原生透传不会经过统一流的 observeUsage。
+		out := llmdialogue.MergeDialogueUsage(nil, source)
+		if protocol == "openai-responses" && (doc["status"] == "completed" || doc["status"] == "incomplete") {
+			// Responses 终态必须自带完整计数，不能拿前面的部分用量补齐退款依据。
+			// 保留原始字段供硬额度核价；只复制独立终态归一化得到的阻断原因。
+			if reason := llmdialogue.NormalizeDialogueUsage(source)["pricing_blocked"]; reason != nil {
+				out["pricing_blocked"] = reason
+			}
 		}
 		if protocol == "openai-images" {
 			// Images 协议中的 output_tokens 表示图片输出 token。把这个上游事实
@@ -96,7 +103,7 @@ func NativeStreamUsage(protocol string, raw []byte, request map[string]any) map[
 			typ = eventType
 			doc["type"] = typ // 事件头与 JSON type 都是协议事件名，统一后才能提取图片完成事实。
 		}
-		terminal := typ == "response.completed" || typ == "image_generation.completed" || typ == "image_edit.completed"
+		terminal := typ == "response.completed" || (protocol == "openai-responses" && typ == "response.incomplete") || typ == "image_generation.completed" || typ == "image_edit.completed"
 		if protocol == "openai-images" && !terminal {
 			continue // 部分图片事件不是生成结果，不能提前计入图片或规格。
 		}
@@ -106,12 +113,14 @@ func NativeStreamUsage(protocol string, raw []byte, request map[string]any) map[
 				break
 			}
 		}
-		for k, v := range NativeUsage(protocol)(doc, request) {
-			if k == "pricing_blocked" && !terminal {
-				continue // 中间事件允许没有用量；终态未知规格必须阻止结算。
+		facts := NativeUsage(protocol)(doc, request)
+		for k, v := range facts {
+			if k == "pricing_blocked" && !terminal && v != "upstream_usage_conflict" && v != "upstream_usage_invalid" {
+				delete(facts, k) // 中间事件允许没有用量；终态未知规格必须阻止结算。
 			}
-			out[k] = v
 		}
+		// 按帧更新别名快照；后帧的正常累计增长不能与前帧旧名字拼成假矛盾。
+		out = llmdialogue.MergeDialogueUsage(out, facts)
 	}
 	if len(out) == 0 {
 		return nil
@@ -120,12 +129,13 @@ func NativeStreamUsage(protocol string, raw []byte, request map[string]any) map[
 }
 
 // NativeStreamState 保存一次原生流的完成、失败及图片完成事件数。
-// 流正常 EOF 不代表业务成功；结算必须观察到协议规定的完成事件且没有失败事件。
+// 流正常 EOF 不代表业务成功；必须观察到协议正常终态且没有失败，明确输出上限属于正常终态。
 type NativeStreamState struct {
-	Completed  bool
-	Failed     bool
-	Images     int
-	ResponseID string // 仅成功 Responses 终态报告的存储响应 ID.
+	Completed        bool
+	Failed           bool
+	Images           int
+	ResponseID       string // 正常结束的 Responses 终态报告的存储响应 ID。
+	ResponseTerminal bool   // 完整且合法的 Responses 完成/长度终态，可立即停止读取，无需等待 EOF。
 }
 
 // Observe 消费一个完整 SSE 事件，更新状态但不修改事件内容。
@@ -156,7 +166,7 @@ func (s *NativeStreamState) Observe(protocol string, raw []byte) {
 	if typ, _ := doc["type"].(string); typ != "" {
 		event = typ
 	}
-	if event == "error" || event == "response.failed" || event == "response.incomplete" || doc["error"] != nil {
+	if event == "error" || event == "response.failed" || (event == "response.incomplete" && protocol != "openai-responses") || doc["error"] != nil {
 		s.Failed = true
 	}
 	switch protocol {
@@ -174,7 +184,19 @@ func (s *NativeStreamState) Observe(protocol string, raw []byte) {
 			s.Completed = true
 		}
 	case "openai-responses":
+		response, _ := doc["response"].(map[string]any)
+		if event == "response.incomplete" {
+			// 输出上限是正常协议终态，不等于传输失败；其他 incomplete 原因继续阻断结算。
+			if nativeResponsesTerminal(response, "incomplete") {
+				s.Completed = true
+				s.ResponseTerminal = true
+				s.ResponseID, _ = response["id"].(string)
+			} else {
+				s.Failed = true
+			}
+		}
 		if event == "response.completed" {
+			s.ResponseTerminal = nativeResponsesTerminal(response, "completed")
 			s.Completed = true
 			if response, ok := doc["response"].(map[string]any); ok {
 				s.ResponseID, _ = response["id"].(string)

@@ -7,6 +7,7 @@ import { FormField } from "@/components/shared/form/FormField";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { useT, t } from "@/i18n";
+import { KeyBudgetStatus } from "../common_components/KeyBudgetStatus";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
 import RouteTemplateSelect from "../route_templates/RouteTemplateSelect";
 import { KeyResponse } from "../key_team_helpers/key_list";
@@ -100,6 +101,8 @@ export function KeyEditView({
   }, [keyData, form]);
   useEffect(() => {
     let cancelled = false;
+    // 切换密钥/团队时立即清除旧目录，避免异步读取期间继续展示旧授权模型；成功后由请求结果更新。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAvailableModels([]);
     setModelsError(false);
     /** 读取团队或个人模型；无参数/返回，卸载后不写状态，失败保留既有选择供用户继续编辑。 */
@@ -151,7 +154,11 @@ export function KeyEditView({
   ];
 
   return (
-    <form noValidate className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-background" onSubmit={form.handleSubmit(save)}>
+    <form
+      noValidate
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-background"
+      onSubmit={form.handleSubmit(save)}
+    >
       <div
         role="region"
         aria-label={t("Key Settings")}
@@ -177,18 +184,15 @@ export function KeyEditView({
                   <MultiSelect
                     id={id}
                     options={modelOptions}
-                    value={modelsDisabled ? [] : (value ?? [])}
+                    value={modelsDisabled ? [] : value ?? []}
                     disabled={modelsDisabled}
                     placeholder={t("Select models")}
-                    onValueChange={(next) =>
-                      onChange(
-                        next.includes("all-team-models")
-                          ? ["all-team-models"]
-                          : next.includes("all-proxy-models")
-                            ? ["all-proxy-models"]
-                            : next,
-                      )
-                    }
+                    onValueChange={(next) => {
+                      // 全部团队/代理模型是互斥选择，优先保留团队范围，普通逐项选择保持原序。
+                      if (next.includes("all-team-models")) onChange(["all-team-models"]);
+                      else if (next.includes("all-proxy-models")) onChange(["all-proxy-models"]);
+                      else onChange(next);
+                    }}
                   />
                 )}
               </FormField>
@@ -202,6 +206,7 @@ export function KeyEditView({
             <section className="space-y-5 border-t pt-6">
               <h2 className="text-base font-semibold">{t("Budget and Routing")}</h2>
               <p className="text-sm text-muted-foreground">{t("keyEditor.budgetHint")}</p>
+              <KeyBudgetStatus pending={keyData.budget_pending} reservations={keyData.budget_reservations} />
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField control={form.control} name="max_budget" label={t("Max Budget (USD)")}>
                   {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} />}

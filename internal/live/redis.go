@@ -319,6 +319,18 @@ end
 return tostring(total)
 `)
 
+// PendingSpendCount 为硬额度启用检查读取队列长度；无 Redis 返回零，连接或类型错误必须返回错误。
+// 不消费队列，调用方在真实 Flush 后用它确认遗留未预占费用已全部处理。
+func (c *Client) PendingSpendCount() (int64, error) {
+	if c == nil {
+		return 0, nil
+	}
+	if c.rdb == nil {
+		return 0, fmt.Errorf("Redis unavailable")
+	}
+	return c.rdb.LLen(context.Background(), "xhub:spendlog").Result()
+}
+
 // HotKeySpend 按稳定 KeyID 汇总尚未落库的消费，供准入与累计费用头使用，不消费队列。
 // 参数 id 为 api_keys 行 ID；空客户端或空 ID 返回零。损坏返回错误，依赖该费用的预算准入必须拒绝；展示可省略。
 // 新队列使用每 Key 请求索引；混有旧进程账单时在同一个 Lua 快照内扫描，避免并发确认造成漏费。
@@ -382,6 +394,8 @@ return tostring(total)
 // SpendLog 是网关发送到 Redis 队列的单次用量载荷，消费者转换为 iam.UsageRecord 写 PostgreSQL。
 // RequestID 用于去重结算，SessionID 用于授权范围内归组，字段记录调用时事实而非刷库时配置。
 type SpendLog struct {
+	// 已验证完整用量的预算尝试 ID，随队列保留至 PostgreSQL 同事务结算。
+	BudgetReservationID string `json:"budget_reservation_id,omitempty"`
 	// 客户端明确指定的推理强度快照；独立于提示词保存，空值表示未指定或历史未记录，不推断厂商默认值。
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。

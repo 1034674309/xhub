@@ -66,7 +66,7 @@ func setCORS(w http.ResponseWriter, r *http.Request) {
 	}
 	h.Set("Access-Control-Allow-Headers", allow)
 	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-	h.Set("Access-Control-Expose-Headers", "X-XHub-Dropped-Capabilities, X-Session-Id, x-litellm-call-id, x-litellm-response-cost, x-litellm-model-name, Retry-After, x-litellm-cache-key, cache_hit, x-litellm-cache-hit, x-litellm-version, x-litellm-response-duration-ms")
+	h.Set("Access-Control-Expose-Headers", "X-XHub-Max-Output-Tokens, X-XHub-Budget-Input-Bound, X-XHub-Budget-Reserved, X-XHub-Budget-Reservation-Id, X-XHub-Budget-State, X-XHub-Dropped-Capabilities, X-Session-Id, x-litellm-call-id, x-litellm-response-cost, x-litellm-model-name, Retry-After, x-litellm-cache-key, cache_hit, x-litellm-cache-hit, x-litellm-version, x-litellm-response-duration-ms")
 	h.Set("Access-Control-Max-Age", "600")
 	// 127.0.0.1:3000 calling localhost:4000 is a private-network request in Chrome.
 	h.Set("Access-Control-Allow-Private-Network", "true")

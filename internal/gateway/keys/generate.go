@@ -150,7 +150,19 @@ func Info(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteAuthz(w, r, err)
 		return
 	}
-	util.WriteJSON(w, 200, map[string]any{"info": Response(*k, "", false)})
+	pending, err := s.Identity().PendingKeyBudget(r.Context(), k.ID)
+	if err != nil {
+		s.WriteIAMError(w, r, err)
+		return
+	}
+	info := Response(*k, "", false)
+	amount := 0.0
+	for _, hold := range pending {
+		amount += hold.Amount
+	}
+	info["budget_pending"] = amount
+	info["budget_reservations"] = pending
+	util.WriteJSON(w, 200, map[string]any{"info": info})
 }
 
 // Delete removes virtual keys. The plaintext can no longer call inference.

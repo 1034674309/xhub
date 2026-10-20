@@ -164,6 +164,6 @@ func (h *harness) addDBModel(t *testing.T, admin, public, upstream, id string, e
 	h.ok(http.MethodPost, "/model/new", admin, map[string]any{
 		"model_name":     public,
 		"litellm_params": params,
-		"model_info":     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "id": id},
+		"model_info":     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "id": id, "max_input_tokens": 1024, "max_output_tokens": 131072, "supported_parameters": []string{"max_completion_tokens", "max_tokens"}},
 	})
 }

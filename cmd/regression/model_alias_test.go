@@ -21,7 +21,7 @@ func TestDialogueAliasLifecycle(t *testing.T) {
 	body := map[string]any{
 		"model_name":     "group/model:latest",
 		"litellm_params": map[string]any{"model": "group/model:latest", "custom_llm_provider": "openai", "litellm_credential_name": "alias-supplier", "input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002},
-		"model_info":     map[string]any{"transport": "bypass_openai_chat", "pricing_source": "manual"},
+		"model_info":     map[string]any{"max_input_tokens": 1024, "supported_parameters": []string{"max_completion_tokens"}, "transport": "bypass_openai_chat", "pricing_source": "manual"},
 	}
 	for _, name := range []string{"group//model", "group/../model", ".", "..", "/model", "model/"} {
 		body["model_name"] = name

@@ -26,12 +26,9 @@ func dialogueNumber(v any) (float64, bool) {
 }
 
 // NormalizeDialogueUsage 统一实测用量名称并保留缓存事实；参数为协议用量，返回新对象。
-// 调用：同步和流适配器；缺失实测输入或输出时标记禁止自动计价，不估算提示词。
+// 调用：同步和流适配器；先记录原始别名冲突/非法计数，再转换名称，避免覆盖导致错误结算；缺失实测量不估算。
 func NormalizeDialogueUsage(u map[string]any) map[string]any {
-	out := map[string]any{}
-	for key, value := range u {
-		out[key] = value
-	}
+	out := MergeDialogueUsage(nil, u)
 	for source, target := range map[string]string{"input_tokens": "prompt_tokens", "output_tokens": "completion_tokens", "input_tokens_details": "prompt_tokens_details", "output_tokens_details": "completion_tokens_details"} {
 		if value, exists := u[source]; exists {
 			out[target] = value
@@ -44,7 +41,9 @@ func NormalizeDialogueUsage(u map[string]any) map[string]any {
 	input, hasInput := dialogueNumber(out["prompt_tokens"])
 	output, hasOutput := dialogueNumber(out["completion_tokens"])
 	if !hasInput || !hasOutput {
-		out["pricing_blocked"] = "upstream_usage_missing"
+		if reason, _ := out["pricing_blocked"].(string); reason == "" {
+			out["pricing_blocked"] = "upstream_usage_missing"
+		}
 	} else {
 		out["total_tokens"] = input + output
 	}
@@ -80,6 +79,15 @@ func DialogueOutputUsage(u map[string]any, protocol string) map[string]any {
 	if protocol == "anthropic-messages" {
 		if details := dialogueMap(u["prompt_tokens_details"]); details["cached_tokens"] != nil {
 			out["cache_read_input_tokens"] = details["cached_tokens"]
+			// OpenAI 的缓存命中是输入总量的子集，Messages 的 cache_read_input_tokens 却独立于 input_tokens。
+			// 只有原用量没有独立缓存字段时才扣除子集；否则同步编码后的再次计费会把同一缓存输入算两次。
+			if u["cache_read_input_tokens"] == nil && u["cache_read_tokens"] == nil {
+				input, inputOK := dialogueNumber(u["prompt_tokens"])
+				cached, cacheOK := dialogueNumber(details["cached_tokens"])
+				if inputOK && cacheOK && cached >= 0 && cached <= input {
+					out["input_tokens"] = input - cached
+				}
+			}
 		}
 		delete(out, "input_tokens_details")
 		delete(out, "output_tokens_details")

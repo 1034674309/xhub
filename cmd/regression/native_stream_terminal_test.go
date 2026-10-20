@@ -23,7 +23,7 @@ func TestMalformedNativeTerminalCannotPublishOwnership(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	dep := chatDeployment("malformed-native")
-	dep.ModelInfo = map[string]any{"id": "malformed-native-deployment", "transport": "bypass_openai_responses", "endpoint_types": []string{"responses", "bypass:openai-responses"}}
+	dep.ModelInfo = map[string]any{"max_input_tokens": 1024, "id": "malformed-native-deployment", "transport": "bypass_openai_responses", "endpoint_types": []string{"responses", "bypass:openai-responses"}}
 	dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
 	h := newHarness(t, dep)
 	admin := h.personalBillingSession()

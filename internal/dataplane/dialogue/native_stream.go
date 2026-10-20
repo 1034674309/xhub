@@ -117,7 +117,8 @@ func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.T
 			if err != nil {
 				break
 			}
-			state.usage = result.Usage
+			// 完整终态补齐用量，但不能抹去之前流帧已经观察到的计数矛盾。
+			state.usage = llmdialogue.MergeDialogueUsage(state.usage, result.Usage)
 			if len(beforeComplete) > 0 && beforeComplete[0] != nil {
 				beforeComplete[0](result)
 			}

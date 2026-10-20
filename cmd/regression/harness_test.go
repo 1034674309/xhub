@@ -636,7 +636,7 @@ func addFlatPricedModel(t *testing.T, h *harness, admin, public string, params m
 	h.ok(http.MethodPost, "/model/new", admin, map[string]any{
 		"model_name":     public,
 		"litellm_params": litellm,
-		"model_info":     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{mode}},
+		"model_info":     map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{mode}, "max_input_tokens": 1024, "max_output_tokens": 131072, "supported_parameters": []string{"max_completion_tokens", "max_tokens"}},
 	})
 }
 

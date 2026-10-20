@@ -37,8 +37,8 @@ func browserBillingPendingControl(w http.ResponseWriter, r *http.Request, s *Ser
 	}
 	switch r.URL.Path {
 	case "/billing-pending/fail":
-		// 正则仅允许本场景模型标识，DDL 不接受参数；绝不覆盖非测试模型的账单。
-		_, err = s.IAM.Engine.Exec("ALTER TABLE usage_events ADD CONSTRAINT browser_pending_reject CHECK (model <> '" + body.Model + "')")
+		// 正则仅允许本场景模型标识，DDL 不接受参数；NOT VALID 仅拦后续写入，允许之前的正常/拒绝账单。
+		_, err = s.IAM.Engine.Exec("ALTER TABLE usage_events ADD CONSTRAINT browser_pending_reject CHECK (model <> '" + body.Model + "') NOT VALID")
 	case "/billing-pending/recover":
 		_, err = s.IAM.Engine.Exec("ALTER TABLE usage_events DROP CONSTRAINT IF EXISTS browser_pending_reject")
 		if err == nil {

@@ -15,6 +15,7 @@ import {
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@tanstack/react-pacer/debouncer";
 import { ColumnFiltersState, functionalUpdate, OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
 import { KeyRound } from "lucide-react";
@@ -187,15 +188,15 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
     [allTeams, organizations, setSelectedKeyId],
   );
 
-  const selectedKeyFromList = useMemo(
-    () => keyList.find((key) => key.token === selectedKeyId),
-    [keyList, selectedKeyId],
-  );
-  const { data: fetchedSelectedKey, isError: selectedKeyLoadFailed } = useKeyInfo(selectedKeyId, {
-    enabled: !selectedKeyFromList,
+  const {
+    data: selectedKey,
+    isError: selectedKeyLoadFailed,
+    refetch: reloadSelectedKey,
+  } = useKeyInfo(selectedKeyId, {
+    // 列表不含实时预算占用，详情始终回读授权接口，不能用列表行掩盖待结算状态。
+    enabled: Boolean(selectedKeyId),
     scope: "personal",
   });
-  const selectedKey = selectedKeyFromList ?? fetchedSelectedKey;
 
   const teamOptions = useMemo(
     () =>
@@ -246,12 +247,25 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
   );
 
   if (selectedKeyId) {
-    if (!selectedKey && !selectedKeyLoadFailed) {
+    // 详情失败不能回退到没有预占字段的列表行，否则未知余额会被显示成零；重试成功才恢复编辑。
+    if (selectedKeyLoadFailed) {
+      return (
+        <div role="alert" className="space-y-4 p-4">
+          <p>{t("hardBudget.detailsLoadFailed")}</p>
+          <Button onClick={() => void reloadSelectedKey()}>{t("hardBudget.retry")}</Button>
+          <Button variant="ghost" onClick={() => void setSelectedKeyId(null)}>
+            {t("keyEditor.back")}
+          </Button>
+        </div>
+      );
+    }
+    if (!selectedKey) {
       return <div className="p-4 text-sm text-muted-foreground">{t("pages.apiKeys.loadingKey")}</div>;
     }
     return (
       <div className="h-full min-h-0 w-full flex-1 overflow-hidden">
         <KeyInfoView
+          key={selectedKeyId}
           keyId={selectedKeyId}
           onClose={() => void setSelectedKeyId(null)}
           keyData={selectedKey}

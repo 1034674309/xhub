@@ -176,3 +176,24 @@ describe("toast", () => {
     });
   });
 });
+
+// 硬额度错误通过稳定协议 code 转为双语说明，保留现有其他错误处理；每次恢复语言，不产生服务端数据。
+it("localizes strict budget errors in both languages", async () => {
+  const { setActiveLocale } = await import("@/i18n/runtime");
+  const { translate } = await import("@/i18n/translate");
+  for (const locale of ["zh-CN", "en"] as const) {
+    setActiveLocale(locale);
+    for (const [type, key] of [
+      ["budget_reservation_exceeded", "insufficient"],
+      ["unsupported_budget", "unsupported"],
+      ["quota_unavailable", "unavailable"],
+    ]) {
+      toast.fromError({ error: { type, message: "Protocol diagnostic", code: "429" } });
+      expect(lastCall(sonner.error)).toMatchObject([
+        translate(locale, "hardBudget.details"),
+        { description: translate(locale, "hardBudget." + key) },
+      ]);
+    }
+  }
+  setActiveLocale("en");
+});
