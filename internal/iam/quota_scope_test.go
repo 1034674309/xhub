@@ -68,7 +68,7 @@ func TestQuotaAndRatesScope(t *testing.T) {
 	}
 	hotIDs = map[string]bool{}
 	tid, oid, scope, plan, err = db.QuotaAndRates(ctx, "user", personal.ID, func(kind, id string, _ ...time.Time) float64 { hotIDs[kind+":"+id] = true; return 0 })
-	if err != nil || tid != "" || oid != "" || scope != "" || len(plan.Nodes) != 2 || len(hotIDs) != 2 || !hotIDs["user:"+personal.ID] || !hotIDs["key:"+personalKey.TokenHash] {
+	if err != nil || tid != "" || oid != "" || scope != "" || len(plan.Nodes) != 2 || len(hotIDs) != 1 || !hotIDs["user:"+personal.ID] || hotIDs["key:"+personalKey.ID] {
 		t.Fatalf("无团队个人必须只读取自己及个人密钥: %s %s %s %+v %+v %v", tid, oid, scope, plan, hotIDs, err)
 	}
 	for _, tc := range []struct {

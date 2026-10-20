@@ -52,6 +52,8 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       });
       expect(first.status(), await first.text()).toBe(200);
       expect((await first.json()).choices[0].message.content).toMatch(/ok/);
+      const firstCost = Number(first.headers()["x-litellm-response-cost"]);
+      expect(firstCost).toBeGreaterThan(0);
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByLabel(tr("Key Alias"))).toHaveValue(alias);
       await expect(page.getByText(tr("keyEditor.apiOnly"))).toBeVisible();
@@ -126,6 +128,8 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       });
       expect(inferred.status(), await inferred.text()).toBe(200);
       expect((await inferred.json()).choices[0].message.content).toMatch(/ok/);
+      // 完整浏览器轮换后，以真实数据面的累计头验证旧凭据消费没有归零；队列未刷写边界由专用 regression 固定覆盖。
+      expect(Number(inferred.headers()["x-litellm-key-spend"])).toBeGreaterThanOrEqual(firstCost * 2 - 1e-12);
       await page.getByRole("button", { name: tr("More key actions"), exact: true }).click();
       await page.getByRole("menuitem", { name: tr("Delete Key"), exact: true }).click();
       await page.getByRole("dialog").getByPlaceholder(alias, { exact: true }).fill(alias);

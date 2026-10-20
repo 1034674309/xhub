@@ -319,6 +319,66 @@ end
 return tostring(total)
 `)
 
+// HotKeySpend 按稳定 KeyID 汇总尚未落库的消费，供准入与累计费用头使用，不消费队列。
+// 参数 id 为 api_keys 行 ID；空客户端或空 ID 返回零。损坏返回错误，依赖该费用的预算准入必须拒绝；展示可省略。
+// 新队列使用每 Key 请求索引；混有旧进程账单时在同一个 Lua 快照内扫描，避免并发确认造成漏费。
+// 旧 Key 账单缺少 KeyID 时无法证明轮换前归属，保守返回错误；排空后惰性清理旧 flusher 遗留的索引成员。
+func (c *Client) HotKeySpend(id string) (float64, error) {
+	if c == nil || id == "" {
+		return 0, nil
+	}
+	if c.rdb == nil {
+		return 0, fmt.Errorf("key spend: Redis client is unavailable")
+	}
+	return keyPendingScript.Run(context.Background(), c.rdb, []string{"xhub:spendlog", "xhub:spend:key-indexed", "xhub:spend:key-pending:" + id, "xhub:spend:requests"}, id).Float64()
+}
+
+// keyQueueSnapshotLua 用队列长度及首尾摘要检测旧进程未同步维护新索引的入队或确认。
+// 新 writer 只能延续已验证快照；未知旧队列保持回退直到排空，避免集合数量碰巧相等时漏算费用。
+const keyQueueSnapshotLua = `
+local function keyQueueSnapshot()
+  local n = redis.call('LLEN', 'xhub:spendlog')
+  return tostring(n) .. ':' .. redis.sha1hex(redis.call('LINDEX', 'xhub:spendlog', 0) or '') .. ':' .. redis.sha1hex(redis.call('LINDEX', 'xhub:spendlog', -1) or '')
+end
+local function keyIndexTrusted()
+  return redis.call('LLEN', 'xhub:spendlog') == 0 or redis.call('GET', 'xhub:spend:key-queue-state') == keyQueueSnapshot()
+end
+`
+
+var keyPendingScript = redis.NewScript(keyQueueSnapshotLua + `
+local total = 0
+local function add(raw)
+  local cost = tonumber(raw)
+  if not cost or cost < 0 or cost ~= cost or cost == math.huge or total + cost == math.huge then
+    error('invalid pending key cost')
+  end
+  total = total + cost
+end
+-- 数量不一致说明存在旧 writer 或未能证明 KeyID 的历史记录；整个回退也必须原子读取。
+if not keyIndexTrusted() or redis.call('SCARD', KEYS[2]) ~= redis.call('LLEN', KEYS[1]) then
+  for _, raw in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
+    local row = cjson.decode(raw)
+    if type(row) ~= 'table' or type(row.request_id) ~= 'string' or row.request_id == '' then
+      return redis.error_reply('invalid pending key event')
+    end
+    if row.spend_valid then
+      local cost = tonumber(row.spend)
+      if not cost or cost < 0 or cost ~= cost or cost == math.huge then return redis.error_reply('invalid pending key cost') end
+      if row.key_id == ARGV[1] then add(cost)
+      elseif cost > 0 and row.api_key and row.api_key ~= '' and (not row.key_id or row.key_id == '') then
+        return redis.error_reply('legacy pending key event has no key_id')
+      end
+    end
+  end
+else
+  for _, id in ipairs(redis.call('SMEMBERS', KEYS[3])) do
+    if redis.call('SISMEMBER', KEYS[2], id) == 1 then add(redis.call('HGET', KEYS[4], id))
+    else redis.call('SREM', KEYS[3], id) end
+  end
+end
+return tostring(total)
+`)
+
 // SpendLog 是网关发送到 Redis 队列的单次用量载荷，消费者转换为 iam.UsageRecord 写 PostgreSQL。
 // RequestID 用于去重结算，SessionID 用于授权范围内归组，字段记录调用时事实而非刷库时配置。
 type SpendLog struct {
@@ -438,7 +498,7 @@ func (c *Client) EnqueueSpend(row SpendLog) error {
 	if err == nil {
 		startedMicros = started.UnixMicro()
 	}
-	args := []any{raw, 0.0, row.RequestID, startedMicros, row.OrgID}
+	args := []any{raw, 0.0, row.RequestID, startedMicros, row.OrgID, row.KeyID, row.APIKey}
 	if row.SpendValid {
 		args[1] = row.Spend
 	}
@@ -454,7 +514,7 @@ func (c *Client) EnqueueSpend(row SpendLog) error {
 	return enqueueSpendScript.Run(context.Background(), c.rdb, []string{"xhub:spendlog", "xhub:spend:requests"}, args...).Err()
 }
 
-var enqueueSpendScript = redis.NewScript(`
+var enqueueSpendScript = redis.NewScript(keyQueueSnapshotLua + `
 if redis.call('HEXISTS', KEYS[2], ARGV[3]) == 1 then
   return 0
 end
@@ -468,10 +528,18 @@ if queueType ~= 'none' and queueType ~= 'list' then
 end
 local indexType = redis.call('TYPE', 'xhub:spend:indexed').ok
 if indexType ~= 'none' and indexType ~= 'set' then return redis.error_reply('invalid pending index') end
+local state = redis.call('GET', 'xhub:spend:key-queue-state')
+local trusted = keyIndexTrusted()
+local wasEmpty = redis.call('LLEN', KEYS[1]) == 0
+local keyIndexType = redis.call('TYPE', 'xhub:spend:key-indexed').ok
+if keyIndexType ~= 'none' and keyIndexType ~= 'set' then return redis.error_reply('invalid key coverage index') end
+local keyIndex = 'xhub:spend:key-pending:' .. ARGV[6]
+local keyType = redis.call('TYPE', keyIndex).ok
+if keyType ~= 'none' and keyType ~= 'set' then return redis.error_reply('invalid key pending index') end
 local orgIndex = 'xhub:spend:org-pending:' .. ARGV[5]
 local orgType = redis.call('TYPE', orgIndex).ok
 if orgType ~= 'none' and orgType ~= 'zset' then return redis.error_reply('invalid organization pending index') end
-for i = 6, #ARGV do
+for i = 8, #ARGV do
   if delta ~= 0 then
     local raw = redis.call('GET', 'xhub:spend:' .. ARGV[i])
     local current = raw and tonumber(raw) or 0
@@ -481,7 +549,9 @@ for i = 6, #ARGV do
     end
   end
 end
-for i = 6, #ARGV do
+-- 旧 flusher 可能留下索引；空队列可证明旧成员均已确认，安全开始新的覆盖集合。
+if wasEmpty then redis.call('DEL', 'xhub:spend:key-indexed') end
+for i = 8, #ARGV do
   if delta ~= 0 then
     redis.call('INCRBYFLOAT', 'xhub:spend:' .. ARGV[i], delta)
   end
@@ -489,7 +559,11 @@ end
 redis.call('RPUSH', KEYS[1], ARGV[1])
 redis.call('HSET', KEYS[2], ARGV[3], ARGV[2])
 redis.call('SADD', 'xhub:spend:indexed', ARGV[3])
+-- 无 Key 的会话账单也计入覆盖集合；无法定位的旧 Key 费用故意不标记覆盖，强制保守回退。
+if ARGV[6] ~= '' or ARGV[7] == '' or delta == 0 then redis.call('SADD', 'xhub:spend:key-indexed', ARGV[3]) end
+if ARGV[6] ~= '' and delta ~= 0 then redis.call('SADD', keyIndex, ARGV[3]) end
 if ARGV[5] ~= '' and delta ~= 0 then redis.call('ZADD', orgIndex, ARGV[4], ARGV[3]) end
+if trusted then redis.call('SET', 'xhub:spend:key-queue-state', keyQueueSnapshot()) else redis.call('DEL', 'xhub:spend:key-queue-state') end
 return 1
 `)
 
@@ -542,7 +616,7 @@ func (c *Client) AckFlushed(deltas map[string]float64, n int, head string) error
 	return ackFlushScript.Run(context.Background(), c.rdb, []string{"xhub:spendlog"}, args...).Err()
 }
 
-var ackFlushScript = redis.NewScript(`
+var ackFlushScript = redis.NewScript(keyQueueSnapshotLua + `
 local head = redis.call('LINDEX', KEYS[1], 0)
 if (not head) or head ~= ARGV[2] then
   return 0
@@ -551,10 +625,17 @@ local n = tonumber(ARGV[1])
 local rows = {}
 local indexType = redis.call('TYPE', 'xhub:spend:indexed').ok
 if indexType ~= 'none' and indexType ~= 'set' then return redis.error_reply('invalid pending index') end
+local state = redis.call('GET', 'xhub:spend:key-queue-state')
+local trusted = keyIndexTrusted()
+local wasEmpty = redis.call('LLEN', KEYS[1]) == 0
+local keyIndexType = redis.call('TYPE', 'xhub:spend:key-indexed').ok
+if keyIndexType ~= 'none' and keyIndexType ~= 'set' then return redis.error_reply('invalid key coverage index') end
 for _, raw in ipairs(redis.call('LRANGE', KEYS[1], 0, n - 1)) do
   local row = cjson.decode(raw)
   local orgType = redis.call('TYPE', 'xhub:spend:org-pending:' .. (row.org_id or '')).ok
   if orgType ~= 'none' and orgType ~= 'zset' then return redis.error_reply('invalid organization pending index') end
+  local keyType = redis.call('TYPE', 'xhub:spend:key-pending:' .. (row.key_id or '')).ok
+  if keyType ~= 'none' and keyType ~= 'set' then return redis.error_reply('invalid key pending index') end
   table.insert(rows, row)
 end
 -- Lua 错误不回滚已经执行的写入，必须在扣减前预检全部主体计数。
@@ -579,8 +660,12 @@ end
 redis.call('LTRIM', KEYS[1], n, -1)
 for _, row in ipairs(rows) do
   redis.call('SREM', 'xhub:spend:indexed', row.request_id)
+  redis.call('SREM', 'xhub:spend:key-indexed', row.request_id)
+  if row.key_id and row.key_id ~= '' then redis.call('SREM', 'xhub:spend:key-pending:' .. row.key_id, row.request_id) end
   if row.org_id and row.org_id ~= '' then redis.call('ZREM', 'xhub:spend:org-pending:' .. row.org_id, row.request_id) end
 end
+if redis.call('LLEN', KEYS[1]) == 0 then redis.call('DEL', 'xhub:spend:key-indexed') end
+if trusted or redis.call('LLEN', KEYS[1]) == 0 then redis.call('SET', 'xhub:spend:key-queue-state', keyQueueSnapshot()) else redis.call('DEL', 'xhub:spend:key-queue-state') end
 return 1
 `)
 

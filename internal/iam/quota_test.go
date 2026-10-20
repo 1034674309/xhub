@@ -249,3 +249,27 @@ func TestOrganizationBudgetValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestQuotaKeyPendingUnavailable 验证有限额 Key 的热费用故障明确失败，无限额 Key 不依赖累计展示。
+// 前置纯内存额度树；覆盖正常、恰好用尽和非数失败，无外部状态，无需清理。
+func TestQuotaKeyPendingUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		limit *float64
+		hot   float64
+		scope string
+		fail  bool
+	}{
+		{quotaLimit(10), 2, "", false}, {quotaLimit(10), 10, "key", false}, {quotaLimit(10), math.NaN(), "", true}, {nil, math.NaN(), "", false},
+	} {
+		key := &quotaNode{ID: "stable", HotID: "stable", Kind: "key", Limit: tc.limit}
+		_, _, scope, err := quotaPath(map[string]*quotaNode{"key:stable": key}, "key:stable", func(kind, id string, _ ...time.Time) float64 {
+			if kind != "key" || id != "stable" {
+				t.Fatal("热费用未使用稳定 KeyID")
+			}
+			return tc.hot
+		})
+		if scope != tc.scope || errors.Is(err, ErrQuotaUnavailable) != tc.fail {
+			t.Fatalf("额度结果 scope=%s err=%v 期望 scope=%s failure=%v", scope, err, tc.scope, tc.fail)
+		}
+	}
+}

@@ -77,7 +77,11 @@ func (s *Server) setChatHeaders(w http.ResponseWriter, p *auth.Principal, alias,
 		if p.Key.MaxBudget != nil {
 			w.Header().Set("x-litellm-key-max-budget", catalog.Format(*p.Key.MaxBudget))
 		}
-		w.Header().Set("x-litellm-key-spend", catalog.Format(p.Key.Spend))
+		// 流式响应在落账前发送头，也必须包含同一 KeyID 下的历史待结算费用。
+		hot, err := s.Live.HotKeySpend(p.KeyID)
+		if err == nil {
+			w.Header().Set("x-litellm-key-spend", catalog.Format(p.Key.Spend+hot))
+		}
 	}
 }
 
@@ -119,10 +123,18 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		w.Header().Set("x-litellm-response-cost-output", catalog.Format(out))
 		if p != nil && p.Key != nil {
 			shown := p.Key.Spend + total
+			showSpend := true
 			if s.Live != nil {
-				shown = p.Key.Spend + s.Live.HotSpend(live.SpendRef("key", p.Hash)) + total
+				// 轮换不改变 KeyID；不可读时省略累计值，避免向客户端伪报零热费用。
+				hot, err := s.Live.HotKeySpend(p.KeyID)
+				showSpend = err == nil
+				shown += hot
 			}
-			w.Header().Set("x-litellm-key-spend", catalog.Format(shown))
+			if showSpend {
+				w.Header().Set("x-litellm-key-spend", catalog.Format(shown))
+			} else {
+				w.Header().Del("x-litellm-key-spend")
+			}
 		}
 	}
 	hash := ""
