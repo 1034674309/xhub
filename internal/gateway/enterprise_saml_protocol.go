@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beevik/etree"
 	"github.com/crewjam/saml"
 	xrv "github.com/mattermost/xml-roundtrip-validator"
 	dsig "github.com/russellhaering/goxmldsig"
@@ -24,8 +25,8 @@ import (
 
 const enterpriseSAMLMetadataLimit = 2 << 20
 
-// enterpriseSAMLURL 校验 SAML 的浏览器端地址；raw 为绝对 URL，allowHTTP 只供显式开启的 SP HTTP 部署使用。
-// 返回解析地址或错误；拒绝凭据、查询、片段和不完整地址，不执行 DNS 或网络访问。IdP 调用方必须传 false。
+// enterpriseSAMLURL 校验 SAML 的浏览器端地址；raw 为绝对 URL，allowHTTP 只供显式开启的 SP/IdP HTTP 联调使用。
+// 返回解析地址或错误；拒绝凭据、查询、片段和不完整地址，不执行 DNS 或网络访问；远程元数据下载仍由独立 HTTPS 策略约束。
 func enterpriseSAMLURL(raw string, allowHTTP bool) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u == nil || u.Hostname() == "" || u.Opaque != "" ||
@@ -75,12 +76,15 @@ func enterpriseSAMLMaterial(master string) (encryptedKey, certificate string, er
 }
 
 // enterpriseSAMLProvider 从持久化配置及已取得的 IdP metadata 构造严格 SP；master 仅用于解密该连接的私钥。
-// 配置校验、登录发起与回调调用；返回提供方或错误，不下载 metadata、不写入状态，HTTP 开关绝不放宽 IdP HTTPS。
+// 配置校验、登录发起与回调调用；返回提供方或错误，不下载 metadata、不写入状态，仅粘贴元数据可通过 HTTP 开关允许 IdP HTTP Redirect 登录。
 func enterpriseSAMLProvider(c *iam.EnterpriseOIDC, master string, metadata string) (*saml.ServiceProvider, error) {
 	if c == nil || c.Protocol != "saml" || strings.TrimSpace(c.ClientID) == "" ||
 		strings.TrimSpace(c.Issuer) == "" || c.ConnectionID != strings.TrimSpace(c.ConnectionID) ||
 		c.ConnectionID == "." || c.ConnectionID == ".." || strings.ContainsAny(c.ConnectionID, "/\\?#%") {
 		return nil, errors.New("invalid enterprise SAML configuration")
+	}
+	if c.AllowExpiredIDPCertificate && (!c.AllowHTTP || strings.TrimSpace(c.IDPMetadataURL) != "" || strings.TrimSpace(c.IDPMetadata) == "") {
+		return nil, errors.New("expired IdP certificate testing requires HTTP opt-in and pasted metadata")
 	}
 	entityURL, err := url.Parse(c.ClientID)
 	if err != nil || !entityURL.IsAbs() {
@@ -95,7 +99,7 @@ func enterpriseSAMLProvider(c *iam.EnterpriseOIDC, master string, metadata strin
 		returnURL.Scheme != acs.Scheme || returnURL.Host != acs.Host {
 		return nil, errors.New("invalid enterprise SAML return URL")
 	}
-	idp, err := enterpriseSAMLMetadata(metadata, c.Issuer, time.Now())
+	idp, err := enterpriseSAMLMetadata(metadata, c.Issuer, time.Now(), c.AllowHTTP && strings.TrimSpace(c.IDPMetadataURL) == "")
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +125,7 @@ func enterpriseSAMLProvider(c *iam.EnterpriseOIDC, master string, metadata strin
 	if c.ConnectionID != "" {
 		metadataURL.Path = "/auth/enterprise/" + c.ConnectionID + "/saml/metadata"
 	}
-	return &saml.ServiceProvider{
+	sp := &saml.ServiceProvider{
 		EntityID:    c.ClientID,
 		Key:         key,
 		Certificate: cert,
@@ -135,12 +139,42 @@ func enterpriseSAMLProvider(c *iam.EnterpriseOIDC, master string, metadata strin
 		AllowIDPInitiated:           false,
 		SignatureMethod:             dsig.RSASHA256SignatureMethod,
 		ValidateAudienceRestriction: enterpriseSAMLAudience(c.ClientID),
-	}, nil
+	}
+	if c.AllowExpiredIDPCertificate {
+		sp.SignatureVerifier = enterpriseSAMLExpiredVerifier{}
+	}
+	return sp, nil
 }
 
-// enterpriseSAMLMetadata 解析一个受信任管理员提交的 IdP 实体；raw 限制为 2MiB，issuer 与 now 用于实体及有效期校验。
+// enterpriseSAMLExpiredVerifier 仅用于显式 HTTP 加手工 XML 的单连接联调；不修改全局时钟或断言时间。
+// 依赖 goxmldsig v1.6.1 先以 Raw DER 精确匹配固定公钥、再检查受信副本日历的行为，升级库时需保留对应测试。
+type enterpriseSAMLExpiredVerifier struct{}
+
+// VerifySignature 包装 crewjam 为本次断言创建的验签上下文；返回原库完整签名验证结果。
+// 只在内存副本忽略已过期的固定证书 NotAfter，保留 Raw、公钥、NotBefore 和所有签名检查；不改配置、XML 或时钟。
+func (enterpriseSAMLExpiredVerifier) VerifySignature(ctx *dsig.ValidationContext, el *etree.Element) error {
+	roots, err := ctx.CertificateStore.Certificates()
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	copies := make([]*x509.Certificate, len(roots))
+	for i, root := range roots {
+		copy := *root
+		if now.After(copy.NotAfter) && !now.Before(copy.NotBefore) {
+			copy.NotAfter = now.Add(time.Hour)
+		}
+		copies[i] = &copy
+	}
+	local := *ctx
+	local.CertificateStore = &dsig.MemoryX509CertificateStore{Roots: copies}
+	_, err = local.Validate(el)
+	return err
+}
+
+// enterpriseSAMLMetadata 解析一个受信任管理员提交的 IdP 实体；raw 限制为 2MiB，issuer 与 now 用于实体及有效期校验，allowHTTP 仅允许手工 XML 联调的 HTTP 登录端点。
 // provider 构造调用；仅接受单一 EntityDescriptor、可用 Redirect SSO 和可解析签名证书，拒绝聚合/尾随 XML，不下载外部资源。
-func enterpriseSAMLMetadata(raw, issuer string, now time.Time) (*saml.EntityDescriptor, error) {
+func enterpriseSAMLMetadata(raw, issuer string, now time.Time, allowHTTP bool) (*saml.EntityDescriptor, error) {
 	fail := func() (*saml.EntityDescriptor, error) { return nil, errors.New("invalid enterprise SAML IdP metadata") }
 	if len(raw) == 0 || len(raw) > enterpriseSAMLMetadataLimit || strings.TrimSpace(issuer) == "" {
 		return fail()
@@ -200,7 +234,7 @@ func enterpriseSAMLMetadata(raw, issuer string, now time.Time) (*saml.EntityDesc
 		}
 		for _, endpoint := range descriptor.SingleSignOnServices {
 			if endpoint.Binding == saml.HTTPRedirectBinding {
-				if _, err := enterpriseSAMLURL(endpoint.Location, false); err != nil {
+				if _, err := enterpriseSAMLURL(endpoint.Location, allowHTTP); err != nil {
 					return fail()
 				}
 				redirectEndpoints++
@@ -217,7 +251,7 @@ func enterpriseSAMLMetadata(raw, issuer string, now time.Time) (*saml.EntityDesc
 				}
 				cert, err := x509.ParseCertificate(der)
 				// IdP 证书是可信元数据固定的验签公钥，不是 TLS PKI；部分 IdP 长期保留过期自签名证书。
-				// 配置/导出允许保留该材料；登录仍由默认验签库检查证书日历、签名和断言时效，绝不绕过到期错误。
+				// 配置/导出允许保留该材料；默认登录严格检查证书日历。显式联调例外仅放宽固定证书 NotAfter，签名和断言时效始终校验。
 				if err != nil || (cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageDigitalSignature == 0) {
 					return fail()
 				}

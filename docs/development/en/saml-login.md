@@ -5,7 +5,7 @@ SSO settings support both existing OIDC connections and SAML 2.0. Each connectio
 ## Configuration and registration
 
 1. Create an SSO configuration, choose its organization and SAML 2.0.
-2. Enter the public XHub origin, for example `https://console.example.com`. For isolated testing, explicitly enable HTTP testing and use an origin such as `http://111.62.156.153:3000`. This option only permits HTTP for XHub addresses; IdP and metadata download endpoints still require HTTPS.
+2. Enter the public XHub origin, for example `https://console.example.com`. For isolated testing, explicitly enable HTTP testing and use an origin such as `http://111.62.156.153:3000`. This option permits HTTP for XHub addresses and IdP Redirect sign-in endpoints in manually pasted XML. Remote metadata downloads still require HTTPS, and remotely fetched metadata must retain HTTPS sign-in endpoints.
 3. Generate the ACS at `/auth/enterprise/saml/acs`, console return URL at `/ui/login`, and SP Entity ID. ACS and return URL must share an origin. Do not register a `/gw/...` callback.
 4. Supply an IdP HTTPS metadata URL (Qiniu: `https://sso.qiniu.io/saml2/meta`), or clear the URL and paste a single EntityDescriptor XML document. URL-based metadata is refreshed for each login and must retain the configured issuer. Network failures and expired metadata reject login. Pasted XML requires administrator-managed updates.
 5. The default stable identity attribute is `urn:oid:0.9.2342.19200300.100.1.1` (uid). It must occur once with one nonempty value. Transient NameID and email matching are not used for account linking.
@@ -30,8 +30,14 @@ HTTP exposes assertions and sessions in transit and is intended for isolated tes
 
 Qiniu production metadata identifies `https://sso.qiniu.io/saml2/meta` and advertises the Redirect endpoint `https://sso.qiniu.io`. Its advertised signing certificate expired on **2019-05-24**. Its SHA-256 fingerprint is `58:DC:21:82:03:E4:D7:B7:17:03:7E:F6:CF:33:37:4B:DF:B0:50:51:7E:E2:E8:5B:7C:1D:DF:B7:93:A4:DD:1F`.
 
-Disabled configuration and SP metadata export remain available, with an expiry warning; enabling is rejected. Real signed-response tests confirm that the underlying verifier rejects expired certificates. Signature verification and its clock are not bypassed. The SSO administrator must supply a current signing certificate and matching metadata before refreshing and enabling the configuration. Successful local IdP tests do not certify real Qiniu login.
+Disabled configuration and SP metadata export remain available, with an expiry warning; enabling is rejected by default. The isolated testing exception below can allow this pinned expired certificate without bypassing signature validation or changing clocks. For normal use, the SSO administrator must supply a current signing certificate and matching metadata. Successful local IdP tests do not certify real Qiniu login.
 
 The deployment server received HTTP 403 when fetching the same HTTPS metadata, while the desktop could read it. An administrator can paste the trusted XML instead. SAML front-channel login does not require a server-side userinfo call; renewed certificates must also be reimported.
 
 Automatic SP key rotation is not included. Before the one-year certificate expires, arrange a new connection and metadata registration; do not replace the stored certificate without its matching private key.
+
+## Pinned certificate expiry exception for isolated testing
+
+The default remains rejection of expired IdP signing certificates. `allow_expired_idp_certificate` is an independent, default-off connection option that requires SAML, `allow_http=true`, an empty metadata URL and manually pasted XML. The existing expiry warning stays visible. Disable the option after isolated testing; update the IdP certificate before normal rollout.
+
+The per-connection signature verifier copies the trusted certificate objects in memory and only extends an already-expired `NotAfter` for validation. Raw DER, public keys and `NotBefore` remain unchanged. goxmldsig still requires an exact Raw certificate match and validates the complete XML signature. Future certificates, untrusted certificates, tampering, expired assertions and replay remain rejected. No global or assertion clock is changed. This relies on the pinned goxmldsig v1.6.1 certificate matching behavior and must be reverified on dependency upgrades.

@@ -167,7 +167,7 @@ func TestEnterpriseSAMLMetadata(t *testing.T) {
 		{"certificate_disallows_signing", enterpriseSAMLTestMetadata(noSigning), cfg.Issuer, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := enterpriseSAMLMetadata(tc.metadata, tc.issuer, now)
+			got, err := enterpriseSAMLMetadata(tc.metadata, tc.issuer, now, false)
 			if (err == nil) != tc.wantOK || (err == nil && got.EntityID != cfg.Issuer) {
 				t.Fatalf("IdP 元数据验证结果错误：允许=%t，错误=%v", tc.wantOK, err)
 			}
@@ -303,13 +303,30 @@ func TestEnterpriseSAMLProvider(t *testing.T) {
 			t.Fatal("空配置未拒绝")
 		}
 	})
-	t.Run("http_mode_never_allows_http_idp", func(t *testing.T) {
-		copy := cfg
-		copy.AllowHTTP = true
-		if _, err := enterpriseSAMLProvider(&copy, master, strings.Replace(metadata, "https://idp.example/sso", "http://idp.example/sso", 1)); err == nil {
-			t.Fatal("SP 的 HTTP 开关错误地放开了 IdP HTTP")
-		}
-	})
+	// 显式 HTTP 开关只允许手工 XML 的浏览器跳转；关闭开关或远程来源仍拒绝。
+	for _, tc := range []struct {
+		name     string
+		allow    bool
+		remote   string
+		endpoint string
+		ok       bool
+	}{
+		{"manual_http_enabled", true, "", "http://idp.example/sso", true},
+		{"manual_http_default_rejected", false, "", "http://idp.example/sso", false},
+		{"remote_http_endpoint_rejected", true, "https://idp.example/meta", "http://idp.example/sso", false},
+		{"http_credentials_rejected", true, "", "http://user@idp.example/sso", false},
+		{"http_query_rejected", true, "", "http://idp.example/sso?a=1", false},
+		{"http_fragment_rejected", true, "", "http://idp.example/sso#fragment", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			copy := cfg
+			copy.AllowHTTP, copy.IDPMetadataURL = tc.allow, tc.remote
+			_, err := enterpriseSAMLProvider(&copy, master, strings.Replace(metadata, "https://idp.example/sso", tc.endpoint, 1))
+			if (err == nil) != tc.ok {
+				t.Fatalf("手工 HTTP IdP 策略不符，允许=%t，错误=%v", tc.ok, err)
+			}
+		})
+	}
 	t.Run("decrypted_non_key_rejected", func(t *testing.T) {
 		copy := cfg
 		var err error
@@ -408,15 +425,74 @@ func TestEnterpriseSAMLResponseCertificateValidity(t *testing.T) {
 	}
 }
 
+// TestEnterpriseSAMLExpiredTestingIsolation 验证显式单连接到期例外仍保持固定证书、签名、未来日期及断言期限。
+// 使用真实签名响应和内存材料；未开启连接仍拒绝，无全局时间改写或外部资源。
+func TestEnterpriseSAMLExpiredTestingIsolation(t *testing.T) {
+	cfg, key, _ := enterpriseSAMLTestMaterial(t)
+	now := time.Now()
+	expired := enterpriseSAMLTestCertificate(t, key, now.Add(-2*time.Hour), now.Add(-time.Hour), x509.KeyUsageDigitalSignature)
+	future := enterpriseSAMLTestCertificate(t, key, now.Add(time.Hour), now.Add(2*time.Hour), x509.KeyUsageDigitalSignature)
+	cfg.AllowHTTP, cfg.AllowExpiredIDPCertificate = true, true
+	cfg.IDPMetadata = enterpriseSAMLTestMetadata(expired)
+	for _, tc := range []struct {
+		name   string
+		mutate func(*iam.EnterpriseOIDC)
+		cert   *x509.Certificate
+		at     time.Time
+		tamper bool
+		ok     bool
+	}{
+		{"expired_explicit", nil, expired, now, false, true},
+		{"other_connection_default", func(c *iam.EnterpriseOIDC) { c.AllowExpiredIDPCertificate = false; c.ConnectionID = "other" }, expired, now, false, false},
+		{"untrusted_certificate_same_key", nil, enterpriseSAMLTestCertificate(t, key, now.Add(-3*time.Hour), now.Add(-time.Hour), x509.KeyUsageDigitalSignature), now, false, false},
+		{"future_certificate", func(c *iam.EnterpriseOIDC) { c.IDPMetadata = enterpriseSAMLTestMetadata(future) }, future, now, false, false},
+		{"tampered_response", nil, expired, now, true, false},
+		{"expired_assertion", nil, expired, now.Add(-time.Hour), false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			copy := cfg
+			if tc.mutate != nil {
+				tc.mutate(&copy)
+			}
+			sp, err := enterpriseSAMLProvider(&copy, strings.Repeat("s", 32), copy.IDPMetadata)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw := enterpriseSAMLTestSignedResponse(t, copy, key, tc.cert, tc.at)
+			if tc.tamper {
+				raw = []byte(strings.Replace(string(raw), "stable-user", "attacker", 1))
+			}
+			_, err = sp.ParseXMLResponse(raw, []string{"request-test"}, sp.AcsURL)
+			if (err == nil) != tc.ok {
+				t.Fatalf("联调证书例外隔离失败 allow=%v err=%v", tc.ok, err)
+			}
+		})
+	}
+	for _, change := range []func(*iam.EnterpriseOIDC){func(c *iam.EnterpriseOIDC) { c.AllowHTTP = false }, func(c *iam.EnterpriseOIDC) { c.IDPMetadataURL = "https://idp.example/meta" }, func(c *iam.EnterpriseOIDC) { c.IDPMetadata = "" }} {
+		copy := cfg
+		change(&copy)
+		if _, err := enterpriseSAMLProvider(&copy, strings.Repeat("s", 32), cfg.IDPMetadata); err == nil {
+			t.Fatal("联调例外缺少约束仍被接受")
+		}
+	}
+	if !expired.NotAfter.Before(time.Now()) {
+		t.Fatal("原始固定证书被篡改")
+	}
+}
+
 // enterpriseSAMLTestSignedResponse 用指定 IdP 密钥与证书生成完整已签名 POST 响应，供真实 ParseXMLResponse 单元验证。
-// cfg 只含合成测试实体/ACS；返回 XML 字节，不绕过验签，不存储断言和私钥。
-func enterpriseSAMLTestSignedResponse(t *testing.T, cfg iam.EnterpriseOIDC, key *rsa.PrivateKey, cert *x509.Certificate) []byte {
+// cfg 只含合成测试实体/ACS，at 可指定断言时间用于到期失败测试；返回 XML 字节，不绕过验签，不存储断言和私钥。
+func enterpriseSAMLTestSignedResponse(t *testing.T, cfg iam.EnterpriseOIDC, key *rsa.PrivateKey, cert *x509.Certificate, at ...time.Time) []byte {
 	t.Helper()
 	now := time.Now().UTC()
+	conditionsAt := now
+	if len(at) > 0 {
+		conditionsAt = at[0].UTC()
+	}
 	raw := fmt.Sprintf(`<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="response-test" Version="2.0" IssueInstant="%s" Destination="%s" InResponseTo="request-test"><saml:Issuer>%s</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="assertion-test" Version="2.0" IssueInstant="%s"><saml:Issuer>%s</saml:Issuer><saml:Subject><saml:NameID>untrusted-transient-name</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="request-test" Recipient="%s" NotOnOrAfter="%s"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="%s" NotOnOrAfter="%s"><saml:AudienceRestriction><saml:Audience>%s</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AttributeStatement><saml:Attribute Name="external_id"><saml:AttributeValue>stable-user</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>`,
 		now.Format(time.RFC3339Nano), cfg.RedirectURI, cfg.Issuer, now.Format(time.RFC3339Nano), cfg.Issuer,
-		cfg.RedirectURI, now.Add(time.Minute).Format(time.RFC3339Nano), now.Add(-time.Minute).Format(time.RFC3339Nano),
-		now.Add(time.Minute).Format(time.RFC3339Nano), cfg.ClientID)
+		cfg.RedirectURI, conditionsAt.Add(time.Minute).Format(time.RFC3339Nano), conditionsAt.Add(-time.Minute).Format(time.RFC3339Nano),
+		conditionsAt.Add(time.Minute).Format(time.RFC3339Nano), cfg.ClientID)
 	doc := etree.NewDocument()
 	if err := doc.ReadFromString(raw); err != nil {
 		t.Fatal("构造测试 SAML 响应失败", err)
