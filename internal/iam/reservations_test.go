@@ -156,7 +156,7 @@ func TestBudgetReservationProjectAndMigration(t *testing.T) {
 	if _, err := db.ReserveBudget(ctx, "project-over", "key", key.ID, 0.01); !errors.Is(err, ErrBudgetUnavailable) {
 		t.Fatalf("项目限额被绕过: %v", err)
 	}
-	if _, err := db.UpdateProject(ctx, actor, project.ID, ProjectInput{MaxBudget: quotaLimit(1)}); !errors.Is(err, ErrBudgetUnavailable) {
+	if _, err := db.UpdateProject(ctx, actor, project.ID, ProjectInput{MaxBudget: quotaLimit(1)}); !errors.Is(err, ErrQuotaAllocation) {
 		t.Fatalf("项目调额不得低于已承诺费用: %v", err)
 	}
 	if _, err := db.UpdateProject(ctx, actor, project.ID, ProjectInput{MaxBudget: quotaLimit(3)}); err != nil {

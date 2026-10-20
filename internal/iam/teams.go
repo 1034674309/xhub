@@ -1198,7 +1198,7 @@ func (db *DB) UpdateProject(ctx context.Context, by Actor, id string, in Project
 				return err
 			}
 			if cur.Spend+held > *in.MaxBudget {
-				return ErrBudgetUnavailable
+				return ErrQuotaAllocation
 			}
 		}
 

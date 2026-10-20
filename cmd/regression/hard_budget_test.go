@@ -127,6 +127,21 @@ func TestHardBudgetPendingRecovery(t *testing.T) {
 	if got := h.do(http.MethodPost, "/v1/chat/completions", c.key, chatRequest(model, "Cannot reuse pending funds.")); got.status != 429 {
 		t.Fatalf("待结算预算被重用: %s", got.describe())
 	}
+	// 管理调额必须保留已承诺项目费用，并返回可解释的400而非存储500。
+	if got := h.do(http.MethodPost, "/project/update", admin, map[string]any{"project_id": c.projectID, "max_budget": 0}); got.status != 400 || got.json()["error"].(map[string]any)["type"] != "quota_allocation_exceeded" {
+		t.Fatalf("待结算时项目降额未原子拒绝: %s", got.describe())
+	}
+	// 新实例不能把无法排空的旧账单队列当成零；503期间上游不应再被调用。
+	other := gateway.New(h.gw.Cfg, h.store, h.db)
+	restarted := httptest.NewServer(other.Handler())
+	defer restarted.Close()
+	probe := &harness{t: t, server: restarted}
+	if got := probe.do(http.MethodPost, "/v1/chat/completions", c.key, chatRequest(model, "Reject pending queue during restart.")); got.status != 503 {
+		t.Fatalf("启动账单闸门未拒绝: %s", got.describe())
+	}
+	if len(h.upstreamCalls()) != 1 {
+		t.Fatalf("无法清算的重启实例仍访问上游: %d", len(h.upstreamCalls()))
+	}
 	if _, err := h.db.Engine.Exec("ALTER TABLE request_logs DROP CONSTRAINT hard_pending_failure"); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +159,7 @@ func TestHardBudgetPendingRecovery(t *testing.T) {
 // TestHardBudgetUnknownUsage 验证缺失或超出声明的上游用量不会退款，也不会静默扣超预算。
 // 前置私有数据库和故意违约的本地供应商；管理详情显示 uncertain/原因，夹具清理未知占用。
 func TestHardBudgetUnknownUsage(t *testing.T) {
-	for _, usage := range []map[string]any{{"prompt_tokens": 2048, "completion_tokens": 5}, {"prompt_tokens": 11}} {
+	for _, usage := range []map[string]any{{"prompt_tokens": 2048, "completion_tokens": 5}, {"prompt_tokens": 11}, {"prompt_tokens": 11, "completion_tokens": 5, "prompt_tokens_details": map[string]any{"cached_tokens": 3}}} {
 		t.Run(fmt.Sprint(usage), func(t *testing.T) {
 			t.Setenv("XHUB_REGRESSION_REDIS_URL", "")
 			const model = "hard-unknown"
