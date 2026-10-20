@@ -345,7 +345,15 @@ func endpointStreamFrames(source string) []string {
 	case "openai-responses":
 		return []string{`{"type":"response.output_text.delta","delta":"matrix-ok"}`, `{"type":"response.completed","response":{"id":"matrix","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"matrix-ok"}]}],"usage":{"input_tokens":8,"output_tokens":2}}}`}
 	case "anthropic-messages":
-		return []string{`{"type":"message_start","message":{"id":"matrix","usage":{"input_tokens":8}}}`, `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"matrix-ok"}}`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`, `{"type":"message_stop"}`}
+		// 同协议透传也验证原生生命周期；夹具必须包含完整消息身份和成对内容块，不能用缺失事件冒充成功流。
+		return []string{
+			`{"type":"message_start","message":{"id":"matrix","type":"message","role":"assistant","content":[],"usage":{"input_tokens":8,"output_tokens":0}}}`,
+			`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"matrix-ok"}}`,
+			`{"type":"content_block_stop","index":0}`,
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+			`{"type":"message_stop"}`,
+		}
 	case "gemini", "vertex":
 		return []string{`{"candidates":[{"content":{"parts":[{"text":"matrix-ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":2}}`}
 	}
