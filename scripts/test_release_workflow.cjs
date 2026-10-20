@@ -16,7 +16,7 @@ test('complete browser catalog has unique identities and budget files before rel
   const report = evaluateScenarios(catalog, []);
   assert.equal(report.total, catalog.length, '未执行场景也必须保留完整分母');
   assert.equal(report.passed, 0, '目录校验不能把未执行场景算作通过');
-  for (const name of ['hard-budget-tier', 'user-bulk-budget']) {
+  for (const name of ['hard-budget-tier', 'user-bulk-budget', 'usage-spool']) {
     for (const locale of ['en', 'zh-CN']) {
       const file = `e2e/scenarios/regression/${name}-${locale}.test.ts`;
       assert.ok(catalog.some(row => row.file === file && row.kind === 'implemented'), '预算场景未登记：' + file);
@@ -46,7 +46,7 @@ test('API client reliability gate runs all flows independently and preserves fai
       assert.equal(result.status, status, '浏览器失败必须阻断发布：' + result.stderr);
       assert.deepEqual(readFileSync(join(directory, 'arguments'), 'utf8').trim().split('\n'), [
         'client-docs-url-', 'client-cancellation-', 'stream-terminal-sc-',
-        'billing-pending-recovery', 'key-lifecycle-', 'agent-history-', 'hard-budget-', 'budget-reconciliation-', 'messages-signed-history-', 'claude-client-compat-', 'user-bulk-budget-',
+        'billing-pending-recovery', 'usage-spool-', 'key-lifecycle-', 'agent-history-', 'hard-budget-', 'budget-reconciliation-', 'messages-signed-history-', 'claude-client-compat-', 'user-bulk-budget-',
         'scenarios/enterprise/saml-', 'scenarios/enterprise/sso-valid.test.ts', 'scenarios/directory/sso-config.test.ts',
       ]);
       assert.equal(readFileSync(join(directory, 'environment'), 'utf8'), '0\n1\n');
