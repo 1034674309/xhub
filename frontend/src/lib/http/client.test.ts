@@ -229,3 +229,13 @@ it("localizes quota allocation and single-team errors", async () => {
     setActiveLocale("en");
   }
 });
+
+/** 前置人工对账错误码；中英文全局HTTP提示与局部弹窗保持一致，未知错误保留原文，测试结束恢复语言。 */
+it.each(["zh-CN", "en"] as const)("localizes reconciliation errors in %s", async locale => {
+  const { setActiveLocale, translate } = await import("@/i18n");
+  setActiveLocale(locale);
+  expect(deriveErrorMessage({ error: { type: "budget_reconciliation_invalid", message: "raw provider text" } })).toBe(translate(locale, "budgetReconciliation.invalid"));
+  expect(deriveErrorMessage({ error: { type: "budget_reconciliation_conflict", message: "raw conflict" } })).toBe(translate(locale, "budgetReconciliation.conflict"));
+  expect(deriveErrorMessage({ error: { type: "other", message: "original" } })).toBe("original");
+  setActiveLocale("en");
+});

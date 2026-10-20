@@ -2853,5 +2853,19 @@
     "title": "Messages signed reasoning and dependent tools zh-CN",
     "kind": "implemented",
     "environment": "default offline; native signed Messages history, real model editor and finite budget"
+  },
+  {
+    "id": "SC-439",
+    "file": "e2e/scenarios/regression/budget-reconciliation-en.test.ts",
+    "title": "manual budget reconciliation restores verified balance en",
+    "kind": "implemented",
+    "environment": "default offline; truncated local SSE, real budget reconciliation and admin session"
+  },
+  {
+    "id": "SC-440",
+    "file": "e2e/scenarios/regression/budget-reconciliation-zh-CN.test.ts",
+    "title": "manual budget reconciliation restores verified balance zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; truncated local SSE, real budget reconciliation and admin session"
   }
 ]

@@ -18,7 +18,7 @@ import { isProxyAdminRole, isUserTeamAdminForSingleTeam } from "../../utils/role
 import DeleteResourceModal from "../common_components/DeleteResourceModal";
 import { KeyResponse } from "../key_team_helpers/key_list";
 import { toast } from "@/lib/toast";
-import { keyDeleteCall, keyUpdateCall } from "../networking";
+import { apiClient, keyDeleteCall, keyUpdateCall } from "../networking";
 import { useResetKeySpend } from "@/app/(dashboard)/hooks/keys/useResetKeySpend";
 import { useSetKeyBlockedState } from "@/app/(dashboard)/hooks/keys/useSetKeyBlockedState";
 import { keyKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
@@ -49,7 +49,7 @@ export default function KeyInfoView({
   backButtonText,
 }: KeyInfoViewProps) {
   const t = useT();
-  const { accessToken, userId: userID, userRole, premiumUser } = useAuthorized();
+  const { accessToken, userId: userID, userRole, userRoleLabel, isViewOnly, premiumUser } = useAuthorized();
   const queryClient = useQueryClient();
   const { teams: teamsData } = useTeams();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -173,6 +173,17 @@ export default function KeyInfoView({
       onKeyDataUpdate?.(keyDataUpdateHeldUntilModalClose);
     }
   };
+
+  /** 对账成功后读取真实Key余额并刷新详情/列表缓存；失败抛给对账区明确提示，不用本地算术伪造退款。 */
+  const refreshBudgetAfterReconciliation = async () => {
+    const response = await apiClient.get<{ info: KeyResponse }>("/key/info", { accessToken, query: { key: currentKeyData.token_id } });
+    if (!response.info || typeof response.info.budget_pending !== "number") throw new Error("Missing budget snapshot");
+    setCurrentKeyData(response.info);
+    onKeyDataUpdate?.(response.info);
+    await queryClient.invalidateQueries({ queryKey: keyKeys.all });
+  };
+  // 使用原始角色标签排除effective Admin的只读查看者；服务端仍强制要求平台管理员登录会话。
+  const canReconcileBudget = !isViewOnly && isProxyAdminRole(userRoleLabel ?? userRole ?? "");
 
   const canModifyKey =
     isProxyAdminRole(userRole || "") ||
@@ -401,6 +412,8 @@ export default function KeyInfoView({
             userID={userID}
             userRole={userRole}
             premiumUser={premiumUser}
+            canReconcileBudget={canReconcileBudget}
+            onBudgetReconciled={refreshBudgetAfterReconciliation}
           />
         </fieldset>
       </div>
