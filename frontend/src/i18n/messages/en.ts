@@ -4,7 +4,24 @@ import { pageDescriptionsEn } from "./pageDescriptions.en";
 import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
- hardBudget: {"details": "Budget reservations", "contract": "When this key or an ancestor has a budget, each attempt reserves the declared full input context plus the output limit (default: {cap} tokens). This can require more available balance than the final cost. Missing bounds or prices are rejected before forwarding. Stop new requests, wait for in-flight calls and drain pending billing before enabling a limit on an unlimited scope; existing calls cannot be retroactively reserved.", "pending": "Pending budget: ${amount}", "reconcile": "Submitted attempts with unknown usage keep their reservation without automatic expiry. Ask an administrator to reconcile the upstream bill before recovery.", "attempt": "${amount} · {state}", "states": {"reserved": "Reserved before sending", "submitted": "Submitted to upstream", "settling": "Awaiting ledger settlement", "uncertain": "Requires reconciliation"}, "insufficient": "Available budget cannot cover the declared input context and output limit.", "unsupported": "This model or request has no verified cost bound. Check the model context limit, supported output limit, and complete prices.", "unavailable": "Pending budget usage is unavailable. Retry after billing storage recovers."},
+  hardBudget: {
+    "detailsLoadFailed": "Unable to load key details and pending budget. Retry before editing this key.",
+    "retry": "Retry",
+    "details": "Budget reservations",
+    "contract": "When this key or an ancestor has a budget, each attempt reserves the declared full input context plus the output limit (default: {cap} tokens). This can require more available balance than the final cost. Missing bounds or prices are rejected before forwarding. Stop new requests, wait for in-flight calls and drain pending billing before enabling a limit on an unlimited scope; existing calls cannot be retroactively reserved.",
+    "pending": "Pending budget: ${amount}",
+    "reconcile": "Submitted attempts with unknown usage keep their reservation without automatic expiry. Ask an administrator to reconcile the upstream bill before recovery.",
+    "attempt": "${amount} · {state}",
+    "states": {
+      "reserved": "Reserved before sending",
+      "submitted": "Submitted to upstream",
+      "settling": "Awaiting ledger settlement",
+      "uncertain": "Requires reconciliation"
+    },
+    "insufficient": "Available budget cannot cover the declared input context and output limit.",
+    "unsupported": "This model or request has no verified cost bound. Check the model context limit, supported output limit, and complete prices.",
+    "unavailable": "Pending budget usage is unavailable. Retry after billing storage recovers."
+  },
   keyEditor: {
     expiredDurationRequired: "Expiration is required for expired keys",
     "apiOnly": "Model API key. Management operations require a signed-in session.",

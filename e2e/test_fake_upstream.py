@@ -24,6 +24,19 @@ class ArkUpstreamTest(unittest.TestCase):
             self.assertIn('"finish_reason": "stop"', text)
             self.assertIn("[DONE]", text)
 
+    def test_hard_budget_cumulative_usage(self):
+        """本地HTTP夹具首帧等价别名为零、末帧单一别名增长；验证合法累计与非流失败，tearDown清理服务。"""
+        body = {"model": "pending-browser-hard-budget-growth", "messages": [{"role": "user", "content": "Verify cumulative usage."}]}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/chat/completions", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            frames = [json.loads(line[6:]) for line in response.read().decode().splitlines() if line.startswith("data: {")]
+            self.assertEqual(frames[0]["usage"], {"prompt_tokens": 8, "input_tokens": 8, "completion_tokens": 0, "output_tokens": 0})
+            self.assertEqual(frames[-1]["usage"], {"prompt_tokens": 8, "completion_tokens": 2})
+            self.assertEqual(frames[0]["choices"][0]["delta"]["content"], "e2e-budget-growth")
+
     def test_monitor_tps_fixture(self):
         """前置真实本地上游；验证 TPS 夹具流式/同步用量一致、确有分帧间隔，非法协议返回 400；tearDown 关闭服务。"""
         import time

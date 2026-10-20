@@ -274,13 +274,17 @@ class Handler(BaseHTTPRequestHandler):
         model = req.get("model") or "gpt-4o-mini"
         if serve_stream_terminal(self, req):
             return
-        # 专属硬额度场景先发矛盾用量再发完整终态，验证后续好帧不能清除已观察到的不可信事实。
-        if str(model).startswith("pending-browser-hard-budget-") and req.get("messages", [{}])[-1].get("content") == "Return contradictory usage.":
+        # 专属硬额度场景分别验证同帧矛盾不能被后续好帧清除，以及跨帧正常累计不能因旧别名误判。
+        budget_prompt = req.get("messages", [{}])[-1].get("content") if req.get("messages") else None
+        if str(model).startswith("pending-browser-hard-budget-") and budget_prompt in ("Return contradictory usage.", "Verify cumulative usage."):
             if req.get("stream") is not True or "chat/completions" not in self.path:
-                self.send_error(400, "conflicting usage fixture requires chat streaming")
+                self.send_error(400, "budget usage fixture requires chat streaming")
                 return
+            conflict = budget_prompt == "Return contradictory usage."
+            initial_usage = {"prompt_tokens": 8, "input_tokens": 9 if conflict else 8, "completion_tokens": 0, "output_tokens": 0}
+            text = "e2e-budget-conflict" if conflict else "e2e-budget-growth"
             self._sse([
-                {"id": "budget-conflict", "choices": [{"index": 0, "delta": {"content": "e2e-budget-conflict"}}], "usage": {"prompt_tokens": 8, "input_tokens": 9, "completion_tokens": 0}},
+                {"id": "budget-conflict", "choices": [{"index": 0, "delta": {"content": text}}], "usage": initial_usage},
                 {"id": "budget-conflict", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 8, "completion_tokens": 2}},
                 "[DONE]",
             ])

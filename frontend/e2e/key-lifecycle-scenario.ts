@@ -32,7 +32,14 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
             input_cost_per_token: 0.000001,
             output_cost_per_token: 0.000002,
           },
-          model_info: { transport: "bypass_openai_chat", endpoint_types: ["chat"], pricing_source: "manual" },
+          model_info: {
+            transport: "bypass_openai_chat",
+            endpoint_types: ["chat"],
+            pricing_source: "manual",
+            max_input_tokens: 1024,
+            max_output_tokens: 8192,
+            supported_parameters: ["max_completion_tokens"],
+          },
         },
       });
       expect(configured.status(), await configured.text()).toBe(200);

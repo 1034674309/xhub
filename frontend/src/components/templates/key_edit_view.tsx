@@ -101,6 +101,8 @@ export function KeyEditView({
   }, [keyData, form]);
   useEffect(() => {
     let cancelled = false;
+    // 切换密钥/团队时立即清除旧目录，避免异步读取期间继续展示旧授权模型；成功后由请求结果更新。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAvailableModels([]);
     setModelsError(false);
     /** 读取团队或个人模型；无参数/返回，卸载后不写状态，失败保留既有选择供用户继续编辑。 */
@@ -185,15 +187,12 @@ export function KeyEditView({
                     value={modelsDisabled ? [] : value ?? []}
                     disabled={modelsDisabled}
                     placeholder={t("Select models")}
-                    onValueChange={(next) =>
-                      onChange(
-                        next.includes("all-team-models")
-                          ? ["all-team-models"]
-                          : next.includes("all-proxy-models")
-                            ? ["all-proxy-models"]
-                            : next,
-                      )
-                    }
+                    onValueChange={(next) => {
+                      // 全部团队/代理模型是互斥选择，优先保留团队范围，普通逐项选择保持原序。
+                      if (next.includes("all-team-models")) onChange(["all-team-models"]);
+                      else if (next.includes("all-proxy-models")) onChange(["all-proxy-models"]);
+                      else onChange(next);
+                    }}
                   />
                 )}
               </FormField>

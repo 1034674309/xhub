@@ -58,7 +58,10 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       const invoke = () =>
         page.request.post(GATEWAY + "/v1/chat/completions", {
           headers: { Authorization: "Bearer " + key.key },
-          data: { model, messages: [{ role: "user", content: "Verify strict budget recovery request " + ++requestSequence + "." }] },
+          data: {
+            model,
+            messages: [{ role: "user", content: "Verify strict budget recovery request " + ++requestSequence + "." }],
+          },
         });
       const refused = await invoke();
       expect(refused.status()).toBe(429);
@@ -85,6 +88,28 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
         page.getByText(pendingInfo.info.budget_reservations[0].reservation_id, { exact: true }),
       ).toBeVisible();
       await expect(page.getByText(tr("hardBudget.reconcile"))).toBeVisible();
+      // 仅中断本测试浏览器的详情读取，验证列表缓存不会把未知占用显示为零；恢复真实接口后点击重试回读原预占。
+      const detailRoute = /\/key\/info(?:\?|$)/;
+      await page.route(detailRoute, (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: { type: "quota_unavailable", message: "Budget storage temporarily unavailable" },
+          }),
+        }),
+      );
+      await page.reload();
+      await expect(page.getByRole("alert").filter({ hasText: tr("hardBudget.detailsLoadFailed") })).toBeVisible({
+        timeout: 20000,
+      });
+      await expect(page.getByText(translate(locale, "hardBudget.pending", { amount: 0 }))).toHaveCount(0);
+      await expect(page.getByRole("button", { name: tr("Save Changes"), exact: true })).toHaveCount(0);
+      await page.unroute(detailRoute);
+      await page.getByRole("button", { name: tr("hardBudget.retry"), exact: true }).click();
+      await expect(
+        page.getByText(pendingInfo.info.budget_reservations[0].reservation_id, { exact: true }),
+      ).toBeVisible();
       expect((await invoke()).status()).toBe(429);
       const recovered = await page.request.post(control + "/billing-pending/recover", { data: { model } });
       expect(recovered.status(), await recovered.text()).toBe(200);
@@ -92,16 +117,36 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByText(translate(locale, "hardBudget.pending", { amount: 0 }))).toBeVisible();
       expect((await invoke()).status()).toBe(200);
+      // 同一计量的跨帧累计允许更新；只有同帧别名矛盾才保留待核对占用。
+      const growing = await page.request.post(GATEWAY + "/v1/chat/completions", {
+        headers: { Authorization: "Bearer " + key.key },
+        data: { model, stream: true, messages: [{ role: "user", content: "Verify cumulative usage." }] },
+      });
+      expect(growing.status()).toBe(200);
+      expect(await growing.text()).toContain("e2e-budget-growth");
+      await expect
+        .poll(async () => {
+          const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+          return info.info.budget_pending;
+        })
+        .toBe(0);
+      const growthLog = await page.request.get(GATEWAY + "/spend/logs/ui/" + growing.headers()["x-litellm-call-id"], {
+        headers,
+      });
+      expect(growthLog.status()).toBe(200);
+      expect((await growthLog.json()).spend).toBeCloseTo(0.00012, 9);
       const uncertain = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key.key },
         data: { model, stream: true, messages: [{ role: "user", content: "Return contradictory usage." }] },
       });
       expect(uncertain.status()).toBe(200);
       expect(await uncertain.text()).toContain("e2e-budget-conflict");
-      await expect.poll(async () => {
-        const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
-        return info.info.budget_reservations?.[0]?.state;
-      }).toBe("uncertain");
+      await expect
+        .poll(async () => {
+          const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+          return info.info.budget_reservations?.[0]?.state;
+        })
+        .toBe("uncertain");
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByText(tr("hardBudget.reconcile"))).toBeVisible();
       await expect(page.getByRole("listitem").filter({ hasText: tr("hardBudget.states.uncertain") })).toBeVisible();
