@@ -2,6 +2,7 @@ package keys
 
 import (
 	"github.com/sunqirui1987/xhub/internal/iam"
+	"strings"
 	"testing"
 )
 
@@ -27,5 +28,20 @@ func TestKeyCapabilities(t *testing.T) {
 	out := Response(iam.Key{}, "", false)
 	if out["key_type"] != "llm_api" || out["auto_rotate"] != false || out["rotation_interval"] != nil {
 		t.Fatalf("回读没有明确支持能力: %v", out)
+	}
+}
+
+// TestRotationBody 验证轮换正文正常、空值与坏输入；纯内存 JSON，无持久化或清理。
+// 截断、数组、标量及尾随正文不能被当作空参数轮换，避免意外撤销旧客户端凭据。
+func TestRotationBody(t *testing.T) {
+	for _, raw := range []string{"", "  ", "null", "{}", `{"duration":"1h"}`} {
+		if _, err := readRotationBody(strings.NewReader(raw)); err != nil {
+			t.Fatalf("可选正文被拒绝: %q %v", raw, err)
+		}
+	}
+	for _, raw := range []string{`{"duration":`, "[]", `"1h"`, "42", "{}{}", "{} trailing"} {
+		if _, err := readRotationBody(strings.NewReader(raw)); err == nil {
+			t.Fatalf("坏正文未拒绝: %q", raw)
+		}
 	}
 }

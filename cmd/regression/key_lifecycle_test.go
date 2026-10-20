@@ -15,6 +15,13 @@ func TestKeyLifecycleSettingsContract(t *testing.T) {
 	h.setUserBudget(t, admin, firstString(h.ok(http.MethodGet, "/auth/me", admin, nil).json(), "user_id"), 100)
 	created := h.ok(http.MethodPost, "/key/generate", admin, map[string]any{"key_type": "llm_api", "key_alias": "lifecycle"}).json()
 	id, secret := firstString(created, "token_id"), firstString(created, "key")
+	for _, raw := range []string{`{"duration":`, "[]", "{} trailing"} {
+		got := h.doRaw(http.MethodPost, "/key/"+id+"/regenerate", admin, "application/json", raw)
+		if got.status != 400 {
+			t.Fatalf("坏轮换正文未拒绝: %s", got.describe())
+		}
+		h.ok(http.MethodGet, "/v1/models", secret, nil)
+	}
 	for _, fields := range []map[string]any{{"key_type": "management"}, {"key_type": "default"}, {"key_type": "read_only"}, {"auto_rotate": true, "rotation_interval": "30d"}, {"allowed_routes": []string{"management_routes"}}, {"grace_period": "60s"}, {"max_budget": -1}, {"duration": "invalid"}} {
 		for _, path := range []string{"/key/generate", "/key/update", "/key/" + id + "/regenerate"} {
 			fields["key"] = id

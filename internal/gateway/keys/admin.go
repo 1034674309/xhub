@@ -26,7 +26,11 @@ func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 	if p == nil {
 		return
 	}
-	body := readMap(r)
+	body, err := readRotationBody(r.Body)
+	if err != nil {
+		util.WriteError(w, 400, "invalid_request", "request body must be a valid JSON object")
+		return
+	}
 	// 先检查所有额度字段，批量更新不能因为非法输入清空固定限额。
 	if err := util.ValidateRateFields(body); err != nil {
 		util.WriteError(w, 400, "invalid_request", err.Error())

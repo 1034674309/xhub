@@ -35,6 +35,16 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       id = original.token_id;
       expect(original).toMatchObject({ key_type: "llm_api", auto_rotate: false, rotation_interval: null });
       await page.keyboard.press("Escape");
+      const invalidRotation = await page.request.post(GATEWAY + "/key/" + id + "/regenerate", {
+        headers: { ...headers, "Content-Type": "application/json" },
+        data: '{"duration":',
+      });
+      expect(invalidRotation.status()).toBe(400);
+      expect(
+        (
+          await page.request.get(GATEWAY + "/v1/models", { headers: { Authorization: "Bearer " + original.key } })
+        ).status(),
+      ).toBe(200);
       const body = { model: "gpt-4o-mini", messages: [{ role: "user", content: "Verify key lifecycle access." }] };
       const first = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + original.key },
