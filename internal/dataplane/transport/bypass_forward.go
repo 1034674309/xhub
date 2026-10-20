@@ -14,6 +14,7 @@ import (
 	dpdiagnostics "github.com/sunqirui1987/xhub/internal/dataplane/diagnostics"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
 	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // ForwardResponse 描述原生转发的一次 HTTP 结果，由 ForwardOfficial 返回给创建或查询执行器。
@@ -213,6 +214,10 @@ func copyBypassResponseHeaders(w http.ResponseWriter, header http.Header) {
 		if values := header.Values(k); len(values) > 0 {
 			w.Header()[k] = append([]string(nil), values...)
 		}
+	}
+	// 非2xx的原生SSE也可能携带错误事件；全部SSE在发送状态前禁止压缩缓冲，JSON不受影响。
+	if strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "text/event-stream") {
+		util.PreventSSETransform(w.Header())
 	}
 }
 

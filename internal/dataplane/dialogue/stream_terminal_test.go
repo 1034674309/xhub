@@ -67,6 +67,9 @@ func TestSemanticTerminalStopsReading(t *testing.T) {
 							t.Errorf("truncation lost at commit: %s", r.Stop)
 						}
 					})
+					if !strings.Contains(w.Header().Get("Cache-Control"), "no-transform") {
+						t.Fatal("SSE终态链缺少代理防缓冲响应头")
+					}
 					// 原生Chat在外层执行器结算后提交归属，其余路径在终态可见前提交。
 					expectedCommits := 1
 					if source == "openai-chat" && target == source {

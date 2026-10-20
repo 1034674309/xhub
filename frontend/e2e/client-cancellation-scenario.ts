@@ -92,6 +92,8 @@ export function registerClientScenario(locale: Locale) {
         await page.getByRole("button", { name: tr("Send message") }).click();
         const response = await pending;
         expect(response.status()).toBe(200);
+        expect(response.headers()["cache-control"]).toContain("no-transform");
+        expect(response.headers()["content-encoding"]).toBeUndefined();
         calls.push(response.headers()["x-litellm-call-id"]);
         await expect(page.getByText("CANCEL_PARTIAL", { exact: true }).last()).toBeVisible();
         await page.getByRole("button", { name: tr("Stop request"), exact: true }).click();

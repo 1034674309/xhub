@@ -122,6 +122,10 @@ func TestClientCancellationDoesNotCoolDeployment(t *testing.T) {
 								t.Fatal(o.err)
 							}
 							buffer := make([]byte, 1)
+							if !strings.Contains(o.response.Header.Get("Cache-Control"), "no-transform") {
+								cancel()
+								t.Fatal("真实标准/bypass流缺少代理防缓冲头")
+							}
 							if _, err := o.response.Body.Read(buffer); err != nil {
 								cancel()
 								t.Fatal(err)

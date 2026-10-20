@@ -11,6 +11,7 @@ import (
 
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // PipeNativeDialogue 在同协议时保留完整 SSE 数据，参数与 PipeDialogue 相同；返回写出、用量、首帧耗时、日志捕获及错误。
@@ -32,7 +33,7 @@ func PipePortableResponses(w http.ResponseWriter, resp *http.Response, start tim
 func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, portable bool, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
+	util.PreventSSETransform(w.Header())
 	state := dialogueStream{observeOnly: true, protocol: protocol, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}}
 	var nativeMessages nativeMessagesStream
 	var capture bytes.Buffer

@@ -15,6 +15,7 @@ import (
 
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // dialogueStream 是单次协议流转换的状态机，由 PipeDialogue 创建并驱动。
@@ -844,7 +845,7 @@ func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start tim
 	}
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
+	util.PreventSSETransform(w.Header())
 	s := dialogueStream{writer: w, protocol: caller, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}, toolBindings: bindings}
 	if upstream == "openai-responses" && caller == "anthropic-messages" {
 		s.responsesMessages, s.responsePrelude = true, true

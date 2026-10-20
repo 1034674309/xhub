@@ -94,6 +94,7 @@ func PipeStream(w http.ResponseWriter, resp *http.Response, start time.Time) (bo
 			if !wrote {
 				ttft = time.Since(start)
 				w.Header().Set("Content-Type", "text/event-stream")
+				util.PreventSSETransform(w.Header())
 				w.WriteHeader(resp.StatusCode)
 				wrote = true
 			}
