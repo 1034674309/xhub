@@ -4,16 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sunqirui1987/xhub/internal/config"
 )
 
 // TestImagePlaygroundParameters 验证调试台图片正文经真实普通/Bypass网关到上游仍保留尺寸、数量及扩展字段。
-// 参数 t 为测试上下文；前置独立 PostgreSQL、本地严格图片渠道；覆盖400透传、模型替换、鉴权及日志用量。
+// 参数 t 为测试上下文；前置独立 PostgreSQL、本地严格图片渠道和无限额普通 Key；覆盖400透传、模型替换、鉴权及日志用量。
+// 有限额会话的图片费用无法构造可信上界，必须在外发前明确拒绝；不能把该拒绝当作非法尺寸透传已通过。
 // 返回无；本地服务 defer 关闭，账单与部署随 harness 私有 schema 清理，不使用外部凭据。
 func TestImagePlaygroundParameters(t *testing.T) {
+	var calls atomic.Int32
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		var doc map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
 			t.Error(err)
@@ -44,20 +49,22 @@ func TestImagePlaygroundParameters(t *testing.T) {
 				endpointType = "bypass:openai-images"
 			}
 			h := newHarness(t, config.ModelEntry{ModelName: "image-playground", LiteLLMParams: map[string]any{"model": "real-image", "custom_llm_provider": "openai", "api_base": up.URL, "api_key": "local-key", "input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002}, ModelInfo: map[string]any{"transport": tc.transport, "endpoint_types": []string{endpointType}}})
-			admin := h.personalBillingSession()
+			admin := h.adminSession()
+			owner := h.openScope(t, admin, "image-unlimited")
 			body := map[string]any{"model": "image-playground", "prompt": "hello", "n": 1, "seed": 42}
 			if denied := h.do("POST", tc.path, "", body); denied.status != 401 {
 				t.Fatalf("缺失网关鉴权未拒绝: %s", denied.describe())
 			}
 			for _, size := range []any{nil, "", "2048x2048"} {
 				body["size"] = size
-				failed := h.do("POST", tc.path, admin, body)
-				if failed.status != 400 {
+				before := calls.Load()
+				failed := h.do("POST", tc.path, owner.key, body)
+				if failed.status != 400 || !strings.Contains(failed.text(), "image size is not available") || calls.Load() != before+1 {
 					t.Fatalf("渠道非法尺寸错误未保留: %s", failed.describe())
 				}
 			}
 			body["size"] = "1024x1024"
-			success := h.ok("POST", tc.path, admin, body)
+			success := h.ok("POST", tc.path, owner.key, body)
 			if len(success.json()["data"].([]any)) != 1 {
 				t.Fatal("图片响应契约丢失")
 			}
@@ -66,6 +73,13 @@ func TestImagePlaygroundParameters(t *testing.T) {
 			log := h.ok("GET", "/spend/logs/ui/"+success.header("x-litellm-call-id"), admin, nil).json()
 			if log["model"] != "image-playground" || !nearlyEqual(numberOrZero(log["spend"]), 0.000012) {
 				t.Fatalf("图片日志或计量错误: %+v", log)
+			}
+			// 只为隔离管理员账户启用有限额；普通用户 Key 的图片协议验证与预算拒绝是两个独立契约。
+			limited := h.personalBillingSession()
+			before := calls.Load()
+			denied := h.do("POST", tc.path, limited, body)
+			if denied.status != 400 || !strings.Contains(denied.text(), "unsupported_budget") || calls.Load() != before {
+				t.Fatalf("有限额图片应在调用上游前明确拒绝，不能按文字费用估计: %s", denied.describe())
 			}
 		})
 	}

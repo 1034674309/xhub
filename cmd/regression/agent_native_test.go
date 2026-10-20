@@ -342,7 +342,7 @@ func TestNativeRefusalAndLifecycleContract(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	dep := chatDeployment("native-refusal")
 	dep.LiteLLMParams["api_base"] = upstream.URL + "/v1"
-	dep.ModelInfo = map[string]any{"id": "refusal-dep", "transport": "bypass_openai_responses", "endpoint_types": []string{"responses"}}
+	dep.ModelInfo = map[string]any{"max_input_tokens": 1024, "id": "refusal-dep", "transport": "bypass_openai_responses", "endpoint_types": []string{"responses"}}
 	h := newHarness(t, dep)
 	admin := h.personalBillingSession()
 	for _, stream := range []bool{false, true} {

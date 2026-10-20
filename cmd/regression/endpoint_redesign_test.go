@@ -20,7 +20,9 @@ func TestEndpointAvailableContract(t *testing.T) {
 	invalid := config.ModelEntry{ModelName: "unbound", LiteLLMParams: map[string]any{"model": "old"}, ModelInfo: map[string]any{"mode": "chat"}}
 	mixed := invalid
 	mixed.ModelName = "mixed"
-	valid := config.ModelEntry{ModelName: "mixed", LiteLLMParams: map[string]any{"model": "real"}, ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat", "responses"}}}
+	valid := chatDeployment("mixed")
+	// 本地文字上游提供已知上限和费率；有效协议声明不能代替有限额会话所需的计费能力。
+	valid.ModelInfo["endpoint_types"] = []string{"chat", "responses"}
 	h := newHarness(t, invalid, mixed, valid)
 	admin := h.personalBillingSession()
 	rows := listField(h.ok("GET", "/model/available", admin, nil).json(), "data")
