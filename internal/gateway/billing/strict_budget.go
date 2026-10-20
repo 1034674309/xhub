@@ -672,6 +672,10 @@ func budgetRequest(body map[string]any, protocol string) (string, error) {
 			if err := budgetContent(item["content"], &ttl); err != nil {
 				return "", err
 			}
+		case "web_search_call":
+			if protocol != "openai-responses" || !llmdialogue.ValidWebSearchHistory(item) {
+				return "", budgetFailure("invalid_request", "invalid web search history item")
+			}
 		case "reasoning", "function_call", "custom_tool_call":
 		case "function_call_output", "custom_tool_call_output":
 			if err := budgetContent(item["output"], &ttl); err != nil {

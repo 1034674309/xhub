@@ -115,3 +115,41 @@ func TestBudgetPriceSnapshot(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchTokenOnlyLifecycle 验证搜索尝试无需持久预占、保留正文和明确软额度头，结束仅清理内存。
+// 前置私有数据库中的有限额用户及合成请求；无上游依赖，同时检查重试不遗留旧硬额度响应头，夹具自动清理。
+func TestSearchTokenOnlyLifecycle(t *testing.T) {
+	cfg, st, db := testGatewayStores(t)
+	s := New(cfg, st, db)
+	limit := 1.0
+	user, err := db.CreateUser(t.Context(), iam.Actor{}, iam.UserInput{Email: "soft-lifecycle@example.com", Password: "password123", MaxBudget: &limit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &auth.Principal{UserID: user.ID}
+	w := httptest.NewRecorder()
+	w.Header().Set("X-XHub-Budget-Reservation-Id", "old-attempt")
+	r := httptest.NewRequest("POST", "/v1/responses", nil)
+	raw := []byte(`{"input":"Hello","tools":[{"type":"web_search_preview"}]}`)
+	body, ok := s.PrepareBudgetAttempt(w, r, p, "search", config.ModelEntry{}, "openai-responses", raw, time.Now())
+	if !ok || string(body) != string(raw) || !s.searchTokenOnlyBudget("search") {
+		t.Fatal("搜索未进入保持正文的软预算")
+	}
+	if w.Header().Get("X-XHub-Budget-Reservation-Id") != "" || w.Header().Get("X-XHub-Budget-State") != "token_only" {
+		t.Fatal("搜索预算头有旧状态")
+	}
+	if !s.MarkBudgetAttemptSubmitted(w, r, "search") {
+		t.Fatal("搜索被无效预占状态阻断")
+	}
+	if _, active, _, _, _ := s.budgetCharge("search", nil, 200, false); active {
+		t.Fatal("搜索不得使用硬预算核费")
+	}
+	s.finishBudgetCall("search")
+	if s.searchTokenOnlyBudget("search") {
+		t.Fatal("搜索尝试未清理")
+	}
+	w.Header().Set("X-XHub-Budget-State", "token_only")
+	if _, ok := s.PrepareBudgetAttempt(w, r, p, "rejected", config.ModelEntry{}, "openai-responses", []byte(`{"tools":[{"type":"web_search"},{"type":"code_interpreter"}]}`), time.Now()); ok || w.Header().Get("X-XHub-Budget-State") != "" {
+		t.Fatal("失败重试遗留旧token-only状态")
+	}
+}
