@@ -5,7 +5,7 @@ import { translate } from "../src/i18n/translate";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto } from "./helpers";
 
 /** 注册双语硬额度闭环；前置隔离无 Redis 网关、生产构建和本地模型，UI 创建/编辑/删除 Key。
- * API 实际调用验证默认 cap、余额不足、PG pending 保留和恢复、缓存别名冲突，页面显示可核对占用；finally 恢复故障并删除专属资源。 */
+ * API 实际调用验证默认 cap、余额不足、PG pending 保留和恢复、缓存别名冲突及正常长度终态结算，页面显示可核对占用；finally 恢复故障并删除专属资源。 */
 export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
   test("hard budget reserves and recovers through key management " + locale, async ({ page }) => {
     test.setTimeout(120_000);
@@ -20,6 +20,7 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       alias = "预算-budget-" + locale;
     let id = "",
       modelID = "",
+      lengthModelID = "",
       failed = false;
     try {
       const createdModel = await page.request.post(GATEWAY + "/model/new", {
@@ -172,6 +173,64 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       );
       expect(projectedLog.status()).toBe(200);
       expect((await projectedLog.json()).spend).toBeCloseTo(0.00013, 9);
+      // 原生 Responses 正常达到输出上限仍按完整用量结算；双语页面回读零占用，JSON/SSE 原始 incomplete 不变。
+      const lengthModel = "pending-browser-hard-budget-length-" + locale.toLowerCase() + "-" + Date.now();
+      const lengthCreated = await page.request.post(GATEWAY + "/model/new", {
+        headers,
+        data: {
+          model_name: lengthModel,
+          litellm_params: {
+            model: lengthModel,
+            custom_llm_provider: "openai",
+            api_base: UPSTREAM,
+            api_key: "sk-fake",
+            input_cost_per_token: 0.00001,
+            output_cost_per_token: 0.00002,
+          },
+          model_info: {
+            transport: "bypass_openai_responses",
+            pricing_source: "manual",
+            endpoint_types: ["responses", "bypass:openai-responses"],
+            max_input_tokens: 1024,
+            max_output_tokens: 8192,
+            supported_parameters: ["max_output_tokens"],
+          },
+        },
+      });
+      expect(lengthCreated.status(), await lengthCreated.text()).toBe(200);
+      lengthModelID = (await lengthCreated.json()).model_info.id;
+      for (const stream of [false, true]) {
+        const limited = await page.request.post(GATEWAY + "/bypass/openai/v1/responses", {
+          headers: { Authorization: "Bearer " + key.key },
+          data: { model: lengthModel, input: "Verify normal output limit.", max_output_tokens: 8, stream },
+        });
+        expect(limited.status(), await limited.text()).toBe(200);
+        const raw = await limited.text();
+        const result = stream
+          ? JSON.parse(
+              raw
+                .split("\n")
+                .find((line) => line.startsWith("data: "))!
+                .slice(6),
+            ).response
+          : JSON.parse(raw);
+        expect(result.status).toBe("incomplete");
+        expect(result.incomplete_details.reason).toBe("max_output_tokens");
+        expect(result.usage).toEqual({ input_tokens: 8, output_tokens: 8 });
+        const limitedLog = await page.request.get(
+          GATEWAY + "/spend/logs/ui/" + limited.headers()["x-litellm-call-id"],
+          { headers },
+        );
+        expect(limitedLog.status()).toBe(200);
+        const bill = await limitedLog.json();
+        expect(bill.status).toBe("success");
+        expect(bill.spend).toBeCloseTo(0.00024, 9);
+        const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+        expect(info.info.budget_pending).toBe(0);
+        expect(info.info.budget_reservations ?? []).toHaveLength(0);
+      }
+      await stableGoto(page, "/api-keys?key=" + id);
+      await expect(page.getByText(translate(locale, "hardBudget.pending", { amount: 0 }))).toBeVisible();
       const uncertain = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key.key },
         data: { model, stream: true, messages: [{ role: "user", content: "Return contradictory usage." }] },
@@ -237,6 +296,10 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
         expect((await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [id] } })).status()).toBe(
           200,
         );
+      if (lengthModelID)
+        expect(
+          (await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: lengthModelID } })).status(),
+        ).toBe(200);
       if (modelID)
         expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: modelID } })).status()).toBe(
           200,

@@ -274,6 +274,17 @@ class Handler(BaseHTTPRequestHandler):
         model = req.get("model") or "gpt-4o-mini"
         if serve_stream_terminal(self, req):
             return
+        # 正常达到输出上限仍有可靠用量；原生 JSON/SSE 保留 incomplete，浏览器验证实际费用与释放预占。
+        if str(model).startswith("pending-browser-hard-budget-length-"):
+            if not self.path.endswith("/responses") or req.get("max_output_tokens") != 8:
+                self.send_error(400, "length fixture requires Responses and cap 8")
+                return
+            result = {"id": "resp_budget_length", "object": "response", "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}, "output": [{"id": "msg_budget_length", "type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "e2e-budget-length"}]}], "usage": {"input_tokens": 8, "output_tokens": 8}}
+            if req.get("stream"):
+                self._sse([{"type": "response.incomplete", "response": result}])
+            else:
+                self._json(result)
+            return
         # 专属硬额度场景分别验证总量/缓存同帧矛盾不能被后续好帧清除，以及跨帧正常累计不能因旧别名误判。
         budget_prompt = req.get("messages", [{}])[-1].get("content") if req.get("messages") else None
         if str(model).startswith("pending-browser-hard-budget-") and budget_prompt in ("Return contradictory usage.", "Verify cumulative usage.", "Return contradictory cache write usage.", "Return contradictory cache read usage.", "Verify cumulative cache usage.", "Verify cache projection."):
