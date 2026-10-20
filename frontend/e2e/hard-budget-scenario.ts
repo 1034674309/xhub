@@ -5,7 +5,7 @@ import { translate } from "../src/i18n/translate";
 import { GATEWAY, UPSTREAM, loginAdmin, sessionBearer, stableGoto } from "./helpers";
 
 /** 注册双语硬额度闭环；前置隔离无 Redis 网关、生产构建和本地模型，UI 创建/编辑/删除 Key。
- * API 实际调用验证默认 cap、余额不足、PG pending 保留和恢复，页面显示可核对占用；finally 恢复故障并删除专属资源。 */
+ * API 实际调用验证默认 cap、余额不足、PG pending 保留和恢复、缓存别名冲突，页面显示可核对占用；finally 恢复故障并删除专属资源。 */
 export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
   test("hard budget reserves and recovers through key management " + locale, async ({ page }) => {
     test.setTimeout(120_000);
@@ -33,11 +33,13 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
             api_key: "sk-fake",
             input_cost_per_token: 0.00001,
             output_cost_per_token: 0.00002,
+            cache_read_input_token_cost: 0.000005,
+            cache_creation_input_token_cost: 0.00001,
           },
           model_info: {
             transport: "bypass_openai_chat",
             pricing_source: "manual",
-            endpoint_types: ["chat"],
+            endpoint_types: ["chat", "messages"],
             max_input_tokens: 1024,
             max_output_tokens: 8192,
             supported_parameters: ["max_tokens"],
@@ -68,7 +70,7 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       expect((await refused.json()).error.type).toBe("budget_reservation_exceeded");
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByText(translate(locale, "hardBudget.contract", { cap: 4096 }))).toBeVisible();
-      await page.getByLabel(tr("Max Budget (USD)"), { exact: true }).fill("0.1");
+      await page.getByLabel(tr("Max Budget (USD)"), { exact: true }).fill("0.12");
       const updated = page.waitForResponse((r) => r.url().includes("/key/update") && r.request().method() === "POST");
       await page.getByRole("button", { name: tr("Save Changes"), exact: true }).click();
       expect((await updated).status()).toBe(200);
@@ -80,7 +82,7 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       expect(paid.headers()["x-xhub-max-output-tokens"]).toBe("4096");
       expect(paid.headers()["x-xhub-budget-input-bound"]).toBe("1024");
       const pendingInfo = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
-      expect(pendingInfo.info.budget_pending).toBeCloseTo(0.09216, 9);
+      expect(pendingInfo.info.budget_pending).toBeCloseTo(0.1024, 9);
       expect(pendingInfo.info.budget_reservations).toHaveLength(1);
       expect(pendingInfo.info.budget_reservations[0].state).toBe("settling");
       await stableGoto(page, "/api-keys?key=" + id);
@@ -135,6 +137,41 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       });
       expect(growthLog.status()).toBe(200);
       expect((await growthLog.json()).spend).toBeCloseTo(0.00012, 9);
+      // 缓存计量也允许跨帧累计，清理旧嵌套别名后应精确计费并释放本次预占。
+      const cacheGrowing = await page.request.post(GATEWAY + "/v1/chat/completions", {
+        headers: { Authorization: "Bearer " + key.key },
+        data: { model, stream: true, messages: [{ role: "user", content: "Verify cumulative cache usage." }] },
+      });
+      expect(cacheGrowing.status()).toBe(200);
+      expect(await cacheGrowing.text()).toContain("e2e-budget-cache-growth");
+      await expect
+        .poll(async () => {
+          const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+          return info.info.budget_pending;
+        })
+        .toBe(0);
+      const cacheGrowthLog = await page.request.get(
+        GATEWAY + "/spend/logs/ui/" + cacheGrowing.headers()["x-litellm-call-id"],
+        { headers },
+      );
+      expect(cacheGrowthLog.status()).toBe(200);
+      expect((await cacheGrowthLog.json()).spend).toBeCloseTo(0.00013, 9);
+      // 浏览器经实际 Messages 入口调用 Chat 上游；输出缓存输入6+2与账单必须和原始Chat输入总量8一致。
+      const projected = await page.request.post(GATEWAY + "/v1/messages", {
+        headers: { Authorization: "Bearer " + key.key },
+        data: { model, messages: [{ role: "user", content: "Verify cache projection." }] },
+      });
+      expect(projected.status(), await projected.text()).toBe(200);
+      const projectedBody = await projected.json();
+      expect(projectedBody.content[0].text).toBe("e2e-budget-cache-projection");
+      expect(projectedBody.usage.input_tokens).toBe(6);
+      expect(projectedBody.usage.cache_read_input_tokens).toBe(2);
+      const projectedLog = await page.request.get(
+        GATEWAY + "/spend/logs/ui/" + projected.headers()["x-litellm-call-id"],
+        { headers },
+      );
+      expect(projectedLog.status()).toBe(200);
+      expect((await projectedLog.json()).spend).toBeCloseTo(0.00013, 9);
       const uncertain = await page.request.post(GATEWAY + "/v1/chat/completions", {
         headers: { Authorization: "Bearer " + key.key },
         data: { model, stream: true, messages: [{ role: "user", content: "Return contradictory usage." }] },
@@ -150,6 +187,38 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByText(tr("hardBudget.reconcile"))).toBeVisible();
       await expect(page.getByRole("listitem").filter({ hasText: tr("hardBudget.states.uncertain") })).toBeVisible();
+      expect((await invoke()).status()).toBe(429);
+      // 管理员追加余额只允许新预占，不清除原有未知费用；两个语言分别覆盖缓存写入和嵌套读取矛盾。
+      await page.getByLabel(tr("Max Budget (USD)"), { exact: true }).fill("0.23");
+      const increased = page.waitForResponse((r) => r.url().includes("/key/update") && r.request().method() === "POST");
+      await page.getByRole("button", { name: tr("Save Changes"), exact: true }).click();
+      expect((await increased).status()).toBe(200);
+      const cacheUncertain = await page.request.post(GATEWAY + "/v1/chat/completions", {
+        headers: { Authorization: "Bearer " + key.key },
+        data: {
+          model,
+          stream: true,
+          messages: [
+            {
+              role: "user",
+              content:
+                locale === "en" ? "Return contradictory cache write usage." : "Return contradictory cache read usage.",
+            },
+          ],
+        },
+      });
+      expect(cacheUncertain.status()).toBe(200);
+      expect(await cacheUncertain.text()).toContain("e2e-budget-cache-conflict");
+      await expect
+        .poll(async () => {
+          const info = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+          return info.info.budget_reservations?.filter((hold: { state: string }) => hold.state === "uncertain").length;
+        })
+        .toBe(2);
+      const cacheInfo = await (await page.request.get(GATEWAY + "/key/info?key=" + id, { headers })).json();
+      expect(cacheInfo.info.budget_pending).toBeCloseTo(0.2048, 9);
+      await stableGoto(page, "/api-keys?key=" + id);
+      await expect(page.getByRole("listitem").filter({ hasText: tr("hardBudget.states.uncertain") })).toHaveCount(2);
       expect((await invoke()).status()).toBe(429);
       await page.getByRole("button", { name: tr("More key actions"), exact: true }).click();
       await page.getByRole("menuitem", { name: tr("Delete Key"), exact: true }).click();

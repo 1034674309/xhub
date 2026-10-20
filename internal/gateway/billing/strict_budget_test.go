@@ -467,7 +467,7 @@ func TestStrictBudgetCatalogAndPriceSnapshot(t *testing.T) {
 		wantError bool
 	}{
 		{name: "no conditional rules"},
-		{name: "single covering range", rules: []any{map[string]any{"input_range": []int{0, 100}, "output_range": []int{0, 8192}}}},
+		{name: "single covering range", rules: []any{map[string]any{"input_range": []int{0, 100}, "output_range": []int{0, 8192}, "details_v2": map[string]any{"ncache": map[string]any{"unit_name": "token", "unit_size": 1, "unit_price_usd": 1e-6}, "output": map[string]any{"unit_name": "token", "unit_size": 1, "unit_price_usd": 2e-6}}}}},
 		{name: "tiered", rules: []any{map[string]any{}, map[string]any{}}, wantError: true},
 		{name: "short input range", rules: []any{map[string]any{"input_range": []int{0, 99}}}, wantError: true},
 		{name: "short output range", rules: []any{map[string]any{"output_range": []int{0, 2}}}, wantError: true},

@@ -12,7 +12,7 @@ A budgeted request without an output limit defaults to **4096 tokens**, reduced 
 | Messages | `max_tokens` |
 | Chat Completions | A trusted declaration of `max_completion_tokens`, or supported `max_tokens` |
 
-When Chat supports both fields, XHub uses `max_completion_tokens`, which includes hidden reasoning. A deployment declaring only legacy `max_tokens` cannot run an explicit reasoning request under strict budgets. Messages `thinking.budget_tokens` must be below the total output cap. Reaching the cap can produce an incomplete or length-limited result; clients must handle that outcome.
+When Chat supports both fields, XHub uses `max_completion_tokens`, which includes hidden reasoning. A deployment declaring only legacy `max_tokens` rejects explicit reasoning by default. When the supplier explicitly guarantees that this field includes hidden reasoning, an administrator may set boolean `model_info.max_tokens_includes_reasoning: true` and a nonempty `model_info.max_tokens_semantics_source` documentation reference. A parameter name, provider name, or one successful response does not establish that semantic contract; string `"true"` is not accepted. Messages `thinking.budget_tokens` must be below the total output cap. Reaching the cap can produce an incomplete or length-limited result; clients must handle that outcome.
 
 Input is reserved against the **entire trusted input window**, without estimating tokens from character counts. Even a short prompt may therefore need a substantial available balance. A reservation is not recorded spend. Complete, reliable measured usage is charged at the frozen rates for that attempt, and the remaining reservation is released in the same transaction.
 
@@ -42,9 +42,17 @@ The following is a **fictional configuration example**, not actual GPT, DeepSeek
 }
 ```
 
-Without cache writes, this example reserves at least `32768 × 0.000001 + 4096 × 0.000002 = 0.04096 USD` for a 4096-token output cap. This is not the final bill. Flat token prices are USD per token. Manual pricing must be complete; missing fields are not silently filled from the catalog. Cache reads, writes, and one-hour writes need their respective rates. Unknown tiers, conditions, or billing dimensions cannot be treated as free.
+Without cache writes, this example reserves at least `32768 × 0.000001 + 4096 × 0.000002 = 0.04096 USD` for a 4096-token output cap. This is not the final bill. Flat token prices are USD per token. Manual pricing must be complete; missing fields are not silently filled from the catalog. In catalog mode, null price fields mean a cleared override and use the complete catalog contract; non-null invalid overrides still reject. Cache reads, writes, and one-hour writes need their respective rates. Incomplete or inconsistent tiers, unsupported conditions, and unknown billing dimensions cannot be treated as free.
 
 This version supports bounded text generation and client tool round trips. Multimodal requests, server tools/search, remote history references, unknown billing dimensions, and uncertified fields are explicitly rejected under strict budgets. Requests with no limit anywhere in their hierarchy keep the existing compatibility path. Removing limits is not evidence that hard budgets work.
+
+## Context tier pricing
+
+The catalog's `pricing_rules_v2` contains the original tier contract. Legacy flat `rates` / `input_cost_per_token` can be derived from only the first tier and do not describe the entire context window. XHub freezes all reachable tiers, their original input/output ranges, and explicit USD prices when an attempt starts. Reservation uses the worst reachable rate for each billing dimension; settlement selects a frozen tier from measured total input and output. Separate cache reads and writes count toward input context, so a cache hit does not turn a long context into a short-context tier. Catalog changes do not change the price of an attempt already sent upstream.
+
+Tiers must cover the declared input window and output cap completely, without gaps or overlapping interiors. Every price needs an explicit `unit_price_usd`, positive integer `unit_size`, and matching `unit_name`. Explicit zero USD is valid; missing USD is not zero, and a displayed CNY price is never converted using a guessed exchange rate. Conditional prices, unknown billing dimensions, and mixed cache TTLs remain unsupported.
+
+The current feed does not define which adjacent range owns a shared threshold. For example, measured input exactly `272000` matches both `[0, 272000]` and `[272000, 99999999]`. Reservation covers both possibilities. Settlement is safe when the complete rates agree; otherwise XHub retains the reservation as `uncertain` with reason `ambiguous catalog pricing boundary`, without claiming a reliable charge. An administrator must reconcile this against an explicit supplier threshold contract. Do not reduce the declared input window or copy first-tier rates into manual pricing to bypass verification.
 
 ## Errors and unresolved reservations
 

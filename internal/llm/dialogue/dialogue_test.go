@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/sunqirui1987/xhub/internal/catalog"
 )
 
 // TestDialogueProtocolMatrix 验证五个入口到五种上游的文本、工具定义、调用和结果往返。
@@ -74,7 +76,8 @@ func TestDialogueRejectsUnsupported(t *testing.T) {
 }
 
 // TestDialogueResultMatrix 验证回复在五种协议间保持工具、结束原因与实测用量。
-// 前置：含工具回复及缓存 token；结果：二十五种组合等价，缺失用量禁止计价；无需外部清理。
+// 前置：含工具回复及缓存 token；结果：二十五种组合的计费事实等价，缺失用量禁止计价；无需外部清理。
+// Messages 的 input_tokens 不含独立缓存，故核对规范化计费总量，不能要求协议原始 total_tokens 一律相等。
 func TestDialogueResultMatrix(t *testing.T) {
 	protocols := []string{"openai-chat", "openai-responses", "anthropic-messages", "gemini", "vertex"}
 	original := DialogueResult{ID: "r_1", Text: "正在查询", Stop: "tool_calls", Calls: []Turn{{ID: "call_1", Name: "weather", Arguments: "{}"}}, Usage: map[string]any{"prompt_tokens": float64(10), "completion_tokens": float64(3), "prompt_tokens_details": map[string]any{"cached_tokens": float64(2)}}}
@@ -97,7 +100,7 @@ func TestDialogueResultMatrix(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if result.Text != original.Text || !reflect.DeepEqual(result.Calls, original.Calls) || result.Stop != "tool_calls" || result.Usage["total_tokens"] != float64(13) {
+				if result.Text != original.Text || !reflect.DeepEqual(result.Calls, original.Calls) || result.Stop != "tool_calls" || catalog.NormalizeUsage(result.Usage) != catalog.NormalizeUsage(original.Usage) {
 					t.Fatalf("回复事实改变: %#v", result)
 				}
 			})

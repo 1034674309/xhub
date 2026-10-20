@@ -1,0 +1,179 @@
+[
+  {
+    "id": "anthropic/claude-sonnet-5.5",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 128000,
+    "pricing_rules_v2": [
+      {
+        "details": {},
+        "details_v2": {
+          "c_1h_cache": {
+            "name": "1h缓存创建",
+            "unit_name": "token",
+            "unit_price": 0.0276,
+            "unit_price_usd": 0.004,
+            "unit_size": 1000
+          },
+          "c_cache": {
+            "name": "缓存创建",
+            "unit_name": "token",
+            "unit_price": 0.01725,
+            "unit_price_usd": 0.0025,
+            "unit_size": 1000
+          },
+          "cache": {
+            "name": "缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.00138,
+            "unit_price_usd": 0.0002,
+            "unit_size": 1000
+          },
+          "ncache": {
+            "name": "非缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.0138,
+            "unit_price_usd": 0.002,
+            "unit_size": 1000
+          },
+          "output": {
+            "name": "输出",
+            "unit_name": "token",
+            "unit_price": 0.069,
+            "unit_price_usd": 0.01,
+            "unit_size": 1000
+          },
+          "web_search_req": {
+            "name": "联网搜索数",
+            "unit_name": "time",
+            "unit_price": 0.069,
+            "unit_price_usd": 0.01,
+            "unit_size": 1
+          }
+        },
+        "input_item_type": "",
+        "input_range": [
+          0,
+          99999999
+        ],
+        "item_order": [
+          "output",
+          "cache",
+          "c_cache",
+          "c_1h_cache",
+          "ncache",
+          "web_search_req"
+        ],
+        "output_item_type": "",
+        "output_range": [
+          0,
+          99999999
+        ]
+      }
+    ]
+  },
+  {
+    "id": "openai/gpt-6-astra",
+    "max_input_tokens": 1050000,
+    "max_output_tokens": 128000,
+    "pricing_rules_v2": [
+      {
+        "details": {},
+        "details_v2": {
+          "c_cache": {
+            "name": "缓存创建",
+            "unit_name": "token",
+            "unit_price": 0.08625,
+            "unit_price_usd": 0.0125,
+            "unit_size": 1000
+          },
+          "cache": {
+            "name": "缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.0069,
+            "unit_price_usd": 0.001,
+            "unit_size": 1000
+          },
+          "ncache": {
+            "name": "非缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.069,
+            "unit_price_usd": 0.01,
+            "unit_size": 1000
+          },
+          "output": {
+            "name": "输出",
+            "unit_name": "token",
+            "unit_price": 0.345,
+            "unit_price_usd": 0.05,
+            "unit_size": 1000
+          }
+        },
+        "input_item_type": "",
+        "input_range": [
+          0,
+          272000
+        ],
+        "item_order": [
+          "ncache",
+          "cache",
+          "c_cache",
+          "output"
+        ],
+        "output_item_type": "",
+        "output_range": [
+          0,
+          99999999
+        ]
+      },
+      {
+        "details": {},
+        "details_v2": {
+          "c_cache": {
+            "name": "缓存创建",
+            "unit_name": "token",
+            "unit_price": 0.1725,
+            "unit_price_usd": 0.025,
+            "unit_size": 1000
+          },
+          "cache": {
+            "name": "缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.0138,
+            "unit_price_usd": 0.002,
+            "unit_size": 1000
+          },
+          "ncache": {
+            "name": "非缓存输入",
+            "unit_name": "token",
+            "unit_price": 0.138,
+            "unit_price_usd": 0.02,
+            "unit_size": 1000
+          },
+          "output": {
+            "name": "输出",
+            "unit_name": "token",
+            "unit_price": 0.5175,
+            "unit_price_usd": 0.075,
+            "unit_size": 1000
+          }
+        },
+        "input_item_type": "",
+        "input_range": [
+          272000,
+          99999999
+        ],
+        "item_order": [
+          "ncache",
+          "cache",
+          "c_cache",
+          "output"
+        ],
+        "output_item_type": "",
+        "output_range": [
+          0,
+          99999999
+        ]
+      }
+    ]
+  }
+]
