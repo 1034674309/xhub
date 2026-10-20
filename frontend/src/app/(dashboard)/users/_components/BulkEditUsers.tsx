@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useId, useState } from "react";
 import { userBulkUpdateUserCall } from "@/components/networking";
 import { toast } from "@/lib/toast";
 import { MoneyCell } from "@/components/shared/table_cells";
@@ -41,7 +41,7 @@ export function bulkBudgetErrorKey(error: unknown): string {
 
 /** 用户批量预算表单；参数为目标用户、管理会话和关闭/刷新回调，返回真实原子接口驱动的可访问对话框。
  * 只支持设置预算上限或明确取消个人上限，零不等于留空；成功后刷新用户列表，失败保留输入，不修改角色/模型/团队或历史消费。 */
-const BulkEditUserModal: React.FC<BulkEditUserModalProps> = ({
+const BulkBudgetForm: React.FC<BulkEditUserModalProps> = ({
   open,
   onCancel,
   selectedUsers,
@@ -58,16 +58,6 @@ const BulkEditUserModal: React.FC<BulkEditUserModalProps> = ({
   const allId = useId(),
     modeId = useId(),
     budgetId = useId();
-
-  // 关闭再打开从“不修改”开始，防止上一次的全部范围或取消上限意图泄漏到新批次。
-  useEffect(() => {
-    if (open) {
-      setUpdateAllUsers(false);
-      setMode("");
-      setBudget("");
-      setError("");
-    }
-  }, [open]);
 
   /** 提交显式预算命令；参数为表单事件，无返回。失败保留对话框并提示整批未更新，成功才刷新和关闭。 */
   const submit = async (event: React.FormEvent) => {
@@ -235,4 +225,9 @@ const BulkEditUserModal: React.FC<BulkEditUserModalProps> = ({
     </Dialog>
   );
 };
+/** 控制批量预算表单生命周期；参数为对话框属性，关闭时卸载表单，返回打开的表单或空节点。
+ * 调用方重复打开时重新创建状态，避免上次“全部用户/取消上限”的选择泄漏到新批次；不在effect中重置状态。 */
+const BulkEditUserModal: React.FC<BulkEditUserModalProps> = (props) =>
+  props.open ? <BulkBudgetForm {...props} /> : null;
+
 export default BulkEditUserModal;

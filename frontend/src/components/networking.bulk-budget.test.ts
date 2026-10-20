@@ -19,7 +19,7 @@ describe("user bulk budget HTTP contract", () => {
         successful_updates: 2,
         failed_updates: 0,
       };
-      const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => result });
+      const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { status: 200 }));
       global.fetch = fetcher;
       expect(await userBulkUpdateUserCall("session", { max_budget: amount }, ["first", "second"])).toEqual(result);
       expect(fetcher).toHaveBeenCalledOnce();
@@ -35,7 +35,7 @@ describe("user bulk budget HTTP contract", () => {
   }
   /** 验证全部范围必须显式声明且不发送选定数组；前置成功HTTP替身，结束恢复fetch。 */
   it("sends explicit all-users command", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ atomic: true }) });
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ atomic: true }), { status: 200 }));
     global.fetch = fetcher;
     await userBulkUpdateUserCall("session", { max_budget: null }, undefined, true);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ all_users: true, user_updates: { max_budget: null } });
@@ -54,7 +54,7 @@ describe("user bulk budget HTTP contract", () => {
     const body = { error: { type: "bulk_budget_allocation", message: "Rejected batch" } };
     global.fetch = vi
       .fn()
-      .mockResolvedValue({ ok: false, status: 400, statusText: "Bad Request", json: async () => body });
+      .mockResolvedValue(new Response(JSON.stringify(body), { status: 400, statusText: "Bad Request" }));
     await expect(userBulkUpdateUserCall("session", { max_budget: 0 }, ["first"])).rejects.toMatchObject({
       status: 400,
       body,
