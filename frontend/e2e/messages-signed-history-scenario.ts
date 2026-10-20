@@ -54,7 +54,7 @@ export function registerMessagesSignedHistoryScenario(locale: "zh-CN" | "en") {
       await page.getByRole("button", { name: translate(other, locale === "en" ? "language.en" : "language.zhCN"), exact: true }).click();
       await expect(page.getByLabel(tr("providerGuideUI.publicName"))).toHaveValue(model);
       await expect(page.getByRole("combobox", { name: tr("providerGuideUI.upstreamLabel"), exact: true })).toHaveValue("e2e-claude-signed");
-      const saved = page.waitForResponse(response => new URL(response.url()).pathname === "/model/" + modelID + "/update" && response.request().method() === "PATCH");
+      const saved = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/model/" + modelID + "/update") && response.request().method() === "PATCH");
       await page.getByRole("button", { name: tr("providerGuideUI.saveChanges"), exact: true }).click();
       const updated = await saved;
       expect(updated.status(), await updated.text()).toBe(200);
