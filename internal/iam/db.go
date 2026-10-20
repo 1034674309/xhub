@@ -34,6 +34,11 @@ var enterpriseSchemaSQL string
 //go:embed archive_schema.sql
 var archiveSchemaSQL string
 
+// usagePendingSchemaSQL 保存普通调用的完整待结算快照，使无 Redis 的账单事务失败可在重启后恢复。
+//
+//go:embed usage_pending_schema.sql
+var usagePendingSchemaSQL string
+
 var (
 	ErrNotFound          = errors.New("not found")
 	ErrConflict          = errors.New("already exists")
@@ -94,6 +99,9 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return err
 	}
 	if _, err := db.Engine.Context(ctx).Exec(archiveSchemaSQL); err != nil {
+		return err
+	}
+	if _, err := db.Engine.Context(ctx).Exec(usagePendingSchemaSQL); err != nil {
 		return err
 	}
 	return db.migrateMonitorTPS(ctx)

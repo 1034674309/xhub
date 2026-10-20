@@ -264,6 +264,9 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	identities := map[string]string{}
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if browserBillingPendingControl(w, r, s) {
+			return
+		}
 		switch r.URL.Path {
 		case "/monitor/tps/legacy":
 			// 只在此测试程序的私有 schema 写入旧 TPS 并移除完成标记；浏览器随后通过生产 Migrate 验证修复。

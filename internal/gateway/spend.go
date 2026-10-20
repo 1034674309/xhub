@@ -299,9 +299,9 @@ func reportsCachedTokens(usage map[string]any) bool {
 	return false
 }
 
-// persistSpend writes spend to PostgreSQL immediately. Requests take this path when Redis is not configured.
+// persistSpend 先独立持久化账单快照再立即结算；无 Redis 或入队失败的调用使用此路径。
 // 参数 row（live.SpendLog）：从用量或目录读出的SpendLog；spend（float64）：这一行要累加的费用，单位是美元；ex（promptExchange）：persist花费使用的promptExchange；start（time.Time）：时间范围的起点。零值表示不限制开始；end（time.Time）：时间范围的终点。零值表示直到现在。
-// 返回：无。这条花费已写入 PostgreSQL。没配库时直接返回，不写。
+// 返回：无。结算失败保留持久快照，后台 Flush/新实例恢复；数据库本身不可写时明确记录未持久化。没配库时不写。
 // 调用：仅在 spend.go 内使用
 // 测试：log_completeness_test.go、TestPersistSpendKeepsFailureResponseWithoutPrompts。
 func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchange, start, end time.Time) {
@@ -317,8 +317,8 @@ func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchang
 		response = row.Response
 	}
 	rec := usageFromSpend(row, spend, ex.messages, response, ex.proxy, start, end)
-	if err := s.IAM.RecordUsage(context.Background(), []iam.UsageRecord{rec}); err != nil {
-		util.Error("persist spend failed: %v", err)
+	if durable, err := s.IAM.RecordUsageDurably(context.Background(), rec); err != nil {
+		util.Error("persist spend failed request=%s durable=%t: %v", rec.RequestID, durable, err)
 	}
 }
 

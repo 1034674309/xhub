@@ -2699,5 +2699,12 @@
     "title": "native agent history and parallel tools zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-384",
+    "file": "e2e/scenarios/regression/billing-pending-recovery.test.ts",
+    "title": "pending billing survives database transaction failure without Redis",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]

@@ -112,7 +112,8 @@ func FlushLoop(ctx context.Context, h Runtime, interval time.Duration) {
 
 // Flush 将至多 500 条队列用量先持久化，再确认删除并调整热预算计数。
 // 参数 h 提供 Redis 与身份数据库；返回值无，FlushLoop 或网关显式刷写方法调用。
-// 任一依赖为 nil 或队列为空时跳过；PeekLogs 只窥视，数据库写入失败记录日志且保留整批队列。
+// 数据库为 nil 时跳过；先恢复数据库待结算快照，没有 Redis 也可恢复此前直写失败的调用。
+// Redis 队列为空时不再处理；PeekLogs 只窥视，数据库写入失败记录日志且保留整批队列。
 // PeekLogs 遇到损坏记录只返回此前的有效前缀；损坏记录位于队头时返回空批次，保留原条目等待修复。
 // 成功后用有效前缀的原始条数及首元素 head 确认，防止并发刷写误删已变化的队头。
 // hotDeltas 扣回已经持久化的临时预算增量；数据库幂等性处理重试，确认失败可能导致下次再次写同一批。
@@ -120,7 +121,13 @@ func FlushLoop(ctx context.Context, h Runtime, interval time.Duration) {
 func Flush(h Runtime) {
 	redis := h.Redis()
 	db := h.Identity()
-	if redis == nil || db == nil {
+	if db == nil {
+		return
+	}
+	if err := db.FlushPendingUsage(context.Background(), 500); err != nil {
+		util.Error("pending spend flush failed: %v", err)
+	}
+	if redis == nil {
 		return
 	}
 	logs, raw := redis.PeekLogs(500)
@@ -219,7 +226,7 @@ type Runtime interface {
 	// 测试：failure_log_test.go 的夹具返回空表。
 	BusyMap() map[string]int
 
-	// Redis 返回热路径客户端。未配置 Redis 时返回 nil，State 只填 Busy，Flush 直接返回。
+	// Redis 返回热路径客户端。未配置 Redis 时返回 nil，State 只填 Busy，Flush 仍恢复数据库待结算快照。
 	// 参数：无。
 	// 返回 *live.Client（*live.Client）：热路径 Redis 客户端。未配置 Redis 时为 nil，花费改为当场写数据库。
 	// 调用：dataplane/runtime/live.go、gateway/wire.go
