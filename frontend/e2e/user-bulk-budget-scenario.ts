@@ -38,6 +38,7 @@ export function registerUserBulkBudgetScenario(locale: "en" | "zh-CN") {
     const prefix = "e2e-bulk-" + locale + "-" + Date.now();
     const users: { user_id: string; user_email: string }[] = [];
     let modelID = "",
+      keyID = "",
       key = "",
       spent = 0;
     const model = prefix + "-model";
@@ -118,7 +119,9 @@ export function registerUserBulkBudgetScenario(locale: "en" | "zh-CN") {
         data: { user_id: users[0].user_id, key_alias: prefix },
       });
       expect(minted.status(), await minted.text()).toBe(200);
-      key = (await minted.json()).key;
+      const mintedKey = await minted.json();
+      key = mintedKey.key;
+      keyID = mintedKey.token_id;
       const initialDialog = await openBulk();
       await initialDialog.getByLabel(tr("pages.users.bulkBudgetAction")).selectOption("set");
       await initialDialog.getByLabel(tr("pages.users.maxBudget"), { exact: true }).fill("-1");
@@ -141,6 +144,40 @@ export function registerUserBulkBudgetScenario(locale: "en" | "zh-CN") {
       expect(overflow.status()).toBe(400);
       expect((await overflow.json()).error.type).toBe("bulk_budget_invalid");
       for (const user of users) expect((await read(user.user_id)).max_budget).toBe(10);
+      // 单用户/Key入口也必须拒绝部分JSON，不能让授权管理员的坏请求取消上限或覆盖别名。
+      expect(
+        (await page.request.post(GATEWAY + "/key/update", { headers, data: { key: keyID, max_budget: 10 } })).status(),
+      ).toBe(200);
+      for (const target of [
+        { path: "/user/update", idField: "user_id", id: users[0].user_id, aliasField: "user_alias" },
+        { path: "/key/update", idField: "key", id: keyID, aliasField: "key_alias" },
+      ]) {
+        const head = `{${JSON.stringify(target.idField)}:${JSON.stringify(target.id)},${JSON.stringify(target.aliasField)}:"must-not-save","max_budget":`;
+        for (const suffix of ["1e309}", "-1e309}", "null} {}", "{} }"]) {
+          const rejected = await page.request.post(GATEWAY + target.path, {
+            headers: { ...headers, "Content-Type": "application/json" },
+            data: head + suffix,
+          });
+          expect(rejected.status(), await rejected.text()).toBe(400);
+          expect((await rejected.json()).error.type).toBe("invalid_request");
+        }
+      }
+      const unchangedUser = await read(users[0].user_id);
+      expect(unchangedUser.max_budget).toBe(10);
+      expect(unchangedUser.user_alias).toBe("原始用户-first");
+      const keyRead = await page.request.get(GATEWAY + "/key/info?key=" + keyID, { headers });
+      expect(keyRead.status()).toBe(200);
+      const unchangedKey = (await keyRead.json()).info;
+      expect(unchangedKey.max_budget).toBe(10);
+      expect(unchangedKey.key_alias).toBe(prefix);
+      // 恢复Key共享上限，后续批量降低失败应由真实消费触发，避免固定Key分配掩盖消费断言。
+      expect(
+        (
+          await page.request.post(GATEWAY + "/key/update", { headers, data: { key: keyID, max_budget: null } })
+        ).status(),
+      ).toBe(200);
+      await page.reload();
+      await expect(page.getByRole("row").filter({ hasText: users[0].user_email })).toContainText("10.00");
       const allowed = await callBulkBudgetModel(page, key, model);
       expect(allowed.status, allowed.text).toBe(200);
       expect(JSON.parse(allowed.text).choices[0].message.content).toContain("ok");
