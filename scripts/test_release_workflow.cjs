@@ -9,6 +9,22 @@ const yaml = require('../frontend/node_modules/js-yaml');
 const workflow = yaml.load(readFileSync(join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
 const publish = workflow.jobs.publish;
 
+/** 前置合并后的真实完整浏览器清单；发布前验证全部ID/绑定唯一及本次两类预算场景文件存在，防止并行合并到E2E收尾才报错；只读无资源清理。 */
+test('complete browser catalog has unique identities and budget files before release', () => {
+  const catalog = JSON.parse(readFileSync(join(__dirname, '../frontend/e2e/scenario-catalog.json'), 'utf8'));
+  const { evaluateScenarios } = require('../frontend/e2e/scenario-coverage.cjs');
+  const report = evaluateScenarios(catalog, []);
+  assert.equal(report.total, catalog.length, '未执行场景也必须保留完整分母');
+  assert.equal(report.passed, 0, '目录校验不能把未执行场景算作通过');
+  for (const name of ['hard-budget-tier', 'user-bulk-budget']) {
+    for (const locale of ['en', 'zh-CN']) {
+      const file = `e2e/scenarios/regression/${name}-${locale}.test.ts`;
+      assert.ok(catalog.some(row => row.file === file && row.kind === 'implemented'), '预算场景未登记：' + file);
+      assert.ok(existsSync(join(__dirname, '../frontend', file)), '预算场景文件不存在：' + file);
+    }
+  }
+});
+
 /** 前置真实工作流和临时脚本夹具；执行新增浏览器门禁，验证全部场景参数、无 Redis 代理环境与失败退出码，finally 清理夹具。 */
 test('API client reliability gate runs all flows independently and preserves failures', () => {
   const steps = workflow.jobs.verify.steps;
