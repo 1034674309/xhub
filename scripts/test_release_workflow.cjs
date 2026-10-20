@@ -349,6 +349,7 @@ test('hard budget tier scenarios are registered and selected by the release gate
 
 /** 前置发布 YAML 与 SAML 场景登记；确认双语 HTTP/HTTPS、拒绝和证书边界进入实际 CI，不把跳过当通过；只读无需清理。 */
 test('SAML release gate includes protocol components and every registered browser flow', () => {
+  assert.ok(workflow.jobs.verify.steps.some(item => item.run === 'go test ./internal/... ./cmd/regression/testsupport/...'), 'SAML 夹具移出生产目录后仍必须运行真实签名与加密单元测试');
   const steps = workflow.jobs.verify.steps;
   const unit = steps.find(item => item.name === 'Console HTTP compatibility unit tests');
   assert.ok(unit.run.includes('src/lib/enterpriseSSO.test.ts'));

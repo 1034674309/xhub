@@ -51,7 +51,8 @@ jobs:
           if [[ ! -f configs/config.yaml ]]; then
             cp configs/config.example.yaml configs/config.yaml
           fi
-      - run: go test ./internal/...
+      # 回归夹具放在 cmd 下，但其签名/加密单元测试仍需进入发布门禁。
+      - run: go test ./internal/... ./cmd/regression/testsupport/...
       - run: docker compose up -d --wait postgres redis
       # 固定真实 CLI 版本，离线协议夹具验证文件工具往返；不使用生产供应商凭据。
       - name: Install agent compatibility clients
