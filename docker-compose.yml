@@ -34,6 +34,9 @@ services:
         condition: service_started
     environment:
       XHUB_PUBLIC_ORIGIN: http://localhost:4000
+      XHUB_USAGE_SPOOL_DIR: /var/lib/xhub/usage-spool
+    volumes:
+      - xhub-usage-spool:/var/lib/xhub/usage-spool
     ports:
       - "4000:4000"
 
@@ -53,3 +56,4 @@ services:
 
 volumes:
   xhub-pg:
+  xhub-usage-spool:

@@ -270,9 +270,11 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 	httpSAMLIDP := samltest.NewHTTP(t)
 	expiredSAMLIDP := samltest.NewExpired(t)
 	identities := map[string]string{}
+	spoolControl, closeSpoolControl := newBrowserUsageSpoolControl(s, dir)
+	defer closeSpoolControl()
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if browserBillingPendingControl(w, r, s) {
+		if browserBillingPendingControl(w, r, s) || spoolControl(w, r) {
 			return
 		}
 		switch r.URL.Path {

@@ -2839,5 +2839,19 @@
     "title": "Claude keep-all, cache TTL, refusal and public history zh-CN",
     "kind": "implemented",
     "environment": "default offline; native Messages contract and finite budget"
+  },
+  {
+    "id": "SC-437",
+    "file": "e2e/scenarios/regression/usage-spool-en.test.ts",
+    "title": "durable disk billing recovers after database disconnect en",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-438",
+    "file": "e2e/scenarios/regression/usage-spool-zh-CN.test.ts",
+    "title": "durable disk billing recovers after database disconnect zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]
