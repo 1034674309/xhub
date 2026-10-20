@@ -28,6 +28,10 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | `GET /auth/enterprise/options` | `enterpriseOIDCOptions` | [directory.go](../../../internal/gateway/directory.go) |
 | `GET /auth/enterprise/{connection_id}/start` | `enterpriseOIDCStart` | [directory.go](../../../internal/gateway/directory.go) |
 | `GET /auth/enterprise/callback` | `enterpriseOIDCCallback` | [directory.go](../../../internal/gateway/directory.go) |
+| `GET /admin/enterprise/sso/{connection_id}/metadata` | `enterpriseSAMLMetadata` | [directory.go](../../../internal/gateway/directory.go) |
+| `GET /auth/enterprise/{connection_id}/saml/metadata` | `enterpriseSAMLMetadata` | [directory.go](../../../internal/gateway/directory.go) |
+| `POST /auth/enterprise/saml/acs` | `enterpriseSAMLACS` | [directory.go](../../../internal/gateway/directory.go) |
+| `GET /auth/enterprise/saml/finish` | `enterpriseSAMLFinish` | [directory.go](../../../internal/gateway/directory.go) |
 | `GET /admin/directory/connections` | `directoryAdmin` | [directory.go](../../../internal/gateway/directory.go) |
 | `POST /admin/directory/connections` | `directoryAdmin` | [directory.go](../../../internal/gateway/directory.go) |
 | `PUT /admin/directory/connections/{connection_id}` | `directoryAdmin` | [directory.go](../../../internal/gateway/directory.go) |
@@ -105,6 +109,7 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | `GET /user/info` | `UserInfo` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `GET /v2/user/info` | `UserInfo` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/update` | `UserUpdate` | [mount.go](../../../internal/gateway/identity/mount.go) |
+| `POST /user/bulk_update` | `UserBulkBudgetUpdate` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/delete` | `UserDelete` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/set_password` | `UserSetPassword` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/{user_id}/password` | `UserSetPassword` | [mount.go](../../../internal/gateway/identity/mount.go) |
@@ -309,3 +314,5 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | `POST /utils/token_counter` | `tokenCounter` | [tokens.go](../../../internal/gateway/tokens/tokens.go) |
 | `GET /utils/supported_openai_params` | `supportedOpenAIParams` | [tokens.go](../../../internal/gateway/tokens/tokens.go) |
 | `POST /utils/transform_request` | `transformRequest` | [tokens.go](../../../internal/gateway/tokens/tokens.go) |
+
+[SAML 配置与元数据注册](saml-login.md)

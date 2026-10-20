@@ -47,6 +47,7 @@ test('API client reliability gate runs all flows independently and preserves fai
       assert.deepEqual(readFileSync(join(directory, 'arguments'), 'utf8').trim().split('\n'), [
         'client-docs-url-', 'client-cancellation-', 'stream-terminal-sc-',
         'billing-pending-recovery', 'key-lifecycle-', 'agent-history-', 'hard-budget-', 'user-bulk-budget-',
+        'scenarios/enterprise/saml-', 'scenarios/enterprise/sso-valid.test.ts', 'scenarios/directory/sso-config.test.ts',
       ]);
       assert.equal(readFileSync(join(directory, 'environment'), 'utf8'), '0\n1\n');
     }
@@ -344,4 +345,19 @@ test('hard budget tier scenarios are registered and selected by the release gate
     assert.ok(catalog.some(row => row.file === file && row.kind === 'implemented'), '阶梯预算场景未登记：' + locale);
     assert.ok(existsSync(join(__dirname, '../frontend', file)), '阶梯预算场景文件不存在：' + locale);
   }
+});
+
+/** 前置发布 YAML 与 SAML 场景登记；确认双语 HTTP/HTTPS、拒绝和证书边界进入实际 CI，不把跳过当通过；只读无需清理。 */
+test('SAML release gate includes protocol components and every registered browser flow', () => {
+  assert.ok(workflow.jobs.verify.steps.some(item => item.run === 'go test ./internal/... ./cmd/regression/testsupport/...'), 'SAML 夹具移出生产目录后仍必须运行真实签名与加密单元测试');
+  const steps = workflow.jobs.verify.steps;
+  const unit = steps.find(item => item.name === 'Console HTTP compatibility unit tests');
+  assert.ok(unit.run.includes('src/lib/enterpriseSSO.test.ts'));
+  assert.ok(unit.run.includes('EnterpriseConfiguration.saml.test.tsx'));
+  const browser = steps.find(item => item.name === 'API client reliability browser regression');
+  assert.ok(browser.run.includes('scenarios/enterprise/saml-'));
+  const scenarios = JSON.parse(readFileSync(join(__dirname, '../frontend/e2e/scenario-catalog.json'), 'utf8'));
+  const rows = Array.isArray(scenarios) ? scenarios : scenarios.scenarios;
+  const saml = rows.filter(item => item.file.includes('/saml-'));
+  assert.equal(saml.length, 9, 'SAML HTTP/HTTPS、未知用户、篡改、重放和过期证书场景必须完整登记');
 });

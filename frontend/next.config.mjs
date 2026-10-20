@@ -26,8 +26,14 @@ const nextConfig = {
   assetPrefix: "",
   trailingSlash: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // 企业认证回调与元数据使用注册在 IdP 的固定公开路径；与 /gw 共用服务端网关源，保留 POST 正文及 Cookie。
+  // 参数无；返回 Next 代理规则，不把后台源暴露给浏览器，避免测试代理可用而正式控制台回调 404。
   async rewrites() {
-    return [{ source: "/gw/:path*", destination: `${process.env.XHUB_GATEWAY_ORIGIN || "http://127.0.0.1:4000"}/:path*` }];
+    const gateway = process.env.XHUB_GATEWAY_ORIGIN || "http://127.0.0.1:4000";
+    return [
+      { source: "/gw/:path*", destination: `${gateway}/:path*` },
+      { source: "/auth/enterprise/:path*", destination: `${gateway}/auth/enterprise/:path*` },
+    ];
   },
   turbopack: {
     root: __dirname,

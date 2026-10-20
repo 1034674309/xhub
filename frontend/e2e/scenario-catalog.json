@@ -2748,5 +2748,68 @@
     "title": "atomic bulk user budgets control real API keys zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-424",
+    "file": "e2e/scenarios/enterprise/saml-http-valid-en.test.ts",
+    "title": "SAML HTTP valid en",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-425",
+    "file": "e2e/scenarios/enterprise/saml-http-valid-zh-CN.test.ts",
+    "title": "SAML HTTP valid zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-426",
+    "file": "e2e/scenarios/enterprise/saml-https-valid-en.test.ts",
+    "title": "SAML HTTPS valid en",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-427",
+    "file": "e2e/scenarios/enterprise/saml-https-valid-zh-CN.test.ts",
+    "title": "SAML HTTPS valid zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-428",
+    "file": "e2e/scenarios/enterprise/saml-http-unknown.test.ts",
+    "title": "SAML HTTP unknown zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-429",
+    "file": "e2e/scenarios/enterprise/saml-http-tamper.test.ts",
+    "title": "SAML HTTP tamper zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-430",
+    "file": "e2e/scenarios/enterprise/saml-http-replay.test.ts",
+    "title": "SAML HTTP replay zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; local TLS IdP; real Next auth proxy"
+  },
+  {
+    "id": "SC-431",
+    "file": "e2e/scenarios/enterprise/saml-http-expired-en.test.ts",
+    "title": "SAML HTTP expired en",
+    "kind": "implemented",
+    "environment": "default offline; expired local IdP certificate"
+  },
+  {
+    "id": "SC-432",
+    "file": "e2e/scenarios/enterprise/saml-http-expired-zh-CN.test.ts",
+    "title": "SAML HTTP expired zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; expired local IdP certificate"
   }
 ]

@@ -7,18 +7,27 @@ import (
 	"xorm.io/xorm"
 )
 
-// EnterpriseOIDC 保存单组织登录配置；Secret 是密文且永不 JSON 回显。
+// EnterpriseOIDC 保存单组织 OIDC/SAML 登录配置；保留旧表名兼容升级。
+// Protocol 区分协议，Secret 保存加密的客户端秘密或 SAML 私钥；Certificate 仅为公开证书。
+// AllowHTTP 仅供 SAML 本站联调，不放宽远端元数据和身份提供方 HTTPS 校验。
 type EnterpriseOIDC struct {
-	Name          string `json:"name"`
-	ConnectionID  string `xorm:"pk 'connection_id'" json:"connection_id"`
-	Issuer        string `json:"issuer"`
-	ClientID      string `xorm:"'client_id'" json:"client_id"`
-	Secret        string `json:"-"`
-	RedirectURI   string `xorm:"'redirect_uri'" json:"redirect_uri"`
-	ReturnURI     string `xorm:"'return_uri'" json:"return_uri"`
-	IdentityClaim string `xorm:"'identity_claim'" json:"identity_claim"`
-	Enabled       bool   `json:"enabled"`
-	Revision      int64  `json:"revision"`
+	// IDPCertificateExpired 仅网关根据已加载元数据计算，不持久化，也不参与身份信任判断。
+	IDPCertificateExpired bool   `xorm:"-" json:"idp_certificate_expired,omitempty"`
+	Name                  string `json:"name"`
+	Protocol              string `json:"protocol"`
+	AllowHTTP             bool   `xorm:"'allow_http'" json:"allow_http"`
+	IDPMetadata           string `xorm:"'idp_metadata'" json:"idp_metadata"`
+	IDPMetadataURL        string `xorm:"'idp_metadata_url'" json:"idp_metadata_url"`
+	Certificate           string `json:"certificate"`
+	ConnectionID          string `xorm:"pk 'connection_id'" json:"connection_id"`
+	Issuer                string `json:"issuer"`
+	ClientID              string `xorm:"'client_id'" json:"client_id"`
+	Secret                string `json:"-"`
+	RedirectURI           string `xorm:"'redirect_uri'" json:"redirect_uri"`
+	ReturnURI             string `xorm:"'return_uri'" json:"return_uri"`
+	IdentityClaim         string `xorm:"'identity_claim'" json:"identity_claim"`
+	Enabled               bool   `json:"enabled"`
+	Revision              int64  `json:"revision"`
 }
 
 // TableName 返回登录配置表，由 xorm 调用，无参数或副作用。
@@ -31,6 +40,7 @@ type EnterpriseLoginTransaction struct {
 	Revision     int64
 	BrowserHash  string `xorm:"'browser_hash'"`
 	Nonce        string
+	SAMLSubject  string `xorm:"'saml_subject'"`
 	Verifier     string
 	ExpiresAt    time.Time `xorm:"'expires_at'"`
 }

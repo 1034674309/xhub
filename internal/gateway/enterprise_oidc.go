@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -68,6 +69,11 @@ func (s *Server) enterpriseOIDCAdmin(w http.ResponseWriter, r *http.Request) {
 				s.WriteIAMError(w, r, err)
 				return
 			}
+			for i := range rows {
+				if rows[i].Protocol == "saml" {
+					rows[i].IDPCertificateExpired = enterpriseSAMLExpiredCertificate(rows[i].IDPMetadata)
+				}
+			}
 			util.WriteJSON(w, 200, rows)
 			return
 		}
@@ -75,6 +81,9 @@ func (s *Server) enterpriseOIDCAdmin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.WriteIAMError(w, r, err)
 			return
+		}
+		if out.Protocol == "saml" {
+			out.IDPCertificateExpired = enterpriseSAMLExpiredCertificate(out.IDPMetadata)
 		}
 		util.WriteJSON(w, 200, out)
 		return
@@ -89,39 +98,68 @@ func (s *Server) enterpriseOIDCAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.ConnectionID = id
-	redirect, err := enterpriseURL(in.RedirectURI)
-	if err != nil || redirect.RawQuery != "" || redirect.Path != "/auth/enterprise/callback" {
-		util.WriteError(w, 400, "invalid_request", "Invalid OIDC callback URL")
-		return
+	if in.Protocol == "" {
+		in.Protocol = "oidc"
 	}
-	ret, err := enterpriseURL(in.ReturnURI)
-	if err != nil || ret.RawQuery != "" || ret.Path != "/ui/login" || ret.Host != redirect.Host {
-		util.WriteError(w, 400, "invalid_request", "Invalid console return URL")
-		return
-	}
-	if _, err := enterpriseURL(in.Issuer); err != nil || in.ClientID == "" || in.IdentityClaim == "" || strings.ContainsAny(in.IdentityClaim, " .[]") {
-		util.WriteError(w, 400, "invalid_request", "Invalid OIDC configuration")
-		return
-	}
-	if in.ClientSecret == "" {
-		old, err := s.Identity().EnterpriseOIDCByID(r.Context(), id)
-		if err == nil {
-			in.Secret = old.Secret
+	if in.Protocol == "saml" {
+		if err := s.prepareEnterpriseSAML(r.Context(), &in.EnterpriseOIDC); err != nil {
+			if errors.Is(err, errSAMLExpiredCertificate) {
+				util.WriteError(w, 400, "saml_certificate_expired", "IdP signing certificate is expired or not yet valid")
+				return
+			}
+			util.WriteError(w, 400, "invalid_saml_configuration", "Invalid SAML configuration")
+			return
+		}
+	} else if in.Protocol == "oidc" {
+		if in.AllowHTTP {
+			util.WriteError(w, 400, "invalid_request", "HTTP is only supported for SAML testing")
+			return
+		}
+		if id != "" {
+			old, err := s.Identity().EnterpriseOIDCByID(r.Context(), id)
+			if err == nil && old.Protocol == "saml" {
+				util.WriteError(w, 400, "invalid_request", "Create a new connection to change protocol")
+				return
+			}
+		}
+		redirect, err := enterpriseURL(in.RedirectURI)
+		if err != nil || redirect.RawQuery != "" || redirect.Path != "/auth/enterprise/callback" {
+			util.WriteError(w, 400, "invalid_request", "Invalid OIDC callback URL")
+			return
+		}
+		ret, err := enterpriseURL(in.ReturnURI)
+		if err != nil || ret.RawQuery != "" || ret.Path != "/ui/login" || ret.Host != redirect.Host || ret.Scheme != redirect.Scheme {
+			util.WriteError(w, 400, "invalid_request", "Invalid console return URL")
+			return
+		}
+		if _, err := enterpriseURL(in.Issuer); err != nil || in.ClientID == "" || in.IdentityClaim == "" || strings.ContainsAny(in.IdentityClaim, " .[]") {
+			util.WriteError(w, 400, "invalid_request", "Invalid OIDC configuration")
+			return
+		}
+		if in.ClientSecret == "" {
+			old, err := s.Identity().EnterpriseOIDCByID(r.Context(), id)
+			if err == nil {
+				in.Secret = old.Secret
+			}
+		} else {
+			in.Secret, err = enterpriseSecret(s.Cfg.GeneralSettings.MasterKey, in.ClientSecret, false)
+			if err != nil {
+				util.WriteError(w, 400, "invalid_request", "A stable encryption key is required")
+				return
+			}
+		}
+		if in.Enabled {
+			ctx := s.enterpriseContext(r.Context())
+			if _, err := enterpriseProvider(ctx, &in.EnterpriseOIDC); err != nil {
+				util.WriteError(w, 400, "oidc_discovery_failed", "OIDC discovery failed")
+				return
+			}
 		}
 	} else {
-		in.Secret, err = enterpriseSecret(s.Cfg.GeneralSettings.MasterKey, in.ClientSecret, false)
-		if err != nil {
-			util.WriteError(w, 400, "invalid_request", "A stable encryption key is required")
-			return
-		}
+		util.WriteError(w, 400, "invalid_request", "Unsupported login protocol")
+		return
 	}
-	if in.Enabled {
-		ctx := s.enterpriseContext(r.Context())
-		if _, err := enterpriseProvider(ctx, &in.EnterpriseOIDC); err != nil {
-			util.WriteError(w, 400, "oidc_discovery_failed", "OIDC discovery failed")
-			return
-		}
-	}
+
 	if r.Method == http.MethodPost {
 		out, err := s.Identity().CreateEnterpriseOIDC(r.Context(), iam.Actor{ID: p.UserID, Kind: "session"}, in.OrganizationID, in.EnterpriseOIDC)
 		if err != nil {
@@ -164,6 +202,10 @@ func (s *Server) enterpriseOIDCStart(w http.ResponseWriter, r *http.Request) {
 	c, err := s.Identity().EnterpriseOIDCByID(r.Context(), r.PathValue("connection_id"))
 	if err != nil || !c.Enabled {
 		util.WriteError(w, 401, "auth_error", "Enterprise login unavailable")
+		return
+	}
+	if c.Protocol == "saml" {
+		s.enterpriseSAMLStart(w, r, c)
 		return
 	}
 	ctx := s.enterpriseContext(r.Context())
@@ -214,7 +256,7 @@ func (s *Server) enterpriseOIDCCallback(w http.ResponseWriter, r *http.Request) 
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookie.Name, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	c, err := s.Identity().EnterpriseOIDCByID(r.Context(), tx.ConnectionID)
-	if err != nil || !c.Enabled || c.Revision != tx.Revision || r.URL.Query().Get("error") != "" {
+	if err != nil || !c.Enabled || c.Protocol == "saml" || c.Revision != tx.Revision || r.URL.Query().Get("error") != "" {
 		reject()
 		return
 	}

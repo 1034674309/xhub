@@ -15,3 +15,5 @@ rg 'GET|POST|DELETE|PATCH' internal/gateway/*/mount.go
 | Usage | [usage/mount.go](../../../internal/gateway/usage/mount.go) |
 
 [Consumer API guide](api-reference.md)
+
+[SAML configuration and metadata registration](saml-login.md)

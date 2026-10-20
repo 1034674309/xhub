@@ -15,6 +15,14 @@ export interface ArchiveStatus { configuration: EnterpriseConfiguration | null; 
 
 /** 读取管理员企业配置；path 为受控路由，返回配置或错误，不回显凭据，无写副作用。 */
 export function readEnterprise<T>(path: string): Promise<T> { return client.get(path, { accessToken: getAuthToken() }); }
+/** 读取已保存 SAML 配置的 SP 元数据；id 为配置标识，返回 XML 原文供管理员下载。
+ * 管理表单调用；鉴权失败或响应缺少 XML 时抛错，不访问公开元数据入口，不保存凭据。
+ */
+export async function readSSOMetadata(id: string): Promise<string> {
+  const result = await client.get<{metadata: string}>("/admin/enterprise/sso/" + encodeURIComponent(id) + "/metadata", {accessToken: getAuthToken()});
+  if (typeof result?.metadata !== "string" || !result.metadata.trim()) throw new Error("Invalid SAML metadata response");
+  return result.metadata;
+}
 /** 保存企业配置；path/body 为管理员输入，返回完成 Promise；凭据不写入浏览器存储。 */
 export function saveEnterprise(path: string, body: EnterpriseConfiguration): Promise<void> { return client.put(path, { accessToken: getAuthToken(), body }); }
 /** 执行归档探针或重试；action 为有限操作，返回完成 Promise；探针由后台清理。 */

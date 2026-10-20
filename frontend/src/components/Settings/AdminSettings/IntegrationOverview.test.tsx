@@ -1,12 +1,45 @@
 import React from "react";
+import { ApiError } from "@/lib/http/client";
 import {cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
 import {afterEach, beforeEach, expect, it, vi} from "vitest";
-import {I18nProvider} from "@/i18n";
+import {I18nProvider, translate} from "@/i18n";
 import * as api from "@/lib/http/enterprise";
 import IntegrationOverview from "./IntegrationOverview";
 vi.mock("@/lib/http/enterprise");
 beforeEach(() => {vi.resetAllMocks(); localStorage.clear(); document.cookie = "xhub_locale=; max-age=0; path=/";});
 afterEach(cleanup);
+
+// 前置SAML证书状态及启用拒绝；双语显示IdP证书警告，开关保持禁用，用户仍可编辑并导出；清理组件/mock。
+it.each(["zh-CN", "en"] as const)("%s SAML 过期证书启用失败保持状态", async (locale) => {
+  vi.mocked(api.readEnterprise).mockResolvedValue({protocol:"saml",name:"Original SAML",enabled:false,idp_certificate_expired:true});
+  vi.mocked(api.saveEnterprise).mockRejectedValue(new ApiError("private signing detail", 400, {error:{type:"saml_certificate_expired"}}));
+  render(<I18nProvider initialLocale={locale}><IntegrationOverview id="saml-id" name="Original SAML"/></I18nProvider>);
+  const warning = translate(locale, "enterprise.samlCertificateExpired");
+  expect(await screen.findByRole("alert")).toHaveTextContent(warning);
+  const toggle = screen.getByRole("switch");
+  fireEvent.click(toggle);
+  await waitFor(() => expect(api.saveEnterprise).toHaveBeenCalledOnce());
+  await waitFor(() => expect(toggle).not.toHaveAttribute("aria-disabled", "true"));
+  expect(toggle).not.toBeChecked();
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
+  expect(screen.getByRole("alert")).toHaveTextContent(warning);
+  expect(screen.queryByText("private signing detail")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", {name:locale === "en" ? "Configure SSO for Original SAML" : "配置 Original SAML 的单点登录"}));
+  expect(within(screen.getByRole("dialog")).getByRole("alert")).toHaveTextContent(warning);
+  expect(screen.getByRole("button", {name:translate(locale, "enterprise.downloadMetadata")})).toBeEnabled();
+});
+
+// 前置已保存SAML快照；双语摘要使用正确实体标识，编辑自动选中SAML并可导出，未请求签名秘密；清理组件/mock。
+it.each(["zh-CN", "en"] as const)("%s SAML 摘要及编辑按保存协议展示", async (locale) => {
+  vi.mocked(api.readEnterprise).mockResolvedValue({protocol:"saml",name:"Original SAML",issuer:"https://identity.example.com/entity",client_id:"urn:xhub:original",enabled:false});
+  render(<I18nProvider initialLocale={locale}><IntegrationOverview id="saml-id" name="Original SAML"/></I18nProvider>);
+  expect(await screen.findByText(locale === "en" ? "IdP Entity ID" : "身份平台实体 ID")).toBeVisible();
+  expect(screen.getByText(locale === "en" ? "SP Entity ID" : "SP 实体 ID")).toBeVisible();
+  expect(screen.queryByText(locale === "en" ? "OIDC issuer" : "OIDC 签发者")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", {name:locale === "en" ? "Configure SSO for Original SAML" : "配置 Original SAML 的单点登录"}));
+  expect(screen.getByLabelText(locale === "en" ? "Identity provider setup template" : "身份平台配置模板")).toHaveValue("saml");
+  expect(screen.getByRole("button", {name:locale === "en" ? "Download SP metadata XML" : "下载 SP 元数据 XML"})).toBeEnabled();
+});
 
 // 前置独立 SSO 快照，中英文验证删除取消、失败保留和成功回调；不调用 SCIM，清理组件/mock。
 it.each(["zh-CN", "en"] as const)("%s SSO 删除有独立确认和失败恢复", async (locale) => {

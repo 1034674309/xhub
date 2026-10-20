@@ -15,3 +15,15 @@ CREATE TABLE IF NOT EXISTS enterprise_login_identities (
  user_id TEXT NOT NULL REFERENCES users(id), PRIMARY KEY(connection_id,issuer,subject),
  UNIQUE(connection_id,user_id)
 );
+
+-- 保留已有 OIDC 数据和外键，幂等扩展协议配置；新连接默认仍要求 HTTPS。
+ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS protocol TEXT NOT NULL DEFAULT 'oidc';
+ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS allow_http BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS idp_metadata TEXT NOT NULL DEFAULT '';
+ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS idp_metadata_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE enterprise_oidc ADD COLUMN IF NOT EXISTS certificate TEXT NOT NULL DEFAULT '';
+-- 验证过的稳定身份仅存活到五分钟事务过期；最终 GET 仍须验证原浏览器凭据。
+ALTER TABLE enterprise_login_transactions ADD COLUMN IF NOT EXISTS saml_subject TEXT NOT NULL DEFAULT '';
+
+-- 不同组织不能共享同一 SAML 实体，以免 IdP 注册覆盖；旧 OIDC client_id 不受影响。
+CREATE UNIQUE INDEX IF NOT EXISTS enterprise_saml_entity_unique ON enterprise_oidc(client_id) WHERE protocol='saml';
