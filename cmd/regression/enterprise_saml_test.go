@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/crewjam/saml"
-	"github.com/sunqirui1987/xhub/internal/testsupport/samltest"
+	"github.com/sunqirui1987/xhub/cmd/regression/testsupport/samltest"
 )
 
 // TestEnterpriseSAMLHTTPFlow 用独立 PostgreSQL schema、真实路由和本地签名 IdP 验证 HTTP/HTTPS 完整登录。

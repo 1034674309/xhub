@@ -16,7 +16,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
 	"github.com/sunqirui1987/xhub/internal/store"
-	"github.com/sunqirui1987/xhub/internal/testsupport/samltest"
+	"github.com/sunqirui1987/xhub/cmd/regression/testsupport/samltest"
 	"github.com/sunqirui1987/xhub/internal/util"
 	"io"
 	"math/big"
