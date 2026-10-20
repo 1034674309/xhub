@@ -1,339 +1,177 @@
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen, waitFor } from "../../../../../tests/test-utils";
-import BulkEditUserModal from "./BulkEditUsers";
-import { userBulkUpdateUserCall, teamBulkMemberAddCall } from "@/components/networking";
+import BulkEditUserModal, { bulkBudgetErrorKey } from "./BulkEditUsers";
+import { userBulkUpdateUserCall } from "@/components/networking";
 import { toast } from "@/lib/toast";
+import { setActiveLocale, translate } from "@/i18n";
 
-vi.mock("@/components/networking", () => ({
-  userBulkUpdateUserCall: vi.fn(),
-  teamBulkMemberAddCall: vi.fn(),
-}));
+vi.mock("@/components/networking", () => ({ userBulkUpdateUserCall: vi.fn() }));
+const request = vi.mocked(userBulkUpdateUserCall);
 
-vi.mock("./user_edit_view", () => ({
-  UserEditView: ({ onSubmit, onCancel }: { onSubmit: (values: any) => void; onCancel: () => void }) => (
-    <div data-testid="user-edit-view">
-      <button onClick={() => onSubmit({ user_role: "admin", max_budget: 100 })}>Submit</button>
-      <button onClick={onCancel}>Cancel</button>
-    </div>
-  ),
-}));
+/** 创建独立组件输入；返回仅本测试使用的账户与回调，不修改服务器，组件卸载由测试运行器负责。 */
+function props() {
+  return {
+    open: true,
+    onCancel: vi.fn(),
+    onSuccess: vi.fn(),
+    selectedUsers: [
+      { user_id: "a", user_email: "原始邮箱@example.com", max_budget: 50 },
+      { user_id: "b", user_email: "b@example.com", max_budget: null },
+    ],
+    possibleUIRoles: null,
+    accessToken: "test-token",
+    teams: [],
+    userRole: "Admin",
+    userModels: [],
+    allowAllUsers: true,
+  };
+}
 
-const mockUserBulkUpdateUserCall = vi.mocked(userBulkUpdateUserCall);
-const mockTeamBulkMemberAddCall = vi.mocked(teamBulkMemberAddCall);
+/** 返回后台原子成功形状；参数为实际数量，默认两位，供组件层验证成功处理，完整接口能力另由真实regression/E2E验证。 */
+function result(count = 2) {
+  return {
+    atomic: true,
+    batch_id: "batch-test",
+    results: [],
+    total_requested: count,
+    successful_updates: count,
+    failed_updates: 0,
+  };
+}
 
-const defaultProps = {
-  open: true,
-  onCancel: vi.fn(),
-  selectedUsers: [
-    { user_id: "user1", user_email: "user1@example.com", user_role: "user", max_budget: 50 },
-    { user_id: "user2", user_email: "user2@example.com", user_role: "admin", max_budget: null },
-  ],
-  possibleUIRoles: {
-    admin: { ui_label: "Admin", description: "Administrator role" },
-    user: { ui_label: "User", description: "Regular user role" },
-  },
-  accessToken: "test-token",
-  onSuccess: vi.fn(),
-  teams: [
-    { team_id: "team1", team_alias: "Team 1" },
-    { team_id: "team2", team_alias: "Team 2" },
-  ],
-  userRole: "Admin",
-  userModels: ["gpt-4", "gpt-3.5-turbo"],
-  allowAllUsers: false,
-};
-
-describe("BulkEditUserModal", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUserBulkUpdateUserCall.mockResolvedValue({
-      results: [],
-      total_requested: 2,
-      successful_updates: 2,
-      failed_updates: 0,
+for (const locale of ["en", "zh-CN"] as const)
+  describe("bulk user budget " + locale, () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      setActiveLocale(locale);
+      request.mockResolvedValue(result());
     });
-    mockTeamBulkMemberAddCall.mockResolvedValue({
-      successful_additions: 2,
-      failed_additions: 0,
+    const tr = (key: string) => translate(locale, key);
+
+    /** 验证初始不修改、范围说明及仅支持预算字段；无网络，清理由组件卸载完成。 */
+    it("shows explicit budget-only actions and preserves original account text", () => {
+      renderWithProviders(<BulkEditUserModal {...props()} />);
+      expect(screen.getByRole("combobox", { name: tr("pages.users.bulkBudgetAction") })).toHaveValue("");
+      expect(screen.getByRole("button", { name: tr("pages.users.saveChanges") })).toBeDisabled();
+      expect(screen.getByText(tr("pages.users.bulkBudgetHelp"))).toBeVisible();
+      expect(screen.getByText("原始邮箱@example.com")).toBeVisible();
+      expect(screen.queryByText(tr("pages.users.teamManagement"))).not.toBeInTheDocument();
+      expect(screen.getAllByRole("combobox")).toHaveLength(1);
     });
-  });
 
-  it("should render without crashing", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
+    /** 验证数字零确为上限而非取消；提交后只在确认全部成功时刷新关闭，fixture不写真实资源。 */
+    it("submits zero as a real cap and closes only after atomic success", async () => {
+      const user = userEvent.setup(),
+        p = props();
+      renderWithProviders(<BulkEditUserModal {...p} />);
+      await user.selectOptions(screen.getByRole("combobox"), "set");
+      await user.type(screen.getByLabelText(tr("pages.users.maxBudget")), "0");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      await waitFor(() => expect(request).toHaveBeenCalledWith("test-token", { max_budget: 0 }, ["a", "b"], false));
+      expect(toast.success).toHaveBeenCalledWith(translate(locale, "pages.users.bulkBudgetSuccess", { count: 2 }));
+      expect(p.onSuccess).toHaveBeenCalledOnce();
+      expect(p.onCancel).toHaveBeenCalledOnce();
+    });
 
-    expect(screen.getByText(`Bulk Edit ${defaultProps.selectedUsers.length} User(s)`)).toBeInTheDocument();
-  });
+    /** 验证明示取消个人上限发送null，留空从不发送null；纯组件替身无持久资源。 */
+    it("clears only through the explicit remove action", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<BulkEditUserModal {...props()} />);
+      await user.selectOptions(screen.getByRole("combobox"), "clear");
+      expect(screen.getByText(tr("pages.users.bulkBudgetClearHelp"))).toBeVisible();
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      await waitFor(() => expect(request).toHaveBeenCalledWith("test-token", { max_budget: null }, ["a", "b"], false));
+    });
 
-  it("should display modal title with correct user count", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
+    /** 验证设置模式空输入显示当前语言错误且不会请求后台，避免误清空额度；无需外部清理。 */
+    it("rejects blank values without calling the API", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<BulkEditUserModal {...props()} />);
+      await user.selectOptions(screen.getByRole("combobox"), "set");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      expect(screen.getByRole("alert")).toHaveTextContent(tr("pages.users.bulkBudgetInvalid"));
+      expect(request).not.toHaveBeenCalled();
+    });
 
-    expect(screen.getByText("Bulk Edit 2 User(s)")).toBeInTheDocument();
-  });
+    /** 验证负数由应用显示本地化错误，不依赖浏览器原生语言；HTTP不应执行，无持久资源。 */
+    it("rejects negative budgets with a localized error", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<BulkEditUserModal {...props()} />);
+      await user.selectOptions(screen.getByRole("combobox"), "set");
+      await user.type(screen.getByLabelText(tr("pages.users.maxBudget")), "-1");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      expect(screen.getByRole("alert")).toHaveTextContent(tr("pages.users.bulkBudgetInvalid"));
+      expect(request).not.toHaveBeenCalled();
+    });
 
-  it("should display selected users table when modal is open", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
+    /** 验证全部模式有明确系统范围/数量限制并提交显式标记；mock只验证UI契约，真实全部更新由后台回归覆盖。 */
+    it("submits all users only after explicit selection", async () => {
+      const user = userEvent.setup();
+      request.mockResolvedValue(result(3));
+      renderWithProviders(<BulkEditUserModal {...props()} />);
+      await user.click(screen.getByRole("checkbox", { name: tr("pages.users.updateAllUsers") }));
+      expect(screen.getByText(translate(locale, "pages.users.bulkBudgetAllWarning", { count: 1000 }))).toBeVisible();
+      await user.selectOptions(screen.getByRole("combobox"), "set");
+      await user.type(screen.getByLabelText(tr("pages.users.maxBudget")), "12.5");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      await waitFor(() => expect(request).toHaveBeenCalledWith("test-token", { max_budget: 12.5 }, undefined, true));
+      expect(toast.success).toHaveBeenCalledWith(translate(locale, "pages.users.bulkBudgetSuccess", { count: 3 }));
+    });
 
-    expect(screen.getByText("Selected Users (2):")).toBeInTheDocument();
-    expect(screen.getByText("user1")).toBeInTheDocument();
-    expect(screen.getByText("user2")).toBeInTheDocument();
-    expect(screen.getByText("user1@example.com")).toBeInTheDocument();
-    expect(screen.getByText("user2@example.com")).toBeInTheDocument();
-  });
+    /** 验证真实错误码映射成当前语言且保留输入，失败不刷新不关闭；无外部资源。 */
+    it("shows allocation errors in the selected language and keeps input", async () => {
+      const user = userEvent.setup(),
+        p = props();
+      request.mockRejectedValue({ body: { error: { type: "bulk_budget_allocation", message: "server diagnostic" } } });
+      renderWithProviders(<BulkEditUserModal {...p} />);
+      await user.selectOptions(screen.getByRole("combobox"), "set");
+      await user.type(screen.getByLabelText(tr("pages.users.maxBudget")), "7");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(tr("pages.users.bulkBudgetAllocation")));
+      expect(screen.getByLabelText(tr("pages.users.maxBudget"))).toHaveValue(7);
+      expect(p.onCancel).not.toHaveBeenCalled();
+      expect(p.onSuccess).not.toHaveBeenCalled();
+    });
 
-  it("should display user roles in table", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
+    /** 验证部分成功/缺少atomic标记不能显示成功，防止兼容旧错误接口时假成功；纯组件fixture。 */
+    it("rejects partial success responses", async () => {
+      const user = userEvent.setup(),
+        p = props();
+      request.mockResolvedValue({ ...result(), successful_updates: 1, failed_updates: 1 });
+      renderWithProviders(<BulkEditUserModal {...p} />);
+      await user.selectOptions(screen.getByRole("combobox"), "clear");
+      await user.click(screen.getByRole("button", { name: tr("pages.users.saveChanges") }));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(tr("pages.users.bulkBudgetFailed")));
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(p.onCancel).not.toHaveBeenCalled();
+    });
 
-    expect(screen.getByText("User")).toBeInTheDocument();
-    expect(screen.getByText("Admin")).toBeInTheDocument();
-  });
-
-  it("should display budget information in table", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    expect(screen.getByText("$50.00")).toBeInTheDocument();
-    expect(screen.getByText("Unlimited")).toBeInTheDocument();
-  });
-
-  it("should call onCancel when cancel button is clicked", async () => {
-    const user = userEvent.setup();
-    const onCancel = vi.fn();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} onCancel={onCancel} />);
-
-    const cancelButton = screen.getByRole("button", { name: "Cancel" });
-    await user.click(cancelButton);
-
-    expect(onCancel).toHaveBeenCalledTimes(1);
-  });
-
-  it("should show update all users checkbox when allowAllUsers is true", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    expect(screen.getByRole("checkbox", { name: /update all users/i })).toBeInTheDocument();
-  });
-
-  it("should not show update all users checkbox when allowAllUsers is false", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={false} />);
-
-    expect(screen.queryByRole("checkbox", { name: /update all users/i })).not.toBeInTheDocument();
-  });
-
-  it("should toggle update all users mode", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    const checkbox = screen.getByRole("checkbox", { name: /update all users/i });
-    expect(checkbox).not.toBeChecked();
-
-    await user.click(checkbox);
-
-    expect(checkbox).toBeChecked();
-    expect(screen.getByText("Bulk Edit All Users")).toBeInTheDocument();
-  });
-
-  it("should show warning message when update all users is enabled", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    const checkbox = screen.getByRole("checkbox", { name: /update all users/i });
-    await user.click(checkbox);
-
-    expect(screen.getByText(/this will apply changes to all users/i)).toBeInTheDocument();
-  });
-
-  it("should hide selected users table when update all users is enabled", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    expect(screen.getByText("Selected Users (2):")).toBeInTheDocument();
-
-    const checkbox = screen.getByRole("checkbox", { name: /update all users/i });
-    await user.click(checkbox);
-
-    expect(screen.queryByText("Selected Users (2):")).not.toBeInTheDocument();
-  });
-
-  it("should display team management section", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    expect(screen.getByText("Team Management")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /add selected users to teams/i })).toBeInTheDocument();
-  });
-
-  it("should show team budget input when add to teams is checked", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    const addToTeamsCheckbox = screen.getByRole("checkbox", { name: /add selected users to teams/i });
-    await user.click(addToTeamsCheckbox);
-
-    expect(screen.getByText("Team Budget (Optional):")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Max budget per user in team")).toBeInTheDocument();
-  });
-
-  it("should render UserEditView component", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    expect(screen.getByTestId("user-edit-view")).toBeInTheDocument();
-  });
-
-  it("should show error when access token is missing", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} accessToken={null} />);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(toast.fromError).toHaveBeenCalledWith("Access token not found");
+    /** 验证取消无写入、重开恢复不修改模式；所有本地状态随组件卸载清理。 */
+    it("resets scope and operation on reopening", async () => {
+      const user = userEvent.setup(),
+        p = props();
+      const view = renderWithProviders(<BulkEditUserModal {...p} />);
+      await user.click(screen.getByRole("checkbox", { name: tr("pages.users.updateAllUsers") }));
+      await user.selectOptions(screen.getByRole("combobox"), "clear");
+      await user.click(screen.getByRole("button", { name: tr("Cancel") }));
+      expect(p.onCancel).toHaveBeenCalledOnce();
+      expect(request).not.toHaveBeenCalled();
+      view.rerender(<BulkEditUserModal {...p} open={false} />);
+      view.rerender(<BulkEditUserModal {...p} />);
+      expect(screen.getByRole("combobox")).toHaveValue("");
+      expect(screen.getByRole("checkbox")).not.toBeChecked();
     });
   });
 
-  it("should call userBulkUpdateUserCall with correct payload for selected users", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockUserBulkUpdateUserCall).toHaveBeenCalledWith("test-token", { user_role: "admin", max_budget: 100 }, [
-        "user1",
-        "user2",
-      ]);
-    });
-  });
-
-  it("should call userBulkUpdateUserCall with allUsers flag when update all users is enabled", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    const updateAllCheckbox = screen.getByRole("checkbox", { name: /update all users/i });
-    await user.click(updateAllCheckbox);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockUserBulkUpdateUserCall).toHaveBeenCalledWith(
-        "test-token",
-        expect.objectContaining({ user_role: "admin", max_budget: 100 }),
-        undefined,
-        true,
-      );
-    });
-  });
-
-  it("should show success message after successful user update", async () => {
-    const user = userEvent.setup();
-    mockUserBulkUpdateUserCall.mockResolvedValue({
-      results: [],
-      total_requested: 2,
-      successful_updates: 2,
-      failed_updates: 0,
-    });
-
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith("Updated 2 user(s)");
-    });
-  });
-
-  it("should show success message for all users update", async () => {
-    const user = userEvent.setup();
-    mockUserBulkUpdateUserCall.mockResolvedValue({
-      results: [],
-      total_requested: 100,
-      successful_updates: 100,
-      failed_updates: 0,
-    });
-
-    renderWithProviders(<BulkEditUserModal {...defaultProps} allowAllUsers={true} />);
-
-    const updateAllCheckbox = screen.getByRole("checkbox", { name: /update all users/i });
-    await user.click(updateAllCheckbox);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith("Updated all users (100 total)");
-    });
-  });
-
-  it("should show error message when bulk update fails", async () => {
-    const user = userEvent.setup();
-    mockUserBulkUpdateUserCall.mockRejectedValueOnce(new Error("Update failed"));
-
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(toast.fromError).toHaveBeenCalledWith("Failed to perform bulk operations");
-    });
-  });
-
-  it("should call onSuccess and onCancel after successful update", async () => {
-    const user = userEvent.setup();
-    const onSuccess = vi.fn();
-    const onCancel = vi.fn();
-
-    renderWithProviders(<BulkEditUserModal {...defaultProps} onSuccess={onSuccess} onCancel={onCancel} />);
-
-    const submitButton = screen.getByRole("button", { name: "Submit" });
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(onSuccess).toHaveBeenCalledTimes(1);
-      expect(onCancel).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it("should truncate long user IDs in table", () => {
-    const longUserId = "a".repeat(30);
-    const propsWithLongId = {
-      ...defaultProps,
-      selectedUsers: [{ user_id: longUserId, user_email: "test@example.com", user_role: "user", max_budget: null }],
-    };
-
-    renderWithProviders(<BulkEditUserModal {...propsWithLongId} />);
-
-    expect(screen.getByText(new RegExp(`${longUserId.slice(0, 20)}...`))).toBeInTheDocument();
-  });
-
-  it("should display no email text when user email is missing", () => {
-    const propsWithoutEmail = {
-      ...defaultProps,
-      selectedUsers: [{ user_id: "user1", user_email: null, user_role: "user", max_budget: null }],
-    };
-
-    renderWithProviders(<BulkEditUserModal {...propsWithoutEmail} />);
-
-    expect(screen.getByText("No email")).toBeInTheDocument();
-  });
-
-  it("should display role label from possibleUIRoles when available", () => {
-    renderWithProviders(<BulkEditUserModal {...defaultProps} />);
-
-    expect(screen.getByText("Admin")).toBeInTheDocument();
-    expect(screen.getByText("User")).toBeInTheDocument();
-  });
-
-  it("should display role key when ui_label is not available", () => {
-    const propsWithoutUIRoles = {
-      ...defaultProps,
-      possibleUIRoles: null,
-    };
-
-    renderWithProviders(<BulkEditUserModal {...propsWithoutUIRoles} />);
-
-    expect(screen.getByText("user")).toBeInTheDocument();
-    expect(screen.getByText("admin")).toBeInTheDocument();
-  });
+/** 验证固定错误码覆盖及未知异常回退；纯映射测试，无副作用和清理需求。 */
+it("maps all supported API error types", () => {
+  for (const [code, key] of Object.entries({
+    bulk_budget_invalid: "bulkBudgetInvalid",
+    bulk_budget_too_large: "bulkBudgetTooLarge",
+    bulk_budget_not_found: "bulkBudgetMissing",
+    bulk_budget_allocation: "bulkBudgetAllocation",
+  }))
+    expect(bulkBudgetErrorKey({ body: { error: { type: code } } })).toBe("pages.users." + key);
+  expect(bulkBudgetErrorKey(undefined)).toBe("pages.users.bulkBudgetFailed");
 });

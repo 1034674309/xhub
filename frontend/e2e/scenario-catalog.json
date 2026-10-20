@@ -2720,5 +2720,19 @@
     "title": "hard budget reserves and recovers through key management zh-CN",
     "kind": "implemented",
     "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-420",
+    "file": "e2e/scenarios/regression/user-bulk-budget-en.test.ts",
+    "title": "atomic bulk user budgets control real API keys en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-421",
+    "file": "e2e/scenarios/regression/user-bulk-budget-zh-CN.test.ts",
+    "title": "atomic bulk user budgets control real API keys zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]
