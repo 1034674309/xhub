@@ -274,14 +274,19 @@ func UserInfo(g Gate, w http.ResponseWriter, r *http.Request) {
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/identity/mount.go
 // 异常与副作用：管理员账户字段在同一事务保存；非法字段或数据库约束失败时整体回滚，角色/状态变化使目标会话失效。
-// 测试：users_test.go、user_edit_test.go
+// 测试：user_update_json_test.go、cmd/regression/budget_update_json_test.go。
 func UserUpdate(g Gate, w http.ResponseWriter, r *http.Request) {
 	util.SetCallID(w, util.CallID())
 	p := g.RequireUser(w, r)
 	if p == nil {
 		return
 	}
-	body := readMap(r)
+	// 更新必须得到完整对象；旧readMap可能在数字溢出后留下nil，不能把解析失败误当取消额度。
+	body, err := util.ReadRequiredJSONObject(r.Body)
+	if err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
+		return
+	}
 	// 在可选额度解析前拒绝非法值，避免错误输入清空原额度。
 	if err := util.ValidateRateFields(body); err != nil {
 		util.WriteError(w, 400, "invalid_request", err.Error())

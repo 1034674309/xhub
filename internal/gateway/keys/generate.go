@@ -248,19 +248,24 @@ func setBlocked(s Host, w http.ResponseWriter, r *http.Request, blocked bool) {
 	util.WriteJSON(w, 200, map[string]any{"blocked": blocked})
 }
 
-// Update changes a virtual key's name, narrowing, and limits. The plaintext stays the same, and a field the caller left out keeps its value.
+// Update 更新Key名称、模型范围与额度；先严格解析完整JSON，合法缺省保留旧值，明确null清空对应字段，明文Key不变。
 // 参数 s（Host）：更新使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/keys/mount.go、gateway/models/admin.go、gateway/models/mount.go、gateway/prefs/mount.go
-// 测试：无直接单测
+// 异常与副作用：解码失败直接400且不读写目标；合法请求仍沿原鉴权与原子存储校验。
+// 测试：update_json_test.go、cmd/regression/budget_update_json_test.go。
 func Update(s Host, w http.ResponseWriter, r *http.Request) {
 	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
 	if p == nil {
 		return
 	}
-	var body map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	// 拒绝不完整对象和所有解码错误，防止溢出后的nil或尾部坏数据清除已有上限。
+	body, err := util.ReadRequiredJSONObject(r.Body)
+	if err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
+		return
+	}
 	// 更新与创建使用相同的输入边界；错误输入必须保留原固定额度。
 	if err := util.ValidateRateFields(body); err != nil {
 		util.WriteError(w, 400, "invalid_request", err.Error())

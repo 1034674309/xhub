@@ -29,6 +29,7 @@ func Module(h Gate) util.Module {
 		reg.Handle("GET /user/info", func(w http.ResponseWriter, r *http.Request) { UserInfo(h, w, r) })
 		reg.Handle("GET /v2/user/info", func(w http.ResponseWriter, r *http.Request) { UserInfo(h, w, r) })
 		reg.Handle("POST /user/update", func(w http.ResponseWriter, r *http.Request) { UserUpdate(h, w, r) })
+		reg.Handle("POST /user/bulk_update", func(w http.ResponseWriter, r *http.Request) { UserBulkBudgetUpdate(h, w, r) })
 		reg.Handle("POST /user/delete", func(w http.ResponseWriter, r *http.Request) { UserDelete(h, w, r) })
 		// Setting somebody else's password. This replaces the reset link the
 		// product used to mint: that link led to an onboarding page with no

@@ -3026,23 +3026,25 @@ export const userUpdateUserCall = async (
   }
 };
 
+/** 原子设置用户预算上限；参数为会话、明确max_budget、选定ID或全部标记，返回真实批次结果。
+ * null取消个人上限，0保留为有效上限；未选择目标直接拒绝，不默认为全部，不重置消费。 */
 export const userBulkUpdateUserCall = async (
   accessToken: string,
-  formValues: any, // Assuming formValues is an object
-  userIds?: string[], // Optional - if not provided, will update all users
-  allUsers: boolean = false, // Flag to update all users
+  formValues: { max_budget: number | null },
+  userIds?: string[],
+  allUsers: boolean = false,
 ) => {
   try {
     let request_body: Record<string, any>;
 
     if (allUsers) {
-      // Update all users mode
+      // 全部范围必须显式指定，快照由后台同一事务获取。
       request_body = {
         all_users: true,
         user_updates: formValues,
       };
     } else if (userIds && userIds.length > 0) {
-      // Update specific users mode
+      // 逐项发送完整预算命令，保持后端按用户报告的真实结果。
       let users = [];
       for (const user_id of userIds) {
         users.push({
@@ -3058,6 +3060,8 @@ export const userBulkUpdateUserCall = async (
     }
 
     const data = (await apiClient.post(`/user/bulk_update`, { accessToken, body: request_body })) as {
+      atomic: boolean;
+      batch_id: string;
       results: Array<{
         user_id?: string;
         user_email?: string;
@@ -3070,9 +3074,8 @@ export const userBulkUpdateUserCall = async (
       failed_updates: number;
     };
     return data;
-    // Handle success - you might want to update some state or UI based on the created key
   } catch (error) {
-    console.error("Failed to create key:", error);
+    console.error("Failed to update user budgets:", error);
     throw error;
   }
 };
