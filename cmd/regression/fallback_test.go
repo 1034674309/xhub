@@ -18,6 +18,7 @@ func TestFallbackChain(t *testing.T) { runSimulated(t, fallbackSimulated) }
 func fallbackSimulated(t *testing.T) {
 	const public = "regression-failover"
 	h := newHarness(t)
+	t.Cleanup(func() { _ = h.gw.CloseUsageSpool() })
 	admin := h.adminSession()
 	c := h.openScope(t, admin, "failover")
 	h.addDBModel(t, admin, public, "fail-a", "dep-fail-a", map[string]any{"input_cost_per_token": testInputRate / 2})
@@ -91,6 +92,7 @@ func fallbackSimulated(t *testing.T) {
 	if got := h.upstreamSince(mark); strings.Join(got, ",") != "fail-a" {
 		t.Fatalf("budget recheck still dialed %v", got)
 	}
+	assertUsageQueuesEmpty(t, h, os.Getenv("XHUB_USAGE_SPOOL_DIR"))
 	h.onUpstream("fail-a", nil)
 
 	h.setProjectBudget(t, admin, c.projectID, 1000)
@@ -118,6 +120,8 @@ func fallbackSimulated(t *testing.T) {
 	if got := h.upstreamSince(mark); len(got) != 0 {
 		t.Fatalf("a guardrail block still failed over: %v", got)
 	}
+	h.flushSpend()
+	assertUsageQueuesEmpty(t, h, os.Getenv("XHUB_USAGE_SPOOL_DIR"))
 }
 
 // TestCooldownSkipsADeployment 配了 Redis 时，失败次数到了 allowed_fails 就跳过这条部署。

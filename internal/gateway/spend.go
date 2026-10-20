@@ -92,6 +92,8 @@ func (s *Server) setChatHeaders(w http.ResponseWriter, p *auth.Principal, alias,
 // 调用：gateway/wire.go
 // 测试：无直接单测
 func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, alias, op string, usage map[string]any, start time.Time, cacheHit bool, status int, depID string) {
+	// 完整快照由本路径负责，即使存储失败也不能由外层生成内容不同的替代账单。
+	markUsageRecorded(w)
 	if usage == nil {
 		usage = map[string]any{}
 	}

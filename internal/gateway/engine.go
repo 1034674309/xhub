@@ -369,6 +369,8 @@ func cloneStringMap(in map[string]string) map[string]string {
 // 调用：Handler 在 beginIdempotency 返回缓存命中时调用。
 // 测试：TestIdempotencyReplaysWithoutASecondCharge 通过完整入口重放覆盖。
 func (s *Server) writeIdempotentResponse(w http.ResponseWriter, lw *statusRecorder, hit *idemRec) {
+	// 重放沿用原调用的账单，不能为同一调用重新生成错误快照。
+	lw.usageRecorded = true
 	for k, v := range hit.Hdr {
 		w.Header().Set(k, v)
 	}
@@ -410,6 +412,8 @@ type statusRecorder struct {
 	code int
 	set  bool
 	note string
+	// usageRecorded 只抑制外层错误兜底，不影响执行链对真实尝试的结算。
+	usageRecorded bool
 	// body 只收集失败响应，供统一早期错误日志保存客户端实际收到的完整正文。
 	body bytes.Buffer
 }
@@ -443,12 +447,29 @@ func (s *statusRecorder) Write(p []byte) (int, error) {
 	return s.ResponseWriter.Write(p)
 }
 
+// markUsageRecorded 沿标准 Unwrap 链标记当前HTTP请求已进入结算，供Handler的错误兜底使用。
+// 参数 w 为直接、Gin或非流式缓冲writer；无返回值。只设置请求本地状态，不影响持久化重试和多次真实结算。
+// 调用方为recordSpend；缺少收集器或异常包装链时直接停止，不写响应头、不保存全局调用状态。
+func markUsageRecorded(w http.ResponseWriter) {
+	for depth := 0; w != nil && depth < 32; depth++ {
+		if recorder, ok := w.(*statusRecorder); ok {
+			recorder.usageRecorded = true
+			return
+		}
+		wrapped, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return
+		}
+		w = wrapped.Unwrap()
+	}
+}
+
 // recordEarlyError 为受支持的数据面尚未进入常规结算路径的失败补写日志。
 // 参数 lw：最终状态和客户端正文；r/raw/body：原请求及解析结果；start：请求开始时间。
-// 返回：无。已删除或退役接口仅保留进程访问日志；已有 RecordSpend 行依赖 request_id 幂等去重；鉴权失败无法认领身份时仅管理员可见。
+// 返回：无。已删除或退役接口仅保留进程访问日志；已经进入 RecordSpend 的请求不重复生成另一份快照；鉴权失败无法认领身份时仅管理员可见。
 // 调用：Handler 的失败 defer，覆盖鉴权、限流、未认领模型和路由配置错误；测试见 early_error_log_test.go。
 func (s *Server) recordEarlyError(lw *statusRecorder, r *http.Request, raw []byte, body map[string]any, start time.Time) {
-	if s == nil || lw == nil || lw.code < 400 || !catalog.IsDataPlanePath(r.URL.Path) {
+	if s == nil || lw == nil || lw.code < 400 || lw.usageRecorded || !catalog.IsDataPlanePath(r.URL.Path) {
 		return
 	}
 	// 兼容路由仍会返回 410，已删除路由会返回 404；它们不再提供模型服务，
@@ -519,6 +540,10 @@ func (h *holdWriter) WriteHeader(c int) {
 		h.hdr = true
 	}
 }
+
+// Unwrap 返回非流式缓冲器底层writer，供账单记录定位请求本地的错误兜底状态。
+// 参数无；返回底层HTTP响应，不刷新缓冲或修改响应；调用方为markUsageRecorded和ResponseController。
+func (h *holdWriter) Unwrap() http.ResponseWriter { return h.ResponseWriter }
 
 // Write buffers the body. The bytes reach the ResponseWriter only after Finish.
 // 参数 p（[]byte）：先放进缓冲的正文，Finish 才交给底层。
