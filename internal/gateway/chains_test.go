@@ -313,12 +313,14 @@ func ensurePlaygroundModel(t *testing.T, st *store.Store, upstreamURL string) {
 		ID:        "model_gpt6_astra",
 		ModelName: "gpt-6-astra",
 		Params: map[string]any{
-			"model":               "openai/gpt-6-astra",
-			"custom_llm_provider": "openai",
-			"api_base":            upstreamURL + "/v1",
-			"api_key":             "sk-playground-fixture",
+			"model":                "openai/gpt-6-astra",
+			"custom_llm_provider":  "openai",
+			"api_base":             upstreamURL + "/v1",
+			"api_key":              "sk-playground-fixture",
+			"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008,
 		},
-		Info: map[string]any{"id": "model_gpt6_astra", "db_model": true, "transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}},
+		// 夹具明确收费契约，不依赖外部目录默认价格和cap推断。
+		Info: map[string]any{"id": "model_gpt6_astra", "db_model": true, "transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "pricing_source": "manual", "max_input_tokens": 8192, "max_output_tokens": 8192, "supported_parameters": []string{"max_completion_tokens"}},
 	})
 	if err != nil {
 		t.Fatal(err)

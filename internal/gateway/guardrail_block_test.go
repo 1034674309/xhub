@@ -66,7 +66,7 @@ func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 		}
 		captured <- request
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -89,9 +89,11 @@ func TestChatStopsBeforeUpstreamWhenADefaultGuardrailBlocks(t *testing.T) {
 		Cfg: &config.Config{
 			ModelList: []config.ModelEntry{{
 				ModelName: "gpt-4o-mini",
-				ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}},
+				// 本地供应商声明可信输入窗、总输出cap及完整价格，使测试实际到达目标故障/护栏路径。
+				ModelInfo: map[string]any{"transport": "bypass_openai_chat", "endpoint_types": []string{"chat"}, "pricing_source": "manual", "max_input_tokens": 8192, "max_output_tokens": 8192, "supported_parameters": []string{"max_completion_tokens"}},
 				LiteLLMParams: map[string]any{
-					"model":    "openai/gpt-4o-mini",
+					"model":                "openai/gpt-4o-mini",
+					"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008,
 					"api_key":  "sk-test",
 					"api_base": upstream.URL + "/v1",
 				},
