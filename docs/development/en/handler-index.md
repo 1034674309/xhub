@@ -17,3 +17,5 @@ rg 'GET|POST|DELETE|PATCH' internal/gateway/*/mount.go
 [Consumer API guide](api-reference.md)
 
 [SAML configuration and metadata registration](saml-login.md)
+
+[Manual reconciliation of uncertain charges](budget-reconciliation.md)

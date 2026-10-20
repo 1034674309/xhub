@@ -89,3 +89,15 @@ test("Responses 与 Bypass 说明匹配各自执行链", () => {
     assert.doesNotMatch(source("docs/api/" + locale + "/native-gemini.md"), /Vertex project|Vertex 项目/);
   }
 });
+
+/** 目的：新增预算核对路由可从双语索引查到实际操作边界；前置真实文档与路由源码，检查入口、仅管理员及attempt费用语义，纯读取无需清理。 */
+test("双语处理器索引提供人工对账指南及实际接口", () => {
+  for (const locale of ["en", "zh-CN"]) {
+    assert.ok(source("docs/development/" + locale + "/handler-index.md").includes("(budget-reconciliation.md)"), "缺少同语言人工对账指南入口");
+    const document = source("docs/development/" + locale + "/budget-reconciliation.md");
+    for (const value of ["GET /budget/reservations", "POST /budget/reservations/{reservation_id}/reconcile", "verified_cost_usd", "expected_fingerprint", "attempt"]) {
+      assert.ok(document.includes(value), "人工对账文档缺少实际契约：" + value);
+    }
+    assert.match(document, locale === "en" ? /[Pp]latform administrator/ : /平台管理员/);
+  }
+});

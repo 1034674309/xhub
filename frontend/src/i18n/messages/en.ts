@@ -1,9 +1,11 @@
+import { budgetReconciliationEn } from "./budgetReconciliation.en";
 import { docsEn } from "./docs.en";
 import { enPhrases } from "./phrases.en";
 import { pageDescriptionsEn } from "./pageDescriptions.en";
 import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
+  budgetReconciliation: budgetReconciliationEn,
   hardBudget: {
     "detailsLoadFailed": "Unable to load key details and pending budget. Retry before editing this key.",
     "retry": "Retry",

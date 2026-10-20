@@ -31,6 +31,8 @@ interface KeyEditViewProps {
   userID: string | null;
   userRole: string | null;
   premiumUser?: boolean;
+  canReconcileBudget?: boolean;
+  onBudgetReconciled?: () => Promise<void>;
 }
 
 /** 构建精简编辑器校验；无参数，返回当前语言的 schema，空期限保留现状，非法期限阻止提交。 */
@@ -85,7 +87,7 @@ export function KeyEditView({
   teams,
   accessToken,
   userID,
-  userRole,
+  userRole, canReconcileBudget = false, onBudgetReconciled,
 }: KeyEditViewProps) {
   const t = useT();
   const form = useZodForm<KeyEditFormValues, KeyEditFormValues>(editorSchema(), { defaultValues: defaults(keyData) });
@@ -206,7 +208,7 @@ export function KeyEditView({
             <section className="space-y-5 border-t pt-6">
               <h2 className="text-base font-semibold">{t("Budget and Routing")}</h2>
               <p className="text-sm text-muted-foreground">{t("keyEditor.budgetHint")}</p>
-              <KeyBudgetStatus pending={keyData.budget_pending} reservations={keyData.budget_reservations} />
+              <KeyBudgetStatus pending={keyData.budget_pending} reservations={keyData.budget_reservations} keyId={keyData.token_id} accessToken={accessToken} canReconcile={canReconcileBudget} onReconciled={onBudgetReconciled} />
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField control={form.control} name="max_budget" label={t("Max Budget (USD)")}>
                   {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} />}

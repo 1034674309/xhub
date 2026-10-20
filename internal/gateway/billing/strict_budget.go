@@ -42,6 +42,8 @@ type BudgetPlan struct {
 // budgetPriceSnapshot 是无需重新查询可变目录的定价契约；金额和所有费率都只包含值，不引用部署配置。
 // 新计划的CacheWrite保存最大预占价，CacheWriteByTTL保存全部已知期限的实际结算价；不能用最大值代替实测分桶。
 type budgetPriceSnapshot struct {
+	// Supplier冻结本次实际连接标识供人工核对；历史缺失保持未知，不能套用最后一个重试的供应商。
+	Supplier           string                  `json:"supplier,omitempty"`
 	InputBound         int                     `json:"input_bound"`
 	OutputCap          int                     `json:"output_cap"`
 	Amount             float64                 `json:"reserved_amount"`
@@ -95,7 +97,8 @@ func StrictBudgetPlan(dep config.ModelEntry, finalBody []byte, protocol string, 
 		return fail(err)
 	}
 	window := catalog.WindowAt(started)
-	snapshot := budgetPriceSnapshot{InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started}
+	supplier, _ := dep.MonitorIdentity()
+	snapshot := budgetPriceSnapshot{Supplier: supplier, InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started}
 	if protocol == "openai-chat" && body["max_tokens"] != nil && budgetTrustedLegacyCap(dep) {
 		snapshot.CapSemanticsSource = strings.TrimSpace(dep.ModelInfo["max_tokens_semantics_source"].(string))
 	}

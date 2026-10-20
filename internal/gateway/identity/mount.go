@@ -94,6 +94,10 @@ func Module(h Gate) util.Module {
 		reg.Handle("GET /route_template/binding", func(w http.ResponseWriter, r *http.Request) { RouteTemplateBinding(h, w, r) })
 		reg.Handle("POST /route_template/binding", func(w http.ResponseWriter, r *http.Request) { RouteTemplateBinding(h, w, r) })
 
+		// 人工对账只在管理session内执行，不能复用普通Key编辑权限。
+		reg.Handle("GET /budget/reservations", func(w http.ResponseWriter, r *http.Request) { BudgetReservations(h, w, r) })
+		reg.Handle("POST /budget/reservations/{reservation_id}/reconcile", func(w http.ResponseWriter, r *http.Request) { BudgetReconcile(h, w, r) })
+
 		// Audit.
 		reg.Handle("GET /audit/logs", func(w http.ResponseWriter, r *http.Request) { AuditLog(h, w, r) })
 	})

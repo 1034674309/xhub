@@ -62,6 +62,8 @@ export const deriveErrorMessage = (errorData: any): string => {
     quota_allocation_exceeded: "quotaGuide.allocationError",
     rate_allocation_exceeded: "quotaGuide.rateAllocationError",
     single_team_required: "quotaGuide.singleTeamError",
+    budget_reconciliation_invalid: "budgetReconciliation.invalid",
+    budget_reconciliation_conflict: "budgetReconciliation.conflict",
   };
   const key = quotaErrors[errorData?.error?.type];
   if (key) return t(key);
