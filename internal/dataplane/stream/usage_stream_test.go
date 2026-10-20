@@ -55,6 +55,9 @@ func TestPipeStreamParsesFragmentedSSEAndReturnsBodyError(t *testing.T) {
 	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(body), Header: make(http.Header)}
 	w := httptest.NewRecorder()
 	wrote, usage, _, captured, gotErr := PipeStream(w, resp, time.Now())
+	if w.Header().Get("Cache-Control") != "no-cache, no-transform" {
+		t.Fatal("断流错误响应缺少代理防缓冲头")
+	}
 	if !wrote || !errors.Is(gotErr, readErr) {
 		t.Fatalf("wrote=%v err=%v", wrote, gotErr)
 	}

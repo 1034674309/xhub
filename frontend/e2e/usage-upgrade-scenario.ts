@@ -67,7 +67,8 @@ export function registerUsageUpgradeScenario(locale: "en" | "zh-CN") {
       const row = page.getByRole("row").filter({ hasText: calls[1] });
       await expect(row).toBeVisible(); await row.click();
       await expect(page.getByRole("dialog")).toContainText(model);
-      const loaded = page.waitForResponse(r => new URL(r.url()).pathname === "/user/daily/activity/aggregated");
+      // 正式构建经 /gw 代理读取用量；直连模式仍支持原路径，不能等待一个浏览器永远不会发出的 URL。
+      const loaded = page.waitForResponse(r => /^(?:\/gw)?\/user\/daily\/activity\/aggregated$/.test(new URL(r.url()).pathname));
       await stableGoto(page, "/usage");
       const activity = await loaded; expect(activity.status()).toBe(200);
       const metadata = (await activity.json()).metadata;

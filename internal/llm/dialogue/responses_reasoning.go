@@ -57,7 +57,7 @@ func MessagesReasoningBlock(item map[string]any) (map[string]any, error) {
 }
 
 // messagesReasoningReplay 还原网关封装的单个 thinking/redacted 块为 Responses 原生历史项。
-// 参数为客户端内容块和角色，返回受限 Turn 或错误；只接受本网关命名空间，原厂签名仍被拒绝。
+// 参数为客户端内容块和角色，返回受限 Turn 或错误；网关封装还原到 Responses，原厂签名仅能原样回到 Messages。
 // 与 LiteLLM 一样省略重建项的 ID，避免把虚构 ID 或跨账户 ID 传给上游；密文原字节保留。
 func messagesReasoningReplay(block map[string]any, role string) (Turn, error) {
 	if role != "assistant" {
@@ -81,7 +81,18 @@ func messagesReasoningReplay(block map[string]any, role string) (Turn, error) {
 		return Turn{Role: "reasoning", Reasoning: text}, nil
 	}
 	if !IsResponsesReasoningSignature(value) {
-		return Turn{}, fmt.Errorf("signed thinking requires native Messages")
+		if _, ok := value.(string); !ok {
+			return Turn{}, fmt.Errorf("thinking signature/data must be a string")
+		}
+		copy, err := cloneObject(block)
+		if err != nil {
+			return Turn{}, err
+		}
+		// 原生签名和密文只保存在受协议约束的历史中；不能当作公开推理跨协议发送。
+		// 网关路由另行验证身份、会话及原连接，本层只保证无损保留和跨协议拒绝。
+		return Turn{Role: "reasoning", NativeProtocol: "anthropic-messages", Native: map[string]any{
+			"role": "assistant", "content": []any{copy},
+		}}, nil
 	}
 	cipher := strings.TrimPrefix(value.(string), ResponsesReasoningSignaturePrefix)
 	if cipher == "" {

@@ -6,6 +6,9 @@ mkdir -p "$DIR"
 UP_PORT="${E2E_UP_PORT:-4110}"
 GW_PORT="${E2E_GW_PORT:-4100}"
 MASTER="${E2E_MASTER_KEY:-sk-e2e-master}"
+# portable模式同时让真实UI配置报告相对代理，避免hydrate前后在/gw和直连地址间变化。
+E2E_REPORTED_ORIGIN="http://127.0.0.1:$GW_PORT"
+if [[ "${E2E_PORTABLE_CONSOLE:-0}" == 1 ]]; then E2E_REPORTED_ORIGIN="/gw"; fi
 DATABASE="${E2E_DATABASE:-xhub}"
 # 数据库名称只允许 SQL 标识符；专属库由调用方创建，脚本只回收自己的 schema。
 [[ "$DATABASE" =~ ^[a-z][a-z0-9_]*$ ]] || { echo "invalid E2E_DATABASE" >&2; exit 1; }
@@ -50,9 +53,9 @@ fi
 python3 "$ROOT/e2e/fake_upstream.py" --port "$UP_PORT" >"$DIR/up.log" 2>&1 &
 UP_PID=$!
 if [[ "${E2E_ENTERPRISE_FIXTURE:-0}" == 1 ]]; then
-  XHUB_PRICE_FEED_URL="http://127.0.0.1:$UP_PORT/v1/market/models" XHUB_PUBLIC_ORIGIN="http://127.0.0.1:$GW_PORT" "$DIR/enterprise.test" -test.run '^TestBrowserEnterpriseFixture$' -test.timeout 0 >"$DIR/gw.log" 2>&1 &
+  XHUB_PRICE_FEED_URL="http://127.0.0.1:$UP_PORT/v1/market/models" XHUB_PUBLIC_ORIGIN="$E2E_REPORTED_ORIGIN" "$DIR/enterprise.test" -test.run '^TestBrowserEnterpriseFixture$' -test.timeout 0 >"$DIR/gw.log" 2>&1 &
 else
-  XHUB_PRICE_FEED_URL="http://127.0.0.1:$UP_PORT/v1/market/models" XHUB_PUBLIC_ORIGIN="http://127.0.0.1:$GW_PORT" "$DIR/xhub" -config "$DIR/c.yaml" -addr "127.0.0.1:$GW_PORT" >"$DIR/gw.log" 2>&1 &
+  XHUB_PRICE_FEED_URL="http://127.0.0.1:$UP_PORT/v1/market/models" XHUB_PUBLIC_ORIGIN="$E2E_REPORTED_ORIGIN" "$DIR/xhub" -config "$DIR/c.yaml" -addr "127.0.0.1:$GW_PORT" >"$DIR/gw.log" 2>&1 &
 fi
 GW_PID=$!
 wait "$GW_PID"

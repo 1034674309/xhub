@@ -5,6 +5,12 @@ import { routeTemplatesEn } from "./routeTemplates.en";
 
 export const en = {
   keyEditor: {
+    expiredDurationRequired: "Expiration is required for expired keys",
+    "apiOnly": "Model API key. Management operations require a signed-in session.",
+    "rotationUnsupported": "Automatic rotation is not supported. Rotate keys manually and update your clients.",
+    "immediateRotation": "Rotation immediately revokes the old key. Update every client with the new key; a grace period is not supported.",
+    "expiredSuffix": " (expired)",
+
     "back": "Back to keys",
     "actions": "Actions",
     "information": "Key information",

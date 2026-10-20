@@ -9,6 +9,39 @@ const yaml = require('../frontend/node_modules/js-yaml');
 const workflow = yaml.load(readFileSync(join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
 const publish = workflow.jobs.publish;
 
+/** 前置真实工作流和临时脚本夹具；执行新增浏览器门禁，验证全部场景参数、无 Redis 代理环境与失败退出码，finally 清理夹具。 */
+test('API client reliability gate runs all flows independently and preserves failures', () => {
+  const steps = workflow.jobs.verify.steps;
+  const browser = steps.find(item => item.name === 'API client reliability browser regression');
+  assert.ok(browser, '发布必须运行 API 客户端可靠性闭环');
+  assert.equal(browser.env.E2E_REDIS, '0', 'PostgreSQL 待结算恢复必须在无 Redis 模式验证');
+  assert.equal(browser.env.E2E_PORTABLE_CONSOLE, '1', '必须经过真实控制台 HTTP 代理');
+  assert.equal(browser.env.E2E_BUILD_DIR, '.next-agent-reliability');
+  assert.ok(browser.env.E2E_RUN_DIR.endsWith('/.e2e/release-agent-reliability'));
+  const directory = mkdtempSync(join(tmpdir(), 'xhub-client-gate-'));
+  try {
+    mkdirSync(join(directory, 'scripts'));
+    writeFileSync(join(directory, 'scripts/e2e.sh'), '#!/bin/bash\nprintf "%s\\n" "$@" > arguments\nprintf "%s\\n" "$E2E_REDIS" "$E2E_PORTABLE_CONSOLE" > environment\nexit "$FIXTURE_STATUS"\n');
+    for (const status of [0, 7]) {
+      const result = spawnSync('bash', ['-c', browser.run], {
+        cwd: directory, encoding: 'utf8',
+        env: { ...process.env, ...browser.env, FIXTURE_STATUS: String(status) },
+      });
+      assert.equal(result.status, status, '浏览器失败必须阻断发布：' + result.stderr);
+      assert.deepEqual(readFileSync(join(directory, 'arguments'), 'utf8').trim().split('\n'), [
+        'client-docs-url-', 'client-cancellation-', 'stream-terminal-sc-',
+        'billing-pending-recovery', 'key-lifecycle-', 'agent-history-',
+      ]);
+      assert.equal(readFileSync(join(directory, 'environment'), 'utf8'), '0\n1\n');
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+  const upload = steps.find(item => item.uses === 'actions/upload-artifact@v4');
+  assert.equal(upload.if, 'always()', '失败也必须保留证据');
+  for (const file of ['results.json', 'junit.xml', 'scenario-coverage.json', 'html/', 'test-results/']) {
+    assert.ok(upload.with.path.split('\n').includes('.e2e/release-agent-reliability/' + file), '遗漏独立报告：' + file);
+  }
+});
+
 /** 前置真实发布 YAML；验证升级及监控权限双语闭环随发布运行且使用隔离 Redis，防止 CI 遗漏权限回归；只读配置无需清理。 */
 test('verification runs bilingual usage upgrade and monitor permission scenarios with isolated Redis', () => {
   const browser = workflow.jobs.verify.steps.find(item => (item.run || '').startsWith('bash scripts/e2e.sh '));

@@ -2615,5 +2615,96 @@
     "title": "log costs and reasoning effort zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-390",
+    "file": "e2e/scenarios/regression/client-cancellation-zh-CN.test.ts",
+    "title": "client cancellation keeps a healthy model available zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-392",
+    "file": "e2e/scenarios/regression/client-docs-url-zh-CN.test.ts",
+    "title": "client documentation URLs execute real agent APIs zh-CN",
+    "kind": "implemented",
+    "environment": "default offline and portable console"
+  },
+  {
+    "id": "SC-391",
+    "file": "e2e/scenarios/regression/client-cancellation-en.test.ts",
+    "title": "client cancellation keeps a healthy model available en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-393",
+    "file": "e2e/scenarios/regression/client-docs-url-en.test.ts",
+    "title": "client documentation URLs execute real agent APIs en",
+    "kind": "implemented",
+    "environment": "default offline and portable console"
+  },
+  {
+    "id": "SC-400",
+    "file": "e2e/scenarios/regression/key-lifecycle-en.test.ts",
+    "title": "key lifecycle settings and atomic rotation en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-401",
+    "file": "e2e/scenarios/regression/key-lifecycle-zh-CN.test.ts",
+    "title": "key lifecycle settings and atomic rotation zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-380",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-380.test.ts",
+    "title": "stream terminal rejects malformed missing through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-381",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-381.test.ts",
+    "title": "stream terminal rejects malformed response through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-382",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-382.test.ts",
+    "title": "stream terminal completes before upstream EOF through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-383",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-383.test.ts",
+    "title": "stream terminal preserves truncated tools in JSON and SSE billing",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-370",
+    "file": "e2e/scenarios/regression/agent-history-en.test.ts",
+    "title": "native agent history and parallel tools en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-371",
+    "file": "e2e/scenarios/regression/agent-history-zh-CN.test.ts",
+    "title": "native agent history and parallel tools zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-384",
+    "file": "e2e/scenarios/regression/billing-pending-recovery.test.ts",
+    "title": "pending billing survives database transaction failure without Redis",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]

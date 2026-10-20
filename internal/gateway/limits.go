@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -285,7 +286,15 @@ func (s *Server) keyBudgetOK(ctx context.Context, p *auth.Principal) error {
 			return errBudget{scope: "User"}
 		}
 	}
-	if overBudget(k.MaxBudget, k.Spend, s.hotSpendRef("key", p.Hash)) {
+	keyHot := 0.0
+	// 无限额 Key 不依赖自身累计费用；父级限制仍由额度树检查。
+	if k.MaxBudget != nil {
+		keyHot = s.hotSpendRef("key", k.ID)
+	}
+	if math.IsNaN(keyHot) {
+		return iam.ErrQuotaUnavailable
+	}
+	if overBudget(k.MaxBudget, k.Spend, keyHot) {
 		return errBudget{scope: "Key"}
 	}
 	if k.ProjectID != nil && *k.ProjectID != "" {
@@ -350,6 +359,10 @@ func (e errBudget) Error() string { return e.scope + " budget has been exceeded"
 // 调用：仅在 limits.go 内使用
 // 测试：无直接单测
 func budgetRefusal(w http.ResponseWriter, path string, err error) {
+	if errors.Is(err, iam.ErrQuotaUnavailable) {
+		util.WriteTypedError(w, path, 503, "quota_unavailable", "pending quota usage is temporarily unavailable")
+		return
+	}
 	var over errBudget
 	if errors.As(err, &over) {
 		util.WriteTypedError(w, path, 429, "budget_exceeded", over.Error())
@@ -370,12 +383,19 @@ func overBudget(ceiling *float64, spent, hot float64) bool {
 // 读取这个主体还没刷进数据库的热花费。没有 Redis 时为 0。
 // 参数 kind（string）：分类名，用来选择限额主体、日志类型或官方端点；id（string）：热花费引用使用的主键。空串表示调用方没有指定记录。
 // 可选 since 为组织当前周期起点；其他层级或未设置周期继续使用累计花费。
-// 返回 float64（float64）：热花费引用。没有计数或类型不符时为 0。
+// 返回金额；Key 使用稳定行 ID，读取失败以 NaN 传给额度树并转为 503，不能按零费用放行。
 // 调用：仅在 limits.go 内使用
 // 测试：无直接单测
 func (s *Server) hotSpendRef(kind, id string, since ...time.Time) float64 {
 	if s.Live == nil {
 		return 0
+	}
+	if kind == "key" {
+		amount, err := s.Live.HotKeySpend(id)
+		if err != nil {
+			return math.NaN()
+		}
+		return amount
 	}
 	if kind == "org" && len(since) > 0 && !since[0].IsZero() {
 		return s.Live.HotSpendSince(id, since[0])

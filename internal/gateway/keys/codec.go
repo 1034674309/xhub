@@ -2,6 +2,7 @@
 package keys
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -154,4 +155,25 @@ func parseFloat(v any) *float64 {
 	default:
 		return nil
 	}
+}
+
+// readRotationBody 严格读取可选的轮换 JSON 对象；参数 reader 为请求正文，返回字段与解析错误。
+// 空正文或 null 表示没有配置更新；语法错误、非对象、尾随数据必须失败，避免坏请求被当成立即撤销旧凭据的指令。
+// 调用：Regenerate；只消耗请求正文，不修改密钥。
+func readRotationBody(reader io.Reader) (map[string]any, error) {
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return map[string]any{}, nil
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, err
+	}
+	if body == nil {
+		body = map[string]any{}
+	}
+	return body, nil
 }

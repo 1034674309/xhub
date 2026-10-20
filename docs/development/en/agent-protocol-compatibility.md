@@ -153,3 +153,9 @@ Live recognition evidence belongs in the PR acceptance record; HTTP 200 alone is
 
 See [OpenAI image inputs](https://developers.openai.com/api/docs/guides/images-vision)
 and `third_party/litellm/NOTICE.md` for pinned LiteLLM mappings and licensing.
+
+### Native Agent history preservation
+
+The standard Messages endpoint preserves `thinking.signature`, `redacted_thinking.data` and `tool_use.caller={"type":"direct"}` on native Anthropic deployments, for both JSON and SSE tool continuation. Signed or encrypted history requires the same identity, public model, session and supplier connection. Unknown ownership or changed connection credentials fail explicitly; cross-protocol and cross-provider migration remain unsupported. Programmatic tool callers remain rejected. Native streams publish continuation ownership only after complete content blocks, tool arguments and a valid message terminal.
+
+Nonnegative integer `tool_calls[].index` values from Chat providers or SDK accumulation can be replayed unchanged. Native requests retain them; cross-protocol projections remove only this positional metadata and retain call IDs. Consecutive Responses function calls in a turn share one Chat assistant message. Results remain associated by ID and keep their order; users, tool results and separate reasoning items form grouping boundaries.

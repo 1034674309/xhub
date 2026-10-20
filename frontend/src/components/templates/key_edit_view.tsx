@@ -15,8 +15,7 @@ import { modelAvailableCall } from "../networking";
 import { fetchTeamModels } from "../organisms/create_key_button";
 import { MultiSelect } from "../shared/MultiSelect";
 import NumericalInput from "../shared/numerical_input";
-import { KeyTypeSelect } from "./KeyEditViewControls";
-import { keyTypeFromRoutes, modelSentinelOptions, parseAllowedRoutes } from "./keyEditFieldNormalizers";
+import { modelSentinelOptions } from "./keyEditFieldNormalizers";
 import { keyEditFormSchema, KeyEditFormValues } from "./keyEditFormValues";
 
 /** 编辑器参数：密钥及用户上下文用于读取模型，回调负责保存或取消；保留团队及授权属性以兼容调用方。 */
@@ -93,8 +92,7 @@ export function KeyEditView({
   const [modelsError, setModelsError] = useState(false);
   const [saving, setSaving] = useState(false);
   const team = teams?.find((item) => item.team_id === keyData.team_id);
-  const routes = parseAllowedRoutes(form.watch("allowed_routes"));
-  const modelsDisabled = routes.includes("management_routes") || routes.includes("info_routes");
+  const modelsDisabled = false;
   const selectedModels = form.watch("models") ?? [];
 
   useEffect(() => {
@@ -135,12 +133,8 @@ export function KeyEditView({
         rpm_limit: values.rpm_limit,
         tpm_limit: values.tpm_limit,
         route_template_id: values.route_template_id,
-        auto_rotate: values.auto_rotate,
       };
-      if (values.allowed_routes !== (keyData.allowed_routes ?? []).join(","))
-        payload.allowed_routes = parseAllowedRoutes(values.allowed_routes);
       if (values.duration?.trim()) payload.duration = values.duration.trim();
-      if (values.auto_rotate) payload.rotation_interval = values.rotation_interval;
       await onSubmit(payload);
     } finally {
       setSaving(false);
@@ -203,20 +197,7 @@ export function KeyEditView({
                   {t("keyEditor.modelsError")}
                 </p>
               )}
-              <FormField control={form.control} name="allowed_routes" label={t("Key Type")}>
-                {({ id, onChange }) => (
-                  <KeyTypeSelect
-                    id={id}
-                    value={keyTypeFromRoutes(routes)}
-                    onChange={(type) => {
-                      onChange(
-                        type === "llm_api" ? "llm_api_routes" : type === "management" ? "management_routes" : "",
-                      );
-                      if (type === "management") form.setValue("models", []);
-                    }}
-                  />
-                )}
-              </FormField>
+              <p className="text-sm text-muted-foreground">{t("keyEditor.apiOnly")}</p>
             </section>
             <section className="space-y-5 border-t pt-6">
               <h2 className="text-base font-semibold">{t("Budget and Routing")}</h2>

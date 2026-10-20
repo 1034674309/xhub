@@ -316,18 +316,22 @@ func Response(k iam.Key, plain string, includePlain bool) map[string]any {
 		token = plain
 	}
 	m := map[string]any{
-		"token_id":   k.ID,
-		"token":      token,
-		"key_name":   k.Name,
-		"key_alias":  k.Name,
-		"key_prefix": k.KeyPrefix,
-		"owner_type": k.OwnerType,
-		"user_id":    emptyNil(deref(k.UserID)),
-		"team_id":    emptyNil(k.TeamID),
-		"project_id": emptyNil(deref(k.ProjectID)),
-		"created_by": emptyNil(deref(k.CreatedBy)),
-		"models":     nonNilStrings(k.Models),
-		"max_budget": floatJSON(k.MaxBudget),
+		"token_id":          k.ID,
+		"token":             token,
+		"key_name":          k.Name,
+		"key_alias":         k.Name,
+		"key_prefix":        k.KeyPrefix,
+		"owner_type":        k.OwnerType,
+		"key_type":          "llm_api",
+		"allowed_routes":    []string{"llm_api_routes"},
+		"auto_rotate":       false,
+		"rotation_interval": nil,
+		"user_id":           emptyNil(deref(k.UserID)),
+		"team_id":           emptyNil(k.TeamID),
+		"project_id":        emptyNil(deref(k.ProjectID)),
+		"created_by":        emptyNil(deref(k.CreatedBy)),
+		"models":            nonNilStrings(k.Models),
+		"max_budget":        floatJSON(k.MaxBudget),
 		// The router template this key selects. Without it the key's edit screen
 		// shows an empty field, which reads as "selects nothing" - and an
 		// operator who had set one would see their choice apparently lost, then
@@ -427,6 +431,9 @@ func keyFilter(sc *authz.Scope) iam.KeyFilter {
 // 调用：Generate、gateway/keys/admin.go；不产生持久化副作用，非法归属或期限返回错误。
 // 测试：key_input_test.go。
 func keyInputFrom(body map[string]any, defaultUserID string) (iam.KeyInput, error) {
+	if err := validateKeyCapabilities(body); err != nil {
+		return iam.KeyInput{}, err
+	}
 	if err := util.ValidateRateFields(body); err != nil {
 		return iam.KeyInput{}, err
 	}
@@ -491,6 +498,9 @@ func keyModels(raw any) []string {
 // 调用：gateway/keys/admin.go
 // 测试：key_input_test.go。
 func patchFrom(cur *iam.Key, body map[string]any) (iam.KeyInput, error) {
+	if err := validateKeyCapabilities(body); err != nil {
+		return iam.KeyInput{}, err
+	}
 	in := iam.KeyInput{Name: cur.Name, Models: cur.Models,
 		MaxBudget: cur.MaxBudget, TPMLimit: cur.TPMLimit, RPMLimit: cur.RPMLimit}
 	in.RouteTemplateID = routeTemplatePatch(body)

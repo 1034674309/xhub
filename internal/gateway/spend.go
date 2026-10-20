@@ -77,7 +77,11 @@ func (s *Server) setChatHeaders(w http.ResponseWriter, p *auth.Principal, alias,
 		if p.Key.MaxBudget != nil {
 			w.Header().Set("x-litellm-key-max-budget", catalog.Format(*p.Key.MaxBudget))
 		}
-		w.Header().Set("x-litellm-key-spend", catalog.Format(p.Key.Spend))
+		// 流式响应在落账前发送头，也必须包含同一 KeyID 下的历史待结算费用。
+		hot, err := s.Live.HotKeySpend(p.KeyID)
+		if err == nil {
+			w.Header().Set("x-litellm-key-spend", catalog.Format(p.Key.Spend+hot))
+		}
 	}
 }
 
@@ -119,10 +123,18 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		w.Header().Set("x-litellm-response-cost-output", catalog.Format(out))
 		if p != nil && p.Key != nil {
 			shown := p.Key.Spend + total
+			showSpend := true
 			if s.Live != nil {
-				shown = p.Key.Spend + s.Live.HotSpend(live.SpendRef("key", p.Hash)) + total
+				// 轮换不改变 KeyID；不可读时省略累计值，避免向客户端伪报零热费用。
+				hot, err := s.Live.HotKeySpend(p.KeyID)
+				showSpend = err == nil
+				shown += hot
 			}
-			w.Header().Set("x-litellm-key-spend", catalog.Format(shown))
+			if showSpend {
+				w.Header().Set("x-litellm-key-spend", catalog.Format(shown))
+			} else {
+				w.Header().Del("x-litellm-key-spend")
+			}
 		}
 	}
 	hash := ""
@@ -299,9 +311,9 @@ func reportsCachedTokens(usage map[string]any) bool {
 	return false
 }
 
-// persistSpend writes spend to PostgreSQL immediately. Requests take this path when Redis is not configured.
+// persistSpend 先独立持久化账单快照再立即结算；无 Redis 或入队失败的调用使用此路径。
 // 参数 row（live.SpendLog）：从用量或目录读出的SpendLog；spend（float64）：这一行要累加的费用，单位是美元；ex（promptExchange）：persist花费使用的promptExchange；start（time.Time）：时间范围的起点。零值表示不限制开始；end（time.Time）：时间范围的终点。零值表示直到现在。
-// 返回：无。这条花费已写入 PostgreSQL。没配库时直接返回，不写。
+// 返回：无。结算失败保留持久快照，后台 Flush/新实例恢复；数据库本身不可写时明确记录未持久化。没配库时不写。
 // 调用：仅在 spend.go 内使用
 // 测试：log_completeness_test.go、TestPersistSpendKeepsFailureResponseWithoutPrompts。
 func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchange, start, end time.Time) {
@@ -317,8 +329,8 @@ func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchang
 		response = row.Response
 	}
 	rec := usageFromSpend(row, spend, ex.messages, response, ex.proxy, start, end)
-	if err := s.IAM.RecordUsage(context.Background(), []iam.UsageRecord{rec}); err != nil {
-		util.Error("persist spend failed: %v", err)
+	if durable, err := s.IAM.RecordUsageDurably(context.Background(), rec); err != nil {
+		util.Error("persist spend failed request=%s durable=%t: %v", rec.RequestID, durable, err)
 	}
 }
 

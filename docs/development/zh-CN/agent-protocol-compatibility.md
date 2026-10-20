@@ -144,3 +144,9 @@ Responses 的 `file_id` 仅在原生 Responses 保留，不下载文件，也不
 
 字段参考：[OpenAI 图片输入](https://developers.openai.com/api/docs/guides/images-vision)。
 LiteLLM 来源、函数与许可证见 `third_party/litellm/NOTICE.md`。
+
+### 原生 Agent 历史保留
+
+标准 Messages 入口在原生 Anthropic 部署上保留 `thinking.signature`、`redacted_thinking.data` 和 `tool_use.caller={"type":"direct"}`，同步与流式回复均可原样续轮。签名/密文必须回到同一身份、公开模型、会话和供应商连接；未知归属或连接凭据变化会拒绝，不能跨协议或跨供应商迁移。程序化工具 caller 仍明确拒绝。原生流只有在内容块、工具参数和消息终态完整时才记录可续轮归属。
+
+Chat SDK 累积或供应商回复中的非负整数 `tool_calls[].index` 可原样回传；同协议保留该字段，跨协议仅移除位置元数据，关联仍使用调用 ID。Responses 一轮中的连续函数调用在 Chat 投影中合并为同一条 assistant 消息，工具结果按 ID 关联并保留原顺序；用户、工具结果或独立推理项构成分组边界。

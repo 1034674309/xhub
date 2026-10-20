@@ -187,6 +187,9 @@ func TestNativeBypassStreamingFlushAndMergedUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	head := make([]byte, len(first))
+	if !strings.Contains(resp.Header.Get("Cache-Control"), "no-transform") {
+		t.Fatal("原生bypass首帧缺少代理防缓冲头")
+	}
 	_, err = io.ReadFull(resp.Body, head)
 	close(release)
 	if err != nil || string(head) != first {

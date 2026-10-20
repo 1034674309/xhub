@@ -142,7 +142,14 @@ func parseUnifiedDialogue(protocol string, body map[string]any) (Dialogue, error
 			continue
 		}
 		if protocol == "openai-responses" && kind == "function_call" {
-			d.Turns = append(d.Turns, Turn{Role: "assistant", Calls: []Turn{{ID: dialogueString(m["call_id"]), Name: dialogueString(m["name"]), Arguments: dialogueString(m["arguments"])}}})
+			call := Turn{ID: dialogueString(m["call_id"]), Name: dialogueString(m["name"]), Arguments: dialogueString(m["arguments"])}
+			// Responses 按项保存同轮并行调用，Chat 必须在一条 assistant.tool_calls 中声明整组。
+			// 仅并入相邻 assistant；遇到工具结果、用户或推理项便重新起组，不跨已经完成的工具轮次。
+			if n := len(d.Turns); n > 0 && d.Turns[n-1].Role == "assistant" && d.Turns[n-1].Native == nil {
+				d.Turns[n-1].Calls = append(d.Turns[n-1].Calls, call)
+			} else {
+				d.Turns = append(d.Turns, Turn{Role: "assistant", Calls: []Turn{call}})
+			}
 			continue
 		}
 		if protocol == "openai-responses" && kind == "function_call_output" {

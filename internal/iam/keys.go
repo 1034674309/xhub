@@ -195,12 +195,12 @@ func (db *DB) CreateKey(ctx context.Context, by Actor, in KeyInput) (*Key, strin
 	return out, plain, nil
 }
 
-// RotateKey replaces the secret and returns the new plaintext once.
+// RotateKey 在同一事务中更新凭据、有效期与额度；可选 inputs 只能包含一份由网关合并已有字段的配置，失败时旧密钥保持有效。
 // 参数 ctx（context.Context）：上下文，取消时停止；by（Actor）：执行这次修改的操作者。审计日志记这个人的 id 和角色；id（string）：密钥 id。空串表示没有指定密钥。
 // 返回 *Key（*Key）：轮换后的密钥行。失败时为 nil；string（string）：新的明文密钥，只展示这一次；error（error）：失败原因。nil 表示轮换成功。
 // 调用：gateway/keys/admin.go
-// 测试：无直接单测
-func (db *DB) RotateKey(ctx context.Context, by Actor, id string) (*Key, string, error) {
+// 测试：keys_rotation_test.go 与 cmd/regression/key_lifecycle_test.go
+func (db *DB) RotateKey(ctx context.Context, by Actor, id string, inputs ...KeyInput) (*Key, string, error) {
 	plain := NewPlainKey()
 	var out *Key
 	err := db.tx(ctx, func(s *xorm.Session) error {
@@ -208,8 +208,34 @@ func (db *DB) RotateKey(ctx context.Context, by Actor, id string) (*Key, string,
 		if err != nil {
 			return err
 		}
-		if _, err := s.ID(id).Cols("token_hash", "key_prefix", "status").Update(&Key{
-			TokenHash: HashKey(plain), KeyPrefix: plain[:11], Status: StatusActive}); err != nil {
+		if len(inputs) > 1 {
+			return ErrInvalid
+		}
+		patch := Key{TokenHash: HashKey(plain), KeyPrefix: plain[:11], Status: StatusActive}
+		cols := []string{"token_hash", "key_prefix", "status"}
+		if len(inputs) == 1 {
+			in := inputs[0]
+			projectID := ""
+			if cur.ProjectID != nil {
+				projectID = *cur.ProjectID
+			}
+			if err := checkWithinTeam(s, cur.TeamID, projectID, in.Models, in.MaxBudget); err != nil {
+				return err
+			}
+			patch.Name, patch.Models, patch.MaxBudget = in.Name, nonNil(in.Models), in.MaxBudget
+			patch.TPMLimit, patch.RPMLimit = in.TPMLimit, in.RPMLimit
+			cols = append(cols, "name", "models", "max_budget", "tpm_limit", "rpm_limit")
+			// 留空期限保留既有到期时间，显式正数期限才能恢复已过期凭据。
+			if in.ExpiresAt != nil {
+				patch.ExpiresAt = in.ExpiresAt
+				cols = append(cols, "expires_at")
+			}
+		}
+		if _, err := s.ID(id).Cols(cols...).Update(&patch); err != nil {
+			return err
+		}
+		// 分配校验必须和更换哈希在同一事务内，避免失败更新先撤销旧密钥。
+		if err := validateQuota(s, "key", id); err != nil {
 			return err
 		}
 		if out, err = getKey(ctx, s, id); err != nil {

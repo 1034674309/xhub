@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { chooseSelectOption, fireEvent, renderWithProviders, screen, waitFor } from "../../../tests/test-utils";
+import { fireEvent, renderWithProviders, screen, waitFor } from "../../../tests/test-utils";
+import { I18nProvider, translate } from "@/i18n";
 import KeyLifecycleSettings from "./KeyLifecycleSettings";
 
 const CREATE_PLACEHOLDER = "e.g., 30d or leave empty to never expire";
@@ -51,8 +52,6 @@ const Harness: React.FC<HarnessProps> = ({ isCreateMode = true, onFinish = () =>
 const getDurationInput = (isCreateMode = true) =>
   screen.getByPlaceholderText(isCreateMode ? CREATE_PLACEHOLDER : EDIT_PLACEHOLDER) as HTMLInputElement;
 
-const isRenderedSelection = (el: HTMLElement): boolean => !el.closest('[role="listbox"]');
-
 describe("KeyLifecycleSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,7 +60,7 @@ describe("KeyLifecycleSettings", () => {
   it("renders the expiry and auto-rotation sections", () => {
     renderWithProviders(<Harness />);
     expect(screen.getByText("Key Expiry Settings")).toBeInTheDocument();
-    expect(screen.getByText("Auto-Rotation Settings")).toBeInTheDocument();
+    expect(screen.getByText(/Automatic rotation is not supported/)).toBeInTheDocument();
     expect(getDurationInput()).toBeInTheDocument();
   });
 
@@ -148,77 +147,29 @@ describe("KeyLifecycleSettings", () => {
       expect(onFinish.mock.calls[0][0]).toMatchObject({ duration: "" });
     });
   });
-
-  describe("Auto-Rotation", () => {
-    it("reveals the rotation interval controls when enabled", async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<Harness />);
-
-      expect(screen.queryByText("Rotation Interval")).not.toBeInTheDocument();
-      await user.click(screen.getByRole("switch"));
-
-      expect(await screen.findByText("Rotation Interval")).toBeInTheDocument();
-    });
-
-    it("propagates a selected predefined interval", async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<Harness />);
-
-      await user.click(screen.getByRole("switch"));
-      expect(await screen.findByText("Rotation Interval")).toBeInTheDocument();
-
-      await chooseSelectOption(user, screen.getByRole("combobox"), "90 days");
-
-      await waitFor(() => expect(screen.getAllByTitle("90 days").some(isRenderedSelection)).toBe(true));
-      expect(screen.getByTestId("rotation-interval-value")).toHaveTextContent("90d");
-    });
-
-    it("shows the custom interval input when Custom interval is selected, without propagating yet", async () => {
-      const user = userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
-      renderWithProviders(<Harness />);
-
-      await user.click(screen.getByRole("switch"));
-      expect(await screen.findByText("Rotation Interval")).toBeInTheDocument();
-
-      await chooseSelectOption(user, screen.getByRole("combobox"), "Custom interval");
-
-      expect(await screen.findByPlaceholderText("e.g., 1s, 5m, 2h, 14d")).toBeInTheDocument();
-      expect(screen.getByText("Supported formats: seconds (s), minutes (m), hours (h), days (d)")).toBeInTheDocument();
-      expect(screen.getByTestId("rotation-interval-value")).toHaveTextContent("");
-    });
-
-    it("propagates a typed custom interval to the parent", async () => {
-      const user = userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
-      renderWithProviders(<Harness />);
-
-      await user.click(screen.getByRole("switch"));
-      expect(await screen.findByText("Rotation Interval")).toBeInTheDocument();
-
-      await chooseSelectOption(user, screen.getByRole("combobox"), "Custom interval");
-
-      const customInput = await screen.findByPlaceholderText("e.g., 1s, 5m, 2h, 14d");
-      fireEvent.change(customInput, { target: { value: "14d" } });
-
-      await waitFor(() => expect(screen.getByTestId("rotation-interval-value")).toHaveTextContent("14d"));
-      expect((customInput as HTMLInputElement).value).toBe("14d");
-    });
-
-    it("hides the custom input and propagates the value when switching back to a predefined interval", async () => {
-      const user = userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
-      renderWithProviders(<Harness />);
-
-      await user.click(screen.getByRole("switch"));
-      expect(await screen.findByText("Rotation Interval")).toBeInTheDocument();
-
-      await chooseSelectOption(user, screen.getByRole("combobox"), "Custom interval");
-      const customInput = await screen.findByPlaceholderText("e.g., 1s, 5m, 2h, 14d");
-      fireEvent.change(customInput, { target: { value: "14d" } });
-      await waitFor(() => expect(screen.getByTestId("rotation-interval-value")).toHaveTextContent("14d"));
-
-      await chooseSelectOption(user, screen.getByRole("combobox"), "7 days");
-
-      await waitFor(() => expect(screen.getByTestId("rotation-interval-value")).toHaveTextContent("7d"));
-      expect(screen.queryByPlaceholderText("e.g., 1s, 5m, 2h, 14d")).not.toBeInTheDocument();
-    });
+});
+/** 验证真实共享生命周期控件；前置双语言且旧调用方仍带轮换标志，确认仅展示真实期限能力与不支持说明，DOM 自动清理。 */
+describe("KeyLifecycleSettings supported capabilities", () => {
+  it.each(["en", "zh-CN"] as const)("shows expiry and an explicit unsupported notice in %s", (locale) => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <I18nProvider initialLocale={locale}>
+        <KeyLifecycleSettings
+          value="30d"
+          onChange={onChange}
+          autoRotationEnabled={true}
+          onAutoRotationChange={vi.fn()}
+          rotationInterval="1d"
+          onRotationIntervalChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText(translate(locale, "keyEditor.rotationUnsupported"))).toBeVisible();
+    const input = screen.getByLabelText(translate(locale, "keyEditor.expire"));
+    expect(input).toHaveValue("30d");
+    fireEvent.change(input, { target: { value: "invalid user text" } });
+    expect(onChange).toHaveBeenCalledWith("invalid user text");
   });
 });

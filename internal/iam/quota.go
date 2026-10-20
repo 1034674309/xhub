@@ -14,6 +14,9 @@ import (
 // ErrQuotaAllocation 表示已消费与下级保留额度超过父级；管理接口返回 400 并回滚配置。
 var ErrQuotaAllocation = errors.New("quota allocation exceeds available parent budget")
 
+// ErrQuotaUnavailable 表示待结算消费不可读，网关应返回 503，不能当作零费用继续调用。
+var ErrQuotaUnavailable = errors.New("pending quota usage is unavailable")
+
 // ErrMultipleTeams 表示账号存在多个团队，必须先解除多余归属，不能猜测计费路径。
 var ErrMultipleTeams = errors.New("a person may belong to only one team")
 
@@ -167,7 +170,7 @@ func quotaTreeFor(s *xorm.Session, kind, id string) (map[string]*quotaNode, erro
 		} else {
 			return nil, ErrInvalid
 		}
-		nodes["key:"+k.ID] = &quotaNode{ID: k.ID, Kind: "key", HotID: k.TokenHash, Parent: parent, Limit: k.MaxBudget, Spend: k.Spend, RPM: k.RPMLimit, TPM: k.TPMLimit}
+		nodes["key:"+k.ID] = &quotaNode{ID: k.ID, Kind: "key", HotID: k.ID, Parent: parent, Limit: k.MaxBudget, Spend: k.Spend, RPM: k.RPMLimit, TPM: k.TPMLimit}
 	}
 	for _, n := range nodes {
 		if p := nodes[n.Parent]; p != nil {
@@ -276,6 +279,10 @@ func quotaPath(nodes map[string]*quotaNode, target string, hot func(string, stri
 	// 热账单同时影响父级消费和子级未用保留额，避免重复占用。
 	if hot != nil {
 		for _, node := range nodes {
+			// 共享 Key 无自身上限且不保留固定余额，其累计值不参与父级计算。
+			if node.Kind == "key" && node.Limit == nil {
+				continue
+			}
 			ref := node.ID
 			if node.Kind == "key" {
 				ref = node.HotID
@@ -284,6 +291,9 @@ func quotaPath(nodes map[string]*quotaNode, target string, hot func(string, stri
 				node.Spend += hot(node.Kind, ref, *node.PeriodStart)
 			} else {
 				node.Spend += hot(node.Kind, ref)
+			}
+			if math.IsNaN(node.Spend) || math.IsInf(node.Spend, 0) {
+				return "", "", "", ErrQuotaUnavailable
 			}
 		}
 	}

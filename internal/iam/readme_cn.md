@@ -80,6 +80,8 @@ func ReadDemoUser(ctx context.Context, dsn, userID string) (*iam.User, error) {
 
 `RecordUsage(records)` 在写库前验证整个批次，去除批次内重复 request ID，并依靠数据库 request ID 唯一约束实现跨请求和并发幂等。任一步失败都会返回错误并回滚事件、日志、聚合和主体计数。`RecordTaskUsage(record, initial, settle)` 通过 PostgreSQL advisory transaction lock 串行处理同一任务：初建只计一次请求且费用为零，轮询只更新状态和正文，首次完成结算才增加 token 与花费；归属和开始时间始终沿用初始事件。
 
+普通调用在未配置 Redis 或 Redis 入队失败时，先通过 `RecordUsageDurably` 独立提交 `usage_pending` 中的完整快照，再尝试 `RecordUsage`。账单事务或确认删除失败时保留快照，`FlushPendingUsage` 在无 Redis 时也会重放，新实例可以继续恢复；重放不重新调用供应商、不按当前价格重算，成功后才删除快照。`durable=false` 明确表示快照本身未保存：本机制不覆盖 PostgreSQL 整库不可写、磁盘丢失或任务生命周期结算，也不新增预算预占能力。已经完成的上游响应不会因账单事务失败改成可诱发客户端重试的 500。
+
 `UsageQuery` 同时携带授权范围和业务筛选。`ListUsageSessions`、`ListUsage`、`CountUsage`、`GetUsageEvent`、`GetRequestLog`、`DailyUsage` 以及模型/密钥/团队汇总，都会先把授权条件写入 SQL，再排序、计数和分页。`AuditLogRead` 记录特权请求日志读取。SQL、解码和上下文错误原样上送；集合查询无结果时返回空切片，单条查询无结果时返回 `ErrNotFound`。
 
 ### 实际 HTTP 注册与调用方

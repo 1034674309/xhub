@@ -11,11 +11,12 @@ import (
 
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
+	"github.com/sunqirui1987/xhub/internal/util"
 )
 
 // PipeNativeDialogue 在同协议时保留完整 SSE 数据，参数与 PipeDialogue 相同；返回写出、用量、首帧耗时、日志捕获及错误。
 // 标准入口仍先经过鉴权、额度和护栏；本函数仅处理传输，复用共享增量校验，不转入 bypass 链。
-// Responses 校验完成对象并在终态可见前提交历史；Chat 必须同时看到 finish_reason 与 DONE。
+// Responses 校验完成对象；Messages 校验原生内容块/签名/工具快照，终态可见前提交归属；Chat 必须同时看到 finish_reason 与 DONE。
 // 截断、供应商失败、写入错误均返回失败，已写出时不能重试；关闭上游正文，捕获最多 2 MiB，不修改不透明推理项。
 func PipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	return pipeNativeDialogue(w, resp, start, alias, protocol, false, beforeComplete...)
@@ -32,8 +33,9 @@ func PipePortableResponses(w http.ResponseWriter, resp *http.Response, start tim
 func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, alias, protocol string, portable bool, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
+	util.PreventSSETransform(w.Header())
 	state := dialogueStream{observeOnly: true, protocol: protocol, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}}
+	var nativeMessages nativeMessagesStream
 	var capture bytes.Buffer
 	var wrote, completed bool
 	var ttft time.Duration
@@ -94,7 +96,18 @@ func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.T
 		if err = json.Unmarshal([]byte(data), &payload); err != nil {
 			break
 		}
-		if err = state.consume(protocol, data); err != nil {
+		if protocol == "anthropic-messages" {
+			var result llmdialogue.DialogueResult
+			result, completed, err = nativeMessages.consume(payload)
+			state.usage = nativeMessages.usage
+			if err != nil {
+				break
+			}
+			if completed && len(beforeComplete) > 0 && beforeComplete[0] != nil {
+				// 客户端收到 message_stop 即可提交含原生签名的工具续轮；先记录同一连接归属。
+				beforeComplete[0](result)
+			}
+		} else if err = state.consume(protocol, data); err != nil {
 			break
 		}
 		if protocol == "openai-responses" && (payload["type"] == "response.completed" || payload["type"] == "response.incomplete") {
@@ -124,6 +137,9 @@ func pipeNativeDialogue(w http.ResponseWriter, resp *http.Response, start time.T
 		}
 		if response := streamMap(payload["response"]); response != nil {
 			response["model"] = alias
+		}
+		if message := streamMap(payload["message"]); message != nil {
+			message["model"] = alias
 		}
 		raw, _ := json.Marshal(payload)
 		if err = write(event.Type, raw); err != nil {

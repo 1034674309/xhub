@@ -134,7 +134,8 @@ func parseUnifiedDialogueResult(protocol string, raw []byte) (DialogueResult, er
 			return r, fmt.Errorf("invalid upstream tool call")
 		}
 	}
-	if len(r.Calls) > 0 {
+	// 工具参数完整不代表整轮生成完整；保留上游输出上限事实供客户端决定是否续写。
+	if len(r.Calls) > 0 && r.Stop != "length" {
 		r.Stop = "tool_calls"
 	}
 	return r, nil
@@ -246,7 +247,7 @@ func EncodeDialogueResult(r DialogueResult, protocol, model string) ([]byte, err
 		if r.Stop == "length" {
 			stop = "max_tokens"
 		}
-		if len(r.Calls) > 0 {
+		if len(r.Calls) > 0 && r.Stop != "length" {
 			stop = "tool_use"
 		}
 		out = map[string]any{"id": r.ID, "type": "message", "role": "assistant", "model": model, "content": content, "stop_reason": stop, "usage": DialogueOutputUsage(u, protocol)}

@@ -92,7 +92,8 @@ describe("CreateKey", () => {
       expect(screen.queryByLabelText("Reset Budget")).not.toBeInTheDocument();
       expect(screen.getByLabelText("Route Templates")).toBeInTheDocument();
       expect(screen.getByLabelText("Expire Key")).toBeInTheDocument();
-      expect(screen.getByText("Enable Auto-Rotation")).toBeInTheDocument();
+      expect(screen.queryByRole("switch", { name: "Enable Auto-Rotation" })).not.toBeInTheDocument();
+      expect(screen.getByText(/Automatic rotation is not supported/)).toBeVisible();
     });
 
     it("removes the old advanced controls", async () => {
@@ -179,13 +180,15 @@ describe("CreateKey", () => {
       expect((await createdPayload()).duration).toBe("45d");
     });
 
-    it("submits auto-rotation with its default interval", async () => {
+    /** 不支持自动轮换时不提供开关或提交虚假设置；真实表单，自动清理 DOM。 */
+    it("does not offer unsupported auto rotation", async () => {
       await openModal();
       await nameTheKey();
-      await userEvent.click(screen.getByRole("switch"));
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
       await submit();
 
-      expect(await createdPayload()).toMatchObject({ auto_rotate: true, rotation_interval: "30d" });
+      expect(await createdPayload()).not.toHaveProperty("auto_rotate");
+      expect(await createdPayload()).not.toHaveProperty("rotation_interval");
     });
 
     it("does not ask for a project", async () => {

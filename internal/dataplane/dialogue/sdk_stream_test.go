@@ -20,7 +20,7 @@ func TestOfficialSSEFraming(t *testing.T) {
 		name, raw string
 		valid     bool
 	}{
-		{"comments_crlf_multiline", ": heartbeat\r\n\r\nevent: message\r\ndata: {\"id\":\"x\",\r\ndata: \"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\r\n\r\ndata: [DONE]\r\n\r\n", true},
+		{"comments_crlf_multiline", ": heartbeat\r\n\r\nevent: message\r\ndata: {\"id\":\"x\",\r\ndata: \"choices\":[{\"delta\":{\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\r\n\r\ndata: [DONE]\r\n\r\n", true},
 		{"unterminated_completion", "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n", false},
 		{"malformed_json", "data: {bad}\n\n", false},
 		{"upstream_error", "event: error\ndata: {\"error\":{\"message\":\"unavailable\"}}\n\n", false},

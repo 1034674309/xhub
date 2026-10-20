@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders, screen, waitFor } from "../../../tests/test-utils";
+import { renderWithProviders, screen, waitFor, fireEvent } from "../../../tests/test-utils";
 import { RegenerateKeyModal } from "./RegenerateKeyModal";
 import { KeyResponse } from "../key_team_helpers/key_list";
 import { toast } from "@/lib/toast";
@@ -67,7 +67,7 @@ describe("RegenerateKeyModal", () => {
 
   it("should display 'Never' when token has no expires", () => {
     renderWithProviders(<RegenerateKeyModal {...defaultProps} selectedToken={makeToken({ expires: undefined })} />);
-    expect(screen.getByText("Current expiry: Never")).toBeInTheDocument();
+    expect(screen.getByText("Current expiry: Never Expire")).toBeInTheDocument();
   });
 
   it("should show Cancel and Regenerate buttons in form view", () => {
@@ -100,16 +100,18 @@ describe("RegenerateKeyModal", () => {
     expect(screen.getByText("RPM Limit")).toBeInTheDocument();
   });
 
-  it("should render duration and grace period fields", () => {
+  /** 验证轮换期限可输入、宽限期不再可配置；前置打开表单，清理由测试框架执行。 */
+  it("shows expiry without unsupported grace period", () => {
     renderWithProviders(<RegenerateKeyModal {...defaultProps} />);
 
     expect(screen.getByText("Expire Key")).toBeInTheDocument();
-    expect(screen.getByText("Grace Period")).toBeInTheDocument();
+    expect(screen.queryByText("Grace Period")).not.toBeInTheDocument();
   });
 
-  it("should display grace period recommendation text", () => {
+  /** 验证立即撤销说明，避免承诺旧凭据宽限期；无外部依赖。 */
+  it("explains immediate revocation", () => {
     renderWithProviders(<RegenerateKeyModal {...defaultProps} />);
-    expect(screen.getByText("Recommended: 24h to 72h for production keys")).toBeInTheDocument();
+    expect(screen.getByText(/Rotation immediately revokes the old key/)).toBeInTheDocument();
   });
 
   it("should call regenerateKeyCall and show success view on successful regeneration", async () => {
@@ -227,15 +229,12 @@ describe("RegenerateKeyModal", () => {
     ["15m", /New expiry:/],
     ["2h", /New expiry:/],
     ["7d", /New expiry:/],
-    ["2w", /New expiry:/],
-    ["1mo", /New expiry:/],
   ])("should compute a new expiry preview for duration '%s'", async (durationInput, expected) => {
     const user = userEvent.setup();
     renderWithProviders(<RegenerateKeyModal {...defaultProps} />);
 
-    const durationField = screen.getByPlaceholderText("e.g. 30s, 30h, 30d");
-    await user.clear(durationField);
-    await user.type(durationField, durationInput);
+    const durationField = screen.getByLabelText("Expire Key");
+    fireEvent.change(durationField, { target: { value: durationInput } });
 
     await waitFor(() => {
       expect(screen.getByText(expected)).toBeInTheDocument();
@@ -290,28 +289,25 @@ describe("RegenerateKeyModal", () => {
 
     renderWithProviders(<RegenerateKeyModal {...defaultProps} />);
 
-    const durationField = screen.getByPlaceholderText("e.g. 30s, 30h, 30d");
+    const durationField = screen.getByLabelText("Expire Key");
     await user.clear(durationField);
     await user.type(durationField, "bogus");
 
     await user.click(screen.getByRole("button", { name: /Regenerate/ }));
 
     await waitFor(() => {
-      expect(screen.getByText("Must be a duration like 30s, 30m, 24h, 2d, 1w, or 1mo")).toBeInTheDocument();
+      expect(screen.getByText("Use a positive duration such as 30s, 30m, 30h or 30d.")).toBeInTheDocument();
     });
     expect(mockRegenerateKeyCall).not.toHaveBeenCalled();
     expect(mockNotificationFromBackend).not.toHaveBeenCalled();
   });
 
-  it("should pass form values to onKeyUpdate even when the API echoes back different limits", async () => {
-    // Regression: when the regenerate endpoint returns GenerateKeyResponse, it echoes
-    // back the existing max_budget / tpm_limit / rpm_limit. The modal must prefer the
-    // values the user just submitted, not whatever the server echoes.
+  /** 验证回读以服务端持久化值为准，不用表单覆盖；前置模拟响应，自动清理 DOM。 */
+  it("uses persisted server limits in onKeyUpdate", async () => {
     const user = userEvent.setup();
     mockRegenerateKeyCall.mockResolvedValue({
       key: "sk-new-regenerated-key",
       token: "new-token-hash",
-      // stale values echoed from the server
       max_budget: 9999,
       tpm_limit: 9999,
       rpm_limit: 9999,
@@ -325,10 +321,10 @@ describe("RegenerateKeyModal", () => {
     });
 
     const updateCall = mockOnKeyUpdate.mock.calls[0][0];
-    // The form's pre-filled values (from makeToken) must win over the API echo.
-    expect(updateCall.max_budget).toBe(100);
-    expect(updateCall.tpm_limit).toBe(5000);
-    expect(updateCall.rpm_limit).toBe(500);
+    // 持久化返回值不可被表单快照掩盖。
+    expect(updateCall.max_budget).toBe(9999);
+    expect(updateCall.tpm_limit).toBe(9999);
+    expect(updateCall.rpm_limit).toBe(9999);
   });
 
   it("should display key alias in success view", async () => {
@@ -385,7 +381,7 @@ describe("RegenerateKeyModal", () => {
     );
 
     expect(screen.getByText(/\(expired\)/)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("e.g. 30s, 30h, 30d")).toHaveValue("");
+    expect(screen.getByLabelText("Expire Key")).toHaveValue("");
   });
 
   it("should require a new expiration before regenerating an expired key", async () => {

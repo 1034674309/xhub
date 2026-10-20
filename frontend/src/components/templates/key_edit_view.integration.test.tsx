@@ -83,7 +83,6 @@ describe("simplified key editor", () => {
       token: "hash-1",
       key_alias: "updated 用户",
       models: ["gpt-4"],
-      auto_rotate: false,
     });
     for (const field of [
       "metadata",
@@ -121,15 +120,15 @@ describe("simplified key editor", () => {
     expect(await screen.findByText("Must be a non-negative whole number")).toBeVisible();
     expect(onSubmit).not.toHaveBeenCalled();
   });
-  /** 生命周期正常保存；输入到期并开启轮换，确认只提交明确指定期限及默认轮换间隔，清理 DOM。 */
-  it("saves expiry and auto rotation", async () => {
+  /** 生命周期正常保存；输入期限但没有自动轮换控件，确认不提交未支持字段，清理 DOM。 */
+  it("saves expiry without unsupported auto rotation", async () => {
     const { onSubmit } = setup();
     fireEvent.change(screen.getByLabelText("Expire Key"), { target: { value: "30d" } });
-    await userEvent.click(screen.getByRole("switch", { name: "Enable Auto-Rotation" }));
+    expect(screen.queryByRole("switch", { name: "Enable Auto-Rotation" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ duration: "30d", auto_rotate: true, rotation_interval: "30d" }),
+        expect.objectContaining({ duration: "30d" }),
       ),
     );
   });
@@ -175,11 +174,11 @@ describe("simplified key editor", () => {
         />
       </I18nProvider>,
     );
-    await userEvent.click(screen.getByRole("switch", { name: "Enable Auto-Rotation" }));
-    expect(screen.getByRole("combobox", { name: "Rotation Interval" })).toHaveTextContent("30 days");
+    expect(screen.queryByRole("switch", { name: "Enable Auto-Rotation" })).not.toBeInTheDocument();
+    expect(screen.getByText(translate("en", "keyEditor.rotationUnsupported"))).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "中文" }));
     expect(screen.getByLabelText(translate("zh-CN", "Key Alias"))).toHaveValue("用户原始 alias");
-    expect(screen.getByRole("combobox", { name: "轮换间隔" })).toHaveTextContent("30 天");
+    expect(screen.getByText(translate("zh-CN", "keyEditor.rotationUnsupported"))).toBeVisible();
     expect(screen.queryByText("Key Lifecycle")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("密钥有效期"), { target: { value: "0d" } });
     await userEvent.click(screen.getByRole("button", { name: translate("zh-CN", "Save Changes") }));

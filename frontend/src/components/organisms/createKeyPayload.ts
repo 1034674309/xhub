@@ -73,6 +73,8 @@ const droppedColumnKeys = new Set<string>([
   "policies",
   "prompts",
   "object_permission",
+  "auto_rotate",
+  "rotation_interval",
 ]);
 
 const consumedSourceKeys = (values: Record<string, unknown>): ReadonlySet<string> =>
@@ -120,7 +122,8 @@ export const buildKeyCreatePayload = (input: KeyCreateInput): KeyPayloadResult =
       ...(values.organization_id === null && { organization_id: undefined }),
       ...(values.project_id === null && { project_id: undefined }),
       ...(input.keyOwner === "you" && { user_id: input.userID }),
-      ...(input.autoRotationEnabled && { auto_rotate: true, rotation_interval: input.rotationInterval }),
+      // UI 只发行模型 API Key；后台再次校验，不把历史管理类型或自动轮换伪装成已保存。
+      key_type: values.key_type ?? "llm_api",
       duration: !duration || (duration as string).trim() === "" ? null : duration,
       metadata: buildMetadataJson(values, input),
       ...(Object.keys(modelAliases).length > 0 && { aliases: JSON.stringify(modelAliases) }),
