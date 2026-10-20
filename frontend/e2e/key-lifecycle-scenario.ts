@@ -23,8 +23,8 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       await expect(page.getByRole("switch")).toHaveCount(0);
       await page.getByRole("combobox", { name: tr("Key Type"), exact: true }).click();
       await expect(page.getByRole("option", { name: /Management|管理/ })).toHaveCount(0);
-      await page.keyboard.press("Escape");
-      await page.getByLabel(tr("keyEditor.expire")).fill("30d");
+      await page.getByRole("option", { name: tr("AI APIs") }).click();
+      await page.getByRole("textbox", { name: tr("keyEditor.expire"), exact: true }).fill("30d");
       const mintedPromise = page.waitForResponse(
         (r) => r.url().includes("/key/generate") && r.request().method() === "POST",
       );
@@ -55,7 +55,7 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       await stableGoto(page, "/api-keys?key=" + id);
       await expect(page.getByLabel(tr("Key Alias"))).toHaveValue(alias);
       await expect(page.getByText(tr("keyEditor.apiOnly"))).toBeVisible();
-      await page.getByLabel(tr("keyEditor.expire")).fill("1s");
+      await page.getByRole("textbox", { name: tr("keyEditor.expire"), exact: true }).fill("1s");
       const updatedPromise = page.waitForResponse(
         (r) => r.url().includes("/key/update") && r.request().method() === "POST",
       );
