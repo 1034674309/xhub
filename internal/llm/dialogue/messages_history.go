@@ -243,7 +243,10 @@ func normalizeMessagesProjection(value any) (map[string]any, error) {
 	if item["type"] == "function_call" {
 		var arguments any
 		text, ok := item["arguments"].(string)
-		if !ok || json.Unmarshal([]byte(text), &arguments) != nil {
+		decoder := json.NewDecoder(strings.NewReader(text))
+		// 工具参数整数可能超过 float64 精度，按原始数字比较，不能将相邻大整数判成相同。
+		decoder.UseNumber()
+		if !ok || !json.Valid([]byte(text)) || decoder.Decode(&arguments) != nil {
 			return nil, fmt.Errorf("invalid history tool arguments")
 		}
 		item["arguments"] = arguments

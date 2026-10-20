@@ -182,3 +182,17 @@ func TestMessagesHistoryRedactedOnly(t *testing.T) {
 		t.Fatal("隐藏推理未原样恢复")
 	}
 }
+
+// TestMessagesHistoryLargeToolInteger 验证完整性比较不因浮点舍入把不同大整数工具参数视为相同。
+// 前置为相邻且超出 float64 精确范围的 JSON 整数，检查拒绝篡改并接受仅空白差异，无外部数据清理。
+func TestMessagesHistoryLargeToolInteger(t *testing.T) {
+	expected := map[string]any{"type": "function_call", "call_id": "c", "name": "read", "arguments": `{"n":9007199254740992}`}
+	changed := map[string]any{"type": "function_call", "call_id": "c", "name": "read", "arguments": `{"n":9007199254740993}`}
+	if equal, err := equalMessagesProjection(changed, expected); err != nil || equal {
+		t.Fatalf("不同大整数被错误接受: equal=%v err=%v", equal, err)
+	}
+	changed["arguments"] = `{ "n": 9007199254740992 }`
+	if equal, err := equalMessagesProjection(changed, expected); err != nil || !equal {
+		t.Fatalf("参数空白差异被错误拒绝: equal=%v err=%v", equal, err)
+	}
+}

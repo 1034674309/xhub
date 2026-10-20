@@ -3,7 +3,8 @@ package dialogue
 import "strings"
 
 // PortableReasoningItems 为统一 Responses 入口生成可迁移的历史副本，参数为 input/output 数组。
-// 返回新数组及推理项副本，移除 reasoning 的账户绑定密文、来源 ID 和输出状态，保留摘要、正文、工具及其 call_id。
+// 返回新数组及推理项副本，移除外部 reasoning 的账户绑定密文、来源 ID 和输出状态，保留摘要、正文、工具及其 call_id。
+// 网关 Messages 引用保留给路由层严格授权解析，不能因 portable 清理跳过缓存缺失、身份或版本错误。
 // Serve 在选路前以及 JSON/SSE 发布前调用；非数组保持原值，非 reasoning 项不改写，非法形状仍由协议解析器拒绝。
 // 不解密、不读取归属缓存、不修改客户端或已保存的原始历史；原生 bypass 不调用本函数。
 func PortableReasoningItems(value any) any {
