@@ -186,4 +186,12 @@ export const providerGuideUIEn = {
   backModels: "Back to model list",
   copyModelId: "Copy model ID",
   searchRequiresResponses: "Native web search requires an OpenAI Responses upstream protocol.",
+  messagesReasoningTitle: "Claude reasoning across protocols",
+  messagesReasoningMode: "Messages reasoning bridge",
+  messagesReasoningDisabled: "Disabled (default)",
+  messagesReasoningAdaptive: "Adaptive thinking (confirmed upstream support)",
+  messagesReasoningHelp: "Enable only after confirming this native Messages connection supports adaptive thinking. Responses low, medium, high and max efforts map to adaptive thinking; this setting does not restrict native Messages requests. Explicit none still requests disabled thinking, which the upstream may reject.",
+  messagesReasoningHistory: "Signed reasoning history expires after {hours} hour and is bound to the caller identity and upstream connection. It cannot be moved to another connection.",
+  invalidMessagesReasoning: "Select a valid Messages reasoning bridge mode.",
+  messagesReasoningRequiresNative: "Adaptive reasoning requires a native Anthropic Messages upstream protocol.",
 };

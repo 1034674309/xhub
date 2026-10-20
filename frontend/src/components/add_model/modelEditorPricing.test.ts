@@ -163,3 +163,21 @@ it.each(["zh-CN","en"] as const)("%s validates web search metadata", (locale) =>
   expect(()=>buildEditorModel({...values,web_search_support:"supported"})).toThrow(locale==="en"?"Native web search requires":"原生联网搜索需要");
   setActiveLocale("zh-CN");
 });
+
+/** 前置双语纯配置；验证推理桥接默认关闭、已有能力回显持久化及非法值/非原生协议拒绝；不访问后台，无资源清理。 */
+it.each(["zh-CN", "en"] as const)("%s validates and preserves explicit Messages reasoning mode", (locale) => {
+  setActiveLocale(locale);
+  expect(editorDefaults().messages_reasoning_mode).toBe("disabled");
+  const values = { ...baseValues, input_cost_per_token: "1", transport: "bypass_anthropic_messages", messages_reasoning_mode: "adaptive" };
+  const saved = buildEditorModel(values);
+  expect(saved.model_info.messages_reasoning_mode).toBe("adaptive");
+  expect(editorDefaults(saved).messages_reasoning_mode).toBe("adaptive");
+  expect(buildEditorModel(editorDefaults(saved), saved).model_info.messages_reasoning_mode).toBe("adaptive");
+  expect(buildEditorModel({ ...values, messages_reasoning_mode: "disabled", transport: "bypass_openai_chat" }).model_info.messages_reasoning_mode).toBe("disabled");
+  for (const mode of ["enabled", true, 0, [], ["adaptive"], { mode: "adaptive" }]) {
+    expect(() => buildEditorModel({ ...values, messages_reasoning_mode: mode })).toThrow(locale === "en" ? "Select a valid Messages" : "请选择有效的 Messages");
+  }
+  expect(() => buildEditorModel({ ...values, transport: "bypass_openai_chat" })).toThrow(locale === "en" ? "requires a native Anthropic" : "需要原生 Anthropic");
+  expect(buildEditorModel({ ...baseValues, input_cost_per_token: "1" }).model_info.messages_reasoning_mode).toBe("disabled");
+  setActiveLocale("zh-CN");
+});

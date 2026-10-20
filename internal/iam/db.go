@@ -39,6 +39,11 @@ var archiveSchemaSQL string
 //go:embed usage_pending_schema.sql
 var usagePendingSchemaSQL string
 
+// budgetReconciliationSchemaSQL 追加保存人工对账终态与原始证据，供重放防重复核验。
+//
+//go:embed budget_reconciliation_schema.sql
+var budgetReconciliationSchemaSQL string
+
 var (
 	ErrNotFound          = errors.New("not found")
 	ErrConflict          = errors.New("already exists")
@@ -102,6 +107,9 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return err
 	}
 	if _, err := db.Engine.Context(ctx).Exec(usagePendingSchemaSQL); err != nil {
+		return err
+	}
+	if _, err := db.Engine.Context(ctx).Exec(budgetReconciliationSchemaSQL); err != nil {
 		return err
 	}
 	return db.migrateMonitorTPS(ctx)

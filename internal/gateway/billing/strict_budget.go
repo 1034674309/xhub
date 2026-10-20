@@ -42,6 +42,8 @@ type BudgetPlan struct {
 // budgetPriceSnapshot 是无需重新查询可变目录的定价契约；金额和所有费率都只包含值，不引用部署配置。
 // 新计划的CacheWrite保存最大预占价，CacheWriteByTTL保存全部已知期限的实际结算价；不能用最大值代替实测分桶。
 type budgetPriceSnapshot struct {
+	// Supplier冻结本次实际连接标识供人工核对；历史缺失保持未知，不能套用最后一个重试的供应商。
+	Supplier           string                  `json:"supplier,omitempty"`
 	InputBound         int                     `json:"input_bound"`
 	OutputCap          int                     `json:"output_cap"`
 	Amount             float64                 `json:"reserved_amount"`
@@ -95,7 +97,8 @@ func StrictBudgetPlan(dep config.ModelEntry, finalBody []byte, protocol string, 
 		return fail(err)
 	}
 	window := catalog.WindowAt(started)
-	snapshot := budgetPriceSnapshot{InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started}
+	supplier, _ := dep.MonitorIdentity()
+	snapshot := budgetPriceSnapshot{Supplier: supplier, InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started}
 	if protocol == "openai-chat" && body["max_tokens"] != nil && budgetTrustedLegacyCap(dep) {
 		snapshot.CapSemanticsSource = strings.TrimSpace(dep.ModelInfo["max_tokens_semantics_source"].(string))
 	}
@@ -501,7 +504,8 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 		return nil, budgetFailure("unsupported_budget", "strict budget requires complete token prices")
 	}
 	var rates []catalog.Rate
-	if raw, exists := source["rates"]; exists {
+	// 模型编辑PATCH用null清空旧定价；与配置校验一致，null是未设置，不是无效费率表或免费费率。
+	if raw := source["rates"]; raw != nil {
 		encoded, err := json.Marshal(raw)
 		if err != nil || json.Unmarshal(encoded, &rates) != nil || len(rates) == 0 {
 			return nil, budgetFailure("unsupported_budget", "strict budget rate table is invalid")
@@ -513,6 +517,9 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 		}
 		// 平面价格表中任何新增阈值/缓存价都不能静默忽略；非数字不是免费，未知阶梯不能用基础低价代替。
 		for key, value := range source {
+			if value == nil {
+				continue
+			}
 			if !strings.Contains(key, "cost_per_") && !strings.Contains(key, "_token_cost") {
 				continue
 			}
@@ -525,7 +532,7 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 			}
 		}
 		rates = catalog.RatesFromFlat(func(key string) (float64, bool) { return floatParam(source, key) })
-		if v, exists := source["cache_creation_input_token_cost_above_1hr"]; exists {
+		if v := source["cache_creation_input_token_cost_above_1hr"]; v != nil {
 			n, _ := floatParam(map[string]any{"v": v}, "v")
 			rates = append(rates, catalog.Rate{Measure: "token", Side: "cache_write", Variant: "1h", Window: "all", UnitSize: 1, USD: n, SourceKey: "cache_creation_input_token_cost_above_1hr"})
 		}

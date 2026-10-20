@@ -64,7 +64,7 @@ type UsageEvent struct {
 	PromptTokens int `xorm:"'prompt_tokens'" json:"prompt_tokens"`
 	// 归一化输出 token 数，由上游用量产生，无实测时为 0。
 	CompletionTokens int `xorm:"'completion_tokens'" json:"completion_tokens"`
-	// 持久化费用，单位沿用平台账单币种；零费用调用也保留日志。
+	// 持久化费用，单位沿用平台账单币种；人工核实费用通过不可变budget_reconciliations追加，原上游价格和Token保持不变。
 	Cost float64 `xorm:"'cost'" json:"cost"`
 	// 从请求开始到结束的耗时，单位毫秒，不等同于首字延迟。
 	DurationMS int `xorm:"'duration_ms'" json:"duration_ms"`
@@ -200,7 +200,7 @@ type UsageRecord struct {
 	PromptTokens int
 	// 归一化输出 token 数，由上游用量产生，无实测时为 0。
 	CompletionTokens int
-	// 持久化费用，单位沿用平台账单币种；零费用调用也保留日志。
+	// 持久化费用，单位沿用平台账单币种；人工核实费用通过不可变budget_reconciliations追加，原上游价格和Token保持不变。
 	Cost float64
 	// 从请求开始到结束的耗时，单位毫秒，不等同于首字延迟。
 	DurationMS int
@@ -283,10 +283,18 @@ func (db *DB) recordUsage(ctx context.Context, records []UsageRecord, exact bool
 	return db.tx(ctx, func(s *xorm.Session) error {
 		monitor := map[monitorKey]monitorDelta{}
 		for _, r := range records {
+			resolved, err := reconciledUsageFence(s, r)
+			if err != nil {
+				return err
+			}
+			if resolved {
+				continue
+			}
 			if exact {
 				if err := checkPendingUsageSnapshot(s, r); err != nil {
 					return err
 				}
+
 			}
 			if err := settleBudgetHold(s, r); err != nil {
 				return err
@@ -318,7 +326,7 @@ func (db *DB) recordUsage(ctx context.Context, records []UsageRecord, exact bool
 	})
 }
 
-// insertEvent 插入一条带归属、计量和明确推理强度的不可变账单事实。
+// insertEvent 插入一条带归属、计量和明确推理强度的原始账单事实；费用的人工修正必须经过独立对账事务保留原值。
 // 参数 s 为调用方事务，r 为完整调用快照；返回是否新增及数据库错误，重复 request_id 返回 false、nil。
 // RecordUsage 的事务路径调用；ON CONFLICT 防止重放中断整批并导致重复计费，正文由独立日志写入。
 // 推理强度只保存采集值，空值保持未知；失败由上层事务回滚，费用和现存记录均不在此重算。

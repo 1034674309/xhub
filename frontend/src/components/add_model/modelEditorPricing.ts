@@ -181,6 +181,7 @@ export function editorDefaults(model?: EditorModel): Record<string, unknown> {
     disabled: info.disabled === true,
     web_search_support: info.web_search_support ?? "inherit",
     web_search_fallback: info.web_search_fallback ?? "reject",
+    messages_reasoning_mode: info.messages_reasoning_mode ?? "disabled",
     pricing_source: info.pricing_source ?? (hasPrice(params) ? "manual" : "catalog"),
     pricing_model: info.base_model ?? params.model ?? "",
     billing_mode: billingModeOf(params),
@@ -205,6 +206,7 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
     disabled: values.disabled === true,
     web_search_support: values.web_search_support ?? "inherit",
     web_search_fallback: values.web_search_fallback ?? "reject",
+    messages_reasoning_mode: values.messages_reasoning_mode ?? "disabled",
     pricing_source: values.pricing_source,
   };
   if (!["inherit", "supported", "unsupported"].includes(String(info.web_search_support)) ||
@@ -212,6 +214,11 @@ export function buildEditorModel(values: Record<string, unknown>, original?: Edi
     throw new Error(t("providerGuideUI.invalidSearchPolicy"));
   if (info.web_search_support === "supported" && values.transport !== "bypass_openai_responses")
     throw new Error(t("providerGuideUI.searchRequiresResponses"));
+  // 能力必须由管理员按连接声明；不按模型名猜测，也不自动把客户端推理请求降级为 none。
+  if (typeof info.messages_reasoning_mode !== "string" || !["disabled", "adaptive"].includes(info.messages_reasoning_mode))
+    throw new Error(t("providerGuideUI.invalidMessagesReasoning"));
+  if (info.messages_reasoning_mode === "adaptive" && values.transport !== "bypass_anthropic_messages")
+    throw new Error(t("providerGuideUI.messagesReasoningRequiresNative"));
   const name = String(values.model_name ?? "").trim();
   if (!name || !params.model || !params.custom_llm_provider || !values.supplier)
     throw new Error(t("providerGuideUI.requiredModel"));

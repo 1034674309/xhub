@@ -186,4 +186,12 @@ export const providerGuideUIZhCN = {
   backModels: "返回模型列表",
   copyModelId: "复制模型 ID",
   searchRequiresResponses: "原生联网搜索需要选择 OpenAI Responses 上游接口协议。",
+  messagesReasoningTitle: "Claude 跨协议推理",
+  messagesReasoningMode: "Messages 推理桥接",
+  messagesReasoningDisabled: "不启用（默认）",
+  messagesReasoningAdaptive: "自适应推理（已确认上游支持）",
+  messagesReasoningHelp: "仅在确认此原生 Messages 连接支持自适应推理后启用。Responses 的 low、medium、high、max 推理强度映射为自适应推理；此设置不限制原生 Messages 请求。显式 none 仍请求关闭推理，上游可能拒绝。",
+  messagesReasoningHistory: "签名推理历史在 {hours} 小时后过期，并绑定调用方身份和上游连接，不能迁移到其他连接。",
+  invalidMessagesReasoning: "请选择有效的 Messages 推理桥接模式。",
+  messagesReasoningRequiresNative: "自适应推理需要原生 Anthropic Messages 上游协议。",
 };

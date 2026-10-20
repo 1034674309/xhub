@@ -147,6 +147,11 @@ func (s *State) PlanRoute(r *http.Request, alias string, body map[string]any, p 
 	if plan.Caller == "" {
 		return plan
 	}
+	// 网关随机引用带有独立、不可重绑定的原响应归属；在普通会话偏好之前核实。
+	if err := s.prepareMessagesHistory(&plan, body); err != nil {
+		plan.Err = err
+		return plan
+	}
 	key := sessionPinKey(alias, plan.Caller, plan.SessionID, endpoint)
 	// 加密推理依赖生成它的供应商连接，不能按普通会话偏好切换账户或降级读本机缓存。
 	opaque := requiresNativeOwnership(body)
@@ -250,8 +255,15 @@ type responseOwner struct {
 // 历史和归属是非事务的一小时记录，不是原厂长期 store；归属写入错误在此被忽略。
 // 调用方应每轮成功提交一次，失败尝试或仅命中响应缓存时不调用；s 必须非 nil。
 func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID string) {
+	_ = s.commitRoute(plan, deploymentID, responseID)
+}
+
+// commitRoute 保存实际目标、完整上下文与固定归属，并返回影响父响应续接的保存错误。
+// 参数与公开 CommitRoute 相同；Messages 桥接准备回调必须检查错误后才能发布终态。
+// 动态偏好允许失败；历史先于归属写入，任意一步失败不发布成功，孤立临时记录按 TTL 清理。
+func (s *State) commitRoute(plan dpcontract.RoutePlan, deploymentID, responseID string) error {
 	if deploymentID == "" || plan.Caller == "" {
-		return
+		return nil
 	}
 	// 复制计划目标，只替换实际成功部署；成功后的回退路径应已由执行器补全。
 	target := plan.Target
@@ -290,15 +302,18 @@ func (s *State) CommitRoute(plan dpcontract.RoutePlan, deploymentID, responseID 
 		if plan.Endpoint == "responses" && len(plan.History) > 0 {
 			raw, err := json.Marshal(plan.History)
 			if err != nil {
-				return
+				return fmt.Errorf("response history could not be encoded")
 			}
 			if err := s.cacheWrite(responseContextKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw)); err != nil {
-				return
+				return fmt.Errorf("response history could not be saved")
 			}
 		}
 		raw, _ := json.Marshal(responseOwner{Target: target, Session: plan.SessionID})
-		_ = s.cacheWrite(responsePinKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw))
+		if err := s.cacheWrite(responsePinKey(plan.Alias, plan.Caller, responseID, plan.Endpoint), string(raw)); err != nil {
+			return fmt.Errorf("response ownership could not be saved")
+		}
 	}
+	return nil
 }
 
 // requiresNativeOwnership 判断对话输入是否含供应商绑定的不透明推理历史。

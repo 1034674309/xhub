@@ -29,6 +29,10 @@ def claude_client_payload(request):
     if messages and _message_text(messages[-1]) == "Verify refusal continuation.":
         if not any(message.get("role") == "assistant" and _message_text(message) == "Synthetic upstream refusal." for message in messages):
             raise ValueError("refusal history was lost")
+    if messages and _message_text(messages[-1]) == "Verify citations continuation.":
+        expected = [{"role": "assistant", "content": [{"type": "text", "text": "(no content)", "citations": []}]}]
+        if messages[:-1] != expected:
+            raise ValueError("native empty citations history changed")
     payload = {"id": "msg_compat", "type": "message", "role": "assistant",
                "content": [{"type": "text", "text": "CLAUDE_COMPAT_OK"}], "stop_reason": "end_turn",
                "usage": {"input_tokens": 8, "output_tokens": 2}}

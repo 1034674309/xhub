@@ -1,3 +1,4 @@
+import { budgetReconciliationZhCN } from "./budgetReconciliation.zh-CN";
 import { docsZhCN } from "./docs.zh-CN";
 import { playgroundZhCN } from "./playground.zh-CN";
 import { zhPhrases } from "./phrases.zh-CN";
@@ -5,6 +6,7 @@ import { pageDescriptionsZhCN } from "./pageDescriptions.zh-CN";
 import { routeTemplatesZhCN } from "./routeTemplates.zh-CN";
 
 export const zhCN = {
+  budgetReconciliation: budgetReconciliationZhCN,
   hardBudget: {
     "detailsLoadFailed": "密钥详情与待结算额度加载失败，请重试成功后再编辑。",
     "retry": "重试",

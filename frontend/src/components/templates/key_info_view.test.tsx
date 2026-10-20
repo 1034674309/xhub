@@ -4,22 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { renderWithProviders } from "../../../tests/test-utils";
 import { KeyResponse } from "../key_team_helpers/key_list";
-import { keyDeleteCall, keyUpdateCall } from "../networking";
+import { apiClient, keyDeleteCall, keyUpdateCall } from "../networking";
 import { toast } from "@/lib/toast";
 import KeyInfoView from "./key_info_view";
 
-const editor = vi.hoisted(() => ({ submit: undefined as undefined | ((values: Record<string, unknown>) => Promise<void>) }));
+const editor = vi.hoisted(() => ({ submit: undefined as undefined | ((values: Record<string, unknown>) => Promise<void>), reconcile: undefined as undefined | (() => Promise<void>), canReconcile: false }));
 vi.mock("./key_edit_view", () => ({
   /** 隔离页面协调逻辑；输入编辑器参数，返回可操作保存按钮和原始标题，无持久数据。 */
-  KeyEditView: ({ onSubmit, header }: { onSubmit: typeof editor.submit; header: React.ReactNode }) => {
-    editor.submit = onSubmit;
+  KeyEditView: ({ onSubmit, header, canReconcileBudget, onBudgetReconciled }: { onSubmit: typeof editor.submit; header: React.ReactNode; canReconcileBudget: boolean; onBudgetReconciled: typeof editor.reconcile }) => {
+    editor.submit = onSubmit; editor.reconcile = onBudgetReconciled; editor.canReconcile = canReconcileBudget;
     return <>{header}<button onClick={() => onSubmit?.({ key_alias: "renamed" })}>Save fixture</button></>;
   },
 }));
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({ default: vi.fn() }));
 vi.mock("@/app/(dashboard)/hooks/useTeams", () => ({ default: () => ({ teams: [] }) }));
 vi.mock("../networking", async (load) => ({ ...await load<typeof import("../networking")>(),
-  keyUpdateCall: vi.fn(), keyDeleteCall: vi.fn().mockResolvedValue({}) }));
+  apiClient: { get: vi.fn() }, keyUpdateCall: vi.fn(), keyDeleteCall: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), fromError: vi.fn() } }));
 const reset = vi.hoisted(() => vi.fn());
 const block = vi.hoisted(() => vi.fn());
@@ -100,4 +100,27 @@ describe("simple key details", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reset", exact: true }));
     expect(reset).toHaveBeenCalledWith("stable-id", expect.any(Object)); expect(update).toHaveBeenCalledWith({ spend: 0 });
   });
+});
+
+
+/** 平台管理员原始角色与只读标记共同决定对账入口，组织管理员/普通用户/管理员查看者均不可操作；无网络写入。 */
+it.each([
+  ["Admin", "Admin", false, true], ["Admin", "Admin Viewer", true, false],
+  ["Internal User", "Internal User", false, false], ["org_admin", "org_admin", false, false],
+])("gates budget reconciliation for %s/%s", (userRole, userRoleLabel, isViewOnly, allowed) => {
+  vi.mocked(useAuthorized).mockReturnValue({ ...auth, userRole, userRoleLabel, isViewOnly } as ReturnType<typeof useAuthorized>);
+  setup(); expect(editor.canReconcile).toBe(allowed);
+});
+
+/** 对账成功只采用后台最新余额并更新父视图；响应缺失预占字段时抛错，不把未知余额当成0；DOM自动清理。 */
+it("refreshes budget only from a complete server snapshot", async () => {
+  const { update } = setup();
+  const fresh = { ...snapshot, budget_pending: 0, budget_reservations: [], spend: 0.0003 };
+  vi.mocked(apiClient.get).mockResolvedValueOnce({ info: fresh });
+  await act(async () => editor.reconcile?.());
+  expect(apiClient.get).toHaveBeenCalledWith("/key/info", { accessToken: "session", query: { key: "stable-id" } });
+  expect(update).toHaveBeenCalledWith(fresh);
+  update.mockClear(); vi.mocked(apiClient.get).mockResolvedValueOnce({ info: snapshot });
+  await expect(editor.reconcile?.()).rejects.toThrow("Missing budget snapshot");
+  expect(update).not.toHaveBeenCalled();
 });

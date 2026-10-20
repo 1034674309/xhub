@@ -98,6 +98,13 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 		}
 		if protocol == "anthropic-messages" {
 			for _, value := range dialogueList(cp["content"]) {
+				citationBoundary, err := projectMessagesCitations(dialogueMap(value))
+				if err != nil {
+					return Dialogue{}, err
+				}
+				if citationBoundary != "" {
+					bridgeError = citationBoundary
+				}
 				if err := projectMessagesCaller(dialogueMap(value)); err != nil {
 					return Dialogue{}, err
 				}

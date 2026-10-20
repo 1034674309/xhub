@@ -46,7 +46,7 @@ test('API client reliability gate runs all flows independently and preserves fai
       assert.equal(result.status, status, '浏览器失败必须阻断发布：' + result.stderr);
       assert.deepEqual(readFileSync(join(directory, 'arguments'), 'utf8').trim().split('\n'), [
         'client-docs-url-', 'client-cancellation-', 'stream-terminal-sc-',
-        'billing-pending-recovery', 'key-lifecycle-', 'agent-history-', 'hard-budget-', 'claude-client-compat-', 'user-bulk-budget-',
+        'billing-pending-recovery', 'key-lifecycle-', 'agent-history-', 'hard-budget-', 'budget-reconciliation-', 'messages-signed-history-', 'claude-client-compat-', 'user-bulk-budget-',
         'scenarios/enterprise/saml-', 'scenarios/enterprise/sso-valid.test.ts', 'scenarios/directory/sso-config.test.ts',
       ]);
       assert.equal(readFileSync(join(directory, 'environment'), 'utf8'), '0\n1\n');
@@ -360,4 +360,20 @@ test('SAML release gate includes protocol components and every registered browse
   const rows = Array.isArray(scenarios) ? scenarios : scenarios.scenarios;
   const saml = rows.filter(item => item.file.includes('/saml-'));
   assert.equal(saml.length, 9, 'SAML HTTP/HTTPS、未知用户、篡改、重放和过期证书场景必须完整登记');
+});
+
+/** 前置真实发布配置及完整场景目录；验证人工对账组件、动态错误与双语真实浏览器闭环都进入CI，避免只跑静态mock；只读无需清理。 */
+test('budget reconciliation release gate covers components and bilingual real flows', () => {
+  const unit = workflow.jobs.verify.steps.find(item => item.name === 'Console HTTP compatibility unit tests');
+  for (const file of ['src/lib/http/client.test.ts', 'src/components/common_components/BudgetReconciliation.test.tsx', 'src/components/templates/key_info_view.test.tsx']) {
+    assert.ok(unit.run.split(/\s+/).includes(file), '人工对账缺少组件或动态错误门禁：' + file);
+  }
+  const browser = workflow.jobs.verify.steps.find(item => item.name === 'API client reliability browser regression');
+  assert.ok(browser.run.split(/\s+/).includes('budget-reconciliation-'), '人工对账未进入真实浏览器门禁');
+  const catalog = JSON.parse(readFileSync(join(__dirname, '../frontend/e2e/scenario-catalog.json'), 'utf8'));
+  for (const locale of ['en', 'zh-CN']) {
+    const file = `e2e/scenarios/regression/budget-reconciliation-${locale}.test.ts`;
+    assert.ok(catalog.some(row => row.file === file && row.kind === 'implemented'), '人工对账场景未登记：' + locale);
+    assert.ok(existsSync(join(__dirname, '../frontend', file)), '人工对账场景不存在：' + locale);
+  }
 });
