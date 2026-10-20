@@ -44,7 +44,8 @@ type ForwardResponse struct {
 // 参数 upstreamClient 为共享 HTTP 客户端；r 提供请求 context；method/address/key 为登记操作与服务端凭据；body/in 为载荷与入站头；transport 为显式注册传输；w 可为 nil 以禁用即时流式写出。
 // 返回 ForwardResponse 与网络、读取、写出、超限或缺少成功终态错误；原生创建和查询调用。
 // 过滤客户端鉴权与逐跳头后设置登记的供应商认证，复制 client 禁止重定向；若 context 有截止时间则由它独占超时控制。
-// 安装原始诊断后读取；2xx SSE 且有 w 时逐行保留换行转发并 Flush，事件/行上限 8 MiB，必须观测成功完成。
+// 安装原始诊断后读取；2xx SSE 且有 w 时逐行保留换行转发并 Flush，事件/行上限 8 MiB，必须观测正常终态。
+// 完整 Responses completed 或明确输出上限终态可立即结束；其他协议保留既有读取规则。
 // 多个图像事件保留事实并阻止当前单规格自动定价；同步正文最多 64 MiB，不将缺失统计伪造成付费事实。
 // 本函数关闭上游 Body；流式开始后可能已写状态或部分正文，调用方必须检查 Streamed 并禁止重复写出/危险重试。
 // 不负责路由重试、任务归属或结算去重，副作用为单次出站 HTTP 及可选客户端输出。
@@ -145,6 +146,11 @@ func ForwardOfficial(upstreamClient *http.Client, r *http.Request, method, addre
 					}
 				}
 				event.Reset()
+				// Responses 完整快照已带最终输出和用量；供应商保持 HTTP 连接不应
+				// 把正常结束变成超时失败。仅此协议提前关闭，多图片等事件流仍读到 EOF。
+				if transport.Protocol == "openai-responses" && streamState.ResponseTerminal && !streamState.Failed {
+					break
+				}
 			}
 		}
 		if err := scanner.Err(); err != nil {

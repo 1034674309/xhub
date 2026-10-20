@@ -10,6 +10,22 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_hard_budget_length(self):
+        """私有本地 HTTP 验证 cap8 的 JSON/SSE 保留 incomplete 和完整用量，错误 cap/协议拒绝；tearDown 关闭服务。"""
+        body = {"model": "pending-browser-hard-budget-length-unit", "input": "Verify normal output limit.", "max_output_tokens": 8}
+        result = self.request("/v1/responses", body)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["incomplete_details"], {"reason": "max_output_tokens"})
+        self.assertEqual(result["usage"], {"input_tokens": 8, "output_tokens": 8})
+        with urlopen(Request(self.base + "/v1/responses", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            frames = [json.loads(line[6:]) for line in response.read().decode().splitlines() if line.startswith("data: {")]
+            self.assertEqual(frames, [{"type": "response.incomplete", "response": result}])
+        for path, cap in (("/v1/responses", 7), ("/v1/chat/completions", 8)):
+            with self.assertRaises(HTTPError) as error:
+                self.request(path, {**body, "max_output_tokens": cap})
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+
     def test_hard_budget_cache_projection(self):
         """本地同步Chat夹具报告含缓存的输入总量，供真实Messages桥接计费；错误目标400，tearDown回收HTTP服务。"""
         body = {"model": "pending-browser-hard-budget-projection", "messages": [{"role": "user", "content": "Verify cache projection."}]}
