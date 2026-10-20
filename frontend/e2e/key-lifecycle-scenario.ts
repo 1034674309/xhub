@@ -15,12 +15,25 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       .click();
     const tr = (key: string) => translate(locale, key);
     const alias = "lifecycle-original-用户-" + locale + "-" + Date.now();
-    let id = "", modelID = "";
+    let id = "",
+      modelID = "";
     const model = "e2e-lifecycle-priced-" + locale;
     try {
       // 费用断言使用明确单价的独立模型，不能依赖目录中未定价的默认部署。
       const configured = await page.request.post(GATEWAY + "/model/new", {
-        headers, data: { model_name: model, litellm_params: { model: "gpt-4o-mini", api_base: UPSTREAM + "/v1", api_key: "sk-fake", custom_llm_provider: "openai", input_cost_per_token: 0.000001, output_cost_per_token: 0.000002 }, model_info: { transport: "bypass_openai_chat", endpoint_types: ["chat"], pricing_source: "manual" } },
+        headers,
+        data: {
+          model_name: model,
+          litellm_params: {
+            model: "gpt-4o-mini",
+            api_base: UPSTREAM + "/v1",
+            api_key: "sk-fake",
+            custom_llm_provider: "openai",
+            input_cost_per_token: 0.000001,
+            output_cost_per_token: 0.000002,
+          },
+          model_info: { transport: "bypass_openai_chat", endpoint_types: ["chat"], pricing_source: "manual" },
+        },
       });
       expect(configured.status(), await configured.text()).toBe(200);
       modelID = (await configured.json()).model_info.id;
@@ -152,7 +165,10 @@ export function registerKeyLifecycleScenario(locale: "en" | "zh-CN") {
       ).toBe(401);
       id = "";
     } finally {
-      if (modelID) expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: modelID } })).status()).toBe(200);
+      if (modelID)
+        expect((await page.request.post(GATEWAY + "/model/delete", { headers, data: { id: modelID } })).status()).toBe(
+          200,
+        );
       if (id)
         expect((await page.request.post(GATEWAY + "/key/delete", { headers, data: { keys: [id] } })).status()).toBe(
           200,

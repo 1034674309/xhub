@@ -40,6 +40,8 @@ export function registerClientScenario(locale: Locale) {
         // 通过浏览器所见URL真实访问，portable测试域名由浏览器解析规则路由到本机。
         const result = await page.evaluate(
           async ({ target, key, body }) => {
+            // 浏览器直接执行文档地址，不能用内部API客户端替换或纠正待验证URL。
+            // eslint-disable-next-line no-restricted-syntax
             const response = await fetch(target, {
               method: "POST",
               headers: {
