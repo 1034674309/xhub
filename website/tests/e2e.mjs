@@ -74,6 +74,23 @@ try {
       await page.screenshot({ path: `${reportDirectory}/docs-navigation-${lang}.png` });
     }
   });
+  // 目的：新增对账路由通过真实网站双语索引可发现，说明和接口契约可读取；前置当前构建与HTTP服务，刷新后检查，无业务写入，最终关闭浏览器。
+  await scenario("处理器索引 → 双语人工对账指南 → 刷新", async () => {
+    for (const [locale, label] of [["zh-CN", "未知费用的人工对账"], ["en", "Manual reconciliation of uncertain charges"]]) {
+      await page.goto(base + "docs/development/" + locale + "/handler-index.html");
+      if (locale === "zh-CN") {
+        const text = await page.getByRole("article").innerText();
+        assert.ok(text.includes("GET /budget/reservations") && text.includes("BudgetReconcile"), "源码索引必须含新增对账接口和处理器");
+      }
+      await page.getByRole("article").getByRole("link", { name: label, exact: true }).click();
+      await page.waitForURL("**/development/" + locale + "/budget-reconciliation.html");
+      await page.reload();
+      const text = await page.getByRole("article").innerText();
+      for (const value of ["GET /budget/reservations", "POST /budget/reservations/{reservation_id}/reconcile", "verified_cost_usd", "expected_fingerprint", "attempt"]) {
+        assert.ok(text.includes(value), locale + " 缺少可读核对契约：" + value);
+      }
+    }
+  });
   // 目的：修正文案必须在双语真实页面可见；前置当前构建和服务器，检查模型匿名参数、默认价格源与系统 CA，再刷新；只读，最终关闭浏览器。
   await scenario("当前源码契约 → 双语模型参数、安装默认值与 CA", async () => {
     for (const [locale, home, setup, ignored] of [["zh-CN", "", "getting-started.zh-CN", "匿名发现忽略此参数"], ["en", "en/", "getting-started", "Ignored for anonymous discovery"]]) {
