@@ -1,5 +1,7 @@
 # Agent protocol compatibility and acceptance (Issue #9)
 
+Limited API keys also follow the [hard-budget and output-cap contract](hard-budgets.md). Protocol compatibility alone does not establish a reliable cost bound; verify deployment pricing metadata as well.
+
 Scope: GPT, Grok and DeepSeek text, function tools, reasoning, Responses and Chat Completions. User image inputs are covered below; audio/video, image generation and other providers are not certified by this change. A catalog model ID is not evidence of endpoint/parameter support or an available channel for a particular key.
 
 ## LiteLLM reference and reuse
