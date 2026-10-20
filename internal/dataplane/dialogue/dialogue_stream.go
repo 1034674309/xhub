@@ -526,7 +526,7 @@ func (s *dialogueStream) finish() error {
 		if r.Stop == "length" {
 			stop = "max_tokens"
 		}
-		if len(r.Calls) > 0 {
+		if len(r.Calls) > 0 && r.Stop != "length" {
 			stop = "tool_use"
 		}
 		if s.beforeComplete != nil {
@@ -549,6 +549,10 @@ func (s *dialogueStream) finish() error {
 func (s *dialogueStream) consume(protocol string, data string) error {
 	if data == "[DONE]" {
 		if protocol == "openai-chat" {
+			// DONE 只是传输结束标志；没有明确停止原因时不能补造正常完成。
+			if s.stop == "" {
+				return fmt.Errorf("upstream stream ended without finish_reason")
+			}
 			s.completed = true
 		}
 		return nil
@@ -691,12 +695,17 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 			}
 		case "response.completed", "response.incomplete":
 			// 达到输出上限仍是可观察终态，必须与 completed 使用相同的密文/拒绝校验，不能静默降级为普通推理。
-			if response := streamMap(m["response"]); response != nil && response["output"] != nil && !s.observeOnly {
-				raw, _ := json.Marshal(response)
-				result, err := llmdialogue.ParseDialogueResult(protocol, raw)
-				if err != nil {
-					return err
-				}
+			response := streamMap(m["response"])
+			if response == nil || streamString(response["id"]) == "" || response["status"] != strings.TrimPrefix(typ, "response.") {
+				return fmt.Errorf("invalid upstream response terminal")
+			}
+			raw, _ := json.Marshal(response)
+			result, err := llmdialogue.ParseDialogueResult(protocol, raw)
+			if err != nil {
+				return err
+			}
+			// 即使没有可见增量也必须校验完整终态对象；observeOnly 同样不能放过损坏对象。
+			if !s.observeOnly {
 				if _, err = llmdialogue.EncodeDialogueResult(result, s.protocol, s.model); err != nil {
 					return err
 				}
@@ -755,6 +764,11 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 					args = string(raw)
 				}
 				return s.toolDelta(streamIndex(m["index"]), streamString(b["id"]), streamString(b["name"]), args)
+			case "thinking", "redacted_thinking":
+				// 原生观察器另行完整校验签名和块生命周期；跨协议不伪造公开推理或厂商签名。
+				if !s.observeOnly {
+					return fmt.Errorf("unsupported upstream content block %v", b["type"])
+				}
 			default:
 				return fmt.Errorf("unsupported upstream content block %v", b["type"])
 			}
@@ -765,15 +779,25 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				return s.textDelta(streamString(d["text"]))
 			case "input_json_delta":
 				return s.toolDelta(streamIndex(m["index"]), "", "", streamString(d["partial_json"]))
+			case "thinking_delta", "signature_delta":
+				if !s.observeOnly {
+					return fmt.Errorf("unsupported upstream delta %v", d["type"])
+				}
 			default:
 				return fmt.Errorf("unsupported upstream delta %v", d["type"])
 			}
 		case "message_delta":
 			d := streamMap(m["delta"])
+			if stop := streamString(d["stop_reason"]); stop != "" {
+				s.stop = stop
+			}
 			if d["stop_reason"] == "max_tokens" {
 				s.stop = "length"
 			}
 		case "message_stop":
+			if s.stop == "" {
+				return fmt.Errorf("upstream stream ended without stop_reason")
+			}
 			s.completed = true
 		case "error":
 			return fmt.Errorf("upstream message failed")
@@ -840,6 +864,11 @@ func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start tim
 			ttft = time.Since(start)
 		}
 		if err != nil {
+			break
+		}
+		// 三种对话协议有独立的最终结束事件，校验后立即结束，不能再等待 HTTP EOF。
+		// Google 的 finishReason 后仍可能单独发送 usageMetadata，必须继续读取这类尾帧。
+		if s.completed && upstream != "gemini" && upstream != "vertex" {
 			break
 		}
 	}

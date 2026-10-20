@@ -12,6 +12,11 @@ from email.policy import default
 from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+if __package__:
+    from .stream_terminal_fixture import serve_stream_terminal
+else:
+    from stream_terminal_fixture import serve_stream_terminal
+
 
 ERROR_LOG_JSON_DIAGNOSTIC = (
     "E2E upstream JSON diagnostic begin | "
@@ -261,6 +266,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(payload)
             return
         model = req.get("model") or "gpt-4o-mini"
+        if serve_stream_terminal(self, req):
+            return
         if model in ("e2e-item-id-chat", "e2e-item-id-native", "e2e-item-id-grok", "e2e-item-id-tracked"):
             # 严格原生夹具按真实 GPT 的 item 类型检查 ID，浏览器必须回放真实桥接产物而非手工修正。
             if self.headers.get("Authorization") != "Bearer sk-fake":

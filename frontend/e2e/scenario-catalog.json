@@ -2657,5 +2657,33 @@
     "title": "key lifecycle settings and atomic rotation zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-380",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-380.test.ts",
+    "title": "stream terminal rejects malformed missing through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-381",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-381.test.ts",
+    "title": "stream terminal rejects malformed response through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-382",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-382.test.ts",
+    "title": "stream terminal completes before upstream EOF through the console",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-383",
+    "file": "e2e/scenarios/regression/stream-terminal-sc-383.test.ts",
+    "title": "stream terminal preserves truncated tools in JSON and SSE billing",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]
