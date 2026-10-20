@@ -63,7 +63,8 @@ export function registerBudgetReconciliationScenario(locale: "en" | "zh-CN") {
         if (outcome === "charged") await dialog.getByLabel(tr("budgetReconciliation.cost")).fill(String(actual));
         const evidence = "Synthetic supplier invoice " + outcome + ": manually verified.";
         await dialog.getByLabel(tr("budgetReconciliation.evidence")).fill(evidence);
-        const submitted = page.waitForResponse(r => new URL(r.url()).pathname === "/budget/reservations/" + row.reservation_id + "/reconcile" && r.request().method() === "POST");
+        // 发布控制台经 /gw 代理，开发模式直连；以相同业务路径后缀匹配，保留真实请求和响应断言。
+        const submitted = page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/budget/reservations/" + row.reservation_id + "/reconcile") && r.request().method() === "POST");
         await dialog.getByRole("button", { name: tr("budgetReconciliation.confirm"), exact: true }).click();
         const completed = await submitted; expect(completed.status(), await completed.text()).toBe(200);
         const result = await completed.json();
