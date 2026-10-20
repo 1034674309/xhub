@@ -142,7 +142,7 @@ func ForwardOfficial(upstreamClient *http.Client, r *http.Request, method, addre
 					if transport.Protocol == "openai-images" && streamState.Images > 1 {
 						result.Usage["pricing_blocked"] = "multiple_image_events_require_itemized_pricing"
 					}
-					if k == "pricing_blocked" && result.Usage[k] != nil {
+					if k == "pricing_blocked" && result.Usage[k] != nil && result.Usage[k] != "" {
 						continue
 					}
 					result.Usage[k] = v

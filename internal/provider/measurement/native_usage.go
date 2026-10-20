@@ -3,6 +3,8 @@ package measurement
 import (
 	"encoding/json"
 	"strings"
+
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
 // NativeUsage 按原生协议建立用量提取器，只记录事实，不在传输层决定价格。
@@ -28,10 +30,8 @@ func NativeUsage(protocol string) func(map[string]any, map[string]any) map[strin
 			return map[string]any{"prompt_tokens": source["promptTokenCount"], "completion_tokens": nativeNumber(source["candidatesTokenCount"]) + nativeNumber(source["thoughtsTokenCount"]), "prompt_tokens_details": map[string]any{"cached_tokens": source["cachedContentTokenCount"]}}
 		}
 		source, _ := doc["usage"].(map[string]any)
-		out := map[string]any{}
-		for k, v := range source {
-			out[k] = v
-		}
+		// 先保留原始计数冲突；原生透传不会经过统一流的 observeUsage。
+		out := llmdialogue.MergeDialogueUsage(nil, source)
 		if protocol == "openai-images" {
 			// Images 协议中的 output_tokens 表示图片输出 token。把这个上游事实
 			// 显式带给目录计价器，避免在同时存在多个输出 token 变体时猜价格。
@@ -107,8 +107,11 @@ func NativeStreamUsage(protocol string, raw []byte, request map[string]any) map[
 			}
 		}
 		for k, v := range NativeUsage(protocol)(doc, request) {
-			if k == "pricing_blocked" && !terminal {
+			if k == "pricing_blocked" && !terminal && v != "upstream_usage_conflict" && v != "upstream_usage_invalid" {
 				continue // 中间事件允许没有用量；终态未知规格必须阻止结算。
+			}
+			if k == "pricing_blocked" && out[k] != nil && out[k] != "" {
+				continue // 同批事件后续的空标记不能清除已经观察到的非法计数。
 			}
 			out[k] = v
 		}

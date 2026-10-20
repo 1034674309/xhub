@@ -61,7 +61,7 @@ func TestResultMalformedAndToolErrors(t *testing.T) {
 }
 
 // TestUsageNumericBoundaries 验证整数、JSON 数值、非有限值和非法数值的计量边界；参数 t 为上下文。
-// 前置纯内存计量，合法数值保持，不合法值阻止计价且不修改输入，无需清理。
+// 前置纯内存计量，合法数字解析保持；token 的小数和非法数值明确阻止计价且不修改输入，无需清理。
 func TestUsageNumericBoundaries(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -79,7 +79,8 @@ func TestUsageNumericBoundaries(t *testing.T) {
 			}
 			input := map[string]any{"input_tokens": tc.v, "output_tokens": 1}
 			out := NormalizeDialogueUsage(input)
-			if tc.valid && out["total_tokens"] != tc.want+1 || !tc.valid && out["pricing_blocked"] != "upstream_usage_missing" {
+			invalidToken := !tc.valid || tc.want != math.Trunc(tc.want)
+			if tc.valid && out["total_tokens"] != tc.want+1 || invalidToken && out["pricing_blocked"] != "upstream_usage_invalid" {
 				t.Fatalf("无效计量被计价: %v", out)
 			}
 			if _, ok := input["input_tokens"]; !ok {

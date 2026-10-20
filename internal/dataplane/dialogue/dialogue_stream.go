@@ -328,18 +328,15 @@ func (s *dialogueStream) toolDelta(index int, id, name, args string) error {
 
 // observeUsage 保存上游流事件报告的用量，并归一输入/输出字段别名。
 // 参数 u 为部分用量，可为空；返回值无，consume 的用量事件分支调用。
-// 后到同名字段覆盖旧值而非累加，保留后续帧省略的字段；本方法没有递归合并嵌套明细。
+// 后到同名字段覆盖旧值而非累加，保留后续帧省略的字段；先标记原始别名冲突，不能靠覆盖恢复可计费状态。
 // 只更新本请求 s.usage，不估算、不记账，缺少终态时这些已观测事实也不能使失败流成为成功。
 func (s *dialogueStream) observeUsage(u map[string]any) {
-	for k, v := range u {
-		switch k {
-		case "input_tokens":
-			s.usage["prompt_tokens"] = v
-		case "output_tokens":
-			s.usage["completion_tokens"] = v
-		default:
-			s.usage[k] = v
+	s.usage = llmdialogue.MergeDialogueUsage(s.usage, u)
+	for source, target := range map[string]string{"input_tokens": "prompt_tokens", "output_tokens": "completion_tokens"} {
+		if value, exists := u[source]; exists {
+			s.usage[target] = value
 		}
+		delete(s.usage, source)
 	}
 }
 

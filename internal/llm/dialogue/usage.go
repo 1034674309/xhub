@@ -26,12 +26,9 @@ func dialogueNumber(v any) (float64, bool) {
 }
 
 // NormalizeDialogueUsage 统一实测用量名称并保留缓存事实；参数为协议用量，返回新对象。
-// 调用：同步和流适配器；缺失实测输入或输出时标记禁止自动计价，不估算提示词。
+// 调用：同步和流适配器；先记录原始别名冲突/非法计数，再转换名称，避免覆盖导致错误结算；缺失实测量不估算。
 func NormalizeDialogueUsage(u map[string]any) map[string]any {
-	out := map[string]any{}
-	for key, value := range u {
-		out[key] = value
-	}
+	out := MergeDialogueUsage(nil, u)
 	for source, target := range map[string]string{"input_tokens": "prompt_tokens", "output_tokens": "completion_tokens", "input_tokens_details": "prompt_tokens_details", "output_tokens_details": "completion_tokens_details"} {
 		if value, exists := u[source]; exists {
 			out[target] = value
@@ -44,7 +41,9 @@ func NormalizeDialogueUsage(u map[string]any) map[string]any {
 	input, hasInput := dialogueNumber(out["prompt_tokens"])
 	output, hasOutput := dialogueNumber(out["completion_tokens"])
 	if !hasInput || !hasOutput {
-		out["pricing_blocked"] = "upstream_usage_missing"
+		if reason, _ := out["pricing_blocked"].(string); reason == "" {
+			out["pricing_blocked"] = "upstream_usage_missing"
+		}
 	} else {
 		out["total_tokens"] = input + output
 	}
