@@ -2,7 +2,7 @@ import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { Alert, AlertTitle } from "@/components/shared/Alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Check, CircleHelp, Copy, RefreshCw, TriangleAlert } from "lucide-react";
+import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { useWatch } from "react-hook-form";
 import { CopyToClipboard } from "react-copy-to-clipboard";
@@ -13,15 +13,13 @@ import { regenerateKeyCall } from "../networking";
 import { FieldGroup } from "@/components/ui/field";
 import { FormField } from "@/components/shared/form/FormField";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { calculateExpiryPreviewFromDuration, formatExpiresUtc, isKeyExpired } from "@/utils/keyExpiryUtils";
 import { buildRegenerateKeyPayload, type RegenerateKeyFormValues } from "./regenerateKeyPayload";
-import { useT } from "@/i18n";
+import { useT, t } from "@/i18n";
 
-const DURATION_PATTERN = /^(\d+(s|m|h|d|w|mo))?$/;
-const DURATION_MESSAGE = "Must be a duration like 30s, 30m, 24h, 2d, 1w, or 1mo";
-const EXPIRED_DURATION_MESSAGE = "Expiration is required for expired keys";
+const DURATION_PATTERN = /^([1-9]\d*(s|m|h|d))?$/;
 
 const EMPTY_VALUES: RegenerateKeyFormValues = {
   key_alias: undefined,
@@ -32,6 +30,7 @@ const EMPTY_VALUES: RegenerateKeyFormValues = {
   grace_period: "",
 };
 
+/** 为轮换表单创建校验规则；参数为过期状态，返回期限规则；无副作用。 */
 const buildSchema = (keyIsExpired: boolean): z.ZodType<RegenerateKeyFormValues, RegenerateKeyFormValues> => {
   const shape = {
     key_alias: z.string().nullish(),
@@ -39,23 +38,16 @@ const buildSchema = (keyIsExpired: boolean): z.ZodType<RegenerateKeyFormValues, 
     tpm_limit: z.number().nullish(),
     rpm_limit: z.number().nullish(),
     duration: keyIsExpired
-      ? z.string().min(1, EXPIRED_DURATION_MESSAGE).regex(DURATION_PATTERN, DURATION_MESSAGE)
-      : z.string().regex(DURATION_PATTERN, DURATION_MESSAGE),
-    grace_period: z.string().regex(DURATION_PATTERN, DURATION_MESSAGE),
+      ? z
+          .string()
+          .min(1, t("keyEditor.expiredDurationRequired"))
+          .regex(DURATION_PATTERN, t("keyEditor.invalidDuration"))
+      : z.string().regex(DURATION_PATTERN, t("keyEditor.invalidDuration")),
+    grace_period: z.string().regex(DURATION_PATTERN, t("keyEditor.invalidDuration")),
   };
 
   return z.object(shape);
 };
-
-const labelWithHint = (label: string, hint: string): React.ReactNode => (
-  <>
-    {label}
-    <Tooltip>
-      <TooltipTrigger render={<CircleHelp className="size-3.5 shrink-0 cursor-help text-muted-foreground" />} />
-      <TooltipContent>{hint}</TooltipContent>
-    </Tooltip>
-  </>
-);
 
 interface RegenerateKeyModalProps {
   selectedToken: KeyResponse | null;
@@ -64,6 +56,7 @@ interface RegenerateKeyModalProps {
   onKeyUpdate?: (updatedKeyData: Partial<KeyResponse>) => void;
 }
 
+/** 展示手动轮换表单；输入密钥快照及回调，保存后仅采用服务端持久化值；旧凭据立即撤销。 */
 export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdate }: RegenerateKeyModalProps) {
   const t = useT();
   const { accessToken } = useAuthorized();
@@ -72,7 +65,7 @@ export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdat
   const [copied, setCopied] = useState(false);
 
   const keyIsExpired = isKeyExpired(selectedToken?.expires);
-  const schema = useMemo(() => buildSchema(keyIsExpired), [keyIsExpired]);
+  const schema = useMemo(() => buildSchema(keyIsExpired), [keyIsExpired, t]);
   const form = useZodForm(schema, { defaultValues: EMPTY_VALUES });
   const durationValue = useWatch({ control: form.control, name: "duration" });
 
@@ -90,8 +83,10 @@ export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdat
     }
   }, [visible, selectedToken, form, accessToken]);
 
-  const newExpiryTime = durationValue ? calculateExpiryPreviewFromDuration(durationValue) : null;
+  const newExpiryTime =
+    durationValue && DURATION_PATTERN.test(durationValue) ? calculateExpiryPreviewFromDuration(durationValue) : null;
 
+  /** 提交手动轮换；参数为已校验表单，保存后以服务端快照更新父页面，异常保留输入并提示。 */
   const submitRegenerateKey = async (values: RegenerateKeyFormValues) => {
     if (!selectedToken || !accessToken) return;
 
@@ -101,19 +96,11 @@ export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdat
       setRegeneratedKey(response.key);
       toast.success(t("Virtual Key regenerated successfully"));
 
-      // Build the update payload. Spread the API response first so any new
-      // fields it returns (new token, timestamps, etc.) are captured, then
-      // override with the explicit form values — the user's just-submitted
-      // edits must win over whatever the API echoes back.
-      // expires must come from the API (an ISO string), never the locale-
-      // formatted preview, otherwise downstream expiry parsing breaks.
+      // 服务端响应是持久化结果，不能以表单值覆盖并掩盖后台忽略字段的问题。
       const updatedKeyData: Partial<KeyResponse> = {
         ...response,
         token: response.token_id || response.token || selectedToken.token,
         key_name: response.key,
-        max_budget: formValues.max_budget,
-        tpm_limit: formValues.tpm_limit,
-        rpm_limit: formValues.rpm_limit,
         expires: response.expires ?? selectedToken.expires,
       };
 
@@ -229,26 +216,23 @@ export function RegenerateKeyModal({ selectedToken, visible, onClose, onKeyUpdat
                     description={
                       <span className="flex flex-col gap-0.5 text-xs">
                         <span className={keyIsExpired ? "text-destructive" : "text-muted-foreground"}>
-                          {t("Current expiry: {value0}{value1}", { value0: (selectedToken?.expires ? formatExpiresUtc(selectedToken.expires) : "Never"), value1: (keyIsExpired && " (expired)") })}
+                          {t("Current expiry: {value0}{value1}", {
+                            value0: selectedToken?.expires
+                              ? formatExpiresUtc(selectedToken.expires)
+                              : t("keyEditor.neverExpire"),
+                            value1: keyIsExpired ? t("keyEditor.expiredSuffix") : "",
+                          })}
                         </span>
-                        {newExpiryTime && <span className="text-success">{t("New expiry: {newExpiryTime}", { newExpiryTime })}</span>}
+                        {newExpiryTime && (
+                          <span className="text-success">{t("New expiry: {newExpiryTime}", { newExpiryTime })}</span>
+                        )}
                       </span>
                     }
                   >
-                    {({ ref, ...field }) => <Input {...field} ref={ref} placeholder="e.g. 30s, 30h, 30d" />}
+                    {({ ref, ...field }) => <Input {...field} ref={ref} placeholder={t("keyEditor.editPlaceholder")} />}
                   </FormField>
 
-                  <FormField
-                    control={form.control}
-                    name="grace_period"
-                    label={labelWithHint(
-                      t("Grace Period"),
-                      t("Keep the old key valid for this duration after rotation. Both keys work during this period for seamless cutover. Empty = immediate revoke."),
-                    )}
-                    description={<span className="text-xs">{t("Recommended: 24h to 72h for production keys")}</span>}
-                  >
-                    {({ ref, ...field }) => <Input {...field} ref={ref} placeholder="e.g. 24h, 2d" />}
-                  </FormField>
+                  <p className="text-sm text-muted-foreground">{t("keyEditor.immediateRotation")}</p>
                 </div>
               </FieldGroup>
             </form>

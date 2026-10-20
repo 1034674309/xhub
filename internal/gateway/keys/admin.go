@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sunqirui1987/xhub/internal/authz"
 	"github.com/sunqirui1987/xhub/internal/gateway/templateauth"
@@ -14,11 +15,11 @@ import (
 
 var logTraceOnceAdmin sync.Once
 
-// Regenerate rotates the key plaintext. The old plaintext stops working immediately, and the key's own limits and narrowing are untouched.
+// Regenerate 原子轮换密钥并保存表单期限和额度；宽限期不受支持，必须在更换旧凭据前拒绝。
 // 参数 s（Host）：Regenerate使用的数据面宿主；w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；r（*http.Request）：入站 HTTP 请求。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/keys/mount.go
-// 测试：无直接单测
+// 测试：cmd/regression/key_lifecycle_test.go
 func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 	util.SetCallID(w, util.CallID())
 	p := s.RequireUser(w, r)
@@ -52,7 +53,17 @@ func Regenerate(s Host, w http.ResponseWriter, r *http.Request) {
 		s.WriteAuthz(w, r, err)
 		return
 	}
-	out, plain, err := s.Identity().RotateKey(r.Context(), actorOf(p), k.ID)
+	patch, err := patchFrom(k, body)
+	if err != nil {
+		util.WriteError(w, 400, "invalid_request", err.Error())
+		return
+	}
+
+	if k.ExpiresAt != nil && patch.ExpiresAt == nil && k.ExpiresAt.Before(time.Now()) {
+		util.WriteError(w, 400, "invalid_request", "duration is required to renew an expired key")
+		return
+	}
+	out, plain, err := s.Identity().RotateKey(r.Context(), actorOf(p), k.ID, patch)
 	if err != nil {
 		s.WriteIAMError(w, r, err)
 		return

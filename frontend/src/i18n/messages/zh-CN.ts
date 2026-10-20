@@ -6,6 +6,12 @@ import { routeTemplatesZhCN } from "./routeTemplates.zh-CN";
 
 export const zhCN = {
   keyEditor: {
+    expiredDurationRequired: "已过期的密钥必须指定新的有效期",
+    "apiOnly": "模型 API 密钥。管理操作需要登录会话。",
+    "rotationUnsupported": "暂不支持自动轮换。请手动轮换密钥并更新客户端。",
+    "immediateRotation": "轮换会立即撤销旧密钥。请将所有客户端更新为新密钥；暂不支持宽限期。",
+    "expiredSuffix": "（已过期）",
+
     "back": "返回密钥列表",
     "actions": "更多操作",
     "information": "密钥信息",

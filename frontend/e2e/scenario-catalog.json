@@ -2643,5 +2643,19 @@
     "title": "client documentation URLs execute real agent APIs en",
     "kind": "implemented",
     "environment": "default offline and portable console"
+  },
+  {
+    "id": "SC-400",
+    "file": "e2e/scenarios/regression/key-lifecycle-en.test.ts",
+    "title": "key lifecycle settings and atomic rotation en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-401",
+    "file": "e2e/scenarios/regression/key-lifecycle-zh-CN.test.ts",
+    "title": "key lifecycle settings and atomic rotation zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]

@@ -40,8 +40,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 const KEY_TYPE_OPTIONS = [
   { value: "llm_api", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("AI APIs"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only AI API routes (chat/completions, embeddings, etc.)"); } },
-  { value: "management", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Management"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call only management routes (user/team/key management)"); } },
-  { value: "default", /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get label() { return t("Full Access"); }, /** 渲染时读取当前语言，避免初始化冻结文案；无写入副作用。 */ get hint() { return t("Can call all routes (AI APIs, Management, and read-only)"); } },
 ];
 
 type FieldWrite = (value: unknown) => void;
@@ -128,6 +126,7 @@ export const fetchUserModels = async (
  * 用户成员关系不自动绑定团队，个人入口忽略预填团队；显式团队上下文保留团队模型和额度约束。
  * 创建失败展示错误，成功刷新列表，关闭后重置表单；明文不持久化到浏览器。
  */
+/** 创建当前用户的模型调用密钥；参数提供归属与预填信息，返回表单；只展示已实现类型，后台拒绝旧链接中的不支持类型。 */
 const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOpenCreate, prefillData }) => {
   const t = useT();
   const { accessToken, userId: userID, userRole } = useAuthorized();

@@ -77,6 +77,7 @@ const OPTIONAL_SETTINGS_VALUES = {
 
 const aliasOnly = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   key_alias: "my-key",
+  key_type: "llm_api",
   user_id: "test-user",
   duration: null,
   metadata: "{}",
@@ -136,7 +137,7 @@ describe("key ownership", () => {
   });
 
   it("leaves the form's user_id alone for another_user", () => {
-    const expected = { key_alias: "my-key", user_id: "someone-else", duration: null, metadata: "{}" };
+    const expected = { key_type: "llm_api", key_alias: "my-key", user_id: "someone-else", duration: null, metadata: "{}" };
     expect(
       payloadOf(build({ key_alias: "my-key", user_id: "someone-else" }, { keyOwner: "another_user" })),
     ).toStrictEqual(expected);
@@ -181,7 +182,7 @@ describe("metadata", () => {
   it("keeps an array metadata as an array without synthetic identity", () => {
     expect(
       payloadOf(build({ key_alias: "svc-key", metadata: '["a"]' }, { keyOwner: "another_user" })),
-    ).toStrictEqual({ key_alias: "svc-key", duration: null, metadata: '["a"]' });
+    ).toStrictEqual({ key_type: "llm_api", key_alias: "svc-key", duration: null, metadata: '["a"]' });
   });
 
   it("preserves primitive metadata", () => {
@@ -201,6 +202,7 @@ describe("metadata", () => {
         ),
       ),
     ).toStrictEqual({
+      key_type: "llm_api",
       key_alias: "svc-key",
       duration: null,
       metadata:
@@ -238,10 +240,11 @@ describe("premium and rotation flags", () => {
     );
   });
 
-  it("adds the rotation fields only when auto rotation is enabled", () => {
+  /** 即使旧调用方传入自动轮换标志，也不会构造后台未支持的保存声明；纯函数无需清理。 */
+  it("omits unsupported auto rotation settings", () => {
     expect(
       payloadOf(build({ key_alias: "my-key" }, { autoRotationEnabled: true, rotationInterval: "7d" })),
-    ).toStrictEqual(aliasOnly({ auto_rotate: true, rotation_interval: "7d" }));
+    ).toStrictEqual(aliasOnly());
   });
 
   it("sends no rotation fields when auto rotation is off", () => {
