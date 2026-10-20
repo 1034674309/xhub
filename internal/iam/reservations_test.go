@@ -118,6 +118,28 @@ func TestBudgetReservationsAtomic(t *testing.T) {
 	if err := db.ReleaseBudget(ctx, next.RequestID); err != nil {
 		t.Fatal(err)
 	}
+	// 删除凭据只能阻止新访问，不能退回已提交未知费用；新Key仍受同一用户占用约束。
+	retained, err := db.ReserveBudget(ctx, "deleted-key-hold", "key", key.ID, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.SetBudgetReservationState(ctx, retained.RequestID, "uncertain"); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.DeleteKey(ctx, Actor{}, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	remaining, err := db.PendingKeyBudget(ctx, key.ID)
+	if err != nil || len(remaining) != 1 || remaining[0].Amount != 8 {
+		t.Fatalf("删除Key不应退回未知费用: %+v %v", remaining, err)
+	}
+	replacement, _, err := db.CreateKey(ctx, Actor{}, KeyInput{UserID: user.ID, OwnerType: OwnerPersonal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ReserveBudget(ctx, "replacement-attempt", "key", replacement.ID, 1); !errors.Is(err, ErrBudgetUnavailable) {
+		t.Fatalf("删除Key绕过用户预占: %v", err)
+	}
 }
 
 // TestBudgetReservationProjectAndMigration 验证项目限制不能被宽松 Key/用户额度绕过，启动迁移保留占用。
@@ -173,6 +195,16 @@ func TestBudgetReservationProjectAndMigration(t *testing.T) {
 	}
 	if err := reopened.SetBudgetReservationState(ctx, first.RequestID, "expired"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("不支持自动过期状态: %v", err)
+	}
+	if err = db.DeleteKey(ctx, actor, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	replacement, _, err := db.CreateKey(ctx, actor, KeyInput{OwnerType: OwnerPersonal, UserID: user.ID, TeamID: team.ID, ProjectID: project.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ReserveBudget(ctx, "project-replacement", "key", replacement.ID, 1); !errors.Is(err, ErrBudgetUnavailable) {
+		t.Fatalf("删除Key绕过项目预占: %v", err)
 	}
 }
 
