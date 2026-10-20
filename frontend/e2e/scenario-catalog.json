@@ -2839,5 +2839,19 @@
     "title": "Claude keep-all, cache TTL, refusal and public history zh-CN",
     "kind": "implemented",
     "environment": "default offline; native Messages contract and finite budget"
+  },
+  {
+    "id": "SC-437",
+    "file": "e2e/scenarios/regression/messages-signed-history-en.test.ts",
+    "title": "Messages signed reasoning and dependent tools en",
+    "kind": "implemented",
+    "environment": "default offline; native signed Messages history, real model editor and finite budget"
+  },
+  {
+    "id": "SC-438",
+    "file": "e2e/scenarios/regression/messages-signed-history-zh-CN.test.ts",
+    "title": "Messages signed reasoning and dependent tools zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; native signed Messages history, real model editor and finite budget"
   }
 ]

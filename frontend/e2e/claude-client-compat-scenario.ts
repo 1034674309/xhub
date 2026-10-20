@@ -118,6 +118,27 @@ export function registerClaudeClientCompatScenario(locale: "zh-CN" | "en") {
         const info = (await (await page.request.get(GATEWAY + "/key/info?key=" + keyID, { headers })).json()).info;
         return { spend: Number(Number(info.spend).toFixed(9)), pending: Number(info.budget_pending || 0) };
       }).toEqual({ spend: 0.000336, pending: 0 });
+      // 重放 Claude Code 拒绝后自动生成的空引用，夹具检查实际原生出站字段并验证两种终态。
+      for (const stream of [false, true]) {
+        const continued = await page.request.post(GATEWAY + "/v1/messages", { headers: keyHeaders, data: {
+          model, stream, max_tokens: 64, messages: [
+            { role: "assistant", content: [{ type: "text", text: "(no content)", citations: [] }] },
+            { role: "user", content: "Verify citations continuation." },
+          ],
+        } });
+        expect(continued.status(), await continued.text()).toBe(200);
+        expect(await continued.text()).toContain("CLAUDE_COMPAT_OK");
+        if (stream) expect(await continued.text()).toContain("message_stop");
+      }
+      const invalidCitations = await page.request.post(GATEWAY + "/v1/messages", { headers: keyHeaders, data: {
+        model, max_tokens: 64, messages: [{ role: "assistant", content: [{ type: "text", text: "Example", citations: "invalid" }] }],
+      } });
+      expect(invalidCitations.status()).toBe(400);
+      expect(await invalidCitations.text()).toContain("citations");
+      await expect.poll(async () => {
+        const info = (await (await page.request.get(GATEWAY + "/key/info?key=" + keyID, { headers })).json()).info;
+        return { spend: Number(Number(info.spend).toFixed(9)), pending: Number(info.budget_pending || 0) };
+      }).toEqual({ spend: 0.000360, pending: 0 });
       const rejected = await page.request.post(GATEWAY + "/v1/messages", { headers: keyHeaders, data: { model, max_tokens: 64, messages: [{ role: "user", content: "Hello" }], context_management: { edits: [{ type: "compact_20260112" }] } } });
       expect(rejected.status()).toBe(400);
       expect(await rejected.text()).toContain("keep-all");

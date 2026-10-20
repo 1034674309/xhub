@@ -15,9 +15,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 if __package__:
     from .stream_terminal_fixture import serve_stream_terminal
     from .claude_client_fixture import serve_claude_client
+    from .messages_signed_fixture import serve_signed_history
 else:
     from stream_terminal_fixture import serve_stream_terminal
     from claude_client_fixture import serve_claude_client
+    from messages_signed_fixture import serve_signed_history
 try:
     from e2e.agent_history_fixture import handle_agent_history
 except ModuleNotFoundError:
@@ -275,6 +277,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         model = req.get("model") or "gpt-4o-mini"
         if serve_stream_terminal(self, req):
+            return
+        if serve_signed_history(self, req):
             return
         if serve_claude_client(self, req):
             return

@@ -78,3 +78,14 @@ class ClaudeClientFixtureTest(unittest.TestCase):
         claude_client_payload(body)
         with self.assertRaises(ValueError):
             claude_client_payload({**body, "messages": body["messages"][1:]})
+
+    def test_empty_citations_continuation(self):
+        """原生空引用续轮必须保留占位与文本，缺失/修改时夹具拒绝；仅内存数据，无需清理。"""
+        history = {"role": "assistant", "content": [{"type": "text", "text": "(no content)", "citations": []}]}
+        prompt = {"role": "user", "content": "Verify citations continuation."}
+        body = {"max_tokens": 64, "messages": [history, prompt]}
+        payload, _ = claude_client_payload(body)
+        self.assertEqual(payload["stop_reason"], "end_turn")
+        for messages in ([prompt], [{"role": "assistant", "content": "(no content)"}, prompt]):
+            with self.subTest(messages=messages), self.assertRaises(ValueError):
+                claude_client_payload({**body, "messages": messages})

@@ -170,15 +170,37 @@ func ResponsesRequestBody(body map[string]any, history []llmdialogue.Turn) (map[
 // ResponseHistory 构造下一轮可恢复的对话历史，保留输入与已验证的助手回复/工具调用。
 // 参数 d 为护栏后的完整统一对话，body 为本轮请求，result 为成功解析结果；返回新的 Turn 切片。
 // Serve 成功分支及 Responses 流完成前回调使用；移除 instructions 派生的首条临时指令，保留输入中的显式系统消息。
+// Responses 调用方始终保存其公开协议项和受控引用，不能把已恢复的原生 Messages Turns 写回 Responses 历史。
+// 普通跨协议结果重新编码为合法 Responses 输出；意外编码失败返回 nil，调用方不得发布不完整上下文。
 // 复制切片并追加回复，保持工具 ID 关联；嵌套字段可能共享引用，本函数本身不写会话缓存或数据库。
 func ResponseHistory(d llmdialogue.Dialogue, body map[string]any, result llmdialogue.DialogueResult) []llmdialogue.Turn {
-	if d.Source == "openai-responses" && result.Source == "openai-responses" {
+	if d.Source == "openai-responses" {
+		output := result.Native["output"]
+		if result.Source != "openai-responses" || result.Native == nil {
+			public := result
+			if result.Refused && result.Refusal != "" {
+				// 拒绝说明可作为公开助手正文继续对话；不把输出专用 refusal 内容块当作下一轮输入。
+				public = llmdialogue.DialogueResult{ID: result.ID, Text: result.Refusal, Stop: "stop", Usage: result.Usage}
+			}
+			raw, err := llmdialogue.EncodeDialogueResult(public, "openai-responses", "")
+			if err != nil {
+				return nil
+			}
+			var response map[string]any
+			if json.Unmarshal(raw, &response) != nil {
+				return nil
+			}
+			output = response["output"]
+		}
+		if _, ok := output.([]any); !ok {
+			return nil
+		}
 		var history []llmdialogue.Turn
 		input := d.Native["input"]
 		if text, ok := input.(string); ok {
 			input = []any{map[string]any{"role": "user", "content": text}}
 		}
-		for _, group := range []any{input, result.Native["output"]} {
+		for _, group := range []any{input, output} {
 			if items, ok := group.([]any); ok {
 				for _, value := range items {
 					if item, ok := value.(map[string]any); ok {

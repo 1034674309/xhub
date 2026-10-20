@@ -21,6 +21,14 @@ func (s *dialogueStream) finishRefusal() error {
 	}
 	s.usage = llmdialogue.NormalizeDialogueUsage(s.usage)
 	result := s.messagesVerified
+	if s.messagesResponses && s.prepareResult != nil {
+		// 完整拒绝也是可续接响应；本地历史失败不能绕过准备钩子发布完成项。
+		var err error
+		result, err = s.prepareResult(result)
+		if err != nil {
+			return err
+		}
+	}
 	raw, err := llmdialogue.EncodeDialogueResult(result, s.protocol, s.model)
 	if err != nil {
 		return err

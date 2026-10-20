@@ -228,6 +228,15 @@ type Bypass interface {
 // 普通会话偏好执行前重新验证；Required 父响应归属只能回原目标，失效必须拒绝。
 // Claim/Save 协调缓存版本而非锁住上游请求；History 只能来自已授权的临时续接上下文，不授予额外权限。
 type RoutePlan struct {
+	// MessagesHistory 只保存 affinity 在当前身份、别名、会话与连接范围验证过的原生助手历史。
+	// Responses 客户端引用仅是查询标识，不是授权；执行器解析完整历史时使用，不能由请求正文直接填充。
+	MessagesHistory map[string]llmdialogue.MessagesReplay
+	// PrepareMessages 在完整原生 Messages 回复发布前保存签名历史并生成 Responses 引用。
+	// 参数是已绑定真实连接的目标及已校验回复；返回公开投影或持久化错误。失败不得发布可重放完成项。
+	PrepareMessages func(RouteTarget, llmdialogue.DialogueResult) (llmdialogue.DialogueResult, error)
+	// CommitMessagesHistory 在发布 Messages 桥接终态前确认父响应历史与归属持久化。
+	// 参数为实际目标、响应 ID 和公开完整历史；失败必须中止本轮，不重复付费调用。
+	CommitMessagesHistory func(RouteTarget, string, []llmdialogue.Turn) error
 	// SessionID 的识别来源，不是供应商来源或路由策略。由 PlanRoute 生成，经 CallNote 写入日志。
 	// explicit：标准 X-Session-Id/正文 session_id；parent：授权父响应继承；
 	// cache_key：prompt_cache_key 哈希；prompt：稳定首轮内容指纹；generated：随机 UUID。

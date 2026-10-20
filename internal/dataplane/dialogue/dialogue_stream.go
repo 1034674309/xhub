@@ -24,6 +24,12 @@ import (
 // Responses 的 incomplete 也可结束，但会保留 length 原因，不伪装成完整生成。
 // 只在当前请求内串行使用；完成前验证工具参数，Responses 终态前提交已验证的续接历史。
 type dialogueStream struct {
+	// prepareResult 在完成校验后、任何 done 事件前保存不透明引用；错误阻止成功终态。
+	prepareResult func(llmdialogue.DialogueResult) (llmdialogue.DialogueResult, error)
+	// messagesResponses 标识受控原生 Messages 到 Responses 的签名桥接，公开流只发布摘要与缓存引用。
+	messagesResponses bool
+	// messagesReasoning 表示已预留首个引用项；无推理普通回复不分配索引，不产生空项。
+	messagesReasoning bool
 	// observeOnly 只复用增量校验和用量累计，原生输出由 PipeNativeDialogue 保留完整事件。
 	observeOnly bool
 	// reasoning 保存公开推理文本；索引用于 Responses 的推理输出生命周期。
@@ -107,10 +113,21 @@ func (s *dialogueStream) emit(event string, data any) error {
 		if m, ok := data.(map[string]any); ok {
 			// 跨协议桥接与原生统一入口使用相同的可迁移推理策略，不能向客户端泄漏桥接来源 ID。
 			if item, ok := m["item"].(map[string]any); ok {
-				m["item"] = llmdialogue.PortableReasoningItems([]any{item}).([]any)[0]
+				if !(s.messagesResponses && item["type"] == "reasoning") {
+					m["item"] = llmdialogue.PortableReasoningItems([]any{item}).([]any)[0]
+				}
 			}
 			if response, ok := m["response"].(map[string]any); ok {
-				m["response"] = llmdialogue.PortableResponsesObject(response, "output")
+				public := llmdialogue.PortableResponsesObject(response, "output")
+				if s.messagesResponses {
+					for i, value := range streamList(public["output"]) {
+						item := streamMap(value)
+						if item["type"] == "reasoning" {
+							item["id"] = streamMap(streamList(response["output"])[i])["id"]
+						}
+					}
+				}
+				m["response"] = public
 			}
 			m["sequence_number"] = s.sequence
 			s.sequence++
@@ -383,6 +400,33 @@ func (s *dialogueStream) finish() error {
 			r.Calls = append(r.Calls, *c)
 		}
 	}
+	if s.messagesResponses {
+		if s.messagesError != nil {
+			return s.messagesError
+		}
+		if s.messagesVerified.Source != "anthropic-messages" {
+			return fmt.Errorf("invalid Messages stream completion")
+		}
+		r = s.messagesVerified
+		r.ToolBindings = s.toolBindings
+		if s.prepareResult != nil {
+			var err error
+			r, err = s.prepareResult(r)
+			if err != nil {
+				return err
+			}
+		}
+		if s.messagesReasoning && llmdialogue.HasOpaqueMessagesResult(r) {
+			return fmt.Errorf("signed Messages history was not prepared")
+		}
+		if s.messagesReasoning && r.Source != "openai-responses" {
+			s.messagesReasoning = false
+			s.reasoningStarted, s.reasoningBlock, s.reasoning = true, 0, r.Reasoning
+		}
+		if s.messagesReasoning && len(streamList(r.Native["output"])) == 0 {
+			return fmt.Errorf("signed Messages history result is empty")
+		}
+	}
 	// 达到输出上限的工具回复仍是截断，不能被工具存在这一事实覆盖成可执行的正常结束。
 	if len(r.Calls) > 0 && r.Stop != "length" {
 		r.Stop = "tool_calls"
@@ -430,7 +474,14 @@ func (s *dialogueStream) finish() error {
 		_ = json.Unmarshal(raw, &response)
 		// 完成事件按已发送的输出索引重排，保留工具和文本块的生命周期及稳定 ID。
 		items := make([]any, s.nextBlock)
-		if s.reasoningStarted {
+		if s.messagesReasoning {
+			item := streamMap(streamList(r.Native["output"])[0])
+			item["id"] = llmdialogue.ResponseItemID("rs", s.responseItemSeed)
+			items[0] = item
+			if err := s.emit("response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item}); err != nil {
+				return err
+			}
+		} else if s.reasoningStarted {
 			part := map[string]any{"type": "summary_text", "text": s.reasoning}
 			item := map[string]any{"id": llmdialogue.ResponseItemID("rs", s.responseItemSeed), "type": "reasoning", "summary": []any{part}}
 			items[s.reasoningBlock] = item
@@ -509,6 +560,9 @@ func (s *dialogueStream) finish() error {
 			}
 		}
 		response["output"] = items
+		if s.messagesReasoning {
+			r.Native = response
+		}
 		event := "response.completed"
 		if r.Stop == "length" {
 			event = "response.incomplete"
@@ -780,6 +834,9 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 				}
 				return s.toolDelta(streamIndex(m["index"]), streamString(b["id"]), streamString(b["name"]), args)
 			case "thinking", "redacted_thinking":
+				if s.messagesResponses {
+					return s.startMessagesReasoning()
+				}
 				// 原生观察器另行完整校验签名和块生命周期；跨协议不伪造公开推理或厂商签名。
 				if !s.observeOnly {
 					return fmt.Errorf("unsupported upstream content block %v", b["type"])
@@ -795,6 +852,9 @@ func (s *dialogueStream) consume(protocol string, data string) error {
 			case "input_json_delta":
 				return s.toolDelta(streamIndex(m["index"]), "", "", streamString(d["partial_json"]))
 			case "thinking_delta", "signature_delta":
+				if s.messagesResponses {
+					return nil
+				}
 				if !s.observeOnly {
 					return fmt.Errorf("unsupported upstream delta %v", d["type"])
 				}
@@ -871,6 +931,13 @@ func PipeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, a
 // PipeDialogueWithTools 为真实请求附加 namespace/custom 工具还原表，其他参数、返回值及资源清理与 PipeDialogue 一致。
 // Serve 调用；映射只作用于跨协议 Responses 工具事件，原生 SSE 不改；参数完整后发布工具输入，不执行工具或改变鉴权。
 func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, bindings map[string]llmdialogue.ToolBinding, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
+	return PipeDialogueWithPreparation(w, resp, start, alias, upstream, caller, bindings, nil, beforeComplete...)
+}
+
+// PipeDialogueWithPreparation 在跨协议完成发布前执行可失败的持久化准备钩子。
+// 参数与 WithTools 相同，prepare 接收完整原生结果并返回可发布结果；只用于 Messages→Responses，错误不能产生 done 或 completed。
+// 同协议保持既有路径；prepare 不得泄露原厂签名，存储成功后客户端写失败无需撤销已保存的临时记录。
+func PipeDialogueWithPreparation(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, bindings map[string]llmdialogue.ToolBinding, prepare func(llmdialogue.DialogueResult) (llmdialogue.DialogueResult, error), beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
 	if upstream == caller && (caller == "openai-chat" || caller == "openai-responses" || caller == "anthropic-messages") {
 		return PipeNativeDialogue(w, resp, start, alias, caller, beforeComplete...)
 	}
@@ -878,6 +945,9 @@ func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start tim
 	w.Header().Set("Content-Type", "text/event-stream")
 	util.PreventSSETransform(w.Header())
 	s := dialogueStream{writer: w, protocol: caller, model: alias, calls: map[int]*llmdialogue.Turn{}, blocks: map[int]int{}, usage: map[string]any{}, textBlock: -1, toolIndices: map[int]int{}, toolBindings: bindings}
+	if upstream == "anthropic-messages" && caller == "openai-responses" && prepare != nil {
+		s.messagesResponses, s.prepareResult = true, prepare
+	}
 	if upstream == "openai-responses" && caller == "anthropic-messages" {
 		s.responsesMessages, s.responsePrelude = true, true
 		s.responseReasoningBlocks = map[string]string{}

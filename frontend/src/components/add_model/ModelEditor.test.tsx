@@ -325,3 +325,48 @@ it.each(["zh-CN", "en"] as const)("%s saves explicit web search capability and f
   await waitFor(()=>expect(mocks.patch).toHaveBeenCalledWith("token",expect.objectContaining({model_info:expect.objectContaining({web_search_support:"unsupported",web_search_fallback:"drop_optional"})}),"search-test"));
   setActiveLocale("zh-CN");
 });
+
+/** 前置双语真实编辑器与原生Messages部署；验证能力回显、保存、禁用回退及有效期插值，原始模型值不变；组件自动卸载，无后台写入。 */
+it.each(["zh-CN", "en"] as const)("%s persists explicit adaptive Messages reasoning without changing model input", async (locale) => {
+  setActiveLocale(locale);
+  mocks.catalog = catalog;
+  mocks.apiPost.mockResolvedValue({ models: [] });
+  mocks.patch.mockClear();
+  mocks.patch.mockImplementation(async (_token, payload) => payload);
+  const model: EditorModel = { model_name: "original-public", litellm_params: { model: "original-upstream", custom_llm_provider: "anthropic", litellm_credential_name: "relay-a", input_cost_per_token: 0.000001 }, model_info: { id: "reasoning-test", transport: "bypass_anthropic_messages", endpoint_types: ["responses", "messages"], pricing_source: "manual", messages_reasoning_mode: "adaptive" } };
+  const user = userEvent.setup();
+  renderEditor({ model });
+  const selector = screen.getByLabelText(t("providerGuideUI.messagesReasoningMode"));
+  expect(selector).toHaveValue("adaptive");
+  expect(screen.getByText(t("providerGuideUI.messagesReasoningHistory", { hours: 1 }))).toBeVisible();
+  expect(screen.getByText(t("providerGuideUI.messagesReasoningHelp"))).toBeVisible();
+  await user.click(screen.getByRole("button", { name: t("providerGuideUI.saveChanges"), exact: true }));
+  await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("token", expect.objectContaining({ model_name: "original-public", litellm_params: expect.objectContaining({ model: "original-upstream" }), model_info: expect.objectContaining({ messages_reasoning_mode: "adaptive" }) }), "reasoning-test"));
+  mocks.patch.mockClear();
+  await user.selectOptions(selector, "disabled");
+  await user.click(screen.getByRole("button", { name: t("providerGuideUI.saveChanges"), exact: true }));
+  await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("token", expect.objectContaining({ model_info: expect.objectContaining({ messages_reasoning_mode: "disabled" }) }), "reasoning-test"));
+  setActiveLocale("zh-CN");
+});
+
+/** 前置非Messages连接；验证自适应选项不可选且缺省不启用，避免未确认协议误配置；自动卸载，无外部数据。 */
+it("does not offer adaptive reasoning for a non-Messages connection", () => {
+  setActiveLocale("en");
+  renderEditor({ model: { model_name: "public", litellm_params: { model: "upstream", custom_llm_provider: "openai", litellm_credential_name: "relay-a" }, model_info: { transport: "bypass_openai_chat", endpoint_types: ["responses"] } } });
+  expect(screen.getByLabelText(t("providerGuideUI.messagesReasoningMode"))).toHaveValue("disabled");
+  expect(screen.getByRole("option", { name: t("providerGuideUI.messagesReasoningAdaptive") })).toBeDisabled();
+  setActiveLocale("zh-CN");
+});
+
+/** 前置遗留错误协议配置；验证双语保存错误可见且不提交后台，防止隐藏字段让错误静默通过；自动卸载，无数据写入。 */
+it.each(["zh-CN", "en"] as const)("%s shows incompatible reasoning configuration without saving", async (locale) => {
+  setActiveLocale(locale);
+  mocks.patch.mockClear();
+  mocks.catalog = catalog;
+  mocks.apiPost.mockResolvedValue({ models: [] });
+  renderEditor({ model: { model_name: "public", litellm_params: { model: "upstream", custom_llm_provider: "openai", litellm_credential_name: "relay-a", input_cost_per_token: 0.000001 }, model_info: { id: "invalid-mode", transport: "bypass_openai_chat", endpoint_types: ["responses"], pricing_source: "manual", messages_reasoning_mode: "adaptive" } } });
+  await userEvent.click(screen.getByRole("button", { name: t("providerGuideUI.saveChanges"), exact: true }));
+  expect(await screen.findByText(t("providerGuideUI.messagesReasoningRequiresNative"))).toBeVisible();
+  expect(mocks.patch).not.toHaveBeenCalled();
+  setActiveLocale("zh-CN");
+});

@@ -49,9 +49,18 @@ func EncodeDialogue(m config.ModelEntry, d llmdialogue.Dialogue) (map[string]any
 	if err != nil {
 		return nil, nil, err
 	}
+	prepared, effort, err := prepareMessagesReasoning(m, prepared)
+	if err != nil {
+		return nil, nil, err
+	}
 	payload, err := llmdialogue.EncodeDialogue(prepared, t.Protocol, m.ParamString("model", ""))
 	if err != nil {
 		return nil, nil, err
+	}
+	if effort != "" {
+		// 输出上限仍由原请求和硬额度链控制；adaptive并不意味着可以擅自扩大max_tokens。
+		payload["thinking"] = map[string]any{"type": "adaptive"}
+		payload["output_config"] = map[string]any{"effort": effort}
 	}
 	if dropped {
 		return payload, []string{"web_search"}, nil

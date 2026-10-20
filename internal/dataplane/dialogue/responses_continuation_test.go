@@ -27,7 +27,7 @@ func TestResponsesRequestRestoresToolsAndValidates(t *testing.T) {
 		t.Fatalf("工具历史恢复失败: %+v %v", d, err)
 	}
 	next := ResponseHistory(d, out, llmdialogue.DialogueResult{Text: "done"})
-	if len(next) != 4 || next[0].Text != "first" || len(history) != 2 || out["guardrails"] == nil || body["previous_response_id"] != "resp-a" {
+	if len(next) != 4 || next[0].Native["content"] != "first" || len(history) != 2 || out["guardrails"] == nil || body["previous_response_id"] != "resp-a" {
 		t.Fatalf("指令隔离或原始数据修改: %+v", next)
 	}
 	for _, invalid := range []map[string]any{{"input": "x", "store": "false"}, {"input": "x", "previous_response_id": 12}, {"input": "x", "previous_response_id": ""}, {"input": []any{}}} {

@@ -120,7 +120,7 @@ export default function ModelEditor({
     if (name === values.supplier) return;
     if (name === "__existing__") {
       const existing = editorDefaults(model);
-      for (const key of ["supplier", "custom_llm_provider", "model", "model_name", "transport", "endpoint_types", "web_search_support", "web_search_fallback"])
+      for (const key of ["supplier", "custom_llm_provider", "model", "model_name", "transport", "endpoint_types", "web_search_support", "web_search_fallback", "messages_reasoning_mode"])
         set(key, existing[key]);
       return;
     }
@@ -136,6 +136,7 @@ export default function ModelEditor({
     set("endpoint_types", []);
     set("web_search_support", "inherit");
     set("web_search_fallback", "reject");
+    set("messages_reasoning_mode", "disabled");
     if (values.model_name === suggestedModelName(String(values.model ?? ""), provider)) set("model_name", "");
   };
 
@@ -385,6 +386,18 @@ export default function ModelEditor({
                   }
                   modelCostMap={rows}
                 />
+                <section aria-label={t("providerGuideUI.messagesReasoningTitle")} className="space-y-3 rounded-lg border p-4">
+                  <h4 className="font-medium">{t("providerGuideUI.messagesReasoningTitle")}</h4>
+                  <Label htmlFor="editor-messages-reasoning">{t("providerGuideUI.messagesReasoningMode")}</Label>
+                  <select id="editor-messages-reasoning" className={selectClass}
+                    value={String(values.messages_reasoning_mode ?? "disabled")}
+                    onChange={event => set("messages_reasoning_mode", event.target.value)}>
+                    <option value="disabled">{t("providerGuideUI.messagesReasoningDisabled")}</option>
+                    <option value="adaptive" disabled={values.transport !== "bypass_anthropic_messages"}>{t("providerGuideUI.messagesReasoningAdaptive")}</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t("providerGuideUI.messagesReasoningHelp")}</p>
+                  <p className="text-xs text-muted-foreground">{t("providerGuideUI.messagesReasoningHistory", { hours: 1 })}</p>
+                </section>
                 <section aria-label={t("providerGuideUI.searchTitle")} className="space-y-3 rounded-lg border p-4">
                   <h4 className="font-medium">{t("providerGuideUI.searchTitle")}</h4>
                   <p className="text-xs text-muted-foreground">{t("providerGuideUI.searchHelp")}</p>
