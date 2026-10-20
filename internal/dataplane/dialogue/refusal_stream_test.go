@@ -146,3 +146,28 @@ func TestRefusalStreamLifecycleBoundaries(t *testing.T) {
 		}
 	})
 }
+
+// TestMessagesRefusalPreparation 验证拒绝终态也先确认历史保存，失败不发布done或completed。
+// 前置内存Messages拒绝流；成功与失败回调各执行一次并保持usage；无外部资源。
+func TestMessagesRefusalPreparation(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			w := httptest.NewRecorder()
+			calls := 0
+			raw := refusalStreamFrames(`{"type":"refusal","explanation":"Request declined."}`, false, true)
+			_, _, _, capture, err := PipeDialogueWithPreparation(w, &http.Response{Body: io.NopCloser(strings.NewReader(raw))}, time.Now(), "public", "anthropic-messages", "openai-responses", nil, func(r llmdialogue.DialogueResult) (llmdialogue.DialogueResult, error) {
+				calls++
+				if fail {
+					return r, fmt.Errorf("history unavailable")
+				}
+				return r, nil
+			})
+			if calls != 1 || (err != nil) != fail {
+				t.Fatalf("拒绝准备未执行或错误未传递: %d %v", calls, err)
+			}
+			if fail && (strings.Contains(string(capture), "response.output_item.done") || strings.Contains(string(capture), "response.completed")) {
+				t.Fatal("保存失败仍发布完成项")
+			}
+		})
+	}
+}

@@ -145,7 +145,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	}
 	var dialogue llmdialogue.Dialogue
 	if dpdialogue.CallerProtocol(op) != "" {
-		dialogue, err = llmdialogue.ParseDialogue(dpdialogue.CallerProtocol(op), dpdialogue.DialogueRequestBody(body))
+		if op == "responses" && len(plan.MessagesHistory) > 0 {
+			dialogue, err = llmdialogue.ParseResponsesWithMessagesHistory(dpdialogue.DialogueRequestBody(body), plan.MessagesHistory)
+		} else {
+			dialogue, err = llmdialogue.ParseDialogue(dpdialogue.CallerProtocol(op), dpdialogue.DialogueRequestBody(body))
+		}
 		if err != nil {
 			util.WriteTypedError(w, r.URL.Path, 400, "unsupported_capability", err.Error())
 			return
@@ -472,6 +476,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					var ttft time.Duration
 					var streamed []byte
 					var streamErr error
+					preparationFailed := false
 					if dpdialogue.CallerProtocol(op) != "" && resp.StatusCode < 400 {
 						execution, _ := providerdeployment.Execution(dep)
 						// 终态发送前提交归属与历史，使收到完成事件的客户端能立即续接。
@@ -486,6 +491,18 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						}
 						if op == "responses" && execution.Protocol == "openai-responses" {
 							wrote, usage, ttft, streamed, streamErr = dpdialogue.PipePortableResponses(w, resp, start, alias, commit)
+						} else if op == "responses" && execution.Protocol == "anthropic-messages" && plan.PrepareMessages != nil {
+							// 引用必须在 output_item.done 之前持久化；工具增量可以先发送，完成项不能先于归属。
+							prepare := func(result llmdialogue.DialogueResult) (llmdialogue.DialogueResult, error) {
+								prepared, err := plan.PrepareMessages(plan.Target, result)
+								if err == nil && plan.CommitMessagesHistory != nil {
+									plan.History = dpdialogue.ResponseHistory(dialogue, body, prepared)
+									err = plan.CommitMessagesHistory(plan.Target, prepared.ID, plan.History)
+								}
+								preparationFailed = err != nil
+								return prepared, err
+							}
+							wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogueWithPreparation(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), dialogue.ToolBindings, prepare)
 						} else {
 							wrote, usage, ttft, streamed, streamErr = dpdialogue.PipeDialogueWithTools(w, resp, start, alias, execution.Protocol, dpdialogue.CallerProtocol(op), dialogue.ToolBindings, commit)
 						}
@@ -501,11 +518,14 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						}
 						h.NoteFailure(did, routeCfg)
 						util.Error("upstream stream path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(streamErr))
-						if wrote {
+						if wrote || preparationFailed {
 							// 客户端已收到部分回复，不能重试或换模型；记录已有用量和 502 事实后结束。
 							h.RememberExchange(callID, r, raw, streamed)
 							h.AnnotateCall(callID, dpcontract.CallNote{Streamed: true, TTFTMs: dpusage.TtftMillis(ttft), Provider: supplier, CacheKey: ck, SessionID: plan.SessionID})
 							h.RecordSpend(w, p, callID, alias, op, usage, start, false, http.StatusBadGateway, did)
+							if !wrote {
+								util.WriteTypedError(w, r.URL.Path, http.StatusBadGateway, "history_unavailable", dpdiagnostics.SafeErr(streamErr))
+							}
 							return
 						}
 						continue
@@ -534,6 +554,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					util.Error("upstream stream path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(errEmptyUpstream))
 					continue
 				}
+				messagesHistoryCommitted := false
 				respBody, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				cancelAttempt()
@@ -557,6 +578,24 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 						continue
 					}
 					result.ToolBindings = dialogue.ToolBindings
+					if op == "responses" && execution.Protocol == "anthropic-messages" && plan.PrepareMessages != nil {
+						prepared, prepareErr := plan.PrepareMessages(plan.Target, result)
+						if prepareErr == nil && plan.CommitMessagesHistory != nil {
+							plan.History = dpdialogue.ResponseHistory(dialogue, body, prepared)
+							prepareErr = plan.CommitMessagesHistory(plan.Target, prepared.ID, plan.History)
+						}
+						if prepareErr != nil {
+							// 上游已完整完成，本地历史失败不能再次付费生成；保留真实 usage 和失败原因，预占待核对。
+							detail := dpdiagnostics.SafeErr(prepareErr)
+							h.RememberExchange(callID, r, raw, []byte(detail))
+							h.AnnotateCall(callID, dpcontract.CallNote{Provider: supplier, SessionID: plan.SessionID})
+							h.RecordSpend(w, p, callID, alias, op, llmdialogue.NormalizeDialogueUsage(result.Usage), start, false, http.StatusBadGateway, did)
+							util.WriteTypedError(w, r.URL.Path, http.StatusBadGateway, "history_unavailable", detail)
+							return
+						}
+						result = prepared
+						messagesHistoryCommitted = plan.CommitMessagesHistory != nil
+					}
 					respBody, conversionErr = llmdialogue.EncodeDialogueResult(result, dpdialogue.CallerProtocol(op), alias)
 					if conversionErr == nil && op == "responses" {
 						// 编码后统一清理，覆盖原生和 Chat 桥接生成的 reasoning ID；原始结果仍供服务器续接。
@@ -586,7 +625,7 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					TTFTMs: dpusage.TtftMillis(elapsed), Provider: supplier, CacheKey: ck,
 					SessionID: plan.SessionID,
 				})
-				if resp.StatusCode < 400 {
+				if resp.StatusCode < 400 && !messagesHistoryCommitted {
 					h.CommitRoute(plan, router.DeploymentID(rawDep), dpstream.ResponseID(respBody))
 				}
 				h.WriteChatJSON(w, p, callID, alias, ck, op, "", respBody, resp.StatusCode, start, depID, fallbacks.PoolAlias, rawDep.ModelName)

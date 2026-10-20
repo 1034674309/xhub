@@ -225,6 +225,11 @@ func normalizeMessagesProjection(value any) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid history item status")
 	}
 	delete(item, "status")
+	if item["type"] == "reasoning" && item["content"] == nil {
+		// Codex SDK 将未提供的可选 reasoning.content 序列化为 null；这是同一公开投影。
+		// 仅忽略 null/缺省，非空或错误类型的 content 仍参与完整性比较并拒绝篡改。
+		delete(item, "content")
+	}
 	if item["type"] == "message" {
 		if v := item["phase"]; v != nil && v != "commentary" && v != "final_answer" {
 			return nil, fmt.Errorf("invalid history message phase")

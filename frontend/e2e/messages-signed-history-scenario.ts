@@ -93,6 +93,8 @@ export function registerMessagesSignedHistoryScenario(locale: "zh-CN" | "en") {
           if (round === 3) { expect(raw).toContain("VALUE_1|VALUE_2"); continue; }
           const reasoning = result.output.find(item => item.type === "reasoning");
           expect(reasoning?.encrypted_content).toEqual(expect.stringMatching(/^xhub_messages_v1:/));
+          // Codex 会显式回传未设置的 content:null；保持签名引用与摘要原样。
+          if (reasoning) reasoning.content = null;
           const calls = result.output.filter(item => item.type === "function_call");
           expect(calls).toHaveLength(1);
           expect(calls[0]).toMatchObject({ name: "lookup", call_id: "call_" + round });

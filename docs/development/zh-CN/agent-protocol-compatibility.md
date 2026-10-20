@@ -152,3 +152,13 @@ LiteLLM 来源、函数与许可证见 `third_party/litellm/NOTICE.md`。
 标准 Messages 入口在原生 Anthropic 部署上保留 `thinking.signature`、`redacted_thinking.data` 和 `tool_use.caller={"type":"direct"}`，同步与流式回复均可原样续轮。签名/密文必须回到同一身份、公开模型、会话和供应商连接；未知归属或连接凭据变化会拒绝，不能跨协议或跨供应商迁移。程序化工具 caller 仍明确拒绝。原生流只有在内容块、工具参数和消息终态完整时才记录可续轮归属。
 
 Chat SDK 累积或供应商回复中的非负整数 `tool_calls[].index` 可原样回传；同协议保留该字段，跨协议仅移除位置元数据，关联仍使用调用 ID。Responses 一轮中的连续函数调用在 Chat 投影中合并为同一条 assistant 消息，工具结果按 ID 关联并保留原顺序；用户、工具结果或独立推理项构成分组边界。
+
+### Responses 调用原生 Messages 的签名推理
+
+管理员可在模型编辑页将 `messages_reasoning_mode` 设置为 `adaptive`，用于已实测支持 adaptive thinking 的原生 Messages 部署。此时 Responses 的 `reasoning.effort` 支持 `low/medium/high/max`，映射到 `thinking.type=adaptive` 和同值 `output_config.effort`。缺省配置不开放这项跨协议能力；不传 effort 保留上游默认行为，显式 `none` 仍请求禁用推理，上游可以拒绝。该开关不代表 Chat 推理桥接、所有 Claude 型号或所有渠道已认证，也不修改请求的输出上限。
+
+带签名或 redacted 块的完整助手消息保存在服务端，Responses 输出使用 `encrypted_content` 中的随机 `xhub_messages_v1:` 引用。它是 XHub 的短期引用，不是 OpenAI 密文格式。客户端应原样回传该 reasoning 项及其后同轮公开文字和工具项，再追加工具结果；工具项不能删改或重排。XHub 校验后恢复单个完整 Messages assistant，保留原生块和签名字节，并按原调用 ID 连接工具结果。也支持 `previous_response_id`，包括签名工具轮之后普通文字回复的继续对话。
+
+引用绑定调用身份、公开模型、会话及实际供应商连接，保存期一小时。更换 Key、别名、会话、连接凭据或缓存失效会拒绝；没有 Redis 时进程重启也会丢失短期历史。它不允许私有推理跨模型迁移。同步和流式都在发布完成项前确认引用、父历史及归属保存成功；保存失败明确报错，保留待核对额度与已观察用量，不重新调用已完成的上游。SSE 支持首个 thinking 在公开正文/工具前出现；首个 thinking 晚于已发送公开内容时明确失败，不能补插或改写已发送的输出顺序。
+
+Messages 文本块的 `citations` 缺省、`null` 或空数组不阻止协议转换；原生 Messages 保留这些字段。非空引用仍须明确可表达，当前跨协议拒绝，避免丢掉引用事实。

@@ -51,6 +51,7 @@ func TestMessagesHistoryReferenceRoundTrip(t *testing.T) {
 	record := MessagesReplay{Message: original.Native, Output: output[1:]}
 	body := signedHistoryRequest(t, prepared)
 	items := dialogueList(body["input"])
+	dialogueMap(items[1])["content"] = nil // 实际 Codex 回传的可选字段形状。
 	dialogueMap(items[2])["arguments"] = `{ "path" : "a" }`
 	dialogueMap(items[3])["phase"] = "commentary"
 	delete(dialogueMap(items[3]), "id")
@@ -99,8 +100,12 @@ func TestMessagesHistoryRejectsTamperedGroups(t *testing.T) {
 		"missing_record": func(body map[string]any) {
 			dialogueMap(dialogueList(body["input"])[1])["encrypted_content"] = MessagesHistoryPrefix + "missing"
 		},
-		"modified_summary": func(body map[string]any) { dialogueMap(dialogueList(body["input"])[1])["summary"] = []any{} },
-		"tool_identity":    func(body map[string]any) { dialogueMap(dialogueList(body["input"])[2])["call_id"] = "other" },
+		"modified_reasoning_content": func(body map[string]any) {
+			dialogueMap(dialogueList(body["input"])[1])["content"] = []any{map[string]any{"type": "reasoning_text", "text": "Changed"}}
+		},
+		"modified_reasoning_content_type": func(body map[string]any) { dialogueMap(dialogueList(body["input"])[1])["content"] = false },
+		"modified_summary":                func(body map[string]any) { dialogueMap(dialogueList(body["input"])[1])["summary"] = []any{} },
+		"tool_identity":                   func(body map[string]any) { dialogueMap(dialogueList(body["input"])[2])["call_id"] = "other" },
 		"tool_argument": func(body map[string]any) {
 			dialogueMap(dialogueList(body["input"])[2])["arguments"] = `{"path":"secret"}`
 		},
