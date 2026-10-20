@@ -91,6 +91,14 @@ jobs:
           E2E_RUN_DIR: ${{ github.workspace }}/.e2e/release
           E2E_PORTABLE_CONSOLE: '1'
           E2E_REDIS: '1'
+      # 独立无 Redis 链验证 PostgreSQL 待结算恢复，并覆盖 Agent 历史、流终态、取消、文档和 Key 生命周期。
+      - name: API client reliability browser regression
+        run: bash scripts/e2e.sh client-docs-url- client-cancellation- stream-terminal-sc- billing-pending-recovery key-lifecycle- agent-history-
+        env:
+          E2E_RUN_DIR: ${{ github.workspace }}/.e2e/release-agent-reliability
+          E2E_BUILD_DIR: .next-agent-reliability
+          E2E_PORTABLE_CONSOLE: '1'
+          E2E_REDIS: '0'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -104,6 +112,11 @@ jobs:
             .e2e/release/scenario-coverage.json
             .e2e/release/html/
             .e2e/release/test-results/
+            .e2e/release-agent-reliability/results.json
+            .e2e/release-agent-reliability/junit.xml
+            .e2e/release-agent-reliability/scenario-coverage.json
+            .e2e/release-agent-reliability/html/
+            .e2e/release-agent-reliability/test-results/
           if-no-files-found: ignore
       - run: docker compose down -v
         if: always()
