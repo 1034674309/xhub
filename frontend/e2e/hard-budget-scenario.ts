@@ -54,10 +54,11 @@ export function registerHardBudgetScenario(locale: "en" | "zh-CN") {
       const key = await (await minted).json();
       id = key.token_id;
       await page.keyboard.press("Escape");
+      let requestSequence = 0;
       const invoke = () =>
         page.request.post(GATEWAY + "/v1/chat/completions", {
           headers: { Authorization: "Bearer " + key.key },
-          data: { model, messages: [{ role: "user", content: "Verify strict budget recovery." }] },
+          data: { model, messages: [{ role: "user", content: "Verify strict budget recovery request " + ++requestSequence + "." }] },
         });
       const refused = await invoke();
       expect(refused.status()).toBe(429);
