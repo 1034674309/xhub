@@ -8,13 +8,17 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.8
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.8
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.3
+	github.com/beevik/etree v1.7.0
 	github.com/coreos/go-oidc/v3 v3.16.0
+	github.com/crewjam/saml v0.5.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/mattermost/xml-roundtrip-validator v0.1.0
 	github.com/openai/openai-go/v3 v3.74.0
 	github.com/qiniu/go-sdk/v7 v7.26.4
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/russellhaering/goxmldsig v1.6.1
 	github.com/tiktoken-go/tokenizer v0.7.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.36.0
@@ -48,6 +52,7 @@ require (
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
+	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

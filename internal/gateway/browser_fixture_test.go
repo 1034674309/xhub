@@ -16,6 +16,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
 	"github.com/sunqirui1987/xhub/internal/store"
+	"github.com/sunqirui1987/xhub/internal/testsupport/samltest"
 	"github.com/sunqirui1987/xhub/internal/util"
 	"io"
 	"math/big"
@@ -261,6 +262,12 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 		proxy.ServeHTTP(w, r)
 	}))
 	defer consoleServer.Close()
+	// SAML 独立 TLS 入口全部经过真实 Next 代理，包括 /auth 路由；HTTP 场景直接使用 Next 端口。
+	// 不复用上方历史 OIDC 的直接路由，以免夹具掩盖生产 /auth rewrite 缺失。
+	samlConsole := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(ui))
+	defer samlConsole.Close()
+	samlIDP := samltest.New(t)
+	expiredSAMLIDP := samltest.NewExpired(t)
 	identities := map[string]string{}
 	control := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -268,6 +275,22 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 			return
 		}
 		switch r.URL.Path {
+		case "/saml/register":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			raw, err := io.ReadAll(io.LimitReader(r.Body, 2<<20))
+			if err != nil || samlIDP.Register(string(raw)) != nil {
+				http.Error(w, "invalid SP metadata", 400)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]bool{"registered": true})
+		case "/saml/mode":
+			samlIDP.SetMode(r.URL.Query().Get("value"))
+			_ = json.NewEncoder(w).Encode(map[string]bool{"configured": true})
+		case "/saml/last":
+			_ = json.NewEncoder(w).Encode(samlIDP.Last())
 		case "/monitor/tps/legacy":
 			// 只在此测试程序的私有 schema 写入旧 TPS 并移除完成标记；浏览器随后通过生产 Migrate 验证修复。
 			// 不改写账单、费用、Token 或其他统计；POST 以外拒绝，运行器最终删除专属 schema。
@@ -507,7 +530,7 @@ func TestBrowserEnterpriseFixture(t *testing.T) {
 		}
 	}))
 	defer control.Close()
-	metadata, _ := json.Marshal(map[string]string{"issuer": issuer, "console": consoleServer.URL, "control": control.URL})
+	metadata, _ := json.Marshal(map[string]string{"issuer": issuer, "console": consoleServer.URL, "control": control.URL, "saml_console": samlConsole.URL, "saml_metadata": samlIDP.Metadata(), "saml_metadata_expired": expiredSAMLIDP.Metadata()})
 	if err = os.WriteFile(filepath.Join(dir, "enterprise-fixture.json"), metadata, 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -2,13 +2,20 @@ package iam
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"xorm.io/xorm"
 )
 
 // saveEnterpriseOIDC 在调用方事务中写入独立 SSO 配置；in 已经网关校验，返回错误，提升版本使旧回调失效。
 func saveEnterpriseOIDC(s *xorm.Session, in EnterpriseOIDC) error {
-	_, err := s.Exec(`INSERT INTO enterprise_oidc(connection_id,name,issuer,client_id,secret,redirect_uri,return_uri,identity_claim,enabled) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(connection_id) DO UPDATE SET name=EXCLUDED.name,issuer=EXCLUDED.issuer,client_id=EXCLUDED.client_id,secret=EXCLUDED.secret,redirect_uri=EXCLUDED.redirect_uri,return_uri=EXCLUDED.return_uri,identity_claim=EXCLUDED.identity_claim,enabled=EXCLUDED.enabled,revision=enterprise_oidc.revision+1`, in.ConnectionID, in.Name, in.Issuer, in.ClientID, in.Secret, in.RedirectURI, in.ReturnURI, in.IdentityClaim, in.Enabled)
+	if in.Protocol == "" {
+		in.Protocol = "oidc"
+	}
+	if in.Protocol != "oidc" && in.Protocol != "saml" {
+		return ErrInvalid
+	}
+	_, err := s.Exec(`INSERT INTO enterprise_oidc(connection_id,name,issuer,client_id,secret,redirect_uri,return_uri,identity_claim,enabled,protocol,allow_http,idp_metadata,idp_metadata_url,certificate) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(connection_id) DO UPDATE SET name=EXCLUDED.name,issuer=EXCLUDED.issuer,client_id=EXCLUDED.client_id,secret=EXCLUDED.secret,redirect_uri=EXCLUDED.redirect_uri,return_uri=EXCLUDED.return_uri,identity_claim=EXCLUDED.identity_claim,enabled=EXCLUDED.enabled,protocol=EXCLUDED.protocol,allow_http=EXCLUDED.allow_http,idp_metadata=EXCLUDED.idp_metadata,idp_metadata_url=EXCLUDED.idp_metadata_url,certificate=EXCLUDED.certificate,revision=enterprise_oidc.revision+1`, in.ConnectionID, in.Name, in.Issuer, in.ClientID, in.Secret, in.RedirectURI, in.ReturnURI, in.IdentityClaim, in.Enabled, in.Protocol, in.AllowHTTP, in.IDPMetadata, in.IDPMetadataURL, in.Certificate)
 	return err
 }
 
@@ -46,6 +53,17 @@ func (db *DB) CreateEnterpriseOIDC(ctx context.Context, by Actor, orgID string, 
 			return ErrConflict
 		}
 		in.ConnectionID = d.ID
+		// 表单默认实体标识是待保存占位值；使用已锁定的连接 ID 生成唯一 SP EntityID，避免不同组织覆盖 IdP 注册。
+		// 管理员显式填写其他绝对 URI 时保留原值，由数据库唯一索引阻止重复 SAML 实体。
+		if in.Protocol == "saml" {
+			if origin, err := url.Parse(in.ReturnURI); err == nil {
+				origin.Path = "/auth/enterprise/saml/metadata"
+				if in.ClientID == origin.String() {
+					origin.Path = "/auth/enterprise/" + d.ID + "/saml/metadata"
+					in.ClientID = origin.String()
+				}
+			}
+		}
 		in.Revision = 1
 		if err := saveEnterpriseOIDC(s, in); err != nil {
 			return err
