@@ -55,6 +55,7 @@ export function registerBudgetReconciliationScenario(locale: "en" | "zh-CN") {
         await expect(region.getByText(row.call_id, { exact: true })).toBeVisible();
         await region.getByRole("button", { name: tr("budgetReconciliation.openAttempt", { attempt: row.reservation_id }) }).click();
         const dialog = page.getByRole("dialog", { name: tr("budgetReconciliation.confirmTitle") });
+        await expect(dialog.getByText(tr("budgetReconciliation.deltaHelp"), { exact: true })).toBeVisible();
         await dialog.getByRole("button", { name: tr("budgetReconciliation.confirm"), exact: true }).click();
         await expect(dialog.getByRole("alert")).toHaveText(tr("budgetReconciliation.invalidEvidence"));
         await dialog.getByLabel(tr("budgetReconciliation.outcome")).selectOption(outcome);
@@ -67,12 +68,16 @@ export function registerBudgetReconciliationScenario(locale: "en" | "zh-CN") {
         const completed = await submitted; expect(completed.status(), await completed.text()).toBe(200);
         const result = await completed.json();
         expect(result.resolution).toMatchObject({ reservation_id: row.reservation_id, outcome, verified_cost_usd: actual, evidence });
+        expect(result.resolution.cost_delta_usd).toBe(actual);
+        expect(result.resolution.previous_cost_usd).toBe(row.ledger_cost);
+        expect(result.resolution.updated_cost_usd).toBeCloseTo((row.ledger_cost ?? 0) + actual, 9);
         expect(result.resolution.actor_id).toBeTruthy(); expect(result.resolution.resolved_at).toBeTruthy();
         await expect(region.getByText(tr("budgetReconciliation.evidenceSaved", { evidence }), { exact: true })).toBeVisible();
         await expect(page.getByText(tr("hardBudget.pending", { amount: 0 }), { exact: true })).toBeVisible();
         const again = await page.request.post(GATEWAY + "/budget/reservations/" + row.reservation_id + "/reconcile", { headers, data: completed.request().postDataJSON() });
         expect(again.status(), await again.text()).toBe(200); expect((await again.json()).already_resolved).toBe(true);
-        expectedSpend = beforeReconcileSpend + actual - (row.ledger_cost ?? 0);
+        // 核定的是本attempt费用；保留同一调用其他已计费尝试，不能把call累计金额当退款抵扣。
+        expectedSpend = beforeReconcileSpend + actual;
         const restored = await invoke("length"); expect(restored.status(), await restored.text()).toBe(200); expect(await restored.text()).toContain("TERMINAL_BROWSER_OK");
         expectedSpend += 0.000012;
         await expect.poll(async () => {
@@ -89,7 +94,7 @@ export function registerBudgetReconciliationScenario(locale: "en" | "zh-CN") {
       await page.getByRole("button", { name: tr("budgetReconciliation.openAttempt", { attempt: concurrent.reservation_id }) }).click();
       const external = await page.request.post(GATEWAY + "/budget/reservations/" + concurrent.reservation_id + "/reconcile", { headers, data: { outcome: "no_charge", verified_cost_usd: 0, evidence: "Concurrent verified invoice.", expected_fingerprint: concurrent.fingerprint } });
       expect(external.status(), await external.text()).toBe(200);
-      expectedSpend = concurrentSpend - (concurrent.ledger_cost ?? 0);
+      expectedSpend = concurrentSpend;
       const dialog = page.getByRole("dialog", { name: tr("budgetReconciliation.confirmTitle") });
       await dialog.getByLabel(tr("budgetReconciliation.outcome")).selectOption("charged");
       await dialog.getByLabel(tr("budgetReconciliation.cost")).fill("0.0001");

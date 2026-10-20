@@ -17,20 +17,21 @@ function setup(locale: "en" | "zh-CN", allowed = true, onReconciled = vi.fn().mo
 beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); document.cookie = "xhub_locale=; max-age=0; path=/"; api.get.mockResolvedValue(response()); });
 afterEach(cleanup);
 
-/** 前置双语管理员与已核实无收费结果；必填依据阻止空提交，成功使用后台审计/差额刷新余额，模型与证据原文不变。 */
+/** 前置双语管理员与已核实无收费结果；必填依据阻止空提交，成功保留调用已有费用并使用后台审计回执刷新余额，模型与证据原文不变。 */
 it.each(["zh-CN", "en"] as const)("%s reconciles no-charge and displays actual audit receipt", async locale => {
   const tr = (key: string, values?: Record<string, string | number>) => translate(locale, key, values);
   const refreshed = setup(locale);
   await userEvent.click(await screen.findByRole("button", { name: tr("budgetReconciliation.openAttempt", { attempt: row.reservation_id }) }));
   await userEvent.click(screen.getByRole("button", { name: tr("budgetReconciliation.confirm"), exact: true }));
   expect(screen.getByRole("alert")).toHaveTextContent(tr("budgetReconciliation.invalidEvidence")); expect(api.post).not.toHaveBeenCalled();
+  expect(screen.getByText(tr("budgetReconciliation.deltaHelp"))).toBeVisible();
   await userEvent.type(screen.getByLabelText(tr("budgetReconciliation.evidence")), "Invoice 用户 checked.");
-  api.post.mockImplementation(async () => { api.get.mockResolvedValue(response([])); return { already_resolved: false, resolution: { reservation_id: row.reservation_id, call_id: row.call_id, outcome: "no_charge", verified_cost_usd: 0, cost_delta_usd: -0.0002, previous_cost_usd: 0.0002, updated_cost_usd: 0, actor_id: "admin-record", resolved_at: "2026-10-21T00:01:00Z", evidence: "Invoice 用户 checked." } }; });
+  api.post.mockImplementation(async () => { api.get.mockResolvedValue(response([])); return { already_resolved: false, resolution: { reservation_id: row.reservation_id, call_id: row.call_id, outcome: "no_charge", verified_cost_usd: 0, cost_delta_usd: 0, previous_cost_usd: 0.0002, updated_cost_usd: 0.0002, actor_id: "admin-record", resolved_at: "2026-10-21T00:01:00Z", evidence: "Invoice 用户 checked." } }; });
   await userEvent.click(screen.getByRole("button", { name: tr("budgetReconciliation.confirm"), exact: true }));
   await waitFor(() => expect(refreshed).toHaveBeenCalledOnce());
   expect(api.post).toHaveBeenCalledWith("/budget/reservations/attempt-user/reconcile", { accessToken: "session", body: { outcome: "no_charge", verified_cost_usd: 0, evidence: "Invoice 用户 checked.", expected_fingerprint: row.fingerprint } });
   expect(await screen.findByText(tr("budgetReconciliation.completed"))).toBeVisible();
-  expect(screen.getByText(tr("budgetReconciliation.costChange", { before: 0.0002, after: 0, delta: -0.0002 }))).toBeVisible();
+  expect(screen.getByText(tr("budgetReconciliation.costChange", { before: 0.0002, after: 0.0002, delta: 0 }))).toBeVisible();
   expect(screen.getByText(tr("budgetReconciliation.evidenceSaved", { evidence: "Invoice 用户 checked." }))).toBeVisible();
   expect(screen.getByText(tr("budgetReconciliation.receipt", { attempt: row.reservation_id, actor: "admin-record", time: "2026-10-21T00:01:00Z" }))).toBeVisible();
   expect(await screen.findByText(tr("budgetReconciliation.empty"))).toBeVisible();
@@ -100,9 +101,10 @@ it("preserves verified charged amount and audit receipt when balance refresh fai
   await userEvent.selectOptions(screen.getByLabelText("Verified outcome"), "charged");
   await userEvent.type(screen.getByLabelText("Verified actual cost (USD)"), "0.0025");
   await userEvent.type(screen.getByLabelText("Verification evidence (required)"), "Supplier invoice 42.");
-  api.post.mockResolvedValueOnce({ already_resolved: true, resolution: { reservation_id: row.reservation_id, call_id: row.call_id, outcome: "charged", verified_cost_usd: 0.0025, cost_delta_usd: 0.0023, previous_cost_usd: 0.0002, updated_cost_usd: 0.0025, actor_id: "operator", resolved_at: "2026-10-21T00:00:00Z", evidence: "Supplier invoice 42." } });
+  api.post.mockResolvedValueOnce({ already_resolved: true, resolution: { reservation_id: row.reservation_id, call_id: row.call_id, outcome: "charged", verified_cost_usd: 0.0025, cost_delta_usd: 0.0025, previous_cost_usd: 0.0002, updated_cost_usd: 0.0027, actor_id: "operator", resolved_at: "2026-10-21T00:00:00Z", evidence: "Supplier invoice 42." } });
   await userEvent.click(screen.getByRole("button", { name: "Confirm reconciliation" }));
   expect(await screen.findByText("This exact reconciliation was already recorded; it was not charged again.")).toBeVisible();
+  expect(screen.getByText("Call total $0.0002 → $0.0027; this attempt adds $0.0025.")).toBeVisible();
   expect(await screen.findByText("The latest Key balance could not be loaded. Refresh the details before using the displayed balance.")).toBeVisible();
   expect(api.post).toHaveBeenCalledWith("/budget/reservations/attempt-user/reconcile", expect.objectContaining({ body: { outcome: "charged", verified_cost_usd: 0.0025, evidence: "Supplier invoice 42.", expected_fingerprint: row.fingerprint } }));
 });

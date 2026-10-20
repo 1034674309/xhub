@@ -215,7 +215,7 @@ func TestBudgetReconciliationSafetyAndRollback(t *testing.T) {
 }
 
 // TestBudgetReconciliationConcurrentAndPeriod 验证并发相同操作仅一次核销，旧周期核实不污染当前组织余额。
-// 前置同call两尝试与手动私有周期切换；其他四层仍记实际费用，撤销Key不妨碍历史核对，schema自动清理。
+// 前置同call两尝试与手动私有周期切换；两个尝试独立追加到其他四层，撤销Key不妨碍历史核对，schema自动清理。
 func TestBudgetReconciliationConcurrentAndPeriod(t *testing.T) {
 	db, by, r, ids := reconciliationFixture(t)
 	ctx := t.Context()
@@ -260,9 +260,23 @@ func TestBudgetReconciliationConcurrentAndPeriod(t *testing.T) {
 	if err != nil || org.Spend != 0 {
 		t.Fatalf("旧周期费用污染新周期: %+v %v", org, err)
 	}
-	key, err := db.GetKey(ctx, r.KeyID)
-	if err != nil || math.Abs(key.Spend-0.6) > 1e-12 {
-		t.Fatalf("旧Key消费不正确: %+v %v", key, err)
+	// 同call第二笔仍按原周期核对；第一笔已核销不能覆盖或释放第二笔的独立预占。
+	if _, _, err := db.ReconcileBudgetReservation(ctx, by, ids[1], reconciliationInput(t, db, ids[1], 0.3)); err != nil {
+		t.Fatal(err)
+	}
+	for table, id := range map[string]string{"api_keys": r.KeyID, "users": r.UserID, "teams": r.TeamID, "projects": r.ProjectID, "organizations": r.OrganizationID} {
+		want := 0.9
+		if table == "organizations" {
+			want = 0
+		}
+		var value struct{ Spend float64 }
+		if _, err = db.Engine.Table(table).Where("id = ?", id).Get(&value); err != nil || math.Abs(value.Spend-want) > 1e-12 {
+			t.Fatalf("跨周期多尝试%s消费=%v，预期%v err=%v", table, value.Spend, want, err)
+		}
+	}
+	var event UsageEvent
+	if _, err = db.Engine.Where("request_id = ?", r.RequestID).Get(&event); err != nil || math.Abs(event.Cost-0.9) > 1e-12 || event.PromptTokens != r.PromptTokens {
+		t.Fatalf("跨周期历史账单未保留两次费用与原Token: %+v %v", event, err)
 	}
 }
 

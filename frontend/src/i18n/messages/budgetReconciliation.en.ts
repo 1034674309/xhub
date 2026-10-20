@@ -23,7 +23,7 @@ export const budgetReconciliationEn = {
   "charged": "Supplier confirmed a charge",
   "cost": "Verified actual cost (USD)",
   "evidence": "Verification evidence (required)",
-  "deltaHelp": "The actual cost replaces the existing charge for this attempt; only the difference is applied. A verified charge may exceed the reservation or budget.",
+  "deltaHelp": "Enter the cost of this attempt only. It is added to the call’s recorded total; charges for other attempts are preserved. No charge releases only this reservation. A verified charge may exceed the reservation or budget.",
   "overHold": "Verified cost ${cost} exceeds the reserved ${amount}.",
   "cancel": "Cancel",
   "confirm": "Confirm reconciliation",
@@ -38,7 +38,7 @@ export const budgetReconciliationEn = {
   "completed": "Reconciliation recorded.",
   "alreadyResolved": "This exact reconciliation was already recorded; it was not charged again.",
   "receipt": "Attempt {attempt} · operator {actor} · {time}",
-  "costChange": "Previous charge ${before} → updated charge ${after}; applied difference ${delta}.",
+  "costChange": "Call total ${before} → ${after}; this attempt adds ${delta}.",
   "evidenceSaved": "Recorded evidence: {evidence}",
   "refreshFailed": "The latest Key balance could not be loaded. Refresh the details before using the displayed balance.",
   "columns": {
@@ -47,7 +47,7 @@ export const budgetReconciliationEn = {
     "time": "Started at",
     "model": "Model",
     "held": "Reserved",
-    "ledger": "Existing charge",
+    "ledger": "Call total already recorded",
     "action": "Action"
   },
   "blocked": {

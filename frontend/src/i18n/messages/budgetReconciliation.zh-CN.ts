@@ -23,7 +23,7 @@ export const budgetReconciliationZhCN = {
   "charged": "上游确认已收费",
   "cost": "核实后的实际费用（USD）",
   "evidence": "核对依据（必填）",
-  "deltaHelp": "实际费用替换此尝试已有的费用，仅记入差额。已核实的费用可能超过预占金额或预算上限。",
+  "deltaHelp": "只填写本次尝试的实际费用，将追加到调用累计费用中，保留其他尝试的已有费用。未收费仅释放本次预占。已核实的费用可能超过预占金额或预算上限。",
   "overHold": "核定费用 ${cost} 超过预占金额 ${amount}。",
   "cancel": "取消",
   "confirm": "确认对账",
@@ -38,7 +38,7 @@ export const budgetReconciliationZhCN = {
   "completed": "对账结果已记录。",
   "alreadyResolved": "相同对账结果已记录，本次未重复计费。",
   "receipt": "尝试 {attempt} · 操作者 {actor} · {time}",
-  "costChange": "原费用 ${before} → 更新后费用 ${after}；本次记入差额 ${delta}。",
+  "costChange": "调用累计费用 ${before} → ${after}；本次尝试追加 ${delta}。",
   "evidenceSaved": "已记录依据：{evidence}",
   "refreshFailed": "最新 Key 余额加载失败，请刷新详情后再使用显示的余额。",
   "columns": {
@@ -47,7 +47,7 @@ export const budgetReconciliationZhCN = {
     "time": "开始时间",
     "model": "模型",
     "held": "冻结预占",
-    "ledger": "已有费用",
+    "ledger": "调用已累计费用",
     "action": "操作"
   },
   "blocked": {
