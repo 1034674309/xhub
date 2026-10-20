@@ -376,6 +376,17 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					w.Header().Set("X-XHub-Dropped-Capabilities", strings.Join(built.DroppedCapabilities, ","))
 					util.Info("process step=capability_dropped call_id=%q deployment_id=%q capability=web_search reason=deployment_unsupported", callID, router.DeploymentID(rawDep))
 				}
+				if budget, ok := h.(dpcontract.BudgetHost); ok {
+					protocol := ""
+					if transport, exists := providerdeployment.Execution(dep); exists {
+						protocol = transport.Protocol
+					}
+					var allowed bool
+					built.Body, allowed = budget.PrepareBudgetAttempt(w, r, p, callID, dep, protocol, built.Body, start)
+					if !allowed {
+						return
+					}
+				}
 				triedHTTP = true
 				util.Trace("process path=%s step=attempt n=%d provider=%s model=%s base_host=%s", r.URL.Path, try+1, supplier, realModel, dpdiagnostics.BaseHost(apiBase))
 				h.IncBusy(did)
@@ -398,6 +409,11 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				// 明确地址不跟随重定向，防止凭据被转发到未配置的连接。
 				client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 				req, firstByte := dpdiagnostics.TraceFirstByte(req)
+				if budget, ok := h.(dpcontract.BudgetHost); ok && !budget.MarkBudgetAttemptSubmitted(w, r, callID) {
+					cancelAttempt()
+					h.DecBusy(did)
+					return
+				}
 				resp, err := client.Do(req)
 				if err != nil {
 					// 即使未收到响应，也保存本次尝试的实际出站路径，便于失败日志定位。

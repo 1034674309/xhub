@@ -76,6 +76,17 @@ func TestRealAgentClients(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				requests++
+				capField := "max_output_tokens"
+				if transport == "chat" {
+					capField = "max_completion_tokens"
+				}
+				capValue, _ := body[capField].(float64)
+				if capValue <= 0 || capValue > 131072 {
+					t.Errorf("真实CLI最终出站未附可信输出上限: %s=%v", capField, body[capField])
+				}
+				if client == "codex" && capValue != 4096 {
+					t.Errorf("Codex缺省上限未使用公开4096: %v", capValue)
+				}
 				limit := 3
 				if live {
 					limit = 8
@@ -250,6 +261,12 @@ func TestRealAgentClients(t *testing.T) {
 			dep.ModelInfo["transport"] = "bypass_openai_" + transport
 			dep.ModelInfo["endpoint_types"] = []string{"chat", "responses", "messages"}
 			dep.ModelInfo["id"] = "real-cli-deployment"
+			// 本地供应商夹具声明可信整窗与完整费率，实际 CLI 默认输出上限必须经过硬额度准入。
+			dep.ModelInfo["max_input_tokens"] = 1048576
+			dep.ModelInfo["max_output_tokens"] = 131072
+			dep.ModelInfo["supported_parameters"] = []string{"max_completion_tokens", "max_tokens"}
+			dep.LiteLLMParams["cache_creation_input_token_cost"] = testInputRate * 1.25
+			dep.LiteLLMParams["cache_read_input_token_cost"] = testInputRate * 0.1
 			if variant.search {
 				dep.ModelInfo["web_search_support"] = "unsupported"
 				dep.ModelInfo["web_search_fallback"] = "drop_optional"
@@ -278,6 +295,7 @@ func TestRealAgentClients(t *testing.T) {
 			})
 			admin := h.adminSession()
 			owner := h.openScope(t, admin, "real-"+client)
+			h.setKeyBudget(t, admin, owner.key, 50)
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
 			prompt := "Read " + file + " using your file or shell tool, then reply with AGENT_OK and its contents. Do not modify any files."
@@ -384,6 +402,10 @@ func TestRealAgentClients(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 				h.flushSpend()
 				rows = h.successRows(t, admin, dep.ModelName)
+			}
+			holds, holdErr := h.db.PendingKeyBudget(t.Context(), owner.keyID)
+			if holdErr != nil || len(holds) != 0 {
+				t.Fatalf("真实 CLI 成功账单未释放预占: %+v %v", holds, holdErr)
 			}
 			if len(rows) != count {
 				t.Fatalf("%s CLI 调用数与成功账单不符: calls=%d rows=%d", client, count, len(rows))

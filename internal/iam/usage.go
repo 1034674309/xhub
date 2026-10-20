@@ -154,6 +154,8 @@ func (UsageDaily) TableName() string { return "usage_daily" }
 // UsageRecord 是等待持久化的一次调用，由网关或 Redis 消费者交给 RecordUsage。
 // 身份采用鉴权时快照，刷库不重新解析层级关系；正文、费用和会话来源分别保留各自记录规则。
 type UsageRecord struct {
+	// BudgetReservationID 关联已验证实际费用的独立尝试；为空时不释放其他尝试的未知费用占用。
+	BudgetReservationID string
 	// 客户端明确指定的推理强度快照；独立于提示词保存，空值表示未指定或历史未记录，不推断厂商默认值。
 	ReasoningEffort string
 	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。

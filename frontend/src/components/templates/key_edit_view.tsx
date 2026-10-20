@@ -7,6 +7,7 @@ import { FormField } from "@/components/shared/form/FormField";
 import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { useT, t } from "@/i18n";
+import { KeyBudgetStatus } from "../common_components/KeyBudgetStatus";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
 import RouteTemplateSelect from "../route_templates/RouteTemplateSelect";
 import { KeyResponse } from "../key_team_helpers/key_list";
@@ -151,7 +152,11 @@ export function KeyEditView({
   ];
 
   return (
-    <form noValidate className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-background" onSubmit={form.handleSubmit(save)}>
+    <form
+      noValidate
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-background"
+      onSubmit={form.handleSubmit(save)}
+    >
       <div
         role="region"
         aria-label={t("Key Settings")}
@@ -177,7 +182,7 @@ export function KeyEditView({
                   <MultiSelect
                     id={id}
                     options={modelOptions}
-                    value={modelsDisabled ? [] : (value ?? [])}
+                    value={modelsDisabled ? [] : value ?? []}
                     disabled={modelsDisabled}
                     placeholder={t("Select models")}
                     onValueChange={(next) =>
@@ -202,6 +207,7 @@ export function KeyEditView({
             <section className="space-y-5 border-t pt-6">
               <h2 className="text-base font-semibold">{t("Budget and Routing")}</h2>
               <p className="text-sm text-muted-foreground">{t("keyEditor.budgetHint")}</p>
+              <KeyBudgetStatus pending={keyData.budget_pending} reservations={keyData.budget_reservations} />
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField control={form.control} name="max_budget" label={t("Max Budget (USD)")}>
                   {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} />}

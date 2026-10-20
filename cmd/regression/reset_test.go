@@ -45,6 +45,10 @@ func resetSpendChain(t *testing.T, live bool) {
 	if !strings.Contains(raw, "key.reset_spend") {
 		t.Fatalf("reset was not audited: %s", raw)
 	}
+	// 清零消费不改变每次出站上界；为本地夹具重新分配足够预占的额度。
+	if !live {
+		h.setKeyBudget(t, admin, c.key, hardBudgetAmount(t, chatDeployment(model)))
+	}
 	h.assertBilled(t, c, admin, model, "after reset", []string{model})
 
 	// 真实供应商两次的 token 数可能不同。把上限收到这次的实际花费上，
@@ -59,6 +63,9 @@ func resetSpendChain(t *testing.T, live bool) {
 	h.setProjectBudget(t, admin, c.projectID, projectSpent)
 	h.assertBudgetStop(t, c, admin, model, "project still exhausted", "Project")
 	h.setProjectBudget(t, admin, c.projectID, 1000)
+	if !live {
+		h.setKeyBudget(t, admin, c.key, hardBudgetAmount(t, chatDeployment(model)))
+	}
 	h.assertBilled(t, c, admin, model, "project ceiling raised", []string{model})
 
 	stranger := h.provision(t, admin, "reset-stranger")

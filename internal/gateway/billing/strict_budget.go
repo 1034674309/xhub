@@ -170,8 +170,9 @@ func (p BudgetPlan) Charge(u catalog.Usage) (catalog.Charge, error) {
 	}
 	c := catalog.Charge{Window: s.Window}
 	cached := u.CachedTokens
-	if s.CacheRead == nil {
-		cached = 0
+	if cached > 0 && s.CacheRead == nil {
+		// 预占可以按普通输入上界，但缺少命中费率不能冒充精确实测账单。
+		return fail("measured cache reads have no reserved price")
 	}
 	budgetAddCharge(&c, s.Input, u.PromptTokens-cached)
 	budgetAddCharge(&c, s.Output, u.CompletionTokens)

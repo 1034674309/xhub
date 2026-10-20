@@ -45,6 +45,17 @@ CREATE TABLE IF NOT EXISTS budget_reservations (
     amount NUMERIC NOT NULL CHECK (amount >= 0), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 启动幂等补齐每次尝试的核对元数据，旧预占保留原请求标识，绝不按迁移释放。
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS call_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS snapshot TEXT NOT NULL DEFAULT '';
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'reserved';
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE budget_reservations ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+UPDATE budget_reservations SET started_at = created_at WHERE started_at IS NULL;
+ALTER TABLE budget_reservations ALTER COLUMN started_at SET NOT NULL;
+ALTER TABLE budget_reservations ALTER COLUMN started_at SET DEFAULT CURRENT_TIMESTAMP;
+
 CREATE TABLE IF NOT EXISTS organizations (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name       TEXT NOT NULL UNIQUE CHECK (name <> ''),

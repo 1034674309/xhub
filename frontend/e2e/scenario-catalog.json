@@ -2706,5 +2706,19 @@
     "title": "pending billing survives database transaction failure without Redis",
     "kind": "implemented",
     "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-402",
+    "file": "e2e/scenarios/regression/hard-budget-en.test.ts",
+    "title": "hard budget reserves and recovers through key management en",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-403",
+    "file": "e2e/scenarios/regression/hard-budget-zh-CN.test.ts",
+    "title": "hard budget reserves and recovers through key management zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]

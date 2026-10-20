@@ -10,6 +10,20 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_hard_budget_conflicting_usage(self):
+        """私有本地HTTP夹具验证冲突中间帧/正常终态并存，非流输入明确400；tearDown清理服务。"""
+        body = {"model": "pending-browser-hard-budget-unit", "messages": [{"role": "user", "content": "Return contradictory usage."}]}
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/chat/completions", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+            text = response.read().decode()
+            self.assertIn('"input_tokens": 9', text)
+            self.assertIn('"prompt_tokens": 8', text)
+            self.assertIn('"finish_reason": "stop"', text)
+            self.assertIn("[DONE]", text)
+
     def test_monitor_tps_fixture(self):
         """前置真实本地上游；验证 TPS 夹具流式/同步用量一致、确有分帧间隔，非法协议返回 400；tearDown 关闭服务。"""
         import time

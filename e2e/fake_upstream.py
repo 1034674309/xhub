@@ -274,6 +274,17 @@ class Handler(BaseHTTPRequestHandler):
         model = req.get("model") or "gpt-4o-mini"
         if serve_stream_terminal(self, req):
             return
+        # 专属硬额度场景先发矛盾用量再发完整终态，验证后续好帧不能清除已观察到的不可信事实。
+        if str(model).startswith("pending-browser-hard-budget-") and req.get("messages", [{}])[-1].get("content") == "Return contradictory usage.":
+            if req.get("stream") is not True or "chat/completions" not in self.path:
+                self.send_error(400, "conflicting usage fixture requires chat streaming")
+                return
+            self._sse([
+                {"id": "budget-conflict", "choices": [{"index": 0, "delta": {"content": "e2e-budget-conflict"}}], "usage": {"prompt_tokens": 8, "input_tokens": 9, "completion_tokens": 0}},
+                {"id": "budget-conflict", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 8, "completion_tokens": 2}},
+                "[DONE]",
+            ])
+            return
         if model in ("e2e-item-id-chat", "e2e-item-id-native", "e2e-item-id-grok", "e2e-item-id-tracked"):
             # 严格原生夹具按真实 GPT 的 item 类型检查 ID，浏览器必须回放真实桥接产物而非手工修正。
             if self.headers.get("Authorization") != "Bearer sk-fake":

@@ -192,10 +192,11 @@ export function VirtualKeysTable({ headerActions }: VirtualKeysTableProps) {
     [keyList, selectedKeyId],
   );
   const { data: fetchedSelectedKey, isError: selectedKeyLoadFailed } = useKeyInfo(selectedKeyId, {
-    enabled: !selectedKeyFromList,
+    // 列表不含实时预算占用，详情始终回读授权接口，不能用列表行掩盖待结算状态。
+    enabled: Boolean(selectedKeyId),
     scope: "personal",
   });
-  const selectedKey = selectedKeyFromList ?? fetchedSelectedKey;
+  const selectedKey = fetchedSelectedKey ?? selectedKeyFromList;
 
   const teamOptions = useMemo(
     () =>

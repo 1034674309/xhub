@@ -354,3 +354,24 @@ func TestConcurrentTokenCounterHasExpiry(t *testing.T) {
 		t.Fatal("accepted negative usage")
 	}
 }
+
+// TestPendingSpendCount 验证硬额度启动闸门的空队列、真实排队和Redis失联边界；专用进程自动清理。
+func TestPendingSpendCount(t *testing.T) {
+	var absent *Client
+	if n, err := absent.PendingSpendCount(); n != 0 || err != nil {
+		t.Fatalf("无Redis不是空队列: %d %v", n, err)
+	}
+	c := testRedis(t)
+	if err := c.EnqueueSpend(SpendLog{RequestID: "pending-count", KeyID: "key", Spend: 1, SpendValid: true}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.PendingSpendCount(); n != 1 || err != nil {
+		t.Fatalf("队列计数错误: %d %v", n, err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.PendingSpendCount(); err == nil {
+		t.Fatal("Redis失败被当成空队列")
+	}
+}

@@ -412,7 +412,7 @@ it("clicking the key cell deep-links via ?key=", async () => {
 });
 
 /** 验证个人密钥页面查询和交互；前置模拟身份与接口，断言范围、URL 或界面结果；框架清理 DOM，无持久数据。 */
-it("renders KeyInfoView when the URL has ?key= for a key on the current page, without refetching it", async () => {
+it("renders KeyInfoView when the URL has ?key= for a key on the current page and refreshes its detail", async () => {
   const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
   renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token }, onUrlUpdate });
 
@@ -420,7 +420,7 @@ it("renders KeyInfoView when the URL has ?key= for a key on the current page, wi
     expect(screen.getByText("Back to keys")).toBeInTheDocument();
   });
   expect(screen.queryByTestId("pagination-range")).not.toBeInTheDocument();
-  expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: false, scope: "personal" });
+  expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token, { enabled: true, scope: "personal" });
 
   fireEvent.click(screen.getByText("Back to keys"));
 
@@ -951,4 +951,12 @@ describe("table state lives in the URL so it survives leaving and returning to t
       expect(lastSearchParam(onUrlUpdate, "key_search")).toBeNull();
     });
   });
+});
+
+/** 验证列表含同一Key时仍回读详情并优先显示实时预占；使用隔离mock，DOM由框架清理。 */
+it("loads pending reservations even when selected key is already in the list", async () => {
+ mockUseKeyInfo.mockReturnValue(keyInfoResult({...mockKey,budget_pending:0.1,budget_reservations:[{reservation_id:"visible-hold",amount:0.1,state:"uncertain"}]}));
+ renderWithProviders(<VirtualKeysTable />, { searchParams: { key: mockKey.token } });
+ expect(await screen.findByText("visible-hold")).toBeVisible();
+ expect(mockUseKeyInfo).toHaveBeenLastCalledWith(mockKey.token,{enabled:true,scope:"personal"});
 });

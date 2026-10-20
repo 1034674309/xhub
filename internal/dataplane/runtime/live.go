@@ -174,7 +174,8 @@ func queuedUsageRecord(row live.SpendLog) iam.UsageRecord {
 		spend = row.Spend
 	}
 	return iam.UsageRecord{
-		InboundEndpoint: row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
+		BudgetReservationID: row.BudgetReservationID,
+		InboundEndpoint:     row.InboundEndpoint, OutboundEndpoint: row.OutboundEndpoint,
 		APIBase: row.APIBase, Supplier: row.Supplier, UpstreamModel: row.UpstreamModel, Streamed: row.Streamed,
 		RequestID: row.RequestID, TS: start, KeyID: row.KeyID, OwnerType: row.OwnerType,
 		UserID: row.UserID, TeamID: row.TeamID, ProjectID: row.ProjectID, OrganizationID: row.OrgID,

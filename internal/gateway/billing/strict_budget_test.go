@@ -565,7 +565,7 @@ func TestStrictBudgetUsageBounds(t *testing.T) {
 		valid bool
 	}{
 		{name: "explicit zero", valid: true}, {name: "full reserved bound", valid: true, usage: catalog.Usage{PromptTokens: 100, CompletionTokens: 10}},
-		{name: "cached without discount", valid: true, usage: catalog.Usage{PromptTokens: 100, CompletionTokens: 10, CachedTokens: 100}},
+		{name: "unpriced cache read", usage: catalog.Usage{PromptTokens: 100, CompletionTokens: 10, CachedTokens: 100}},
 		{name: "matching pricing model", valid: true, usage: catalog.Usage{PromptTokens: 2, CompletionTokens: 2, PricingModel: "private-strict-budget-test"}},
 		{name: "missing usage", usage: catalog.Usage{PricingBlocked: "upstream_usage_missing"}},
 		{name: "negative input", usage: catalog.Usage{PromptTokens: -1}}, {name: "input overflow", usage: catalog.Usage{PromptTokens: 101}},

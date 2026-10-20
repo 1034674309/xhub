@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import type { ReactNode } from "react";
 import { toast as sonner } from "sonner";
 import { ApiError, deriveErrorMessage, unwrapProxyErrorMessage } from "@/lib/http/client";
@@ -139,6 +140,17 @@ export const toast = {
   error: (message: ReactNode, options?: ToastOptions): void => show("error", message, options),
   fromError: (input: unknown, options?: ToastOptions): void => {
     const facts = describeError(input);
+    // 硬额度协议错误保持稳定代码，控制台按当前语言说明，不翻译供应商或用户原始内容。
+    const budgetKeys: Record<string, string> = {
+      budget_reservation_exceeded: "insufficient",
+      unsupported_budget: "unsupported",
+      quota_unavailable: "unavailable",
+    };
+    const budgetKey = facts.proxyType && budgetKeys[facts.proxyType];
+    if (budgetKey) {
+      show("error", t("hardBudget.details"), { ...options, description: t("hardBudget." + budgetKey) });
+      return;
+    }
     const title = titleFor(facts);
     show(WARNING_TITLES.has(title) ? "warning" : "error", title, { description: facts.text, ...options });
   },
