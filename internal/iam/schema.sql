@@ -346,3 +346,6 @@ CREATE INDEX IF NOT EXISTS organizations_budget_reset_due ON organizations(budge
 
 -- 推理强度独立于请求正文保存；旧库补列后保持未知，不从当前模型配置伪造历史设置。
 ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS reasoning_effort TEXT NOT NULL DEFAULT '';
+
+-- 完整用量快照摘要用于磁盘重放精确确认；旧账单保持未知，不能伪造摘要。
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS usage_fingerprint TEXT NOT NULL DEFAULT '';

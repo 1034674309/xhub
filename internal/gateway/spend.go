@@ -3,8 +3,8 @@
 // (headers, body, response) and the call note (provider, TTFT, session,
 // session) that the handler stored under the call id, then deletes them.
 //
-// Redis, when Live is set, takes the hot spend update and queues the row.
-// Otherwise persistSpend writes PostgreSQL before the response returns.
+// Configured disk spool synchronously saves complete usage and commits PostgreSQL.
+// Without it, Redis queues hot charges when available; otherwise PostgreSQL is written directly.
 // A cache hit keeps the token counts and forces the billed amount to zero.
 // A status at or above 400 keeps the row for the log and forces the billed
 // amount to zero as well.
@@ -85,13 +85,15 @@ func (s *Server) setChatHeaders(w http.ResponseWriter, p *auth.Principal, alias,
 	}
 }
 
-// recordSpend 计算费用响应头并记录用量；Redis 可用时排队写入，否则直接持久化。
+// recordSpend 计算费用响应头并记录用量；配置磁盘队列时先同步落盘/PG，否则沿用Redis排队或直接PG。
 // 异步轮询消费临时元数据后更新原请求，只有创建增加请求计数，首次结算增加费用。
 // 参数 w（http.ResponseWriter）：调用方的 HTTP 响应，状态和正文写在这里；p（*auth.Principal）：已经鉴权的调用方，含用户、团队、密钥哈希和别名；callID（string）：这一次调用的 id，用来把请求、响应和用量记在同一行；alias（string）：对外模型名；op（string）：操作名，例如 chat；usage（map[string]any）：用量对象。字段可能是 prompt_tokens，也可能是 input_tokens；start（time.Time）：时间范围的起点。零值表示不限制开始；cacheHit（bool）：为真时走缓存命中这一支。为假时保持原来的路径；status（int）：HTTP 状态码；depID（string）：部署 id。空串表示当前没有钉住的部署。
 // 返回：无。状态码和正文写进调用方的响应。
 // 调用：gateway/wire.go
 // 测试：无直接单测
 func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, alias, op string, usage map[string]any, start time.Time, cacheHit bool, status int, depID string) {
+	// 完整快照由本路径负责，即使存储失败也不能由外层生成内容不同的替代账单。
+	markUsageRecorded(w)
 	if usage == nil {
 		usage = map[string]any{}
 	}
@@ -280,6 +282,11 @@ func (s *Server) recordSpend(w http.ResponseWriter, p *auth.Principal, callID, a
 		}
 		return
 	}
+	// 磁盘模式先保存完整最终账单再同步结算，不加入新的Redis热队列；旧队列仍由Flush清算。
+	if s.usageSpoolEnabled {
+		s.persistSpend(row, spend, ex, start, end)
+		return
+	}
 	if s.Live != nil && s.Live.EnqueueSpend(row) == nil {
 		return
 	}
@@ -338,7 +345,7 @@ func reportsCachedTokens(usage map[string]any) bool {
 
 // persistSpend 先独立持久化账单快照再立即结算；无 Redis 或入队失败的调用使用此路径。
 // 参数 row（live.SpendLog）：从用量或目录读出的SpendLog；spend（float64）：这一行要累加的费用，单位是美元；ex（promptExchange）：persist花费使用的promptExchange；start（time.Time）：时间范围的起点。零值表示不限制开始；end（time.Time）：时间范围的终点。零值表示直到现在。
-// 返回：无。结算失败保留持久快照，后台 Flush/新实例恢复；数据库本身不可写时明确记录未持久化。没配库时不写。
+// 返回：无。启用磁盘队列时先落独立快照，结算失败由后台Flush/新实例恢复；所有持久介质都失败时明确记录未持久化。没配库时不写。
 // 调用：仅在 spend.go 内使用
 // 测试：log_completeness_test.go、TestPersistSpendKeepsFailureResponseWithoutPrompts。
 func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchange, start, end time.Time) {
@@ -354,7 +361,11 @@ func (s *Server) persistSpend(row live.SpendLog, spend float64, ex promptExchang
 		response = row.Response
 	}
 	rec := usageFromSpend(row, spend, ex.messages, response, ex.proxy, start, end)
-	if durable, err := s.IAM.RecordUsageDurably(context.Background(), rec); err != nil {
+	if durable, err := s.persistUsageSnapshot(rec); err != nil {
+		// 已准入后磁盘突然失效且PG也不可写时尽力使用Redis，不能只打印日志后丢弃完整载荷。
+		if !durable && s.Live != nil {
+			durable = s.Live.EnqueueSpend(row) == nil
+		}
 		util.Error("persist spend failed request=%s durable=%t: %v", rec.RequestID, durable, err)
 	}
 }

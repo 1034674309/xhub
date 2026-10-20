@@ -19,6 +19,7 @@ import (
 	"github.com/sunqirui1987/xhub/internal/gateway/affinity"
 	"github.com/sunqirui1987/xhub/internal/gateway/family"
 	"github.com/sunqirui1987/xhub/internal/gateway/models"
+	"github.com/sunqirui1987/xhub/internal/gateway/usagespool"
 	"github.com/sunqirui1987/xhub/internal/iam"
 	"github.com/sunqirui1987/xhub/internal/live"
 	_ "github.com/sunqirui1987/xhub/internal/provider/all"
@@ -33,8 +34,12 @@ const Version = family.ProxyVersion
 // row is written, so a handler must AnnotateCall and RememberExchange before
 // RecordSpend.
 type Server struct {
-	Cfg   *config.Config
-	Store *store.Store
+	// usageSpool 保存独立磁盘账单；启用但初始化失败时拒绝付费准入，不能退化成仅内存日志。
+	usageSpool        *usagespool.Spool
+	usageSpoolEnabled bool
+	usageSpoolErr     error
+	Cfg               *config.Config
+	Store             *store.Store
 	// IAM is users, teams, organizations, projects, keys, and the audit log.
 	// Authz is the only authorization check over that store.
 	IAM   *iam.DB
@@ -134,6 +139,7 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 		now:                time.Now,
 		yamlStoreModelInDB: cfg.GeneralSettings.StoreModelInDB,
 	}
+	s.initializeUsageSpool()
 	if cfg.GeneralSettings.RedisURL != "" {
 		if client, err := live.Open(cfg.GeneralSettings.RedisURL); err == nil {
 			s.Live = client
@@ -153,6 +159,14 @@ func New(cfg *config.Config, st *store.Store, db *iam.DB) *Server {
 	s.mountModules()
 	// mountCatalog registers each catalog route on Gin by itself. Unregistered paths are not swallowed by a "/" handler that would hide 404s.
 	s.mountCatalog()
+	// 启动时重放独立磁盘快照；失败保留证据并由周期任务继续，不影响管理面排障。
+	if s.usageSpoolEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := s.FlushLocalUsage(ctx); err != nil {
+			util.Error("usage spool startup recovery failed: %v", err)
+		}
+		cancel()
+	}
 	return s
 }
 
@@ -172,11 +186,14 @@ func (s *Server) Run(addr string) error {
 // 返回服务退出错误；退出取消预算/归档任务，IAM 存在时即启动维护，不以 Redis 可用性为条件。
 func (s *Server) serveListener(ln net.Listener) error {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var flush sync.WaitGroup
+	// 先停止并等待刷写，再释放独占目录锁，避免旧实例仍提交时新实例抢先重放。
+	defer func() { cancel(); flush.Wait(); _ = s.CloseUsageSpool() }()
 	// 监听成功且有身份库时启动预算维护及可选 Redis 刷写；纯 PostgreSQL 也必须重置空闲组织预算。
 	// 服务退出时取消，避免启动失败留下后台任务。
 	if s.IAM != nil {
-		go s.flushLoop(ctx)
+		flush.Add(1)
+		go func() { defer flush.Done(); s.flushLoop(ctx) }()
 	}
 	go s.archiveLoop(ctx)
 	return (&http.Server{Handler: s.Handler()}).Serve(ln)

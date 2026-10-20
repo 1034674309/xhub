@@ -2867,5 +2867,19 @@
     "title": "manual budget reconciliation restores verified balance zh-CN",
     "kind": "implemented",
     "environment": "default offline; truncated local SSE, real budget reconciliation and admin session"
+  },
+  {
+    "id": "SC-441",
+    "file": "e2e/scenarios/regression/usage-spool-en.test.ts",
+    "title": "durable disk billing recovers after database disconnect en",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-442",
+    "file": "e2e/scenarios/regression/usage-spool-zh-CN.test.ts",
+    "title": "durable disk billing recovers after database disconnect zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]

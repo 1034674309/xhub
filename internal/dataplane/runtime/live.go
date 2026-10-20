@@ -112,7 +112,7 @@ func FlushLoop(ctx context.Context, h Runtime, interval time.Duration) {
 
 // Flush 将至多 500 条队列用量先持久化，再确认删除并调整热预算计数。
 // 参数 h 提供 Redis 与身份数据库；返回值无，FlushLoop 或网关显式刷写方法调用。
-// 数据库为 nil 时跳过；先恢复数据库待结算快照，没有 Redis 也可恢复此前直写失败的调用。
+// 数据库为 nil 时跳过；先恢复可选本机磁盘快照，再恢复数据库待结算，没有 Redis 也可恢复此前失败调用。
 // Redis 队列为空时不再处理；PeekLogs 只窥视，数据库写入失败记录日志且保留整批队列。
 // PeekLogs 遇到损坏记录只返回此前的有效前缀；损坏记录位于队头时返回空批次，保留原条目等待修复。
 // 成功后用有效前缀的原始条数及首元素 head 确认，防止并发刷写误删已变化的队头。
@@ -123,6 +123,12 @@ func Flush(h Runtime) {
 	db := h.Identity()
 	if db == nil {
 		return
+	}
+	// 独立磁盘队列可在PG完全不可写期间保留最终账单；可选宿主先恢复它，再清算旧PG/Redis队列。
+	if local, ok := h.(interface{ FlushLocalUsage(context.Context) error }); ok {
+		if err := local.FlushLocalUsage(context.Background()); err != nil {
+			util.Error("local usage spool flush failed: %v", err)
+		}
 	}
 	if err := db.FlushPendingUsage(context.Background(), 500); err != nil {
 		util.Error("pending spend flush failed: %v", err)

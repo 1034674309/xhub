@@ -56,6 +56,9 @@ func (s *Server) initializeBudgetQueue(ctx context.Context) error {
 // 搜索采用仅token软预算，其余有限额请求要求可信上界。硬预算重试单独预占，旧未知费用保持原有占用。
 func (s *Server) PrepareBudgetAttempt(w http.ResponseWriter, r *http.Request, p *auth.Principal, callID string, dep config.ModelEntry, protocol string, body []byte, start time.Time) ([]byte, bool) {
 	s.finishBudgetCall(callID)
+	if !s.admitUsageSpool(w, r, callID) {
+		return nil, false
+	}
 	// 重试可能切换部署或降级搜索；每次尝试先清除全部预算头，失败不能继承旧策略。
 	for _, name := range []string{"X-XHub-Budget-State", "X-XHub-Billing-Scope", "X-XHub-Budget-Guarantee", "X-XHub-Tool-Costs", "X-XHub-Max-Output-Tokens", "X-XHub-Max-Tool-Calls", "X-XHub-Budget-Input-Bound", "X-XHub-Budget-Reserved", "X-XHub-Budget-Reservation-Id"} {
 		w.Header().Del(name)
@@ -66,6 +69,14 @@ func (s *Server) PrepareBudgetAttempt(w http.ResponseWriter, r *http.Request, p 
 		return nil, false
 	}
 	if search {
+		// 搜索没有硬预占；存在尚未入库的本机费用时保守拒绝，避免读取旧余额继续透支。
+		if s.usageSpool != nil {
+			state, err := s.usageSpool.Status()
+			if err != nil || state.Pending > 0 {
+				util.WriteTypedError(w, r.URL.Path, 503, "billing_storage_pending", "pending token charges must settle before another hosted-tool request")
+				return nil, false
+			}
+		}
 		kind, id := "user", p.UserID
 		if p.Key != nil {
 			kind, id = "key", p.KeyID
@@ -181,6 +192,9 @@ func (s *Server) MarkBudgetAttemptSubmitted(w http.ResponseWriter, r *http.Reque
 func (s *Server) finishBudgetCall(callID string) {
 	if s == nil || callID == "" {
 		return
+	}
+	if s.usageSpool != nil {
+		s.usageSpool.Release(callID)
 	}
 	s.mu.Lock()
 	attempt := s.budgetCalls[callID]

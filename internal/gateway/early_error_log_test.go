@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/sunqirui1987/xhub/internal/iam"
 )
 
@@ -123,4 +124,51 @@ func TestRecordEarlyErrorSkipsNonDataPlane(t *testing.T) {
 	}
 	var absent *Server
 	absent.recordEarlyError(nil, nil, nil, nil, time.Now())
+}
+
+// TestUsageRecordedFollowsResponseWrappers 验证同步缓冲、Gin和直接流式writer均把结算状态留给外层兜底。
+// 前置内存writer；缺失、空和循环包装不会挂起，状态不会泄露到响应头；无需外部资源和清理。
+func TestUsageRecordedFollowsResponseWrappers(t *testing.T) {
+	for _, mode := range []string{"direct", "buffered", "gin"} {
+		t.Run(mode, func(t *testing.T) {
+			r := &statusRecorder{ResponseWriter: httptest.NewRecorder(), code: 400}
+			var w http.ResponseWriter = r
+			if mode != "direct" {
+				w = &holdWriter{ResponseWriter: w}
+			}
+			if mode == "gin" {
+				c, _ := gin.CreateTestContext(w)
+				w = c.Writer
+			}
+			markUsageRecorded(w)
+			if !r.usageRecorded || len(r.Header()) != 0 {
+				t.Fatal("结算状态未穿透包装或泄露响应头")
+			}
+			s := &Server{}
+			r.Header().Set("x-litellm-call-id", "already-recorded")
+			s.recordEarlyError(r, httptest.NewRequest("POST", "/v1/chat/completions", nil), nil, nil, time.Now())
+			if len(s.exchanges) != 0 {
+				t.Fatal("已结算错误被再次记录")
+			}
+		})
+	}
+	markUsageRecorded(nil)
+	markUsageRecorded(httptest.NewRecorder())
+	cycle := &holdWriter{}
+	cycle.ResponseWriter = cycle
+	markUsageRecorded(cycle)
+}
+
+// TestIdempotentErrorDoesNotCreateAnotherSnapshot 验证错误响应重放只复用原账单，不生成时间和正文不同的替代快照。
+// 前置内存缓存响应；原HTTP状态、正文、调用ID保持一致，外层兜底被抑制；无外部资源。
+func TestIdempotentErrorDoesNotCreateAnotherSnapshot(t *testing.T) {
+	s := &Server{}
+	out := httptest.NewRecorder()
+	r := &statusRecorder{ResponseWriter: out, code: 200}
+	hit := &idemRec{Code: 400, Body: []byte(`{"error":"original"}`), Hdr: map[string]string{"x-litellm-call-id": "original-id"}}
+	s.writeIdempotentResponse(r, r, hit)
+	s.recordEarlyError(r, httptest.NewRequest("POST", "/v1/chat/completions", nil), nil, nil, time.Now())
+	if !r.usageRecorded || out.Code != 400 || out.Body.String() != string(hit.Body) || len(s.exchanges) != 0 {
+		t.Fatal("错误重放修改原响应或重复记录")
+	}
 }
