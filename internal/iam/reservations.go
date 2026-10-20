@@ -295,6 +295,15 @@ func settleBudgetHold(s *xorm.Session, r UsageRecord) error {
 	if r.Cost > h.Amount {
 		return ErrBudgetUnavailable
 	}
+	// 同call可能已有失败零账单或另一attempt的费用。先删hold再依靠事件去重会吞掉本次费用；
+	// 人工核对有独立增量事务，普通晚到结算在此保留原占用和队列证据，不猜测如何覆盖历史。
+	duplicate, err := s.Where("request_id = ?", r.RequestID).Exist(new(UsageEvent))
+	if err != nil {
+		return err
+	}
+	if duplicate {
+		return ErrConflict
+	}
 	_, err = s.ID(id).Delete(new(BudgetReservation))
 	return err
 }
