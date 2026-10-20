@@ -241,6 +241,17 @@ func serveBypassCreate(h dpcontract.Bypass, w http.ResponseWriter, r *http.Reque
 				dep = candidate
 				selectedID = router.CooldownID(rawDep)
 				if err != nil {
+					// 原生入口同样区分客户端取消与供应商超时：只检查入站上下文，
+					// 不能检查上面已释放的尝试上下文；取消记499并停止重试，不污染共享冷却。
+					if r.Context().Err() != nil {
+						h.RememberExchange(callID, r, raw, []byte("client request canceled"))
+						note := dataplaneNote(hit, dep, plan.SessionID, time.Since(start))
+						applyStreamTiming(&note, response, start)
+						note.Upstream = response.Diagnostics
+						h.AnnotateCall(callID, note)
+						h.RecordSpend(w, principal, callID, alias, hit.Transport.ID+":"+hit.Action.Name, nil, start, false, 499, selectedID)
+						return
+					}
 					if response.Streamed {
 						h.RememberExchange(callID, r, raw, []byte(dpdiagnostics.SafeErr(err)))
 						note := dataplaneNote(hit, dep, plan.SessionID, time.Since(start))

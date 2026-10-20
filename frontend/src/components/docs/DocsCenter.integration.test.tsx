@@ -1,16 +1,25 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { LOCALE_COOKIE } from "@/i18n/translate";
 import { DocsCenter } from "./DocsCenter";
 import { docPages } from "./catalog";
 import { readApiMarkdown } from "./apiMarkdown";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/docs" }));
-vi.mock("@/components/networking", () => ({ getProxyBaseUrl: () => "https://gateway.example.com/prefix/v1/" }));
+const gateway = vi.hoisted(() => ({ base: "https://gateway.example.com/prefix/v1/" }));
+vi.mock("@/components/networking", () => ({ getProxyBaseUrl: () => gateway.base }));
+/** 每例恢复显式公开网关，避免相对代理测试污染其他文档验证；无网络副作用。 */
+beforeEach(() => {
+  gateway.base = "https://gateway.example.com/prefix/v1/";
+});
 
 /** 目的：供应商帮助区分页面配置与未实现音乐协议，禁止教授内联部署 YAML；前置真实双语文章，语言切换保留启动边界与代码清单，无业务写入，afterEach 清理语言。 */
 it("explains NewAPI configuration and Suno development in both languages", () => {
-  render(<I18nProvider initialLocale="zh-CN"><DocsCenter page={docPages.find((page) => page.id === "help-models")!} /></I18nProvider>);
+  render(
+    <I18nProvider initialLocale="zh-CN">
+      <DocsCenter page={docPages.find((page) => page.id === "help-models")!} />
+    </I18nProvider>,
+  );
   expect(screen.getByRole("heading", { name: "NewAPI：连接、部署、密钥、调用" })).toBeInTheDocument();
   expect(screen.getByRole("main")).toHaveTextContent("internal/provider/all/all.go");
   expect(screen.getByRole("main")).toHaveTextContent("当前没有 Suno 执行器");
@@ -19,8 +28,14 @@ it("explains NewAPI configuration and Suno development in both languages", () =>
   expect(screen.getByRole("main")).toHaveTextContent("不编辑 model_list");
   expect(screen.getByRole("main")).toHaveTextContent("部署级 api_base 优先；供应商地址只补空值。");
   expect(screen.getByRole("main")).not.toHaveTextContent("os.environ/NEWAPI_KEY");
-  expect(screen.getByRole("img", { name: "中文模型供应商连接表单" })).toHaveAttribute("src", "/assets/provider-guide/provider-form-zh.jpg");
-  expect(screen.getByRole("img", { name: "中文模型部署表单" })).toHaveAttribute("src", "/assets/provider-guide/deployment-form-zh.jpg");
+  expect(screen.getByRole("img", { name: "中文模型供应商连接表单" })).toHaveAttribute(
+    "src",
+    "/assets/provider-guide/provider-form-zh.jpg",
+  );
+  expect(screen.getByRole("img", { name: "中文模型部署表单" })).toHaveAttribute(
+    "src",
+    "/assets/provider-guide/deployment-form-zh.jpg",
+  );
   fireEvent.click(screen.getByRole("button", { name: "English" }));
   expect(screen.getByRole("heading", { name: "NewAPI: connection, deployment, key and call" })).toBeInTheDocument();
   expect(screen.getByRole("main")).toHaveTextContent("There is no Suno executor");
@@ -28,9 +43,17 @@ it("explains NewAPI configuration and Suno development in both languages", () =>
   expect(screen.getByRole("main")).not.toHaveTextContent("model_list: []");
   expect(screen.getByRole("main")).not.toHaveTextContent("store_model_in_db: true");
   expect(screen.getByRole("main")).toHaveTextContent("without editing model_list");
-  expect(screen.getByRole("main")).toHaveTextContent("Deployment-level api_base values take precedence; provider resolution fills empty addresses.");
-  expect(screen.getByRole("img", { name: "English provider connection form" })).toHaveAttribute("src", "/assets/provider-guide/provider-form-en.jpg");
-  expect(screen.getByRole("img", { name: "English model deployment form" })).toHaveAttribute("src", "/assets/provider-guide/deployment-form-en.jpg");
+  expect(screen.getByRole("main")).toHaveTextContent(
+    "Deployment-level api_base values take precedence; provider resolution fills empty addresses.",
+  );
+  expect(screen.getByRole("img", { name: "English provider connection form" })).toHaveAttribute(
+    "src",
+    "/assets/provider-guide/provider-form-en.jpg",
+  );
+  expect(screen.getByRole("img", { name: "English model deployment form" })).toHaveAttribute(
+    "src",
+    "/assets/provider-guide/deployment-form-en.jpg",
+  );
   expect(screen.queryByRole("img", { name: "中文模型供应商连接表单" })).not.toBeInTheDocument();
   expect(screen.getByRole("main")).not.toHaveTextContent("os.environ/NEWAPI_KEY");
 });
@@ -93,7 +116,7 @@ describe("documentation reader", () => {
   it("keeps the search query across language changes", () => {
     render(
       <I18nProvider initialLocale="zh-CN">
-          <DocsCenter page={docPages[0]} />
+        <DocsCenter page={docPages[0]} />
       </I18nProvider>,
     );
     expect(screen.getByRole("searchbox", { name: "搜索文档" })).toHaveValue("");
@@ -172,4 +195,18 @@ it("uses the playground gateway root in tool configuration", () => {
     '"baseURL": "https://gateway.example.com/prefix"',
   );
   expect(screen.getByLabelText("Request example", { exact: true })).not.toHaveTextContent("YOUR_GATEWAY_HOST");
+});
+
+/** 验证默认发布代理下两种CLI文档均输出可复制绝对URL；前置真实组件和/gw配置，双语渲染后框架清理DOM。 */
+it.each(["codex", "claude-code"])("resolves same-origin proxy in bilingual %s client documentation", (id) => {
+  gateway.base = "/gw";
+  render(
+    <I18nProvider initialLocale="zh-CN">
+      <DocsCenter page={docPages.find((entry) => entry.id === id)!} />
+    </I18nProvider>,
+  );
+  expect(screen.getByLabelText("请求示例", { exact: true })).toHaveTextContent(window.location.origin + "/gw");
+  expect(screen.getByLabelText("请求示例", { exact: true })).not.toHaveTextContent('= "/gw"');
+  fireEvent.click(screen.getByRole("button", { name: "English", exact: true }));
+  expect(screen.getByLabelText("Request example", { exact: true })).toHaveTextContent(window.location.origin + "/gw");
 });

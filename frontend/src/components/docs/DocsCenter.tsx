@@ -7,6 +7,7 @@ import { ApiRunnerDialog } from "./ApiRunnerDialog";
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { getProxyBaseUrl } from "@/components/networking";
+import { resolveClientGatewayRoot } from "@/lib/http/resolveApiBase";
 import { ArrowRight, BookOpen, Copy, Search, Terminal, CreditCard, Layers } from "lucide-react";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n";
@@ -17,9 +18,9 @@ const icons = { product: BookOpen, tools: Terminal, billing: CreditCard, api: La
 function subscribeGateway() {
   return () => {};
 }
-/** 返回调试台当前网关根地址；客户端阅读器调用，保留代理前缀，去掉末尾版本段，无网络调用。 */
+/** 返回可复制到终端的绝对网关根地址；客户端阅读器调用，补全同源代理并保留前缀，无网络调用。 */
 function gatewaySnapshot() {
-  return getProxyBaseUrl().replace(/\/+$/, "").replace(/\/v1$/, "");
+  return resolveClientGatewayRoot({ registeredBase: getProxyBaseUrl(), pageOrigin: window.location.origin });
 }
 /** 服务端尚无浏览器网关选择；返回空值，供 hydration 使用，无副作用。 */
 function serverGatewaySnapshot() {

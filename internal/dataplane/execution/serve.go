@@ -256,12 +256,32 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 	var lastProvider string
 	triedHTTP := false
 	missingCredential := false
+	// stopCanceled 在调用方上下文结束时记录一次零费用取消并终止执行。
+	// 参数保留已读取正文、用量、部署和首字时间；返回是否已处理取消。
+	// 每次出站及传输错误分支调用，不能检查已主动释放的 attempt context，否则正常完成也会被误判。
+	// 499 只表示调用方中止，不增加共享部署失败数；已验证的成功终态仍走原有成功结算路径。
+	stopCanceled := func(response []byte, usage map[string]any, deployment string, ttft time.Duration) bool {
+		if r.Context().Err() == nil {
+			return false
+		}
+		if len(response) == 0 {
+			response = []byte("client request canceled")
+		}
+		h.RememberExchange(callID, r, raw, response)
+		h.AnnotateCall(callID, dpcontract.CallNote{Streamed: stream, TTFTMs: dpusage.TtftMillis(ttft), Provider: lastProvider, CacheKey: ck, SessionID: plan.SessionID})
+		h.RecordSpend(w, p, callID, alias, op, usage, start, false, 499, deployment)
+		util.Info("process path=%s step=cancel status=499 call_id=%q", r.URL.Path, callID)
+		return true
+	}
 	// 分开保存“尚未发 HTTP”“凭据缺失”“构造失败”和“上游失败”的事实，
 	// 使最终错误能指出配置或协议问题，避免一律归因为缺少密钥。
 
 	for len(pool) > 0 {
 		kind := "general"
 		for _, rawDep := range pool {
+			if stopCanceled(nil, nil, "", 0) {
+				return
+			}
 			// 组耗尽后采用最后尝试成员的回退链，保留原组名的初始权限检查。
 			fallbacks.UseDeployment(rawDep.ModelName)
 			if !plan.Required {
@@ -333,6 +353,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 			}
 
 			for try := 0; try < routeCfg.Retries(); try++ {
+				if stopCanceled(nil, nil, did, 0) {
+					return
+				}
 				if try > 0 {
 					fresh, err := h.ResolveRequest(r)
 					if err != nil || fresh == nil || !fresh.CanInfer() {
@@ -382,6 +405,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					cancelAttempt()
 					h.DecBusy(did)
 					lastErr = err
+					if stopCanceled(nil, nil, did, 0) {
+						return
+					}
 					h.NoteFailure(router.CooldownID(rawDep), routeCfg)
 					util.Error("upstream dial path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(err))
 					continue
@@ -454,6 +480,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 					cancelAttempt()
 					if streamErr != nil {
 						lastErr = streamErr
+						if stopCanceled(streamed, usage, did, ttft) {
+							return
+						}
 						h.NoteFailure(did, routeCfg)
 						util.Error("upstream stream path=%s provider=%s model=%s base_host=%s err=%s", r.URL.Path, supplier, realModel, dpdiagnostics.BaseHost(apiBase), dpdiagnostics.SafeErr(streamErr))
 						if wrote {
@@ -495,6 +524,9 @@ func Serve(h dpcontract.Adapted, w http.ResponseWriter, r *http.Request, op stri
 				h.DecBusy(did)
 				if readErr != nil {
 					lastErr = readErr
+					if stopCanceled(respBody, nil, did, 0) {
+						return
+					}
 					h.NoteFailure(did, routeCfg)
 					continue
 				}

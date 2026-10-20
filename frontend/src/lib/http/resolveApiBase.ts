@@ -97,6 +97,21 @@ export interface RequestUrlInputs {
   pageOrigin?: string | null;
 }
 
+/** 生成终端客户端可直接使用的网关根地址；参数为当前后台地址和浏览器源，返回绝对HTTP(S)地址或空值。
+ * 文档阅读器调用；同源 /gw 与反向代理前缀保留，只去掉末尾 /v1，由各协议示例拼接端点。
+ * 缺少源、非法地址或非HTTP协议时返回空值以保留文档占位符，不生成无法使用的相对客户端配置；无副作用。
+ */
+export const resolveClientGatewayRoot = ({ registeredBase, pageOrigin }: RequestUrlInputs): string => {
+  try {
+    const url = new URL((registeredBase || "/gw").trim(), pageOrigin || undefined);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+      return "";
+    return url.href.replace(/\/+$/, "").replace(/\/v1$/, "");
+  } catch {
+    return "";
+  }
+};
+
 /** 组合请求路径与运行时地址，供 typed client 创建 Request；参数为路径、注册地址和页面源。
  * 返回可用 URL；/gw 等相对代理需要页面源补全，避免原生 Request 拒绝相对 URL，无网络或存储副作用。
  */

@@ -2615,5 +2615,33 @@
     "title": "log costs and reasoning effort zh-CN",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-390",
+    "file": "e2e/scenarios/regression/client-cancellation-zh-CN.test.ts",
+    "title": "client cancellation keeps a healthy model available zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-392",
+    "file": "e2e/scenarios/regression/client-docs-url-zh-CN.test.ts",
+    "title": "client documentation URLs execute real agent APIs zh-CN",
+    "kind": "implemented",
+    "environment": "default offline and portable console"
+  },
+  {
+    "id": "SC-391",
+    "file": "e2e/scenarios/regression/client-cancellation-en.test.ts",
+    "title": "client cancellation keeps a healthy model available en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-393",
+    "file": "e2e/scenarios/regression/client-docs-url-en.test.ts",
+    "title": "client documentation URLs execute real agent APIs en",
+    "kind": "implemented",
+    "environment": "default offline and portable console"
   }
 ]
