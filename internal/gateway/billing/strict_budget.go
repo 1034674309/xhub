@@ -501,7 +501,8 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 		return nil, budgetFailure("unsupported_budget", "strict budget requires complete token prices")
 	}
 	var rates []catalog.Rate
-	if raw, exists := source["rates"]; exists {
+	// 模型编辑PATCH用null清空旧定价；与配置校验一致，null是未设置，不是无效费率表或免费费率。
+	if raw := source["rates"]; raw != nil {
 		encoded, err := json.Marshal(raw)
 		if err != nil || json.Unmarshal(encoded, &rates) != nil || len(rates) == 0 {
 			return nil, budgetFailure("unsupported_budget", "strict budget rate table is invalid")
@@ -513,6 +514,9 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 		}
 		// 平面价格表中任何新增阈值/缓存价都不能静默忽略；非数字不是免费，未知阶梯不能用基础低价代替。
 		for key, value := range source {
+			if value == nil {
+				continue
+			}
 			if !strings.Contains(key, "cost_per_") && !strings.Contains(key, "_token_cost") {
 				continue
 			}
@@ -525,7 +529,7 @@ func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, err
 			}
 		}
 		rates = catalog.RatesFromFlat(func(key string) (float64, bool) { return floatParam(source, key) })
-		if v, exists := source["cache_creation_input_token_cost_above_1hr"]; exists {
+		if v := source["cache_creation_input_token_cost_above_1hr"]; v != nil {
 			n, _ := floatParam(map[string]any{"v": v}, "v")
 			rates = append(rates, catalog.Rate{Measure: "token", Side: "cache_write", Variant: "1h", Window: "all", UnitSize: 1, USD: n, SourceKey: "cache_creation_input_token_cost_above_1hr"})
 		}
