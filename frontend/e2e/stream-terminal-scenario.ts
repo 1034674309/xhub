@@ -112,7 +112,7 @@ export function registerMalformedTerminal(suffix: "missing" | "response") {
       expect(response.status()).toBe(200);
       await expect(page.getByRole("button", { name: t("Send message") })).toBeVisible();
       // 客户端收到协议错误会主动取消读取，Chromium不保证此时还能取回response.text；验证用户可见错误与真实持久化失败。
-      await expect(page.getByText(reason, { exact: false }).last()).toBeVisible();
+      await expect(page.getByText(reason, { exact: false }).filter({ visible: true }).first()).toBeVisible();
       if (endpoint === "responses")
         expect(await page.evaluate(() => sessionStorage.getItem("responsesSessionId"))).toBeFalsy();
       const dialog = await inspectTerminalBill(page, bearer, response.headers()["x-litellm-call-id"], {
