@@ -258,7 +258,7 @@ Installation and customer guides are available in English and Chinese. Central d
 
 ## Project status and deployment references
 
-XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Enterprise identity supports independently managed OIDC Code + PKCE login and SCIM user/group provisioning; OIDC login requires an active provisioned identity. Real identity-provider tenants require separate validation; this repository does not promise commercial SLAs or compliance certifications.
+XHub is actively evolving. Evaluate production requirements against the [runtime reference](docs/development/en/runtime.md), [permission rules](docs/development/en/permissions.md), and [guardrail guide](docs/development/en/guardrails.md). Budgets do not reserve request costs; shared limits, caching, and idempotency have implementation boundaries across instances. Reconcile calculated costs with provider bills. Enterprise identity supports independently managed OIDC Code + PKCE and [SAML 2.0 login](docs/development/en/saml-login.md), plus SCIM user/group provisioning; enterprise login requires an active provisioned identity. Real identity-provider tenants require separate validation; this repository does not promise commercial SLAs or compliance certifications.
 
 ## License
 

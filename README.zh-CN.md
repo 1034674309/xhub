@@ -258,7 +258,7 @@ SDK 连接 **4000 端口的网关**；3000 端口提供 Web 控制台。集成�
 
 ## 项目状态与部署参考
 
-XHub 正在持续迭代。生产选型请结合[运行行为参考](docs/development/zh-CN/runtime.md)、[权限规则](docs/development/zh-CN/permissions.md)与[护栏指南](docs/development/zh-CN/guardrails.md)核对所需能力。预算没有请求费用预占，多实例的共享限额、缓存与幂等存在实现边界；实际费用需与供应商账单核对。企业身份支持独立管理的 OIDC Code + PKCE 登录和 SCIM 用户、组同步；OIDC 登录要求已有活跃的同步身份，真实身份平台租户需独立验收。本仓库不承诺商业 SLA 或合规认证。
+XHub 正在持续迭代。生产选型请结合[运行行为参考](docs/development/zh-CN/runtime.md)、[权限规则](docs/development/zh-CN/permissions.md)与[护栏指南](docs/development/zh-CN/guardrails.md)核对所需能力。预算没有请求费用预占，多实例的共享限额、缓存与幂等存在实现边界；实际费用需与供应商账单核对。企业身份支持独立管理的 OIDC Code + PKCE 和 [SAML 2.0 登录](docs/development/zh-CN/saml-login.md)，以及 SCIM 用户、组同步；企业登录要求已有活跃的同步身份，真实身份平台租户需独立验收。本仓库不承诺商业 SLA 或合规认证。
 
 ## 许可证
 
