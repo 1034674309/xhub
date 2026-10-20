@@ -44,17 +44,25 @@ func (db *DB) RecordUsageDurably(ctx context.Context, record UsageRecord) (durab
 	var saved pendingUsage
 	found, err := db.Engine.Context(ctx).Table("usage_pending").Where("request_id = ?", record.RequestID).Get(&saved)
 	if err != nil {
-		return true, err
+		return false, err
 	}
 	if !found {
-		// 并发恢复者已结算并确认；再次调用 RecordUsage 由 request_id 去重，不重复计费。
-		return true, db.RecordUsage(ctx, []UsageRecord{record})
+		// 并发恢复者可能已确认；必须精确核对同一快照，不能把别人的同ID记录当作本份持久化。
+		err := db.RecordUsageExact(ctx, []UsageRecord{record})
+		return err == nil, err
+	}
+	rows, compareErr := db.Engine.Context(ctx).QueryString("SELECT CAST(? AS jsonb) = CAST(? AS jsonb) AS same", saved.Payload, string(payload))
+	if compareErr != nil {
+		return false, compareErr
+	}
+	if len(rows) != 1 || rows[0]["same"] != "true" {
+		return false, fmt.Errorf("%w: pending usage snapshot differs", ErrConflict)
 	}
 	return true, db.settlePendingUsage(ctx, saved)
 }
 
 // settlePendingUsage 校验并结算一个持久快照；参数为数据库原值，返回解码、结算或删除错误。
-// 直写和后台恢复调用；RecordUsage 的事务保证账单/预算/聚合幂等，只有提交成功才删除相同快照。
+// 直写和后台恢复调用；RecordUsageExact 的事务保证完整快照匹配及账单/预算/聚合幂等，只有提交成功才删除相同快照。
 func (db *DB) settlePendingUsage(ctx context.Context, saved pendingUsage) error {
 	var record UsageRecord
 	if err := json.Unmarshal([]byte(saved.Payload), &record); err != nil {
@@ -63,7 +71,7 @@ func (db *DB) settlePendingUsage(ctx context.Context, saved pendingUsage) error 
 	if err := validatePendingUsage(record); err != nil || record.RequestID != saved.RequestID {
 		return fmt.Errorf("pending usage %s has invalid snapshot", saved.RequestID)
 	}
-	if err := db.RecordUsage(ctx, []UsageRecord{record}); err != nil {
+	if err := db.RecordUsageExact(ctx, []UsageRecord{record}); err != nil {
 		return err
 	}
 	// 提交后进程退出会留下同一快照；下一实例重放由 RecordUsage 去重后继续确认。

@@ -109,13 +109,12 @@ func (s *Server) FlushLocalUsage(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	_, err := s.usageSpool.Replay(ctx, 500, func(ctx context.Context, record iam.UsageRecord) error {
-		_, err := s.IAM.RecordUsageDurably(ctx, record)
-		return err
+		return s.IAM.RecordUsageExact(ctx, []iam.UsageRecord{record})
 	})
 	return err
 }
 
-// persistUsageSnapshot 将完整最终账单先落独立磁盘，再尝试原有PG pending/事务闭环；返回是否已有可靠介质。
+// persistUsageSnapshot 将完整最终账单先落独立磁盘，再精确提交PG事务；磁盘失败才使用PG pending兜底；返回是否已有可靠介质。
 // 持久化失败不改写已完成上游响应；磁盘写失败仍尝试PG，若两者失败由persistSpend尝试Redis并告警，不虚构可恢复事实。
 func (s *Server) persistUsageSnapshot(record iam.UsageRecord) (bool, error) {
 	diskDurable := false
@@ -131,7 +130,15 @@ func (s *Server) persistUsageSnapshot(record iam.UsageRecord) (bool, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	databaseDurable, databaseErr := s.IAM.RecordUsageDurably(ctx, record)
+	var databaseDurable bool
+	var databaseErr error
+	if diskDurable {
+		// 磁盘已保存完整证据，直接严格确认本份快照，不能用同ID另一份PG pending的成功替代。
+		databaseErr = s.IAM.RecordUsageExact(ctx, []iam.UsageRecord{record})
+		databaseDurable = databaseErr == nil
+	} else {
+		databaseDurable, databaseErr = s.IAM.RecordUsageDurably(ctx, record)
+	}
 	if databaseErr == nil && diskDurable {
 		if err := s.usageSpool.Acknowledge(record); err != nil {
 			diskErr = err

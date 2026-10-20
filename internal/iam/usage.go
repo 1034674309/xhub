@@ -16,6 +16,8 @@ var logTraceOnceUsage sync.Once
 // UsageEvent 是 usage_events 中一条推理用量和调用日志事实，由刷库链写入、授权查询读取。
 // 身份与供应商字段是调用时快照，成员离队或配置删除不改变历史费用；SessionID 只用于归组。
 type UsageEvent struct {
+	// UsageFingerprint 保存完整结算快照摘要，仅用于严格磁盘重放确认，不向控制台公开正文指纹。
+	UsageFingerprint string `xorm:"usage_fingerprint" json:"-"`
 	// 客户端明确指定的推理强度快照；独立于提示词保存，空值表示未指定或历史未记录，不推断厂商默认值。
 	ReasoningEffort string `xorm:"reasoning_effort" json:"reasoning_effort"`
 	// 客户端实际请求路径，不含查询串；由执行器记录，独立于提示词存储。
@@ -254,6 +256,17 @@ type UsageRecord struct {
 // 调用：dataplane/live.go、gateway/spend.go、gateway/wire.go
 // 测试：activity_http_test.go、prompt_log_test.go、usage_idempotency_test.go
 func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
+	return db.recordUsage(ctx, records, false)
+}
+
+// RecordUsageExact 原子结算指定完整快照并严格确认重复内容，供独立磁盘恢复/PG待结算使用。
+// 参数是已冻结账单，返回nil只表示同一快照已提交或核销fence已确认；旧无指纹/冲突返回ErrConflict且不释放占用。
+func (db *DB) RecordUsageExact(ctx context.Context, records []UsageRecord) error {
+	return db.recordUsage(ctx, records, true)
+}
+
+// recordUsage 共享普通写入与严格恢复事务，exact控制重复快照确认；任何冲突回滚账单、预占和聚合。
+func (db *DB) recordUsage(ctx context.Context, records []UsageRecord, exact bool) error {
 	logTraceOnceUsage.Do(func() { util.Trace("enter iam.RecordUsage") })
 
 	if len(records) == 0 {
@@ -270,6 +283,11 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 	return db.tx(ctx, func(s *xorm.Session) error {
 		monitor := map[monitorKey]monitorDelta{}
 		for _, r := range records {
+			if exact {
+				if err := checkPendingUsageSnapshot(s, r); err != nil {
+					return err
+				}
+			}
 			if err := settleBudgetHold(s, r); err != nil {
 				return err
 			}
@@ -278,6 +296,11 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 				return err
 			}
 			if !fresh {
+				if exact {
+					if err := checkCommittedUsageSnapshot(s, r); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 			accumulateMonitor(monitor, r, 1)
@@ -300,6 +323,10 @@ func (db *DB) RecordUsage(ctx context.Context, records []UsageRecord) error {
 // RecordUsage 的事务路径调用；ON CONFLICT 防止重放中断整批并导致重复计费，正文由独立日志写入。
 // 推理强度只保存采集值，空值保持未知；失败由上层事务回滚，费用和现存记录均不在此重算。
 func insertEvent(s *xorm.Session, r UsageRecord) (bool, error) {
+	fingerprint, err := usageFingerprint(r)
+	if err != nil {
+		return false, err
+	}
 	var ended any
 	if !r.EndedAt.IsZero() {
 		ended = r.EndedAt.UTC()
@@ -308,14 +335,14 @@ func insertEvent(s *xorm.Session, r UsageRecord) (bool, error) {
         (request_id, ts, key_id, owner_type, user_id, team_id, project_id, organization_id,
 		 model, call_type, status, http_status, prompt_tokens, completion_tokens, cost, duration_ms,
          ended_at, ttft_ms, cache_hit, key_hash, key_alias, team_alias, provider,
-         cached_tokens, session_id, session_source, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint, label, api_base, reasoning_effort)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cached_tokens, session_id, session_source, cache_key, guardrail, price_snapshot, supplier, upstream_model, streamed, inbound_endpoint, outbound_endpoint, label, api_base, reasoning_effort, usage_fingerprint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (request_id) DO NOTHING`,
 		r.RequestID, stamp(r.TS), r.KeyID, ownerType(r), r.UserID, r.TeamID, r.ProjectID,
 		r.OrganizationID, r.Model, r.CallType, status(r), r.HTTPStatus,
 		r.PromptTokens, r.CompletionTokens, r.Cost, r.DurationMS,
 		ended, r.TTFTMs, r.CacheHit, r.KeyHash, r.KeyAlias, r.TeamAlias, r.Provider,
-		r.CachedTokens, r.SessionID, r.SessionSource, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint, r.Label, r.APIBase, r.ReasoningEffort)
+		r.CachedTokens, r.SessionID, r.SessionSource, r.CacheKey, r.Guardrail, r.PriceSnapshot, r.Supplier, r.UpstreamModel, r.Streamed, r.InboundEndpoint, r.OutboundEndpoint, r.Label, r.APIBase, r.ReasoningEffort, fingerprint)
 	if err != nil {
 		return false, mapErr(err)
 	}

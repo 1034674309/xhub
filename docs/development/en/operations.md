@@ -75,7 +75,12 @@ contain settled charges only, not all incurred charges.
 Records include a version and SHA-256 checksum. Corrupt, unsupported-version or
 conflicting snapshots are preserved in `quarantine/`, never silently deleted.
 Keep evidence and reconcile or restore it; clearing the queue loses billing data.
-Database call IDs and reservation reconciliation prevent duplicate accounting.
+Database call IDs, complete-snapshot SHA-256 fingerprints and reservation
+reconciliation prevent duplicate accounting. A different pending payload or
+committed fingerprint with the same ID blocks acknowledgement and retains disk
+evidence. Startup idempotently adds `usage_fingerprint`; historical events retain
+an empty fingerprint and strict replay refuses to acknowledge them automatically.
+Reconcile those records explicitly rather than inventing historical evidence.
 Conflicts retain their payload and produce errors; retries wait at least 30 seconds
 per failed record without blocking other valid records. Logs contain request IDs,
 hashed filenames and errors, not full payloads. Do not attach usage files or user
