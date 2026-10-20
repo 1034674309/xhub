@@ -106,15 +106,14 @@ func NativeStreamUsage(protocol string, raw []byte, request map[string]any) map[
 				break
 			}
 		}
-		for k, v := range NativeUsage(protocol)(doc, request) {
+		facts := NativeUsage(protocol)(doc, request)
+		for k, v := range facts {
 			if k == "pricing_blocked" && !terminal && v != "upstream_usage_conflict" && v != "upstream_usage_invalid" {
-				continue // 中间事件允许没有用量；终态未知规格必须阻止结算。
+				delete(facts, k) // 中间事件允许没有用量；终态未知规格必须阻止结算。
 			}
-			if k == "pricing_blocked" && out[k] != nil && out[k] != "" {
-				continue // 同批事件后续的空标记不能清除已经观察到的非法计数。
-			}
-			out[k] = v
 		}
+		// 按帧更新别名快照；后帧的正常累计增长不能与前帧旧名字拼成假矛盾。
+		out = llmdialogue.MergeDialogueUsage(out, facts)
 	}
 	if len(out) == 0 {
 		return nil

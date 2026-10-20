@@ -6,7 +6,7 @@ import (
 )
 
 // MergeDialogueUsage 合并一帧原始实测用量，并保留任何已观察到的矛盾或非法计数。
-// 参数 previous 为本次请求累积对象（可为空），incoming 为当前帧；返回累积对象，更新同名字段但不转换别名。
+// 参数 previous 为本次请求累积对象（可为空），incoming 为当前帧；返回累积对象，更新计数但不转换别名。
 // 流适配器在归一化前调用；后续完整帧或空 pricing_blocked 不得把已不可信的费用重新标为可结算。
 // 不拒绝缺少字段的合法部分帧，不修改 incoming，不执行计费或外部操作。
 func MergeDialogueUsage(previous, incoming map[string]any) map[string]any {
@@ -16,6 +16,17 @@ func MergeDialogueUsage(previous, incoming map[string]any) map[string]any {
 	blocked, _ := previous["pricing_blocked"].(string)
 	if blocked == "" {
 		blocked = dialogueUsageProblem(incoming)
+	}
+	// 别名冲突只比较同一帧；合法累计更新可以只携带其中一个名字，
+	// 必须删除另一名字的旧快照，避免最终归一化把跨帧增长误判为矛盾。
+	for _, pair := range [][2]string{{"prompt_tokens", "input_tokens"}, {"completion_tokens", "output_tokens"}} {
+		_, hasLeft := incoming[pair[0]]
+		_, hasRight := incoming[pair[1]]
+		if hasLeft && !hasRight {
+			delete(previous, pair[1])
+		} else if hasRight && !hasLeft {
+			delete(previous, pair[0])
+		}
 	}
 	for key, value := range incoming {
 		previous[key] = value

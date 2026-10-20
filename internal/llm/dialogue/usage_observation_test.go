@@ -49,3 +49,25 @@ func TestNormalizeDialogueUsageBeforeAliasReplacement(t *testing.T) {
 		t.Fatalf("归一化丢失原始别名冲突: %+v", got)
 	}
 }
+
+// TestMergeDialogueUsageCumulativeAliases 验证跨帧累计增长与同帧矛盾分开判断；纯内存，无外部清理。
+// 首帧两个别名相等，后帧只更新任一名称，最终应使用新值；同帧真矛盾仍由原矩阵验证为永久阻断。
+func TestMergeDialogueUsageCumulativeAliases(t *testing.T) {
+	for _, field := range []string{"prompt_tokens", "input_tokens", "completion_tokens", "output_tokens"} {
+		t.Run(field, func(t *testing.T) {
+			usage := MergeDialogueUsage(nil, map[string]any{"prompt_tokens": 8, "input_tokens": 8, "completion_tokens": 0, "output_tokens": 0})
+			next := map[string]any{field: 9}
+			usage = NormalizeDialogueUsage(MergeDialogueUsage(usage, next))
+			if usage["pricing_blocked"] != nil {
+				t.Fatalf("合法累计增长被误认为同帧冲突: %+v", usage)
+			}
+			target := "completion_tokens"
+			if field == "prompt_tokens" || field == "input_tokens" {
+				target = "prompt_tokens"
+			}
+			if usage[target] != 9 || len(next) != 1 {
+				t.Fatalf("累计值或原始帧被错误修改: usage=%+v incoming=%+v", usage, next)
+			}
+		})
+	}
+}

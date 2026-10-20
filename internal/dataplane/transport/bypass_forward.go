@@ -12,6 +12,7 @@ import (
 	"time"
 
 	dpdiagnostics "github.com/sunqirui1987/xhub/internal/dataplane/diagnostics"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 	providercontract "github.com/sunqirui1987/xhub/internal/provider/contract"
 	providermeasurement "github.com/sunqirui1987/xhub/internal/provider/measurement"
 	"github.com/sunqirui1987/xhub/internal/util"
@@ -133,19 +134,15 @@ func ForwardOfficial(upstreamClient *http.Client, r *http.Request, method, addre
 			event.Write(line)
 			if bytes.Equal(line, []byte("\n")) || bytes.Equal(line, []byte("\r\n")) {
 				streamState.Observe(transport.Protocol, event.Bytes())
-				for k, v := range providermeasurement.NativeStreamUsage(transport.Protocol, event.Bytes(), request.Fields) {
-					if result.Usage == nil {
-						result.Usage = map[string]any{}
-					}
+				facts := providermeasurement.NativeStreamUsage(transport.Protocol, event.Bytes(), request.Fields)
+				if len(facts) > 0 {
+					// 与标准流使用相同的逐帧合并，保留真矛盾并替换旧别名快照。
+					result.Usage = llmdialogue.MergeDialogueUsage(result.Usage, facts)
 					// 多张图片可能各自带用量和规格。当前结算是单规格账单，不能覆盖
 					// 前一张的事实后按最后一张规格计价；保留事实并阻止自动结算。
 					if transport.Protocol == "openai-images" && streamState.Images > 1 {
 						result.Usage["pricing_blocked"] = "multiple_image_events_require_itemized_pricing"
 					}
-					if k == "pricing_blocked" && result.Usage[k] != nil && result.Usage[k] != "" {
-						continue
-					}
-					result.Usage[k] = v
 				}
 				event.Reset()
 			}
