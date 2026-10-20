@@ -109,6 +109,7 @@ x-litellm-call-id 关联调用与日志，x-litellm-response-cost 表示这次�
 | `GET /user/info` | `UserInfo` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `GET /v2/user/info` | `UserInfo` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/update` | `UserUpdate` | [mount.go](../../../internal/gateway/identity/mount.go) |
+| `POST /user/bulk_update` | `UserBulkBudgetUpdate` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/delete` | `UserDelete` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/set_password` | `UserSetPassword` | [mount.go](../../../internal/gateway/identity/mount.go) |
 | `POST /user/{user_id}/password` | `UserSetPassword` | [mount.go](../../../internal/gateway/identity/mount.go) |
