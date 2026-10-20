@@ -61,7 +61,7 @@ func TestMessagesPublicReasoningRoundTrip(t *testing.T) {
 }
 
 // TestMessagesThinkingInputBoundaries 验证公开 thinking 的空值、错误类型、角色、签名与密文边界。
-// 参数 t 为测试上下文；纯内存请求允许空/缺失签名，拒绝不能等价桥接的厂商签名和 redacted 块；不修改输入，无需清理。
+// 参数 t 为测试上下文；纯内存请求允许公开及原生签名历史，原生块仍限制同协议；拒绝错类型、错误角色和未知字段，不修改输入。
 func TestMessagesThinkingInputBoundaries(t *testing.T) {
 	for _, tc := range []struct {
 		name, role string
@@ -73,9 +73,9 @@ func TestMessagesThinkingInputBoundaries(t *testing.T) {
 		{"null_signature", "assistant", map[string]any{"type": "thinking", "thinking": "Plan", "signature": nil}, true},
 		{"wrong_text", "assistant", map[string]any{"type": "thinking", "thinking": 42}, false},
 		{"wrong_signature", "assistant", map[string]any{"type": "thinking", "thinking": "Plan", "signature": 42}, false},
-		{"signed", "assistant", map[string]any{"type": "thinking", "thinking": "Plan", "signature": "vendor-signature"}, false},
+		{"signed", "assistant", map[string]any{"type": "thinking", "thinking": "Plan", "signature": "vendor-signature"}, true},
 		{"user_thinking", "user", map[string]any{"type": "thinking", "thinking": "Plan"}, false},
-		{"redacted", "assistant", map[string]any{"type": "redacted_thinking", "data": "cipher"}, false},
+		{"redacted", "assistant", map[string]any{"type": "redacted_thinking", "data": "cipher"}, true},
 		{"unknown_field", "assistant", map[string]any{"type": "thinking", "thinking": "Plan", "unknown": true}, false},
 		{"thinking_on_text", "assistant", map[string]any{"type": "text", "text": "Hello", "thinking": "Plan"}, false},
 	} {

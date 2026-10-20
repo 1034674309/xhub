@@ -94,7 +94,7 @@ func TestMessagesReasoningEnvelopeBoundaries(t *testing.T) {
 	if block, err := MessagesReasoningBlock(map[string]any{"summary": []any{}}); err != nil || block != nil {
 		t.Fatalf("空推理不应产生可见块: %v %v", block, err)
 	}
-	for _, value := range []any{ResponsesReasoningSignaturePrefix, "vendor-signature", 42, nil} {
+	for _, value := range []any{ResponsesReasoningSignaturePrefix, 42, nil} {
 		if _, err := messagesReasoningReplay(map[string]any{"type": "redacted_thinking", "data": value}, "assistant"); err == nil {
 			t.Fatalf("无效密文封装被接受: %v", value)
 		}

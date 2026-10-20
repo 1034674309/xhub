@@ -2685,5 +2685,19 @@
     "title": "stream terminal preserves truncated tools in JSON and SSE billing",
     "kind": "implemented",
     "environment": "default offline"
+  },
+  {
+    "id": "SC-370",
+    "file": "e2e/scenarios/regression/agent-history-en.test.ts",
+    "title": "native agent history and parallel tools en",
+    "kind": "implemented",
+    "environment": "default offline"
+  },
+  {
+    "id": "SC-371",
+    "file": "e2e/scenarios/regression/agent-history-zh-CN.test.ts",
+    "title": "native agent history and parallel tools zh-CN",
+    "kind": "implemented",
+    "environment": "default offline"
   }
 ]

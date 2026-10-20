@@ -16,6 +16,10 @@ if __package__:
     from .stream_terminal_fixture import serve_stream_terminal
 else:
     from stream_terminal_fixture import serve_stream_terminal
+try:
+    from e2e.agent_history_fixture import handle_agent_history
+except ModuleNotFoundError:
+    from agent_history_fixture import handle_agent_history
 
 
 ERROR_LOG_JSON_DIAGNOSTIC = (
@@ -240,6 +244,8 @@ class Handler(BaseHTTPRequestHandler):
             req = json.loads(raw.decode() or "{}")
         except (json.JSONDecodeError, UnicodeDecodeError):
             req = {}
+        if handle_agent_history(self, req):
+            return
         if self._ark(req) or self._fal(req):
             return
         if self._monitor_tps(req):

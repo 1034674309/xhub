@@ -325,7 +325,8 @@ func requiresNativeOwnership(body map[string]any) bool {
 		blocks, _ := message["content"].([]any)
 		for _, value := range blocks {
 			block, _ := value.(map[string]any)
-			if llmdialogue.IsResponsesReasoningSignature(block["signature"]) || llmdialogue.IsResponsesReasoningSignature(block["data"]) {
+			// 原生 Anthropic 签名/密文与 Responses 封装一样绑定原连接，不能被普通选路迁移。
+			if block["type"] == "redacted_thinking" || (block["type"] == "thinking" && block["signature"] != nil && block["signature"] != "") || llmdialogue.IsResponsesReasoningSignature(block["signature"]) || llmdialogue.IsResponsesReasoningSignature(block["data"]) {
 				return true
 			}
 		}

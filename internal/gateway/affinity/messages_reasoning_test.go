@@ -40,3 +40,32 @@ func TestMessagesEnvelopeRequiresOwnedConnection(t *testing.T) {
 		}
 	}
 }
+
+// TestNativeMessagesRequiresOwnedConnection 验证原厂签名与密文同样要求原身份、会话和供应商连接，不因原生透传而放宽。
+// 参数 t 为上下文；纯内存状态，正常首轮建立归属后固定连接，另一身份/会话/别名拒绝；无外部清理。
+func TestNativeMessagesRequiresOwnedConnection(t *testing.T) {
+	for _, block := range []map[string]any{{"type": "thinking", "thinking": "Plan", "signature": "vendor-signature"}, {"type": "redacted_thinking", "data": "vendor-cipher"}} {
+		s := &State{}
+		p := &auth.Principal{UserID: "alice"}
+		r := httptest.NewRequest("POST", "/v1/messages", nil)
+		r.Header.Set("X-Session-Id", "native")
+		body := map[string]any{"messages": []any{map[string]any{"role": "assistant", "content": []any{block}}}}
+		if s.PlanRoute(r, "model", body, p).Err == nil {
+			t.Fatal("原厂状态未建立归属即放行")
+		}
+		first := s.PlanRoute(r, "model", map[string]any{"messages": []any{map[string]any{"role": "user", "content": "Read"}}}, p)
+		first.Target = dpcontract.RouteTarget{DeploymentID: "dep", ConnectionID: "account-a", Model: "model", Pool: "model"}
+		s.CommitRoute(first, "dep", "msg-first")
+		got := s.PlanRoute(r, "model", body, p)
+		if got.Err != nil || !got.Required || got.Target.ConnectionID != "account-a" {
+			t.Fatalf("原生历史未固定连接: %+v", got)
+		}
+		for _, tc := range []struct{ alias, user, session string }{{"other", "alice", "native"}, {"model", "bob", "native"}, {"model", "alice", "other"}} {
+			req := httptest.NewRequest("POST", "/v1/messages", nil)
+			req.Header.Set("X-Session-Id", tc.session)
+			if s.PlanRoute(req, tc.alias, body, &auth.Principal{UserID: tc.user}).Err == nil {
+				t.Fatalf("跨范围原生签名放行: %+v", tc)
+			}
+		}
+	}
+}

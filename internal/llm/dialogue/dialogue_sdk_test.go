@@ -20,7 +20,7 @@ func TestOfficialDialogueResultBoundaries(t *testing.T) {
 		{"openai-responses", `{"status":"completed","output":[{"type":"message","content":[{"type":"refusal","refusal":42}]}]}`},
 		{"openai-responses", `{"status":"completed","output":[{"type":"reasoning"}]}`},
 		{"anthropic-messages", `{"content":[{"type":"tool_use","id":"x","name":"f","input":null}]}`},
-		{"anthropic-messages", `{"content":[{"type":"thinking","thinking":"private"}]}`},
+		{"anthropic-messages", `{"content":[{"type":"thinking","thinking":42}]}`},
 		{"gemini", `{"candidates":[null]}`},
 		{"gemini", `{"candidates":[{"content":{"parts":[{"text":"x","thought":true}]}}]}`},
 	} {

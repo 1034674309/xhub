@@ -839,7 +839,7 @@ func PipeDialogue(w http.ResponseWriter, resp *http.Response, start time.Time, a
 // PipeDialogueWithTools 为真实请求附加 namespace/custom 工具还原表，其他参数、返回值及资源清理与 PipeDialogue 一致。
 // Serve 调用；映射只作用于跨协议 Responses 工具事件，原生 SSE 不改；参数完整后发布工具输入，不执行工具或改变鉴权。
 func PipeDialogueWithTools(w http.ResponseWriter, resp *http.Response, start time.Time, alias, upstream, caller string, bindings map[string]llmdialogue.ToolBinding, beforeComplete ...func(llmdialogue.DialogueResult)) (bool, map[string]any, time.Duration, []byte, error) {
-	if upstream == caller && (caller == "openai-chat" || caller == "openai-responses") {
+	if upstream == caller && (caller == "openai-chat" || caller == "openai-responses" || caller == "anthropic-messages") {
 		return PipeNativeDialogue(w, resp, start, alias, caller, beforeComplete...)
 	}
 	defer resp.Body.Close()

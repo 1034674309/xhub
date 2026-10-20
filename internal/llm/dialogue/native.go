@@ -91,6 +91,18 @@ func ParseDialogue(protocol string, body map[string]any) (Dialogue, error) {
 			return Dialogue{}, fmt.Errorf("conversation item must be an object")
 		}
 		cp, _ := cloneObject(m)
+		if protocol == "openai-chat" {
+			if err := projectChatToolIndices(cp); err != nil {
+				return Dialogue{}, err
+			}
+		}
+		if protocol == "anthropic-messages" {
+			for _, value := range dialogueList(cp["content"]) {
+				if err := projectMessagesCaller(dialogueMap(value)); err != nil {
+					return Dialogue{}, err
+				}
+			}
+		}
 		if protocol == "openai-responses" {
 			switch dialogueString(cp["type"]) {
 			case "additional_tools":
@@ -446,7 +458,7 @@ func bridgeOptions(d Dialogue, target string, out map[string]any) (map[string]an
 // 参数为登记协议与 JSON 正文，返回结果或协议错误；同步响应和 SSE 完成事件调用，无外部副作用。
 // 推理、加密项及供应商扩展保留到同协议输出；跨协议不能表达时显式报错。
 func ParseDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
-	if protocol != "openai-responses" && protocol != "openai-chat" {
+	if protocol != "openai-responses" && protocol != "openai-chat" && protocol != "anthropic-messages" {
 		return parseUnifiedDialogueResult(protocol, raw)
 	}
 	var native map[string]any
@@ -458,7 +470,14 @@ func ParseDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
 		return DialogueResult{}, err
 	}
 	bridgeError := ""
-	if protocol == "openai-responses" {
+	var messagesReasoning string
+	if protocol == "anthropic-messages" {
+		var err error
+		messagesReasoning, bridgeError, err = projectMessagesResult(projection)
+		if err != nil {
+			return DialogueResult{}, err
+		}
+	} else if protocol == "openai-responses" {
 		list, ok := projection["output"].([]any)
 		if !ok {
 			return DialogueResult{}, fmt.Errorf("invalid upstream output")
@@ -535,6 +554,8 @@ func ParseDialogueResult(protocol string, raw []byte) (DialogueResult, error) {
 			}
 			r.Reasoning = dialogueString(value)
 		}
+	} else if protocol == "anthropic-messages" {
+		r.Reasoning = messagesReasoning
 	} else {
 		for _, part := range dialogueList(native["output"]) {
 			item := dialogueMap(part)
