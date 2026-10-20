@@ -79,6 +79,15 @@ func DialogueOutputUsage(u map[string]any, protocol string) map[string]any {
 	if protocol == "anthropic-messages" {
 		if details := dialogueMap(u["prompt_tokens_details"]); details["cached_tokens"] != nil {
 			out["cache_read_input_tokens"] = details["cached_tokens"]
+			// OpenAI 的缓存命中是输入总量的子集，Messages 的 cache_read_input_tokens 却独立于 input_tokens。
+			// 只有原用量没有独立缓存字段时才扣除子集；否则同步编码后的再次计费会把同一缓存输入算两次。
+			if u["cache_read_input_tokens"] == nil && u["cache_read_tokens"] == nil {
+				input, inputOK := dialogueNumber(u["prompt_tokens"])
+				cached, cacheOK := dialogueNumber(details["cached_tokens"])
+				if inputOK && cacheOK && cached >= 0 && cached <= input {
+					out["input_tokens"] = input - cached
+				}
+			}
 		}
 		delete(out, "input_tokens_details")
 		delete(out, "output_tokens_details")

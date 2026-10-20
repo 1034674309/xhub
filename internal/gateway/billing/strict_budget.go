@@ -11,6 +11,7 @@ import (
 
 	"github.com/sunqirui1987/xhub/internal/catalog"
 	"github.com/sunqirui1987/xhub/internal/config"
+	llmdialogue "github.com/sunqirui1987/xhub/internal/llm/dialogue"
 )
 
 // DefaultBudgetOutputTokens 是有限预算请求未声明输出上限时公开采用的上限；推理和可见输出共用该额度。
@@ -196,6 +197,10 @@ func ValidateStrictBudgetUsage(raw map[string]any, plans ...BudgetPlan) error {
 	fail := func(message string) error { return budgetFailure("invalid_usage", message) }
 	if raw == nil || raw["pricing_blocked"] != nil && raw["pricing_blocked"] != "" {
 		return fail("strict budget requires complete measured usage")
+	}
+	// 原生同步旁路尚未归一化，必须与流入口使用同一缓存别名校验，不能按优先级掩盖矛盾后退款。
+	if llmdialogue.DialogueUsageProblem(raw) != "" {
+		return fail("measured usage aliases or counts are inconsistent")
 	}
 	counts := map[string]int{}
 	for _, group := range [][]string{{"prompt_tokens", "input_tokens"}, {"completion_tokens", "output_tokens"}} {

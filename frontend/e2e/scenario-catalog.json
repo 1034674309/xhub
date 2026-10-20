@@ -2712,13 +2712,13 @@
     "file": "e2e/scenarios/regression/hard-budget-en.test.ts",
     "title": "hard budget reserves and recovers through key management en",
     "kind": "implemented",
-    "environment": "default offline; E2E_REDIS=0"
+    "environment": "default offline; E2E_REDIS=0; includes cache alias conflicts and cumulative usage"
   },
   {
     "id": "SC-403",
     "file": "e2e/scenarios/regression/hard-budget-zh-CN.test.ts",
     "title": "hard budget reserves and recovers through key management zh-CN",
     "kind": "implemented",
-    "environment": "default offline; E2E_REDIS=0"
+    "environment": "default offline; E2E_REDIS=0; includes cache alias conflicts and cumulative usage"
   }
 ]

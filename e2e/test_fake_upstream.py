@@ -10,6 +10,39 @@ from e2e.fake_upstream import Handler, ERROR_LOG_JSON_DIAGNOSTIC, ERROR_LOG_TEXT
 
 
 class ArkUpstreamTest(unittest.TestCase):
+    def test_hard_budget_cache_projection(self):
+        """本地同步Chat夹具报告含缓存的输入总量，供真实Messages桥接计费；错误目标400，tearDown回收HTTP服务。"""
+        body = {"model": "pending-browser-hard-budget-projection", "messages": [{"role": "user", "content": "Verify cache projection."}]}
+        response = self.request("/v1/chat/completions", body)
+        self.assertEqual(response["usage"], {"prompt_tokens": 8, "completion_tokens": 2, "cache_write_tokens": 2, "prompt_tokens_details": {"cached_tokens": 2}})
+        self.assertEqual(response["choices"][0]["message"]["content"], "e2e-budget-cache-projection")
+        with self.assertRaises(HTTPError) as error:
+            self.request("/v1/messages", body)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+
+    def test_hard_budget_cache_usage(self):
+        """本地HTTP覆盖缓存read/write矛盾、合法累计和非流拒绝；终态必须正常且原矛盾仍在中间帧，tearDown清理服务。"""
+        for mode in ("write", "read", "growth"):
+            with self.subTest(mode=mode):
+                prompt = "Verify cumulative cache usage." if mode == "growth" else f"Return contradictory cache {mode} usage."
+                body = {"model": "pending-browser-hard-budget-cache", "messages": [{"role": "user", "content": prompt}]}
+                with self.assertRaises(HTTPError) as error:
+                    self.request("/v1/chat/completions", body)
+                self.assertEqual(error.exception.code, 400)
+                error.exception.close()
+                with urlopen(Request(self.base + "/v1/chat/completions", data=json.dumps({**body, "stream": True}).encode()), timeout=2) as response:
+                    raw = response.read().decode()
+                    frames = [json.loads(line[6:]) for line in raw.splitlines() if line.startswith("data: {")]
+                    first = frames[0]["usage"]
+                    self.assertEqual(first["cache_creation_input_tokens"], 0)
+                    self.assertEqual(first["cache_write_tokens"], 50 if mode == "write" else 0)
+                    self.assertEqual(first["cached_tokens"], 0)
+                    self.assertEqual(first["prompt_tokens_details"]["cached_tokens"], 8 if mode == "read" else 0)
+                    self.assertEqual(frames[-1]["usage"], {"prompt_tokens": 8, "completion_tokens": 2, "cache_write_tokens": 2, "cached_tokens": 2})
+                    self.assertEqual(frames[-1]["choices"][0]["finish_reason"], "stop")
+                    self.assertIn("[DONE]", raw)
+
     def test_hard_budget_conflicting_usage(self):
         """私有本地HTTP夹具验证冲突中间帧/正常终态并存，非流输入明确400；tearDown清理服务。"""
         body = {"model": "pending-browser-hard-budget-unit", "messages": [{"role": "user", "content": "Return contradictory usage."}]}

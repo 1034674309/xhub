@@ -385,10 +385,14 @@ func parseGoogleDialogueResult(raw []byte) (DialogueResult, error) {
 	}
 	u := dialogueMap(m["usageMetadata"])
 	usage := map[string]any{}
-	for source, target := range map[string]string{"promptTokenCount": "prompt_tokens", "candidatesTokenCount": "completion_tokens", "cachedContentTokenCount": "cache_read_input_tokens"} {
+	for source, target := range map[string]string{"promptTokenCount": "prompt_tokens", "candidatesTokenCount": "completion_tokens"} {
 		if v, ok := u[source]; ok {
 			usage[target] = v
 		}
+	}
+	// Google cachedContentTokenCount 已包含于 promptTokenCount，不能标记为需要再次加到输入的独立缓存量。
+	if cached, exists := u["cachedContentTokenCount"]; exists {
+		usage["prompt_tokens_details"] = map[string]any{"cached_tokens": cached}
 	}
 	if candidate, exists := u["candidatesTokenCount"]; exists {
 		n, ok := dialogueNumber(candidate)
@@ -437,6 +441,20 @@ func encodeGoogleDialogueResult(r DialogueResult) ([]byte, error) {
 	}
 	if d := dialogueMap(r.Usage["prompt_tokens_details"]); d != nil {
 		u["cachedContentTokenCount"] = d["cached_tokens"]
+	}
+	// 从 Messages 独立缓存计数输出 Google 时先还原包含缓存的输入总量，与上面的反向投影保持等价。
+	separate := r.Usage["cache_read_input_tokens"]
+	if separate == nil {
+		separate = r.Usage["cache_read_tokens"]
+	}
+	if cached, ok := dialogueNumber(separate); ok {
+		if input, inputOK := dialogueNumber(r.Usage["prompt_tokens"]); inputOK {
+			u["promptTokenCount"] = input + cached
+			if output, outputOK := dialogueNumber(r.Usage["completion_tokens"]); outputOK {
+				u["totalTokenCount"] = input + cached + output
+			}
+		}
+		u["cachedContentTokenCount"] = cached
 	}
 	return json.Marshal(map[string]any{"responseId": r.ID, "candidates": []any{map[string]any{"index": 0, "content": map[string]any{"role": "model", "parts": parts}, "finishReason": stop}}, "usageMetadata": u})
 }
