@@ -41,17 +41,20 @@ type BudgetPlan struct {
 
 // budgetPriceSnapshot 是无需重新查询可变目录的定价契约；金额和所有费率都只包含值，不引用部署配置。
 type budgetPriceSnapshot struct {
-	InputBound int           `json:"input_bound"`
-	OutputCap  int           `json:"output_cap"`
-	Amount     float64       `json:"reserved_amount"`
-	Protocol   string        `json:"protocol"`
-	Window     string        `json:"window"`
-	Model      string        `json:"model"`
-	StartedAt  time.Time     `json:"started_at"`
-	Input      catalog.Rate  `json:"input_rate"`
-	Output     catalog.Rate  `json:"output_rate"`
-	CacheRead  *catalog.Rate `json:"cache_read_rate,omitempty"`
-	CacheWrite *catalog.Rate `json:"cache_write_rate,omitempty"`
+	InputBound         int               `json:"input_bound"`
+	OutputCap          int               `json:"output_cap"`
+	Amount             float64           `json:"reserved_amount"`
+	Protocol           string            `json:"protocol"`
+	Window             string            `json:"window"`
+	Model              string            `json:"model"`
+	StartedAt          time.Time         `json:"started_at"`
+	Input              catalog.Rate      `json:"input_rate"`
+	Output             catalog.Rate      `json:"output_rate"`
+	CacheRead          *catalog.Rate     `json:"cache_read_rate,omitempty"`
+	CacheWrite         *catalog.Rate     `json:"cache_write_rate,omitempty"`
+	Tiers              []budgetPriceTier `json:"tiers,omitempty"`
+	IntervalSemantics  string            `json:"interval_semantics,omitempty"`
+	CapSemanticsSource string            `json:"cap_semantics_source,omitempty"`
 }
 
 // budgetFailure 构造不包含输入正文的分类错误；参数为固定代码和原因，返回错误，严格计划和结算共用。
@@ -89,42 +92,36 @@ func StrictBudgetPlan(dep config.ModelEntry, finalBody []byte, protocol string, 
 	if err != nil {
 		return fail(err)
 	}
-	rates, err := budgetRates(dep, row, input, cap)
+	window := catalog.WindowAt(started)
+	snapshot := budgetPriceSnapshot{InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started}
+	if protocol == "openai-chat" && body["max_tokens"] != nil && budgetTrustedLegacyCap(dep) {
+		snapshot.CapSemanticsSource = strings.TrimSpace(dep.ModelInfo["max_tokens_semantics_source"].(string))
+	}
+	tiers, tiered, err := budgetTiers(dep, row, input, cap, window, cacheTTL)
 	if err != nil {
 		return fail(err)
 	}
-	window := catalog.WindowAt(started)
-	in, ok := budgetRate(rates, "input", "uncached", window)
-	if !ok {
-		return fail(budgetFailure("unsupported_budget", "strict budget requires an explicit input token rate"))
+	if tiered {
+		snapshot.Tiers = tiers
+		snapshot.IntervalSemantics = "shared_boundaries_require_equal_rates"
+		// 原始目录不声明开闭边界；预占覆盖所有可达档，最终共享边界只有费率一致才可结算。
+		snapshot.Input, snapshot.Output, snapshot.CacheRead, snapshot.CacheWrite = budgetTierMaximum(tiers)
+	} else {
+		rates, err := budgetRates(dep, row)
+		if err != nil {
+			return fail(err)
+		}
+		prices, err := budgetSelectPrices(rates, window, cacheTTL)
+		if err != nil {
+			return fail(err)
+		}
+		snapshot.Input, snapshot.Output, snapshot.CacheRead, snapshot.CacheWrite = prices.Input, prices.Output, prices.CacheRead, prices.CacheWrite
 	}
-	output, ok := budgetRate(rates, "output", "", window)
-	if !ok {
-		return fail(budgetFailure("unsupported_budget", "strict budget requires an explicit output token rate"))
-	}
-	snapshot := budgetPriceSnapshot{InputBound: input, OutputCap: cap, Protocol: protocol, Window: window, Model: dep.ParamString("model", ""), StartedAt: started, Input: in, Output: output}
-	if read, found := budgetRate(rates, "input", "cached", window); found && read.Variant == "cached" {
-		read.Side = "cache_read"
-		snapshot.CacheRead = &read
-	} else if read, found := budgetRate(rates, "cache_read", "", window); found {
-		snapshot.CacheRead = &read
-	}
-	// 写缓存是独立收费维度，哪怕本轮没有提示也预留已声明的自动写入价；不能假定命中缓存。
-	writeVariant := ""
-	if cacheTTL == "1h" {
-		writeVariant = "1h"
-	}
-	if write, found := budgetRate(rates, "cache_write", writeVariant, window); found {
-		snapshot.CacheWrite = &write
-	} else if cacheTTL != "" {
-		return fail(budgetFailure("unsupported_budget", "strict budget requires a cache write rate for requested caching"))
-	}
-	// 混用5m/1h而上游只报合计写入量时不能可靠按TTL结算；请求校验已拒绝混用。
-	maxInput := in.USD
+	maxInput := snapshot.Input.USD
 	if snapshot.CacheRead != nil {
 		maxInput = math.Max(maxInput, snapshot.CacheRead.USD)
 	}
-	amount := float64(input)*maxInput + float64(cap)*output.USD
+	amount := float64(input)*maxInput + float64(cap)*snapshot.Output.USD
 	if snapshot.CacheWrite != nil {
 		amount += float64(input) * snapshot.CacheWrite.USD
 	}
@@ -153,6 +150,19 @@ func (p BudgetPlan) Charge(u catalog.Usage) (catalog.Charge, error) {
 	}
 	if s == nil {
 		return fail("strict budget plan is uninitialized")
+	}
+	if len(s.Tiers) > 0 {
+		if int64(u.PromptTokens)+int64(u.CacheWriteTokens) > int64(s.InputBound) {
+			return fail("measured total input including cache writes exceeds the reserved bound")
+		}
+		prices, err := budgetSelectTier(s.Tiers, u)
+		if err != nil {
+			return fail(err.Error())
+		}
+		// 临时副本仅替换本次实际档位，绝不修改持久快照或让目录热更新穿透冻结契约。
+		selected := *s
+		selected.Input, selected.Output, selected.CacheRead, selected.CacheWrite = prices.Input, prices.Output, prices.CacheRead, prices.CacheWrite
+		s = &selected
 	}
 	if u.PricingBlocked != "" {
 		return fail("strict budget requires complete measured usage")
@@ -481,8 +491,8 @@ func budgetOutputCap(body map[string]any, protocol string, dep config.ModelEntry
 			}
 		}
 	}
-	// 只有旧cap能力时，显式推理请求的隐藏输出是否计入cap没有可信声明，不能放行。
-	if protocol == "openai-chat" && field == "max_tokens" && (body["reasoning"] != nil || body["reasoning_effort"] != nil || body["thinking"] != nil) {
+	// 旧cap默认不能证明包含隐藏推理；仅管理员提供明确语义声明和来源后接受，不按模型名称猜测。
+	if protocol == "openai-chat" && field == "max_tokens" && (body["reasoning"] != nil || body["reasoning_effort"] != nil || body["thinking"] != nil) && !budgetTrustedLegacyCap(dep) {
 		return 0, false, budgetFailure("unsupported_budget", "strict reasoning budget requires a declared total output token limit")
 	}
 	for _, key := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
@@ -493,50 +503,10 @@ func budgetOutputCap(body map[string]any, protocol string, dep config.ModelEntry
 }
 
 // budgetRates 选择完整可信费率源并复制所有值；手工价格不回落目录，条件价格与未知变体由后续精确选择拒绝。
-func budgetRates(dep config.ModelEntry, row map[string]any, inputBound, outputCap int) ([]catalog.Rate, error) {
-	source := dep.LiteLLMParams
-	hasManual := dep.ModelInfo["pricing_source"] == "manual"
-	for key := range source {
-		if strings.Contains(key, "cost_per_") || strings.Contains(key, "_token_cost") || key == "rates" {
-			hasManual = true
-		}
-	}
-	if !hasManual {
-		source = row
-	}
+func budgetRates(dep config.ModelEntry, row map[string]any) ([]catalog.Rate, error) {
+	source := budgetPriceSource(dep, row)
 	if source == nil {
 		return nil, budgetFailure("unsupported_budget", "strict budget requires complete token prices")
-	}
-	// 多个阶梯或非空条件未进入当前收费结构，不能拿最低档伪装费用上界。
-	if !hasManual {
-		if raw, exists := source["pricing_rules_v2"]; exists && raw != nil {
-			encoded, _ := json.Marshal(raw)
-			var rules []map[string]any
-			if json.Unmarshal(encoded, &rules) != nil || len(rules) > 1 {
-				return nil, budgetFailure("unsupported_budget", "conditional catalog pricing requires an explicit deployment price")
-			}
-			for _, rule := range rules {
-				// 单档价格也可能只覆盖部分长度；全窗口预占必须在该档范围内，禁止借用更短上下文的低价。
-				for key, bound := range map[string]int{"input_range": inputBound, "output_range": outputCap} {
-					if value := rule[key]; value != nil {
-						limits, ok := value.([]any)
-						if !ok || len(limits) != 2 {
-							return nil, budgetFailure("unsupported_budget", "catalog price range is invalid")
-						}
-						low, lowOK := floatParam(map[string]any{"v": limits[0]}, "v")
-						high, highOK := floatParam(map[string]any{"v": limits[1]}, "v")
-						if !lowOK || !highOK || low != 0 || math.IsNaN(high) || math.IsInf(high, 0) || high < float64(bound) {
-							return nil, budgetFailure("unsupported_budget", "catalog price range does not cover the reserved context")
-						}
-					}
-				}
-				for _, key := range []string{"condition", "input_item_type", "output_item_type"} {
-					if v := rule[key]; v != nil && v != "" {
-						return nil, budgetFailure("unsupported_budget", "conditional catalog pricing requires an explicit deployment price")
-					}
-				}
-			}
-		}
 	}
 	var rates []catalog.Rate
 	if raw, exists := source["rates"]; exists {
@@ -830,4 +800,12 @@ func budgetTools(value any, ttl *string) error {
 // String 返回计划的非敏感简述，供诊断记录；只读公开上限，不包含正文、凭据或完整费率表。
 func (p BudgetPlan) String() string {
 	return fmt.Sprintf("input<=%d output<=%d reserve=%g", p.InputBound, p.OutputCap, p.Amount)
+}
+
+// budgetTrustedLegacyCap 检查管理员对旧max_tokens总输出语义的明确认证；参数为实际部署，返回可信声明是否完整。
+// 必须是真正布尔true并附非空来源，普通supported_parameters只证明字段存在，不能证明包含隐藏推理。
+func budgetTrustedLegacyCap(dep config.ModelEntry) bool {
+	declared, ok := dep.ModelInfo["max_tokens_includes_reasoning"].(bool)
+	source, sourceOK := dep.ModelInfo["max_tokens_semantics_source"].(string)
+	return ok && declared && sourceOK && strings.TrimSpace(source) != ""
 }

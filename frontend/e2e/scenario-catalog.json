@@ -2720,5 +2720,19 @@
     "title": "hard budget reserves and recovers through key management zh-CN",
     "kind": "implemented",
     "environment": "default offline; E2E_REDIS=0; includes cache alias conflicts and cumulative usage"
+  },
+  {
+    "id": "SC-420",
+    "file": "e2e/scenarios/regression/hard-budget-tier-en.test.ts",
+    "title": "tiered budget prices and ambiguous boundary en",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
+  },
+  {
+    "id": "SC-421",
+    "file": "e2e/scenarios/regression/hard-budget-tier-zh-CN.test.ts",
+    "title": "tiered budget prices and ambiguous boundary zh-CN",
+    "kind": "implemented",
+    "environment": "default offline; E2E_REDIS=0"
   }
 ]

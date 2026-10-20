@@ -317,3 +317,15 @@ test('verification includes bilingual log cost and reasoning effort browser scen
       `发布缺少 ${locale} 日志金额与推理强度闭环`);
   }
 });
+
+/** 前置真实场景目录和发布命令；验证两语阶梯预算均被现有hard-budget选择器覆盖，防止仅本地验证；只读无需清理。 */
+test('hard budget tier scenarios are registered and selected by the release gate', () => {
+  const browser = workflow.jobs.verify.steps.find(item => item.name === 'API client reliability browser regression');
+  assert.ok(browser.run.split(/\s+/).includes('hard-budget-'));
+  const catalog = JSON.parse(readFileSync(join(__dirname, '../frontend/e2e/scenario-catalog.json'), 'utf8'));
+  for (const locale of ['en', 'zh-CN']) {
+    const file = `e2e/scenarios/regression/hard-budget-tier-${locale}.test.ts`;
+    assert.ok(catalog.some(row => row.file === file && row.kind === 'implemented'), '阶梯预算场景未登记：' + locale);
+    assert.ok(existsSync(join(__dirname, '../frontend', file)), '阶梯预算场景文件不存在：' + locale);
+  }
+});
